@@ -55,14 +55,5 @@
   };
   window.GB = window.GB || {};
   window.GB.icon = (name, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-hidden="true">${P[name] || ''}</svg>`;
-  window.GB.logo = (cls = '') => `
-    <svg class="brand-mark ${cls}" viewBox="0 0 64 64" aria-hidden="true">
-      <defs><linearGradient id="gbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b79cff"/><stop offset="1" stop-color="#6d3cf0"/></linearGradient></defs>
-      <rect x="2" y="2" width="60" height="60" rx="18" fill="url(#gbg)"/>
-      <g fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round">
-        <circle cx="22" cy="43" r="6"/><circle cx="42" cy="43" r="6"/>
-        <path d="M26.5 39 44 14M37.5 39 20 14"/>
-      </g>
-      <circle cx="47" cy="17" r="3" fill="#f4b93a"/>
-    </svg>`;
+  window.GB.logo = (cls = '') => `<img class="brand-mark ${cls}" src="${window.GB.LOGO_SRC || 'assets/logo.jpg'}" alt="Gestão Barber IA" width="512" height="512">`;
 })();

@@ -61,10 +61,13 @@
   function companyAvatar(size = 40) {
     return avatar({ name: state.company.name, photo: state.company.logo }, size);
   }
-  const brand = (cls = '') => `
-    <span class="brand ${cls}">${logo()}
-      <span class="brand-text"><span class="brand-name">Gestão Barber</span>
-      <span class="brand-sub"><span class="brand-ia">IA</span> performance da equipe</span></span>
+  // Versão grande (abertura e login): só o selo, que já traz o nome.
+  // Versão compacta (menu, TV): selo pequeno + nome ao lado.
+  const brand = (cls = '') => cls.includes('brand--lg')
+    ? `<span class="brand ${cls}">${logo()}</span>`
+    : `<span class="brand ${cls}">${logo()}
+      <span class="brand-text"><span class="brand-name">Gestão Barber <span class="brand-ia-word">IA</span></span>
+      <span class="brand-sub">Sistema de gestão</span></span>
     </span>`;
 
   function toast(msg) {
