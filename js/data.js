@@ -173,6 +173,54 @@
     return { rows, active, inactive, N, half, mvpNeed, title, range };
   }
 
+
+  // ---------- quanto falta para subir ----------
+  // Recalcula a pontuação geral trocando alguns valores de um barbeiro.
+  function simulate(R, meId, otherId, changes) {
+    const vals = R.rows.map(r => ({ id: r.barber.id, v: { ...r.values } }));
+    const me = vals.find(x => x.id === meId);
+    Object.assign(me.v, changes);
+    const totalW = R.active.reduce((a, i) => a + i.weight, 0) || 1;
+    const overall = { };
+    for (const x of vals) overall[x.id] = 0;
+    for (const ind of R.active) {
+      const nums = vals.map(x => x.v[ind.key] ?? 0);
+      const max = Math.max(...nums), min = Math.min(...nums);
+      vals.forEach((x, i) => {
+        const sc = max === min ? (max > 0 ? 100 : 0) : ((nums[i] - min) / (max - min)) * 100;
+        overall[x.id] += ind.weight * sc / totalW;
+      });
+    }
+    return { me: overall[meId], other: overall[otherId] };
+  }
+
+  // Menor aumento, em cada indicador, que faz `me` passar `target` na pontuação.
+  function gapTo(R, me, target) {
+    const has = k => R.active.some(a => a.key === k);
+    const v = me.values, s = me.sums;
+    const passes = ch => { const r = simulate(R, me.barber.id, target.barber.id, ch); return r.me > r.other + 0.05; };
+    const out = [];
+    const search = (kind, lo, hi, step, mk) => {
+      if (!passes(mk(hi))) return;
+      while (hi - lo > step) { const mid = (lo + hi) / 2; if (passes(mk(mid))) hi = mid; else lo = mid; }
+      out.push({ kind, delta: Math.ceil(hi / step) * step });
+    };
+    if (has('fat')) {
+      const maxFat = Math.max(...R.rows.map(r => r.sums.fat), 100);
+      search('fat', 0, maxFat * 4, 1, d => {
+        const ch = { fat: (v.fat ?? 0) + d };
+        if (has('ticket') && s.cli > 0) ch.ticket = (s.fat + d) / s.cli;
+        return ch;
+      });
+    }
+    if (has('ocup') && v.ocup != null) search('ocup', 0, Math.max(0.1, 100 - v.ocup), 0.1, d => ({ ocup: v.ocup + d }));
+    for (const k of ['check', 'planos', 'serv']) {
+      if (!has(k)) continue;
+      for (let d = 1; d <= 60; d++) { if (passes({ [k]: (v[k] ?? 0) + d })) { out.push({ kind: k, delta: d }); break; } }
+    }
+    return out;
+  }
+
   // ---------- dados de demonstração ----------
   function rng(seed) {
     return function () {
@@ -296,5 +344,5 @@
     else state.entries.push({ id: uid('e_'), ...entry });
   }
 
-  window.GB = Object.assign(window.GB || {}, { DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, emptyState, passHash, uid, iso, fromIso, hash });
+  window.GB = Object.assign(window.GB || {}, { DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, emptyState, passHash, uid, iso, fromIso, hash });
 })();

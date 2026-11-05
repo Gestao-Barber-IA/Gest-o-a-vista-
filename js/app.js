@@ -1,7 +1,7 @@
 /* Gestão Barber IA — telas e interação. */
 (function () {
   'use strict';
-  const { DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, importEntries, upsertEntry, emptyState, passHash, uid, iso, fromIso, hash, icon, logo } = window.GB;
+  const { DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, importEntries, upsertEntry, gapTo, emptyState, passHash, uid, iso, fromIso, hash, icon, logo } = window.GB;
 
   let state = DB.load();
   const ui = {
@@ -332,7 +332,7 @@
       ? `<polygon points="49,-4 60,-18 71,-4 60,10" fill="url(#${id})" stroke="#e8f6ff" stroke-width="1.5"/><path d="M49 -4h22M55 -4l5 14 5-14" stroke="#e8f6ff" stroke-width="1" fill="none"/>`
       : `<circle cx="60" cy="-2" r="6" fill="url(#${id})" stroke="#fff" stroke-width="1.2"/>`;
     return `<svg viewBox="0 -22 120 100" aria-hidden="true">
-      <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset=".45" stop-color="var(--tc)"/><stop offset="1" stop-color="var(--tc2)"/></linearGradient></defs>
+      <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset=".45" style="stop-color:var(--tc)"/><stop offset="1" style="stop-color:var(--tc2)"/></linearGradient></defs>
       <path d="M12 62 6 18l26 22L60 6l28 34 26-22-6 44z" fill="url(#${id})" stroke="#fff" stroke-opacity=".7" stroke-width="1.6" stroke-linejoin="round"/>
       <rect x="10" y="62" width="100" height="12" rx="3" fill="url(#${id})" stroke="#fff" stroke-opacity=".7" stroke-width="1.4"/>
       <circle cx="6" cy="16" r="4" fill="#fff"/><circle cx="114" cy="16" r="4" fill="#fff"/>
@@ -414,15 +414,26 @@
   function rankingList(R, limit) {
     if (!R.rows.length) return '';
     const prev = prevPositions();
+    const n = R.rows.length;
     const rows = (limit ? R.rows.slice(0, limit) : R.rows).map(r => {
       const p = prev[r.barber.id];
-      const trend = !p || p === r.pos ? ['', 'dash', 'Mesma posição do período anterior'] : p > r.pos ? ['up', 'up', `Subiu ${p - r.pos} posição(ões)`] : ['down', 'down', `Caiu ${r.pos - p} posição(ões)`];
-      return `<li><a class="rank-row ${r.pos <= 3 ? 'top' : ''}" href="#perfil-${esc(r.barber.id)}">
+      const diff = p ? p - r.pos : 0;
+      const trend = diff === 0
+        ? `<span class="rank-trend" title="Mesma posição do período anterior">${icon('dash')}</span>`
+        : `<span class="rank-trend ${diff > 0 ? 'up' : 'down'}" title="${diff > 0 ? 'Subiu' : 'Caiu'} ${Math.abs(diff)} posição(ões) em relação ao período anterior">${icon(diff > 0 ? 'up' : 'down')}<b class="num">${Math.abs(diff)}</b></span>`;
+      const t = R.title.barberId === r.barber.id ? R.title.type : null;
+      const sub = t === 'mvp'
+        ? `<small class="rank-sub sub-mvp">${icon('diamond')} MVP · ${r.leads.length}/${R.N}</small>`
+        : t === 'destaque'
+          ? `<small class="rank-sub sub-gold">${icon('crown')} Destaque · ${r.leads.length}/${R.N}</small>`
+          : `<small class="rank-sub">${r.leads.length}/${R.N} indicadores</small>`;
+      const zone = r.pos <= 3 ? 'top' : (n >= 5 && r.pos > n - 2 ? 'low' : '');
+      return `<li><a class="rank-row ${zone}" href="#perfil-${esc(r.barber.id)}">
         <span class="rank-pos num">${ord(r.pos)}</span>
         ${avatar(r.barber, 46)}
-        <span class="rank-who"><b><span class="rank-name">${esc(r.barber.name)}</span>${titleChip(R, r.barber.id)}</b><span class="num">${money2(r.sums.fat)}</span></span>
+        <span class="rank-who"><b><span class="rank-name">${esc(r.barber.name)}</span><span class="rank-money num">${money0(r.sums.fat)}</span></b>${sub}</span>
         <span class="rank-score num">${score(r.overall)}</span>
-        <span class="rank-trend ${trend[0]}" title="${trend[2]}">${icon(trend[1])}</span>
+        ${trend}
       </a></li>`;
     }).join('');
     return `<ol class="rank-list">${rows}</ol>`;
@@ -812,23 +823,179 @@ Content-Type: application/json</pre>
     ajuda: { t: 'Central de ajuda', r: pageAjuda },
   };
 
-  // ---------- modo apresentação ----------
+  // ---------- sons (gerados no navegador, sem arquivos) ----------
+  const Sound = {
+    ctx: null,
+    get on() { return DB.pref.get('sound', '1') === '1'; },
+    set on(v) { DB.pref.set('sound', v ? '1' : '0'); },
+    get kind() { return DB.pref.get('soundKind', 'sino'); },
+    set kind(v) { DB.pref.set('soundKind', v); },
+    KINDS: { sino: 'Sino', moeda: 'Moeda', fanfarra: 'Fanfarra', aplausos: 'Aplausos' },
+    ensure() {
+      try {
+        if (!this.ctx) { const C = window.AudioContext || window.webkitAudioContext; if (!C) return null; this.ctx = new C(); }
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+        return this.ctx;
+      } catch (e) { return null; }
+    },
+    tone(c, f, t, dur, type, g) {
+      const o = c.createOscillator(), a = c.createGain();
+      o.type = type; o.frequency.setValueAtTime(f, t);
+      a.gain.setValueAtTime(0.0001, t); a.gain.exponentialRampToValueAtTime(g, t + 0.02); a.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(a).connect(c.destination); o.start(t); o.stop(t + dur + 0.05);
+    },
+    play(kind = this.kind, force = false) {
+      if (!this.on && !force) return;
+      const c = this.ensure(); if (!c) return;
+      const t = c.currentTime + 0.02;
+      if (kind === 'moeda') { this.tone(c, 988, t, 0.1, 'square', 0.08); this.tone(c, 1319, t + 0.09, 0.45, 'square', 0.08); }
+      else if (kind === 'fanfarra') { [523, 659, 784, 1047].forEach((f, i) => this.tone(c, f, t + i * 0.13, i === 3 ? 0.9 : 0.3, 'triangle', 0.22)); }
+      else if (kind === 'aplausos') {
+        const len = c.sampleRate * 1.6, buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) { const clap = (i % 2200) < 500 && Math.random() < 0.6; d[i] = (Math.random() * 2 - 1) * (clap ? 0.9 : 0.15) * (1 - i / len); }
+        const src = c.createBufferSource(), fl = c.createBiquadFilter(), g = c.createGain();
+        fl.type = 'bandpass'; fl.frequency.value = 1800; g.gain.value = 0.5; src.buffer = buf; src.connect(fl).connect(g).connect(c.destination); src.start(t);
+      } else { this.tone(c, 880, t, 1.4, 'sine', 0.25); this.tone(c, 1760, t, 0.8, 'sine', 0.07); this.tone(c, 1318, t + 0.12, 1.1, 'sine', 0.1); }
+    },
+  };
+
+  // ---------- tela da loja (modo apresentação) ----------
+  const TV_SECONDS = 30;
+  const ALERT_LINES = {
+    leader: [['Quem lidera dita o ritmo da casa.', 'Hoje é dia de aumentar a vantagem.'], ['Defender o topo dá mais trabalho que chegar nele.', 'Qual detalhe vai fazer o próximo cliente voltar?']],
+    chase: [['O pódio está a um bom dia de distância.', 'Qual cliente você vai encantar agora?'], ['Falta pouco. Pouco mesmo.', 'Um atendimento caprichado muda essa conta.']],
+    middle: [['Sair do meio é decisão, não sorte.', 'Qual horário vazio você vai preencher hoje?'], ['Quem está acima não vai esperar.', 'Ofereça o plano mensal para quem vem sempre.']],
+    low: [['A virada começa no próximo atendimento.', 'Quem você pode chamar agora para lotar a agenda?'], ['Daqui para frente, só dá para subir.', 'Escolha um número e foque nele hoje.']],
+  };
+  function pickLine(zone, id) {
+    const list = ALERT_LINES[zone];
+    const day = new Date().getDate();
+    return list[(hash(id + day).charCodeAt(0) + day) % list.length];
+  }
+  function gapText(g) {
+    switch (g.kind) {
+      case 'fat': return `faturar mais ${money0(g.delta)}`;
+      case 'ocup': return `ocupar mais ${nf1.format(g.delta)} pontos percentuais da agenda`;
+      case 'check': return `somar mais ${g.delta} ponto(s) no Checklist POP`;
+      case 'planos': return `vender mais ${g.delta} plano(s) mensal(is)`;
+      case 'serv': return `fazer mais ${g.delta} serviço(s)`;
+      default: return '';
+    }
+  }
+  const first = name => esc(name.split(/\s+/)[0]);
+  function bestGaps(list) {
+    if (!list.length) return [];
+    const fat = list.find(g => g.kind === 'fat');
+    const other = list.filter(g => g.kind !== 'fat')[0];
+    return [fat, other].filter(Boolean).slice(0, 2);
+  }
+
+  function tvRanking(R) {
+    return `<div class="tv-split">
+      <section class="tv-panel"><h2 class="section-title">Pódio do período</h2><div class="tv-stage">${podium(R)}</div></section>
+      <section class="tv-panel"><div class="tv-panel-head"><h2 class="section-title">Ranking em tempo real</h2><span class="tv-count">${R.rows.length} posições</span></div>${rankingList(R)}</section>
+    </div>`;
+  }
+
+  function tvGuardians(R) {
+    const cards = R.active.map(ind => {
+      const leaders = ind.leaders.map(barberById).filter(Boolean);
+      if (!leaders.length) return '';
+      const row = R.rows.find(r => r.barber.id === leaders[0].id);
+      const names = leaders.length > 1 ? leaders.map(b => first(b.name)).join(' + ') : esc(leaders[0].name);
+      return `<div class="gd ${leaders.length > 1 ? 'gd-tie' : ''}">
+        <span class="gd-label">${esc(ind.label)}</span>
+        <div class="gd-photos"><span class="gd-crown">${crownSvg('tier-gold')}</span>${leaders.slice(0, 3).map(b => `<span class="gd-photo">${pdPhoto(b).replace('pd-photo', 'gd-ring')}</span>`).join('')}</div>
+        <b class="gd-name">${names}</b>
+        <span class="gd-val num">${fmt(ind, row.values[ind.key])}${ind.key === 'check' ? ' pts' : ''}</span>
+        ${leaders.length > 1 ? '<span class="chip chip-destaque">Empate na liderança</span>' : ''}
+      </div>`;
+    }).join('');
+    return `<p class="tv-eyebrow gold">${icon('crown')} Líderes do período</p>
+      <h2 class="tv-h">Quem está puxando cada resultado</h2>
+      ${cards ? `<div class="gd-grid">${cards}</div>` : '<div class="card muted">Ainda não há lançamentos neste período.</div>'}`;
+  }
+
+  function tvAlerts(R) {
+    const n = R.rows.length;
+    const cards = R.rows.map((r, i) => {
+      const zone = r.pos === 1 ? 'leader' : r.pos <= 3 ? 'chase' : (r.pos > Math.ceil(n / 2) + 1 ? 'low' : 'middle');
+      const [line, sub] = pickLine(zone, r.barber.id);
+      let gap;
+      if (r.pos === 1) {
+        const second = R.rows[1];
+        if (!second) gap = 'Sem concorrência no período.';
+        else {
+          const d = r.overall - second.overall;
+          const t = R.title.barberId === r.barber.id ? (R.title.type === 'mvp' ? 'MVP' : 'Destaque') : null;
+          if (d >= 0) {
+            const g = bestGaps(gapTo(R, second, r))[0];
+            gap = `Vantagem de ${score(d)} pts sobre ${first(second.barber.name)}.${g ? ` ${first(second.barber.name)} precisa ${gapText(g)} para passar.` : ''}`;
+          } else {
+            gap = `Está em 1º pelo título de ${t}. Na pontuação, ${first(second.barber.name)} está ${score(-d)} pts à frente: mantenha a liderança nos indicadores.`;
+          }
+        }
+      } else {
+        const above = R.rows[i - 1];
+        if (above.pos === 1 && R.title.barberId === above.barber.id) {
+          const need = Math.max(1, R.half - r.leads.length);
+          gap = `${first(above.barber.name)} está em 1º pelo título. Para disputar, fique em 1º em mais ${need} indicador(es).`;
+        } else {
+          const gs = bestGaps(gapTo(R, r, above));
+          gap = gs.length ? `Para passar ${first(above.barber.name)}: ${gs.map(gapText).join(' ou ')}.` : `Faltam ${score(above.overall - r.overall)} pts para passar ${first(above.barber.name)}.`;
+        }
+      }
+      return `<div class="al al-${zone}">
+        <div class="al-av">${avatar(r.barber, 58)}<span class="al-pos num">${ord(r.pos)}</span></div>
+        <div class="al-body"><b class="al-name">${esc(r.barber.name)}</b>
+          <p class="al-line">${esc(line)}</p><p class="al-sub">${esc(sub)}</p>
+          <p class="al-gap">${gap}</p></div>
+      </div>`;
+    }).join('');
+    return `<p class="tv-eyebrow red">${icon('bolt')} Alerta do ranking</p>
+      <h2 class="tv-h">Quanto falta para subir de posição</h2>
+      ${cards ? `<div class="al-grid">${cards}</div>` : '<div class="card muted">Sem barbeiros no ranking.</div>'}`;
+  }
+
+  function tvCheckChanges(R) {
+    const snap = { leader: R.rows[0]?.barber.id, title: R.title.type + ':' + R.title.barberId, pos: Object.fromEntries(R.rows.map(r => [r.barber.id, r.pos])) };
+    const old = ui.tvSnap;
+    ui.tvSnap = snap;
+    if (!old) return;
+    if (old.leader !== snap.leader || old.title !== snap.title) { Sound.play('fanfarra'); toast('Mudou o 1º lugar!'); return; }
+    if (Object.keys(snap.pos).some(id => old.pos[id] && snap.pos[id] < old.pos[id])) Sound.play();
+  }
+
   function renderTV() {
+    state = DB.load();
     const R = computeRanking(state, range());
-    const slides = [
-      ['Pódio do período', podium(R) + (R.rows.length ? podiumLegend(R) : '')],
-      ['Ranking em tempo real', rankingList(R)],
-      ['Destaques', titleCard(R) + highlights(R)],
-    ];
-    const i = ui.tvIndex % slides.length;
+    tvCheckChanges(R);
+    const slides = [tvRanking, tvGuardians, tvAlerts];
+    const i = ((ui.tvIndex % slides.length) + slides.length) % slides.length;
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
     root.innerHTML = `<div class="tv">
-      <div class="tv-head">${brand()}<div style="text-align:right"><b>${esc(state.company.name)}</b><div class="muted">${esc(PERIOD_NAMES[ui.period])}: ${esc(range().label)}</div></div>
-      <button class="btn btn-sm" data-action="exitTV">${icon('x')} Sair da apresentação</button></div>
-      <div class="tv-body"><h2 class="section-title" style="font-size:1.3rem">${slides[i][0]}</h2>${slides[i][1]}</div>
-      <div class="tv-dots">${slides.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</div>
+      <div class="tv-progress" aria-hidden="true"><i style="animation-duration:${TV_SECONDS}s${reduce ? ';animation:none;width:100%' : ''}"></i></div>
+      <header class="tv-head">
+        ${logo('tv-logo')}
+        <div class="tv-title"><b>${esc(state.company.name)}</b><span>Tela da loja · ${esc(PERIOD_NAMES[ui.period])}: ${esc(range().label)}</span></div>
+        <div class="tv-controls">
+          <button class="btn btn-sm" data-action="tvSound" aria-pressed="${Sound.on}">${icon('sound')} ${Sound.on ? 'Sons ativos' : 'Sons desligados'}</button>
+          <select class="input tv-select" id="tv-sound" data-change="tvSoundKind" aria-label="Escolher e testar som">
+            ${Object.entries(Sound.KINDS).map(([k, v]) => `<option value="${k}" ${Sound.kind === k ? 'selected' : ''}>Som: ${v}</option>`).join('')}
+          </select>
+          <button class="icon-btn tv-ib" data-action="tvFull" aria-label="Tela cheia">${icon('expand')}</button>
+          <button class="icon-btn tv-ib" data-action="exitTV" aria-label="Sair da tela da loja">${icon('x')}</button>
+        </div>
+      </header>
+      <div class="tv-body">${slides[i](R)}</div>
+      <nav class="tv-dots" aria-label="Telas">${slides.map((_, k) => `<button class="${k === i ? 'on' : ''}" data-action="tvGo" data-i="${k}" aria-label="Tela ${k + 1}"></button>`).join('')}</nav>
     </div>`;
     clearTimeout(ui.tvTimer);
-    ui.tvTimer = setTimeout(() => { ui.tvIndex++; if (location.hash === '#apresentacao') renderTV(); }, 12000);
+    ui.tvTimer = setTimeout(() => { ui.tvIndex = i + 1; if (location.hash === '#apresentacao') { renderTV(); window.scrollTo(0, 0); } }, TV_SECONDS * 1000);
+  }
+
+  async function keepAwake() {
+    try { if (navigator.wakeLock && !ui.wake) { ui.wake = await navigator.wakeLock.request('screen'); ui.wake.addEventListener('release', () => { ui.wake = null; }); } } catch (e) { /* opcional */ }
   }
 
   // ---------- render principal ----------
@@ -894,6 +1061,9 @@ Content-Type: application/json</pre>
       DB.pref.set('size', next);
       document.documentElement.style.setProperty('--base-size', next + 'px');
     },
+    tvSound() { Sound.on = !Sound.on; if (Sound.on) Sound.play(undefined, true); renderTV(); },
+    tvFull() { const d = document.documentElement; if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); else if (d.requestFullscreen) d.requestFullscreen().catch(() => toast('Este aparelho não permite tela cheia.')); else toast('Este aparelho não permite tela cheia.'); },
+    tvGo(el) { ui.tvIndex = Number(el.dataset.i); renderTV(); },
     exitTV() { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); location.hash = 'inicio'; },
     approve(el) { const u = state.users.find(x => x.id === el.dataset.id); if (u) { u.status = 'ativo'; save(); toast(`${u.name} agora tem acesso.`); render(); } },
     reject(el) { const u = state.users.find(x => x.id === el.dataset.id); if (u) { u.status = 'recusado'; save(); toast('Cadastro recusado.'); render(); } },
@@ -1043,6 +1213,7 @@ Content-Type: application/json</pre>
   };
 
   const CHANGES = {
+    tvSoundKind(el) { Sound.kind = el.value; Sound.play(el.value, true); },
     perfBarber(el) { ui.perfBarber = el.value; render(); },
     entryKey() {
       const f = $('form[data-form="entry"]');
@@ -1082,8 +1253,10 @@ Content-Type: application/json</pre>
   window.addEventListener('hashchange', () => {
     ui.confirm = null; ui.invite = null; ui.lastReset = null;
     render();
-    if (location.hash === '#apresentacao' && document.documentElement.requestFullscreen) {
-      document.documentElement.requestFullscreen().catch(() => {});
+    if (location.hash === '#apresentacao') {
+      ui.tvSnap = null; ui.tvIndex = 0; keepAwake(); Sound.ensure();
+      render();
+      if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
     }
     window.scrollTo(0, 0);
   });
@@ -1094,6 +1267,10 @@ Content-Type: application/json</pre>
       const p = $('.popover'); if (p) p.hidden = true;
     }
   });
+
+  // Atualiza a tela da loja quando outra aba deste aparelho lança resultados.
+  window.addEventListener('storage', e => { if (e.key === 'gbia.v1' && location.hash === '#apresentacao') renderTV(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && location.hash === '#apresentacao') keepAwake(); });
 
   splash(render);
 })();
