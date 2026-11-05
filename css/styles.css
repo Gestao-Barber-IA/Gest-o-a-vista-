@@ -432,6 +432,14 @@ pre.code { margin: 0; padding: 14px; border-radius: 14px; background: var(--bg);
 .toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 60; background: var(--fg); color: var(--bg); padding: 12px 18px; border-radius: 14px; font-weight: 600; max-width: calc(100vw - 32px); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); }
 
 
+/* ---------- Configuração de indicadores ---------- */
+.ind-cfg > label:first-child { font-weight: 600; font-size: 0.95rem; }
+.ind-row { display: flex; gap: 10px; align-items: center; }
+.ind-row .input { flex: 1; min-width: 0; }
+.ind-on { display: inline-flex; align-items: center; gap: 6px; flex: none; color: var(--muted); font-size: 0.9rem; cursor: pointer; }
+.ind-on input { width: 20px; height: 20px; accent-color: var(--accent); }
+.ind-cfg.is-off .input { opacity: 0.5; }
+
 /* ---------- Time e ranking ---------- */
 .tm-block { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; min-width: 0; }
 .tm-month { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px; justify-content: space-between; }

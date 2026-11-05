@@ -662,7 +662,8 @@
     const integ = monthFromIntegration(state, b.id, ym);
     const R = monthR(ym);
     const row = R.rows.find(r => r.barber.id === b.id);
-    return GB.MONTH_FIELDS.map(f => {
+    const hidden = state.hidden || [];
+    return GB.MONTH_FIELDS.filter(f => !hidden.includes(GB.FIELD_IND[f.key] || f.key)).map(f => {
       if (f.calc) {
         const t = row && row.sums.cli > 0 ? row.sums.fat / row.sums.cli : null;
         return `<div class="field"><span class="tm-flabel">${esc(f.label)}<span class="lock">${icon('chart')} Calculado</span></span>
@@ -702,7 +703,7 @@
       </div>
       <div class="grid-2" id="tm-fields">${editorFields(sel, ym)}</div>
       <details class="tm-goals"><summary>Metas individuais de ${esc(sel.name.split(' ')[0])} <span class="muted">(em branco = meta da equipe)</span></summary>
-        <div class="grid-2">${INDICATORS.map(i => `<label class="field"><span class="tm-flabel">${esc(i.label)}</span><input class="input input-edit num" id="g-${i.key}" name="${i.key}" type="number" min="0" step="any" value="${isNum(goals[i.key]) ? goals[i.key] : ''}" placeholder="Equipe: ${esc(fmtGoal(i, GB.goalFor(state, '', i.key)))}" data-auto="goal" data-id="${esc(sel.id)}"></label>`).join('')}</div>
+        <div class="grid-2">${GB.visibleInds(state).map(i => `<label class="field"><span class="tm-flabel">${esc(i.label)}</span><input class="input input-edit num" id="g-${i.key}" name="${i.key}" type="number" min="0" step="any" value="${isNum(goals[i.key]) ? goals[i.key] : ''}" placeholder="Equipe: ${esc(fmtGoal(i, GB.goalFor(state, '', i.key)))}" data-auto="goal" data-id="${esc(sel.id)}"></label>`).join('')}</div>
       </details>
       <p class="section-note" id="tm-pos">${row ? `Posição atual: ${ord(row.pos)} · pontuação ${score(row.overall)} / 100.` : ''} Tudo é salvo automaticamente no mês selecionado.</p>
     </section>`;
@@ -898,7 +899,7 @@
       }
     }
 
-    const cards = INDICATORS.map(ind => {
+    const cards = GB.visibleInds(state).map(ind => {
       const act = R.active.find(a => a.key === ind.key);
       if (!act) return `<div class="card ind" style="opacity:.55"><div class="ind-top"><span>${esc(ind.label)}</span><span class="chip chip-soft">sem dados</span></div><div class="ind-val">—</div></div>`;
       const v = row.values[ind.key];
@@ -998,15 +999,18 @@
 
   function pageConfig() {
     const w = state.weights;
-    const total = INDICATORS.reduce((a, i) => a + Number(w[i.key] ?? i.weight), 0);
+    const hidden = state.hidden || [];
+    const total = INDICATORS.filter(i => !hidden.includes(i.key)).reduce((a, i) => a + Number(w[i.key] ?? i.weight), 0);
     return `
       <section class="section card">
-        <h2 class="section-title">Pesos dos indicadores</h2>
-        <p class="section-note">O peso define quanto cada indicador vale na pontuação geral. Peso zero tira o indicador do ranking. Soma atual: <b class="num">${total} pts</b>.</p>
+        <h2 class="section-title">Indicadores e pesos</h2>
+        <p class="section-note">O peso define quanto cada indicador vale na pontuação geral. Desmarque "Ativo" para ocultar um indicador do app inteiro; os dados dele ficam guardados para quando você reativar. Soma dos ativos: <b class="num">${total} pts</b>.</p>
         <form class="form" data-form="weights" novalidate>
-          <div class="grid-2">${INDICATORS.map(i => `<label class="field"><span>${esc(i.label)}</span><input class="input num" id="w-${i.key}" name="${i.key}" type="number" min="0" max="100" step="1" value="${w[i.key] ?? i.weight}"></label>`).join('')}</div>
+          <div class="grid-2">${INDICATORS.map(i => { const off = hidden.includes(i.key); return `<div class="field ind-cfg ${off ? 'is-off' : ''}"><label for="w-${i.key}">${esc(i.label)}${off ? ' <span class="chip chip-soft">oculto</span>' : ''}</label>
+            <div class="ind-row"><input class="input num" id="w-${i.key}" name="${i.key}" type="number" min="0" max="100" step="1" value="${w[i.key] ?? i.weight}">
+            <label class="ind-on"><input type="checkbox" id="on-${i.key}" name="on-${i.key}" ${off ? '' : 'checked'}> Ativo</label></div></div>`; }).join('')}</div>
           <p class="form-msg" data-msg></p>
-          <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar pesos</button>
+          <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar indicadores</button>
           <button class="btn" type="button" data-action="defaultWeights">Voltar aos pesos padrão</button></div>
         </form>
       </section>
@@ -1014,7 +1018,7 @@
         <h2 class="section-title">Metas mensais da equipe</h2>
         <p class="section-note">Valem para todos os barbeiros. Para ajustar a meta de alguém, abra o barbeiro em Time e ranking, em "Metas individuais". Percentuais em %, valores em R$.</p>
         <form class="form" data-form="goals" novalidate>
-          <div class="grid-2">${INDICATORS.map(i => `<label class="field"><span>${esc(i.label)}</span><input class="input num" id="gt-${i.key}" name="${i.key}" type="number" min="0" step="any" value="${GB.goalFor(state, '', i.key)}"></label>`).join('')}</div>
+          <div class="grid-2">${GB.visibleInds(state).map(i => `<label class="field"><span>${esc(i.label)}</span><input class="input num" id="gt-${i.key}" name="${i.key}" type="number" min="0" step="any" value="${GB.goalFor(state, '', i.key)}"></label>`).join('')}</div>
           <p class="form-msg" data-msg></p>
           <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar metas</button>
           <button class="btn" type="button" data-action="defaultGoals">Voltar às metas padrão</button></div>
@@ -1095,7 +1099,7 @@ Content-Type: application/json</pre>
       <h2 class="section-title">Como a pontuação funciona</h2>
       <h3>1. Indicadores e pesos</h3>
       <p>Cada indicador vale um peso. Só entram no cálculo os indicadores que têm dados no período.</p>
-      <ul>${INDICATORS.map(i => `<li>${esc(i.label)}: <b>${w[i.key] ?? i.weight} pts</b></li>`).join('')}</ul>
+      <ul>${GB.visibleInds(state).map(i => `<li>${esc(i.label)}: <b>${w[i.key] ?? i.weight} pts</b></li>`).join('')}</ul>
       <h3>2. Nota de cada indicador</h3>
       <p>Quem está em 1º recebe 100 e o último recebe 0. Os outros ficam no meio, proporcional ao resultado.</p>
       <h3>3. Pontuação geral</h3>
@@ -1488,11 +1492,13 @@ Content-Type: application/json</pre>
         if (Number.isNaN(v) || v < 0 || v > 100) return setMsg(f, `Peso de "${i.label}" deve ficar entre 0 e 100.`);
         w[i.key] = Math.round(v);
       }
-      state.weights = w; save(); toast('Pesos salvos.'); render();
+      const hidden = INDICATORS.filter(i => !f.elements['on-' + i.key].checked).map(i => i.key);
+      if (INDICATORS.length - hidden.length < 2) return setMsg(f, 'Deixe pelo menos 2 indicadores ativos.');
+      state.weights = w; state.hidden = hidden; save(); toast('Indicadores salvos.'); render();
     },
     goals(f) {
-      const g = {};
-      for (const i of INDICATORS) {
+      const g = { ...(state.goals?.team || {}) };
+      for (const i of GB.visibleInds(state)) {
         const v = Number(val(f, i.key).replace(',', '.'));
         if (Number.isNaN(v) || v < 0) return setMsg(f, `Meta de "${i.label}" precisa ser um número positivo.`);
         g[i.key] = v;

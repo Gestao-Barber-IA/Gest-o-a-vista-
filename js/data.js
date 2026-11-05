@@ -220,8 +220,10 @@
     const rows = barbers.map(b => ({ barber: b, sums: aggregate(state, b.id, range), values: {}, ranks: {}, scores: {}, leads: [], overall: 0 }));
 
     const active = [], inactive = [];
+    const hidden = state.hidden || [];
     for (const ind of INDICATORS) {
       const w = weights[ind.key] ?? ind.weight;
+      if (hidden.includes(ind.key)) { inactive.push({ ...ind, weight: w, reason: 'oculto' }); continue; }
       const vals = rows.map(r => ind.calc(r.sums));
       if (w <= 0) { inactive.push({ ...ind, weight: w, reason: 'peso zero' }); continue; }
       if (vals.every(v => v === null)) { inactive.push({ ...ind, weight: w, reason: 'sem dados' }); continue; }
@@ -364,6 +366,7 @@
       version: 2,
       demo: true,
       monthly,
+      hidden: ['fid'],
       goals: { team: { ...DEFAULT_GOALS }, byBarber: {} },
       company: { name: 'Barbearia Demonstração', cnpj: '00.000.000/0001-00', phone: '(11) 90000-0000', email: 'gestor@demo.com', logo: null },
       users: [
@@ -381,7 +384,7 @@
 
   function emptyState(company, gestor) {
     return {
-      version: 2, demo: false, company, users: [gestor], invites: [], barbers: [], entries: [], monthly: [],
+      version: 2, demo: false, company, users: [gestor], invites: [], barbers: [], entries: [], monthly: [], hidden: ['fid'],
       goals: { team: { ...DEFAULT_GOALS }, byBarber: {} },
       weights: Object.fromEntries(INDICATORS.map(i => [i.key, i.weight])),
       apiKey: 'gbia_' + hash(String(Date.now())) + hash('k' + Math.random()),
@@ -401,6 +404,7 @@
             st.barbers.forEach(b => { b.role = b.role || 'Barbeiro'; });
             DB.save(st);
           }
+          if (!Array.isArray(st.hidden)) { st.hidden = ['fid']; DB.save(st); } // fidelização começa oculta
           return st;
         } catch (e) { /* recria abaixo */ }
       }
@@ -456,5 +460,9 @@
     else state.entries.push({ id: uid('e_'), ...entry });
   }
 
-  window.GB = Object.assign(window.GB || {}, { DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
+  // Indicadores ligados (o gestor pode ocultar um indicador em Configurações).
+  const visibleInds = state => INDICATORS.filter(i => !(state.hidden || []).includes(i.key));
+  const FIELD_IND = { fidPct: 'fid', ocupPct: 'ocup' };
+
+  window.GB = Object.assign(window.GB || {}, { visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
 })();
