@@ -1,0 +1,1042 @@
+/* Gestão Barber IA — telas e interação. */
+(function () {
+  'use strict';
+  const { DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, importEntries, upsertEntry, emptyState, passHash, uid, iso, fromIso, hash, icon, logo } = window.GB;
+
+  let state = DB.load();
+  const ui = {
+    period: DB.pref.get('period', 'mes'),
+    offset: 0,
+    authMode: 'entrar',
+    perfBarber: null,
+    invite: null,
+    confirm: null,
+    tvIndex: 0,
+    tvTimer: null,
+    lastReset: null,
+  };
+  if (!PERIOD_NAMES[ui.period]) ui.period = 'mes';
+  document.documentElement.style.setProperty('--base-size', DB.pref.get('size', '16') + 'px');
+
+  const root = document.getElementById('app');
+  const $ = (s, r = document) => r.querySelector(s);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const save = () => DB.save(state);
+
+  // ---------- formatação ----------
+  const nf0 = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
+  const nf1 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const nf2 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const money0 = v => 'R$ ' + nf0.format(v);
+  const money2 = v => 'R$ ' + nf2.format(v);
+  function fmt(ind, v) {
+    if (v === null || v === undefined) return '—';
+    switch (ind.fmt) {
+      case 'money': return money0(v);
+      case 'money2': return money2(v);
+      case 'pct': return nf1.format(v) + '%';
+      default: return nf0.format(v);
+    }
+  }
+  const score = v => nf1.format(v);
+  const ord = n => n + 'º';
+  const dateBR = s => { const d = fromIso(s); return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }); };
+
+  // ---------- sessão ----------
+  function currentUser() {
+    const id = DB.session.get();
+    return state.users.find(u => u.id === id && u.status === 'ativo') || null;
+  }
+  const isGestor = u => !!u && u.role === 'gestor';
+  const barberById = id => state.barbers.find(b => b.id === id);
+  const range = (offset = ui.offset) => periodRange(ui.period, offset);
+
+  // ---------- pedaços de interface ----------
+  function avatar(b, size = 44) {
+    const name = b?.name || '?';
+    const ini = name.split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase();
+    const inner = b?.photo ? `<img src="${esc(b.photo)}" alt="">` : esc(ini);
+    return `<span class="avatar" style="--s:${size}px" aria-hidden="true">${inner}</span>`;
+  }
+  function companyAvatar(size = 40) {
+    return avatar({ name: state.company.name, photo: state.company.logo }, size);
+  }
+  const brand = (cls = '') => `
+    <span class="brand ${cls}">${logo()}
+      <span class="brand-text"><span class="brand-name">Gestão Barber</span>
+      <span class="brand-sub"><span class="brand-ia">IA</span> performance da equipe</span></span>
+    </span>`;
+
+  function toast(msg) {
+    document.querySelectorAll('.toast').forEach(t => t.remove());
+    const t = document.createElement('div');
+    t.className = 'toast'; t.setAttribute('role', 'status'); t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 2800);
+  }
+
+  function readImage(file, max = 256) {
+    return new Promise((resolve, reject) => {
+      if (!file || !file.type.startsWith('image/')) { reject(new Error('Escolha um arquivo de imagem.')); return; }
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Não foi possível ler a imagem.'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Imagem inválida.'));
+        img.onload = () => {
+          const s = Math.min(1, max / Math.max(img.width, img.height));
+          const c = document.createElement('canvas');
+          c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+          c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+          resolve(c.toDataURL('image/jpeg', 0.85));
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function copyText(text, fallbackEl) {
+    try { await navigator.clipboard.writeText(text); toast('Link copiado.'); }
+    catch (e) {
+      if (fallbackEl) {
+        const r = document.createRange(); r.selectNodeContents(fallbackEl);
+        const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+      }
+      toast('Selecionei o texto. Use Copiar do seu aparelho.');
+    }
+  }
+
+  // ---------- abertura ----------
+  const PHRASES = [
+    ['Cada cliente na cadeira é uma chance de ser lembrado.', 'Capriche no detalhe que ninguém pediu.'],
+    ['Consistência vence talento que não aparece.', 'Repita hoje o que deu certo ontem.'],
+    ['O corte termina na cadeira. A experiência, não.', 'Ofereça algo a mais no próximo atendimento.'],
+    ['Meta batida começa no primeiro cliente do dia.', 'Abra a agenda com energia.'],
+    ['Quem mede, melhora.', 'Confira seus números antes de começar.'],
+    ['Pequenos ajustes trazem grandes resultados.', 'Escolha um ponto para melhorar hoje.'],
+    ['Cliente bem atendido volta e traz outro.', 'Apresente o plano mensal para quem vem sempre.'],
+    ['Disciplina é fazer bem feito mesmo sem ninguém olhando.', 'Siga o checklist do começo ao fim.'],
+    ['Seu próximo nível está no hábito de hoje.', 'Treine uma técnica nova nesta semana.'],
+    ['Time forte se faz com cada um dando o seu melhor.', 'Ajude um colega no próximo intervalo.'],
+    ['Atenção ao cliente é o melhor marketing.', 'Chame pelo nome quem você atende.'],
+    ['O ranking muda todo dia. Sua dedicação também pode.', 'Comece pelo que está ao seu alcance.'],
+  ];
+  function splash(next) {
+    const [q, sub] = PHRASES[Math.floor(Math.random() * PHRASES.length)];
+    root.innerHTML = `
+      <div class="splash" role="status" aria-live="polite">
+        <div class="splash-inner">
+          ${brand('brand--lg')}
+          <p class="splash-quote">${esc(q)}</p>
+          <p class="splash-sub">${esc(sub)}</p>
+          <div class="splash-bar" aria-hidden="true"><span></span></div>
+        </div>
+      </div>`;
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    setTimeout(next, reduce ? 600 : 1900);
+  }
+
+  // ---------- login, cadastro e convite ----------
+  function authShell(inner) {
+    return `<div class="auth"><div class="auth-card">${brand('brand--lg')}${inner}
+      <p class="auth-foot">Cada atendimento conta.</p></div></div>`;
+  }
+  function tabs(active) {
+    return `<div class="tabs" role="tablist">
+      <button type="button" role="tab" aria-selected="${active === 'entrar'}" data-action="authMode" data-mode="entrar">Entrar</button>
+      <button type="button" role="tab" aria-selected="${active === 'criar'}" data-action="authMode" data-mode="criar">Criar cadastro</button>
+    </div>`;
+  }
+
+  function renderAuth(mode, code) {
+    let inner = '';
+    if (mode === 'convite') {
+      const inv = state.invites.find(i => i.code === code && !i.used);
+      const b = inv && barberById(inv.barberId);
+      if (!inv || !b) {
+        inner = `<div class="empty" style="padding:10px 0">${icon('link')}<h2>Convite inválido</h2>
+          <p>Este link já foi usado ou foi cancelado. Peça um novo convite ao gestor da barbearia.</p>
+          <a class="btn" href="#inicio" data-action="authMode" data-mode="entrar">Ir para o login</a></div>`;
+      } else {
+        inner = `
+          <p class="auth-lead"><b style="color:var(--fg)">${esc(state.company.name)}</b> convidou você para a equipe. Faça seu cadastro e aguarde o gestor aprovar sua entrada.</p>
+          <form class="form" data-form="invite" data-code="${esc(code)}" novalidate>
+            <label class="field"><span>Nome *</span><input class="input" id="inv-name" name="name" required value="${esc(b.name)}" autocomplete="name"></label>
+            <label class="field"><span>E-mail *</span><input class="input" id="inv-email" name="email" type="email" required autocomplete="email" placeholder="voce@email.com"></label>
+            <label class="field"><span>WhatsApp</span><input class="input" id="inv-phone" name="phone" type="tel" autocomplete="tel" placeholder="(00) 00000-0000"></label>
+            <label class="field"><span>Senha *</span><input class="input" id="inv-pass" name="pass" type="password" required minlength="6" autocomplete="new-password"><small>Mínimo de 6 caracteres.</small></label>
+            <p class="form-msg" data-msg></p>
+            <button class="btn btn-primary btn-block" type="submit">${icon('check')} Enviar cadastro</button>
+          </form>`;
+      }
+    } else if (mode === 'pendente') {
+      inner = `<div class="empty" style="padding:10px 0">${icon('clock')}<h2>Cadastro enviado</h2>
+        <p>Agora é só aguardar. Assim que o gestor aprovar, você entra com seu e-mail e senha.</p>
+        <button class="btn" data-action="authMode" data-mode="entrar">Voltar para o login</button></div>`;
+    } else if (mode === 'recuperar') {
+      inner = `
+        <p class="auth-lead">Informe seu e-mail. O gestor da barbearia pode gerar uma senha nova para você em <b>Barbeiros</b>.</p>
+        <form class="form" data-form="recover" novalidate>
+          <label class="field"><span>E-mail *</span><input class="input" id="rec-email" name="email" type="email" required autocomplete="email"></label>
+          <p class="form-msg" data-msg></p>
+          <button class="btn btn-primary btn-block" type="submit">Pedir nova senha</button>
+        </form>
+        <div class="auth-links"><button class="link-btn" data-action="authMode" data-mode="entrar">Voltar para o login</button></div>`;
+    } else if (mode === 'criar') {
+      inner = `${tabs('criar')}
+        <p class="auth-lead">Crie a conta da sua barbearia. Você será o gestor e vai convidar os barbeiros depois.</p>
+        <form class="form" data-form="signup" novalidate>
+          <label class="field"><span>Nome da barbearia *</span><input class="input" id="su-company" name="company" required></label>
+          <label class="field"><span>Seu nome *</span><input class="input" id="su-name" name="name" required autocomplete="name"></label>
+          <label class="field"><span>E-mail *</span><input class="input" id="su-email" name="email" type="email" required autocomplete="email" placeholder="voce@barbearia.com"></label>
+          <label class="field"><span>Senha *</span><input class="input" id="su-pass" name="pass" type="password" required minlength="6" autocomplete="new-password"><small>Mínimo de 6 caracteres.</small></label>
+          ${state.demo ? '<p class="section-note">Neste aparelho, criar uma conta nova substitui os dados de demonstração. Dá para restaurá-los depois em Configurações.</p>' : ''}
+          <p class="form-msg" data-msg></p>
+          <button class="btn btn-primary btn-block" type="submit">${icon('check')} Criar conta</button>
+        </form>
+        <p class="section-note" style="text-align:center">Barbeiro? Sua entrada é pelo link de convite que o gestor envia.</p>`;
+    } else {
+      inner = `${tabs('entrar')}
+        <p class="auth-lead">Entre com sua conta.</p>
+        <form class="form" data-form="login" novalidate>
+          <label class="field"><span>E-mail *</span><input class="input" id="li-email" name="email" type="email" required autocomplete="email" placeholder="voce@barbearia.com"></label>
+          <div class="field"><label for="li-pass" style="font-weight:600;font-size:.95rem">Senha *</label>
+            <div class="input-wrap"><input class="input" id="li-pass" name="pass" type="password" required autocomplete="current-password" placeholder="••••••••">
+            <button type="button" data-action="togglePass" aria-label="Mostrar senha">${icon('eye')}</button></div></div>
+          <label class="check"><input type="checkbox" id="li-remember" name="remember" checked><span><b>Lembrar-me neste aparelho</b><small>Você continua conectado até sair.</small></span></label>
+          <p class="form-msg" data-msg></p>
+          <button class="btn btn-primary btn-block" type="submit">${icon('login')} Entrar</button>
+        </form>
+        <div class="divider">ou</div>
+        <div class="stack">
+          <button class="btn btn-dark btn-block" data-action="social" data-name="Google">Continuar com Google</button>
+          <button class="btn btn-dark btn-block" data-action="social" data-name="Apple">Continuar com Apple</button>
+          <button class="btn btn-dark btn-block" data-action="social" data-name="Microsoft">Continuar com Microsoft</button>
+        </div>
+        <div class="auth-links">
+          <button class="link-btn" data-action="authMode" data-mode="criar">Ainda não tenho conta. Criar agora</button>
+          <button class="link-btn" data-action="authMode" data-mode="recuperar">Esqueci minha senha</button>
+        </div>
+        ${state.demo ? `<div class="demo-box"><span><strong>Demonstração.</strong> Os números são de exemplo. Entre como:</span>
+          <div class="row"><button class="btn btn-sm" data-action="demoFill" data-email="gestor@demo.com">Gestor</button>
+          <button class="btn btn-sm" data-action="demoFill" data-email="barbeiro@demo.com">Barbeiro</button>
+          <span class="muted" style="align-self:center">senha: demo123</span></div></div>` : ''}`;
+    }
+    root.innerHTML = authShell(inner);
+  }
+
+  // ---------- menu ----------
+  const NAV = [
+    { items: [
+      { r: 'inicio', t: 'Início', i: 'grid' },
+      { r: 'time', t: 'Time e ranking', i: 'trophy' },
+      { r: 'lancamentos', t: 'Lançamentos', i: 'wallet', g: 1 },
+      { r: 'gestao-visual', t: 'Gestão Visual', i: 'signal', soon: 1 },
+      { r: 'fechamento', t: 'Fechamento', i: 'clipboard', g: 1, soon: 1 },
+    ] },
+    { group: 'GP · Gestão de pessoas', items: [
+      { r: 'performance', t: 'Minha performance', i: 'chart' },
+      { r: 'barbeiros', t: 'Barbeiros', i: 'users', g: 1 },
+      { r: 'tarefas', t: 'Tarefas', i: 'clipboard', soon: 1 },
+      { r: 'metas', t: 'Metas', i: 'target', soon: 1 },
+      { r: 'premios', t: 'Prêmios e metas', i: 'gift', soon: 1 },
+      { r: 'sonhos', t: 'Sonhos', i: 'rocket', soon: 1 },
+      { r: 'checklist', t: 'Checklist POP', i: 'checksq', soon: 1 },
+    ] },
+    { group: 'Gestor', g: 1, items: [
+      { r: 'empresa', t: 'Minha empresa', i: 'building' },
+      { r: 'integracao', t: 'Integração & API', i: 'plug' },
+      { r: 'apresentacao', t: 'Modo apresentação', i: 'monitor' },
+      { r: 'configuracoes', t: 'Configurações', i: 'gear' },
+      { r: 'organograma', t: 'Organograma', i: 'org', soon: 1 },
+      { r: 'cockpit', t: 'Cockpit do gestor', i: 'gauge', soon: 1 },
+    ] },
+    { group: 'Conta', items: [
+      { r: 'cadastro', t: 'Meu cadastro', i: 'idcard' },
+      { r: 'ajuda', t: 'Central de ajuda', i: 'help' },
+    ] },
+  ];
+  const SOON_TEXT = {
+    'gestao-visual': 'Quadro visual da loja com metas do dia, ocupação da agenda e alertas.',
+    fechamento: 'Fechamento do caixa e da comissão de cada barbeiro no fim do período.',
+    tarefas: 'Tarefas do dia para cada barbeiro, com prazo e confirmação.',
+    metas: 'Metas individuais e da equipe, com acompanhamento em tempo real.',
+    premios: 'Prêmios ligados às metas, para motivar o time.',
+    sonhos: 'Cada barbeiro registra um sonho e acompanha quanto falta para realizá-lo.',
+    checklist: 'Checklist do procedimento padrão (POP), que alimenta o indicador Checklist POP.',
+    organograma: 'Estrutura da equipe e responsabilidades.',
+    cockpit: 'Visão rápida do gestor com os principais números do negócio.',
+  };
+
+  function drawer(user, route) {
+    const g = isGestor(user);
+    const groups = NAV.filter(gr => !gr.g || g).map(gr => {
+      const items = gr.items.filter(it => !it.g || g).map(it => `
+        <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}</a>`).join('');
+      return (gr.group ? `<div class="nav-group">${esc(gr.group)}</div>` : '') + items;
+    }).join('');
+    const periods = Object.entries(PERIOD_NAMES).map(([k, v]) =>
+      `<button type="button" aria-pressed="${ui.period === k}" data-action="period" data-period="${k}">${v}</button>`).join('');
+    return `
+      <div class="scrim" hidden data-action="closeDrawer"></div>
+      <nav class="drawer" aria-label="Menu principal">
+        ${brand()}
+        ${groups}
+        <div class="period-box"><div class="nav-group">Período</div>${periods}</div>
+        <div class="nav-sep"></div>
+        <button class="nav-item" data-action="logout">${icon('logout')}<span>Sair</span></button>
+      </nav>`;
+  }
+
+  function popover(user) {
+    const c = state.company;
+    const b = user.barberId ? barberById(user.barberId) : null;
+    const who = isGestor(user) ? { name: c.name, photo: c.logo } : (b || { name: user.name });
+    return `
+      <div class="popover" hidden role="dialog" aria-label="Perfil">
+        <div class="popover-head">${avatar(who, 64)}<div><b>${esc(isGestor(user) ? c.name : user.name)}</b><span>${esc(user.email)}</span></div></div>
+        <label class="btn btn-dark btn-block" style="cursor:pointer">${icon('camera')} Atualizar foto
+          <input type="file" accept="image/*" hidden data-change="${isGestor(user) ? 'companyLogo' : 'myPhoto'}"></label>
+        <ul class="info-list">
+          ${c.cnpj ? `<li>${icon('card')}<span>CNPJ: <b>${esc(c.cnpj)}</b></span></li>` : ''}
+          ${c.phone ? `<li>${icon('phone')}<b>${esc(c.phone)}</b></li>` : ''}
+          <li>${icon('building')}<b>${esc(c.name)}</b></li>
+          ${c.email ? `<li>${icon('mail')}<b>${esc(c.email)}</b></li>` : ''}
+        </ul>
+        <button class="btn btn-danger btn-block" data-action="logout">${icon('logout')} Sair</button>
+      </div>`;
+  }
+
+  // ---------- componentes do ranking ----------
+  function periodNav() {
+    const r = range();
+    return `<div class="period-nav">
+      <button class="icon-btn" data-action="shift" data-dir="-1" aria-label="Período anterior">${icon('left')}</button>
+      <b>${esc(PERIOD_NAMES[ui.period])}: ${esc(r.label)}</b>
+      <button class="icon-btn" data-action="shift" data-dir="1" aria-label="Próximo período" ${ui.offset >= 0 ? 'disabled style="opacity:.3"' : ''}>${icon('right')}</button>
+    </div>`;
+  }
+
+  function titleChip(R, id) {
+    if (R.title.barberId !== id) return '';
+    return R.title.type === 'mvp' ? `<span class="chip chip-mvp">${icon('diamond')} MVP</span>` : `<span class="chip chip-destaque">${icon('bolt')} Destaque</span>`;
+  }
+
+  function podium(R) {
+    const rows = R.rows;
+    if (!rows.length) return emptyBarbers();
+    const card = (row, place) => {
+      if (!row) return `<div class="pod pod-${place} pod-empty"><span class="pod-place">${ord(place)} lugar</span></div>`;
+      const b = row.barber;
+      const isTop = place === 1;
+      const t = isTop && R.title.barberId === b.id ? R.title.type : null;
+      const cls = t === 'mvp' ? 'is-mvp' : t === 'destaque' ? 'is-destaque' : '';
+      const medal = isTop ? icon('trophy') : icon(place === 2 ? 'medal' : 'award');
+      return `<div class="pod pod-${place} ${cls}">
+        <span class="pod-medal">${medal}</span>
+        ${t === 'mvp' ? `<span class="pod-title">${icon('diamond')} MVP</span>` : t === 'destaque' ? `<span class="pod-title">${icon('bolt')} DESTAQUE</span>` : (isTop ? '<span style="height:18px"></span>' : '')}
+        <span class="pod-money num">${money0(row.sums.fat)}</span>
+        ${avatar(b, isTop ? 76 : 58)}
+        <span class="pod-place">${ord(place)} lugar</span>
+        <span class="pod-name">${esc(b.name)}</span>
+        <span class="pod-pts num">${score(row.overall)} pts</span>
+        <span class="pod-leads num" title="Indicadores em 1º lugar">${row.leads.length} / ${R.N}</span>
+        <a class="pod-btn" href="#perfil-${esc(b.id)}">Ver perfil</a>
+        ${isTop ? icon('crown') : ''}
+      </div>`;
+    };
+    return `<div class="podium">${card(rows[1], 2)}${card(rows[0], 1)}${card(rows[2], 3)}</div>`;
+  }
+
+  function prevPositions() {
+    const P = computeRanking(state, range(ui.offset - 1));
+    const hasData = P.active.length > 0;
+    return hasData ? Object.fromEntries(P.rows.map(r => [r.barber.id, r.pos])) : {};
+  }
+
+  function rankingList(R, limit) {
+    if (!R.rows.length) return '';
+    const prev = prevPositions();
+    const rows = (limit ? R.rows.slice(0, limit) : R.rows).map(r => {
+      const p = prev[r.barber.id];
+      const trend = !p || p === r.pos ? ['', 'dash', 'Mesma posição do período anterior'] : p > r.pos ? ['up', 'up', `Subiu ${p - r.pos} posição(ões)`] : ['down', 'down', `Caiu ${r.pos - p} posição(ões)`];
+      return `<li><a class="rank-row ${r.pos <= 3 ? 'top' : ''}" href="#perfil-${esc(r.barber.id)}">
+        <span class="rank-pos num">${ord(r.pos)}</span>
+        ${avatar(r.barber, 46)}
+        <span class="rank-who"><b><span class="rank-name">${esc(r.barber.name)}</span>${titleChip(R, r.barber.id)}</b><span class="num">${money2(r.sums.fat)}</span></span>
+        <span class="rank-score num">${score(r.overall)}</span>
+        <span class="rank-trend ${trend[0]}" title="${trend[2]}">${icon(trend[1])}</span>
+      </a></li>`;
+    }).join('');
+    return `<ol class="rank-list">${rows}</ol>`;
+  }
+
+  function highlights(R) {
+    if (!R.active.length) return `<div class="card muted">Ainda não há lançamentos neste período.</div>`;
+    return `<div class="highlights">${R.active.map(ind => {
+      const leaders = ind.leaders.map(barberById).filter(Boolean);
+      if (!leaders.length) return '';
+      const row = R.rows.find(r => r.barber.id === leaders[0].id);
+      return `<div class="card card-glow hl">
+        <div class="hl-head">${icon('trophy')}<span>Melhor em ${esc(ind.label)} · ${ind.weight} pts</span></div>
+        <div class="hl-who"><span class="avatar-stack">${leaders.slice(0, 3).map(b => avatar(b, 44)).join('')}</span><span>${leaders.map(b => esc(b.name)).join(' + ')}</span></div>
+        <div class="hl-val num">${fmt(ind, row.values[ind.key])}</div>
+        ${leaders.length > 1 ? '<span><span class="chip chip-tie">Empate na liderança</span></span>' : ''}
+      </div>`;
+    }).join('')}</div>`;
+  }
+
+  function titleCard(R) {
+    const rule = `Destaque: 1º lugar em pelo menos ${R.half} de ${R.N} indicadores. MVP: em ${R.mvpNeed}.`;
+    if (!R.title.type) {
+      return `<div class="card title-card is-none">
+        <div class="eyebrow">${icon('trophy')} Título do período</div>
+        <h3>Ninguém conquistou título ainda</h3>
+        <p class="muted">${R.N >= 2 ? esc(rule) : 'São necessários pelo menos 2 indicadores com dados.'}</p></div>`;
+    }
+    const row = R.rows.find(r => r.barber.id === R.title.barberId);
+    const names = row.leads.map(k => INDICATORS.find(i => i.key === k).label).join(' · ');
+    const mvp = R.title.type === 'mvp';
+    return `<div class="card title-card ${mvp ? 'is-mvp' : ''}">
+      <div class="eyebrow">${icon(mvp ? 'diamond' : 'bolt')} ${mvp ? 'MVP do período' : 'Destaque do período'}</div>
+      <h3>${esc(row.barber.name)}</h3>
+      <p><b>${row.leads.length} de ${R.N} indicadores em 1º lugar</b></p>
+      <p class="muted">${esc(names)}</p>
+      <p class="muted" style="font-size:.88rem;margin-top:6px">${esc(rule)}${mvp ? '' : ' Mais um 1º lugar e vira MVP.'}</p>
+    </div>`;
+  }
+
+  function inactiveNote(R) {
+    const none = R.inactive.filter(i => i.reason === 'sem dados');
+    if (!none.length) return '';
+    return `<p class="section-note">Indicadores ainda sem dados (não aparecem e não pontuam): ${none.map(i => esc(i.label)).join(', ')}.</p>`;
+  }
+
+  function classification(R) {
+    if (!R.rows.length || !R.active.length) return '';
+    const head = R.active.map(i => `<th>${esc(i.label)} <small>(${i.weight} pts)</small></th>`).join('');
+    const body = R.rows.map(r => `<tr>
+      <td class="num"><b>${ord(r.pos)}</b></td>
+      <td><span class="td-who">${avatar(r.barber, 36)}<span>${esc(r.barber.name)}</span></span></td>
+      ${R.active.map(i => `<td class="${r.ranks[i.key] === 1 && i.leaders.includes(r.barber.id) ? 'lead-cell' : ''}">${ord(r.ranks[i.key])} <small>(${score(r.scores[i.key])} pts)</small></td>`).join('')}
+      <td class="td-score">${score(r.overall)}</td></tr>`).join('');
+    return `<section class="section card">
+      <h2 class="section-title">Classificação geral</h2>
+      <p class="section-note">Posição em cada indicador e nota proporcional (1º = 100, último = 0). A pontuação geral é a média ponderada das notas pelos pesos.</p>
+      <div class="table-wrap"><table><thead><tr><th>Rank</th><th>Barbeiro</th>${head}<th>Pontuação</th></tr></thead><tbody>${body}</tbody></table></div>
+    </section>`;
+  }
+
+  function emptyBarbers() {
+    const u = currentUser();
+    return `<div class="card empty">${icon('users')}<h2>Nenhum barbeiro cadastrado</h2>
+      <p>${isGestor(u) ? 'Cadastre a equipe e envie os convites para começar o ranking.' : 'O gestor ainda não cadastrou a equipe.'}</p>
+      ${isGestor(u) ? `<a class="btn btn-primary" href="#barbeiros">${icon('plus')} Cadastrar barbeiros</a>` : ''}</div>`;
+  }
+
+  // ---------- páginas ----------
+  function pageInicio(user) {
+    const R = computeRanking(state, range());
+    const shortcuts = isGestor(user)
+      ? [['lancamentos', 'Lançar resultados', 'bolt'], ['time', 'Time e ranking', 'trophy'], ['barbeiros', 'Barbeiros', 'users'], ['apresentacao', 'Tela da loja', 'crown']]
+      : [['performance', 'Minha performance', 'award'], ['time', 'Time e ranking', 'trophy'], ['ajuda', 'Como pontuo', 'help'], ['apresentacao', 'Tela da loja', 'crown']];
+    return `
+      ${periodNav()}
+      <div class="shortcuts">${shortcuts.map(([r, t, i]) => `<a class="shortcut" href="#${r}">${icon(i)}<span>${t}</span></a>`).join('')}</div>
+      <div class="home-cols">
+        <section class="section"><h2 class="section-title">Pódio do período</h2>${podium(R)}
+          <p class="section-note">Pontuação geral = média ponderada dos ${R.N} indicadores com dados. O título vai para quem lidera ${R.half} ou mais.</p></section>
+        <section class="section"><h2 class="section-title">Ranking em tempo real</h2>${rankingList(R)}</section>
+      </div>
+      <section class="section"><h2 class="section-title">Destaques por indicador</h2>${highlights(R)}${titleCard(R)}${inactiveNote(R)}</section>
+      ${classification(R)}`;
+  }
+
+  function pageTime() {
+    const R = computeRanking(state, range());
+    return `${periodNav()}
+      ${titleCard(R)}
+      <section class="section"><h2 class="section-title">Ranking completo</h2>${rankingList(R) || emptyBarbers()}</section>
+      ${classification(R)}${inactiveNote(R)}`;
+  }
+
+  function perfFor(barberId, user) {
+    const b = barberById(barberId);
+    if (!b) return `<div class="card empty">${icon('users')}<h2>Barbeiro não encontrado</h2><p>Ele pode ter sido removido da equipe.</p></div>`;
+    const R = computeRanking(state, range());
+    // Compara com o mesmo número de dias do período anterior, para não punir o período em andamento.
+    const cur = range(), prevR = range(ui.offset - 1);
+    if (ui.offset === 0) {
+      const days = Math.round((fromIso(iso(new Date())) - fromIso(cur.start)) / 86400000);
+      const s = fromIso(prevR.start);
+      const lim = iso(new Date(s.getFullYear(), s.getMonth(), s.getDate() + days));
+      if (lim < prevR.end) prevR.end = lim;
+    }
+    const P = computeRanking(state, prevR);
+    const row = R.rows.find(r => r.barber.id === b.id);
+    const prow = P.rows.find(r => r.barber.id === b.id);
+    const picker = isGestor(user) ? `<label class="field"><span>Barbeiro</span><select class="input" id="perf-barber" data-change="perfBarber">
+      ${state.barbers.map(x => `<option value="${esc(x.id)}" ${x.id === b.id ? 'selected' : ''}>${esc(x.name)}${x.active === false ? ' (inativo)' : ''}</option>`).join('')}</select></label>` : '';
+    if (!row) return `${picker}<div class="card muted">Este barbeiro está inativo e não aparece no ranking.</div>`;
+
+    let goal = '';
+    if (R.N >= 2) {
+      if (R.title.barberId === b.id && R.title.type === 'mvp') goal = `É o MVP do período. Mantenha a liderança em ${R.mvpNeed} indicadores.`;
+      else if (R.title.barberId === b.id) goal = `É o Destaque do período. Falta 1 indicador em 1º lugar para virar MVP.`;
+      else {
+        const miss = Math.max(0, R.half - row.leads.length);
+        goal = miss > 0 ? `Faltam ${miss} indicador(es) em 1º lugar para disputar o título de Destaque.` : `Já lidera ${row.leads.length} indicadores. Para levar o título, precisa superar quem lidera mais.`;
+      }
+    }
+
+    const cards = INDICATORS.map(ind => {
+      const act = R.active.find(a => a.key === ind.key);
+      if (!act) return `<div class="card ind" style="opacity:.55"><div class="ind-top"><span>${esc(ind.label)}</span><span class="chip chip-soft">sem dados</span></div><div class="ind-val">—</div></div>`;
+      const v = row.values[ind.key];
+      const pv = prow ? prow.values[ind.key] : null;
+      let delta = '';
+      if (v !== null && pv !== null && pv !== undefined && pv > 0) {
+        const d = ((v - pv) / pv) * 100;
+        delta = `<span class="${d >= 0 ? 'delta-up' : 'delta-down'}">${d >= 0 ? '+' : ''}${nf1.format(d)}% vs. período anterior</span>`;
+      }
+      const lead = act.leaders.includes(b.id);
+      return `<div class="card ind ${lead ? 'card-glow' : ''}">
+        <div class="ind-top"><span>${esc(ind.label)}</span>${lead ? '<span class="chip chip-destaque">1º lugar</span>' : `<span class="chip chip-soft">${act.weight} pts</span>`}</div>
+        <div class="ind-val num">${fmt(ind, v)}</div>
+        <div class="bar" title="Nota ${score(row.scores[ind.key])}"><i style="width:${Math.max(2, row.scores[ind.key])}%"></i></div>
+        <div class="ind-foot"><span class="num">${ord(row.ranks[ind.key])} de ${R.rows.length} · nota ${score(row.scores[ind.key])}</span>${delta}</div>
+      </div>`;
+    }).join('');
+
+    return `${picker}${periodNav()}
+      <div class="card">
+        <div class="perf-head">${avatar(b, 72)}<div><h2>${esc(b.name)} ${titleChip(R, b.id)}</h2><p class="muted" style="margin:2px 0 0">${esc(goal)}</p></div></div>
+        <div class="perf-stats">
+          <div class="stat"><span>Posição</span><b class="num">${ord(row.pos)} de ${R.rows.length}</b></div>
+          <div class="stat"><span>Pontuação</span><b class="num">${score(row.overall)}</b></div>
+          <div class="stat"><span>1º lugares</span><b class="num">${row.leads.length} de ${R.N}</b></div>
+          <div class="stat"><span>Faturamento</span><b class="num">${money0(row.sums.fat)}</b></div>
+        </div>
+      </div>
+      <section class="section"><h2 class="section-title">Indicadores</h2><div class="ind-grid">${cards}</div></section>`;
+  }
+
+  function pagePerformance(user) {
+    if (isGestor(user)) {
+      const id = ui.perfBarber && barberById(ui.perfBarber) ? ui.perfBarber : state.barbers[0]?.id;
+      return id ? perfFor(id, user) : emptyBarbers();
+    }
+    return user.barberId ? perfFor(user.barberId, user) : `<div class="card muted">Seu cadastro ainda não está ligado a um barbeiro. Fale com o gestor.</div>`;
+  }
+
+  function entryForm(barberId, date) {
+    const e = state.entries.find(x => x.barberId === barberId && x.date === date) || {};
+    return FIELDS.map(f => `<label class="field"><span>${esc(f.label)}</span>
+      <input class="input num" id="f-${f.key}" name="${f.key}" type="number" inputmode="decimal" min="0" step="${f.step}" value="${e[f.key] ?? ''}"></label>`).join('');
+  }
+
+  function pageLancamentos() {
+    if (!state.barbers.length) return emptyBarbers();
+    const r = range();
+    const date = ui.entryDate || iso(new Date());
+    const bid = ui.entryBarber && barberById(ui.entryBarber) ? ui.entryBarber : state.barbers[0].id;
+    const list = state.entries.filter(e => e.date >= r.start && e.date <= r.end).sort((a, b) => b.date.localeCompare(a.date) || (barberById(a.barberId)?.name || '').localeCompare(barberById(b.barberId)?.name || '')).slice(0, 60);
+    return `
+      <section class="section card">
+        <h2 class="section-title">Lançar resultado do dia</h2>
+        <p class="section-note">Um lançamento por barbeiro por dia. Salvar de novo na mesma data substitui os números. Deixe em branco o que não quiser lançar.</p>
+        <form class="form" data-form="entry" novalidate>
+          <div class="grid-2">
+            <label class="field"><span>Data</span><input class="input" type="date" id="f-date" name="date" value="${date}" max="${iso(new Date())}" data-change="entryKey" required></label>
+            <label class="field"><span>Barbeiro</span><select class="input" id="f-barber" name="barberId" data-change="entryKey">
+              ${state.barbers.filter(b => b.active !== false).map(b => `<option value="${esc(b.id)}" ${b.id === bid ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>
+          </div>
+          <div class="grid-2" data-fields>${entryForm(bid, date)}</div>
+          <p class="form-msg" data-msg></p>
+          <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar lançamento</button>
+          <a class="btn" href="#integracao">${icon('plug')} Importar de outro sistema</a></div>
+        </form>
+      </section>
+      <section class="section">
+        <h2 class="section-title">Lançamentos do período</h2>
+        ${periodNav()}
+        ${list.length ? `<div class="table-wrap card" style="padding:8px"><table style="min-width:620px"><thead><tr><th>Data</th><th>Barbeiro</th><th>Faturamento</th><th>Serviços</th><th>Clientes</th><th>Planos</th><th></th></tr></thead><tbody>
+          ${list.map(e => `<tr><td class="num">${dateBR(e.date)}</td><td>${esc(barberById(e.barberId)?.name || 'Removido')}</td>
+            <td>${e.fat != null ? money2(e.fat) : '—'}</td><td>${e.serv ?? '—'}</td><td>${e.cli ?? '—'}</td><td>${e.planos ?? '—'}</td>
+            <td><button class="btn btn-sm ${ui.confirm === e.id ? 'btn-danger' : ''}" data-action="delEntry" data-id="${esc(e.id)}" aria-label="Excluir lançamento">${ui.confirm === e.id ? 'Confirmar' : icon('trash')}</button></td></tr>`).join('')}
+          </tbody></table></div>` : '<div class="card muted">Nenhum lançamento neste período.</div>'}
+      </section>`;
+  }
+
+  function inviteLink(code) { return location.href.split('#')[0] + '#convite-' + code; }
+
+  function pageBarbeiros() {
+    const pending = state.users.filter(u => u.role === 'barbeiro' && u.status === 'pendente');
+    const pendingHtml = pending.length ? `<section class="section"><h2 class="section-title">Aguardando aprovação</h2><ul class="list">
+      ${pending.map(u => { const b = barberById(u.barberId); return `<li class="list-row">${avatar(b || u, 44)}
+        <div class="grow"><b>${esc(u.name)}</b><span class="muted">${esc(u.email)}${u.phone ? ' · ' + esc(u.phone) : ''}</span></div>
+        <div class="btn-row"><button class="btn btn-sm btn-primary" data-action="approve" data-id="${esc(u.id)}">${icon('check')} Aprovar</button>
+        <button class="btn btn-sm btn-danger" data-action="reject" data-id="${esc(u.id)}">Recusar</button></div></li>`; }).join('')}
+      </ul></section>` : '';
+
+    const rows = state.barbers.map(b => {
+      const u = state.users.find(x => x.barberId === b.id && x.status !== 'recusado');
+      const inv = state.invites.find(i => i.barberId === b.id && !i.used);
+      let status;
+      if (u && u.status === 'ativo') status = '<span class="chip chip-ok">com acesso</span>';
+      else if (u && u.status === 'pendente') status = '<span class="chip chip-warn">aguardando aprovação</span>';
+      else if (inv) status = '<span class="chip chip-soft">convite enviado</span>';
+      else status = '<span class="chip chip-soft">sem acesso</span>';
+      const showInvite = ui.invite === b.id && inv;
+      const link = inv ? inviteLink(inv.code) : '';
+      const msg = `Olá, ${b.name}! Você foi convidado para a equipe da ${state.company.name} no Gestão Barber IA. Faça seu cadastro por este link: ${link}`;
+      return `<li class="list-row" style="${b.active === false ? 'opacity:.6' : ''}">
+        ${avatar(b, 48)}
+        <div class="grow"><b>${esc(b.name)}</b>${status} ${b.active === false ? '<span class="chip chip-soft">inativo</span>' : ''}${u ? `<div class="muted" style="font-size:.88rem">${esc(u.email)}</div>` : ''}</div>
+        <div class="btn-row">
+          ${!u ? `<button class="btn btn-sm btn-primary" data-action="invite" data-id="${esc(b.id)}">${icon('link')} ${inv ? 'Ver convite' : 'Convidar'}</button>` : ''}
+          ${u && u.status === 'ativo' ? `<button class="btn btn-sm" data-action="resetPass" data-id="${esc(u.id)}">${icon('lock')} Nova senha</button>` : ''}
+          <label class="btn btn-sm" style="cursor:pointer">${icon('camera')} Foto<input type="file" accept="image/*" hidden data-change="barberPhoto" data-id="${esc(b.id)}"></label>
+          <button class="btn btn-sm" data-action="toggleBarber" data-id="${esc(b.id)}">${b.active === false ? 'Reativar' : 'Desativar'}</button>
+        </div>
+        ${showInvite ? `<div class="invite-box">
+          <span class="muted">Envie este link para ${esc(b.name)}. Ele faz o cadastro e você aprova aqui.</span>
+          <div class="invite-link" id="inv-${esc(b.id)}">${esc(link)}</div>
+          <div class="btn-row">
+            <button class="btn btn-sm" data-action="copyInvite" data-id="${esc(b.id)}">${icon('copy')} Copiar link</button>
+            <a class="btn btn-sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(msg)}">${icon('chat')} WhatsApp</a>
+            <a class="btn btn-sm" href="mailto:?subject=${encodeURIComponent('Convite: ' + state.company.name)}&body=${encodeURIComponent(msg)}">${icon('mail')} E-mail</a>
+            <button class="btn btn-sm btn-danger" data-action="cancelInvite" data-id="${esc(b.id)}">Cancelar convite</button>
+          </div></div>` : ''}
+      </li>`;
+    }).join('');
+
+    return `${pendingHtml}
+      <section class="section card">
+        <h2 class="section-title">Adicionar barbeiro</h2>
+        <form class="form" data-form="addBarber" novalidate>
+          <div class="grid-2"><label class="field"><span>Nome *</span><input class="input" id="nb-name" name="name" required></label>
+          <label class="field"><span>Foto</span><input class="input" id="nb-photo" name="photo" type="file" accept="image/*"></label></div>
+          <p class="form-msg" data-msg></p>
+          <div><button class="btn btn-primary" type="submit">${icon('plus')} Adicionar</button></div>
+        </form>
+      </section>
+      ${ui.lastReset ? `<div class="card card-glow"><b>Senha provisória de ${esc(ui.lastReset.name)}:</b> <span class="invite-link" style="display:inline-block">${esc(ui.lastReset.pass)}</span><p class="section-note">Passe essa senha para o barbeiro. Ele pode trocá-la em Meu cadastro.</p></div>` : ''}
+      <section class="section"><h2 class="section-title">Equipe (${state.barbers.length})</h2>
+        ${state.barbers.length ? `<ul class="list">${rows}</ul>` : '<div class="card muted">Ninguém cadastrado ainda.</div>'}</section>`;
+  }
+
+  function pageConfig() {
+    const w = state.weights;
+    const total = INDICATORS.reduce((a, i) => a + Number(w[i.key] ?? i.weight), 0);
+    return `
+      <section class="section card">
+        <h2 class="section-title">Pesos dos indicadores</h2>
+        <p class="section-note">O peso define quanto cada indicador vale na pontuação geral. Peso zero tira o indicador do ranking. Soma atual: <b class="num">${total} pts</b>.</p>
+        <form class="form" data-form="weights" novalidate>
+          <div class="grid-2">${INDICATORS.map(i => `<label class="field"><span>${esc(i.label)}</span><input class="input num" id="w-${i.key}" name="${i.key}" type="number" min="0" max="100" step="1" value="${w[i.key] ?? i.weight}"></label>`).join('')}</div>
+          <p class="form-msg" data-msg></p>
+          <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar pesos</button>
+          <button class="btn" type="button" data-action="defaultWeights">Voltar aos pesos padrão</button></div>
+        </form>
+      </section>
+      <section class="section card">
+        <h2 class="section-title">Dados deste aparelho</h2>
+        <p class="section-note">Nesta versão os dados ficam salvos neste navegador. Quando o app for ligado a um servidor, eles passam a valer em todos os aparelhos.</p>
+        <div class="btn-row">
+          <button class="btn ${ui.confirm === 'demo' ? 'btn-danger' : ''}" data-action="resetDemo">${ui.confirm === 'demo' ? 'Confirmar: apagar e restaurar demonstração' : 'Restaurar dados de demonstração'}</button>
+          <button class="btn btn-danger" data-action="clearData">${ui.confirm === 'clear' ? 'Confirmar: apagar equipe e lançamentos' : 'Apagar equipe e lançamentos'}</button>
+        </div>
+      </section>`;
+  }
+
+  function pageIntegracao() {
+    const ex = JSON.stringify([
+      { data: iso(new Date()), barbeiro: state.barbers[0]?.name || 'Nome do barbeiro', faturamento: 420.5, servicos: 9, clientes: 8, checklist_pop: 1, horas_disponiveis: 8, horas_ocupadas: 6.5, planos_mensais: 1, clientes_retorno: 5, venda_produtos: 60 },
+    ], null, 2);
+    return `
+      <section class="section card">
+        <h2 class="section-title">Como funciona</h2>
+        <p class="section-note">Outro sistema (agenda, caixa, ERP) envia os resultados de cada barbeiro por dia. Os números entram no ranking na hora, junto com os lançados à mão.</p>
+        <div class="field"><span>Chave da API</span><div class="invite-link" id="api-key">${esc(state.apiKey)}</div></div>
+        <div class="btn-row"><button class="btn btn-sm" data-action="copyKey">${icon('copy')} Copiar chave</button>
+        <button class="btn btn-sm ${ui.confirm === 'key' ? 'btn-danger' : ''}" data-action="newKey">${ui.confirm === 'key' ? 'Confirmar: a chave antiga para de funcionar' : 'Gerar nova chave'}</button></div>
+        <pre class="code">POST /api/v1/lancamentos
+Authorization: Bearer ${esc(state.apiKey)}
+Content-Type: application/json</pre>
+        <p class="section-note">Campos aceitos: <code>data</code> (AAAA-MM-DD), <code>barbeiro</code> (nome) ou <code>barbeiro_id</code>, ${FIELDS.map(f => `<code>${f.api}</code>`).join(', ')}. Campos ausentes ficam em branco. Enviar a mesma data e barbeiro de novo substitui os números.</p>
+        <p class="section-note"><b>Atenção:</b> o endereço acima passa a receber dados quando o app for publicado com servidor. Até lá, teste o formato colando os dados abaixo.</p>
+      </section>
+      <section class="section card">
+        <h2 class="section-title">Testar importação</h2>
+        <form class="form" data-form="import" novalidate>
+          <label class="field"><span>Dados em JSON</span><textarea class="input" id="imp-json" name="json" spellcheck="false">${esc(ex)}</textarea></label>
+          <p class="form-msg" data-msg></p>
+          <div><button class="btn btn-primary" type="submit">${icon('upload')} Importar lançamentos</button></div>
+        </form>
+      </section>`;
+  }
+
+  function pageEmpresa() {
+    const c = state.company;
+    return `<section class="section card">
+      <h2 class="section-title">Dados da barbearia</h2>
+      <div class="perf-head">${companyAvatar(72)}<label class="btn btn-sm" style="cursor:pointer">${icon('camera')} Trocar logo<input type="file" accept="image/*" hidden data-change="companyLogo"></label></div>
+      <form class="form" data-form="company" novalidate>
+        <label class="field"><span>Nome *</span><input class="input" id="co-name" name="name" required value="${esc(c.name)}"></label>
+        <div class="grid-2">
+          <label class="field"><span>CNPJ</span><input class="input" id="co-cnpj" name="cnpj" value="${esc(c.cnpj)}" placeholder="00.000.000/0000-00"></label>
+          <label class="field"><span>Telefone</span><input class="input" id="co-phone" name="phone" type="tel" value="${esc(c.phone)}"></label>
+        </div>
+        <label class="field"><span>E-mail</span><input class="input" id="co-email" name="email" type="email" value="${esc(c.email)}"></label>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
+      </form></section>`;
+  }
+
+  function pageCadastro(user) {
+    const b = user.barberId ? barberById(user.barberId) : null;
+    return `<section class="section card">
+      <h2 class="section-title">Meu cadastro</h2>
+      ${b ? `<div class="perf-head">${avatar(b, 72)}<label class="btn btn-sm" style="cursor:pointer">${icon('camera')} Trocar foto<input type="file" accept="image/*" hidden data-change="myPhoto"></label></div>` : ''}
+      <form class="form" data-form="profile" novalidate>
+        <label class="field"><span>Nome *</span><input class="input" id="pr-name" name="name" required value="${esc(user.name)}"></label>
+        <label class="field"><span>E-mail *</span><input class="input" id="pr-email" name="email" type="email" required value="${esc(user.email)}"></label>
+        <label class="field"><span>Nova senha</span><input class="input" id="pr-pass" name="pass" type="password" minlength="6" autocomplete="new-password"><small>Deixe em branco para manter a atual.</small></label>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
+      </form></section>`;
+  }
+
+  function pageAjuda() {
+    const R = computeRanking(state, range());
+    const w = state.weights;
+    return `<section class="section card prose">
+      <h2 class="section-title">Como a pontuação funciona</h2>
+      <h3>1. Indicadores e pesos</h3>
+      <p>Cada indicador vale um peso. Só entram no cálculo os indicadores que têm dados no período.</p>
+      <ul>${INDICATORS.map(i => `<li>${esc(i.label)}: <b>${w[i.key] ?? i.weight} pts</b></li>`).join('')}</ul>
+      <h3>2. Nota de cada indicador</h3>
+      <p>Quem está em 1º recebe 100 e o último recebe 0. Os outros ficam no meio, proporcional ao resultado.</p>
+      <h3>3. Pontuação geral</h3>
+      <p>É a média das notas, ponderada pelos pesos.</p>
+      <h3>4. Destaque e MVP</h3>
+      <p>Neste período há <b>${R.N}</b> indicadores com dados.</p>
+      <ul>
+        <li><b>Destaque do período:</b> 1º lugar em pelo menos metade dos indicadores (${R.half}).</li>
+        <li><b>MVP:</b> 1º lugar em um a mais que a metade (${R.mvpNeed}).</li>
+        <li>O Destaque vira MVP quando conquista mais um 1º lugar. Nunca há Destaque e MVP ao mesmo tempo.</li>
+        <li>Empate no 1º lugar conta para todos os empatados. Se duas pessoas chegarem ao critério, leva quem lidera mais indicadores e, depois, quem tem a maior pontuação geral.</li>
+        <li>Quando a metade não é número inteiro, arredonda para cima.</li>
+      </ul>
+      <h3>5. Ordem do ranking</h3>
+      <p>Quem tem o título fica em 1º. Os demais seguem pela pontuação geral.</p>
+    </section>`;
+  }
+
+  function pageSoon(route) {
+    const item = NAV.flatMap(g => g.items).find(i => i.r === route);
+    return `<div class="card empty">${icon(item?.i || 'clock')}<h2>${esc(item?.t || 'Em breve')}</h2>
+      <p>${esc(SOON_TEXT[route] || '')}</p><span class="chip chip-soft">Chega numa próxima etapa</span>
+      <a class="btn" href="#inicio">Voltar ao início</a></div>`;
+  }
+
+  const PAGES = {
+    inicio: { t: 'Início', r: pageInicio },
+    time: { t: 'Time e ranking', r: pageTime },
+    performance: { t: 'Minha performance', r: pagePerformance },
+    lancamentos: { t: 'Lançamentos', r: pageLancamentos, g: 1 },
+    barbeiros: { t: 'Barbeiros', r: pageBarbeiros, g: 1 },
+    configuracoes: { t: 'Configurações', r: pageConfig, g: 1 },
+    integracao: { t: 'Integração & API', r: pageIntegracao, g: 1 },
+    empresa: { t: 'Minha empresa', r: pageEmpresa, g: 1 },
+    cadastro: { t: 'Meu cadastro', r: pageCadastro },
+    ajuda: { t: 'Central de ajuda', r: pageAjuda },
+  };
+
+  // ---------- modo apresentação ----------
+  function renderTV() {
+    const R = computeRanking(state, range());
+    const slides = [
+      ['Pódio do período', podium(R)],
+      ['Ranking em tempo real', rankingList(R)],
+      ['Destaques', titleCard(R) + highlights(R)],
+    ];
+    const i = ui.tvIndex % slides.length;
+    root.innerHTML = `<div class="tv">
+      <div class="tv-head">${brand()}<div style="text-align:right"><b>${esc(state.company.name)}</b><div class="muted">${esc(PERIOD_NAMES[ui.period])}: ${esc(range().label)}</div></div>
+      <button class="btn btn-sm" data-action="exitTV">${icon('x')} Sair da apresentação</button></div>
+      <div class="tv-body"><h2 class="section-title" style="font-size:1.3rem">${slides[i][0]}</h2>${slides[i][1]}</div>
+      <div class="tv-dots">${slides.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</div>
+    </div>`;
+    clearTimeout(ui.tvTimer);
+    ui.tvTimer = setTimeout(() => { ui.tvIndex++; if (location.hash === '#apresentacao') renderTV(); }, 12000);
+  }
+
+  // ---------- render principal ----------
+  function render() {
+    clearTimeout(ui.tvTimer);
+    const h = decodeURIComponent(location.hash.slice(1));
+    if (h.startsWith('convite-')) { renderAuth('convite', h.slice(8)); return; }
+    const user = currentUser();
+    if (!user) { renderAuth(ui.authMode); return; }
+
+    let route = h || 'inicio';
+    if (route === 'apresentacao') { renderTV(); return; }
+    let page, title;
+    if (route.startsWith('perfil-')) {
+      const id = route.slice(7);
+      page = { r: () => perfFor(id, user) }; title = 'Perfil';
+    } else if (PAGES[route]) {
+      page = PAGES[route]; title = page.t;
+    } else if (SOON_TEXT[route]) {
+      page = { r: () => pageSoon(route) }; title = NAV.flatMap(g => g.items).find(i => i.r === route).t;
+    } else { route = 'inicio'; page = PAGES.inicio; title = page.t; }
+    if (page.g && !isGestor(user)) { route = 'inicio'; page = PAGES.inicio; title = page.t; }
+
+    const pending = isGestor(user) ? state.users.filter(u => u.status === 'pendente').length : 0;
+    const who = isGestor(user) ? { name: state.company.name, photo: state.company.logo } : (barberById(user.barberId) || { name: user.name });
+    root.innerHTML = `
+      <header class="topbar">
+        <button class="icon-btn" data-action="openDrawer" aria-label="Abrir menu">${icon('menu')}</button>
+        <div class="topbar-title"><h1>${esc(title)}</h1><p>Período: ${esc(PERIOD_NAMES[ui.period])} · ${esc(range().label)}</p></div>
+        <a class="icon-btn" href="#apresentacao" aria-label="Modo apresentação" title="Modo apresentação">${icon('monitor')}</a>
+        <button class="icon-btn" data-action="fontSize" aria-label="Tamanho da letra" title="Tamanho da letra">${icon('type')}</button>
+        ${isGestor(user) ? `<a class="icon-btn" href="#barbeiros" aria-label="Aprovações pendentes: ${pending}">${icon('bell')}${pending ? `<span class="badge-dot">${pending}</span>` : ''}</a>` : ''}
+        <button class="avatar-btn" data-action="togglePopover" aria-label="Perfil e conta">${avatar(who, 40)}</button>
+      </header>
+      <main class="main" id="main">${page.r(user)}</main>
+      <button class="fab" data-action="openDrawer" aria-label="Abrir menu">${icon('menu')}</button>
+      ${drawer(user, route)}
+      ${popover(user)}`;
+  }
+
+  // ---------- ações ----------
+  function setMsg(form, text, ok) {
+    const m = form.querySelector('[data-msg]');
+    if (m) { m.textContent = text; m.classList.toggle('ok', !!ok); }
+  }
+  const val = (form, name) => (form.elements[name]?.value ?? '').trim();
+  const validEmail = e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+
+  const ACTIONS = {
+    authMode(el, ev) { ev.preventDefault(); ui.authMode = el.dataset.mode; if (location.hash.startsWith('#convite-')) location.hash = ''; renderAuth(ui.authMode); },
+    togglePass() { const i = $('#li-pass'); i.type = i.type === 'password' ? 'text' : 'password'; },
+    social(el) { toast(`Entrar com ${el.dataset.name} será ligado junto com o servidor.`); },
+    demoFill(el) { $('#li-email').value = el.dataset.email; $('#li-pass').value = 'demo123'; $('#li-pass').focus(); },
+    openDrawer() { $('.drawer').classList.add('open'); $('.scrim').hidden = false; },
+    closeDrawer() { $('.drawer').classList.remove('open'); $('.scrim').hidden = true; },
+    togglePopover() { const p = $('.popover'); p.hidden = !p.hidden; },
+    logout() { DB.session.clear(); ui.authMode = 'entrar'; location.hash = ''; render(); },
+    period(el) { ui.period = el.dataset.period; ui.offset = 0; DB.pref.set('period', ui.period); render(); },
+    shift(el) { ui.offset = Math.min(0, ui.offset + Number(el.dataset.dir)); ui.confirm = null; render(); },
+    fontSize() {
+      const sizes = ['16', '18', '20'];
+      const next = sizes[(sizes.indexOf(DB.pref.get('size', '16')) + 1) % sizes.length];
+      DB.pref.set('size', next);
+      document.documentElement.style.setProperty('--base-size', next + 'px');
+    },
+    exitTV() { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); location.hash = 'inicio'; },
+    approve(el) { const u = state.users.find(x => x.id === el.dataset.id); if (u) { u.status = 'ativo'; save(); toast(`${u.name} agora tem acesso.`); render(); } },
+    reject(el) { const u = state.users.find(x => x.id === el.dataset.id); if (u) { u.status = 'recusado'; save(); toast('Cadastro recusado.'); render(); } },
+    invite(el) {
+      const id = el.dataset.id;
+      if (!state.invites.find(i => i.barberId === id && !i.used)) {
+        state.invites.push({ code: hash(id + Date.now() + Math.random()).slice(0, 10), barberId: id, createdAt: iso(new Date()), used: false });
+        save();
+      }
+      ui.invite = ui.invite === id ? null : id; render();
+    },
+    copyInvite(el) { const inv = state.invites.find(i => i.barberId === el.dataset.id && !i.used); if (inv) copyText(inviteLink(inv.code), $('#inv-' + CSS.escape(el.dataset.id))); },
+    cancelInvite(el) { state.invites = state.invites.filter(i => !(i.barberId === el.dataset.id && !i.used)); ui.invite = null; save(); render(); },
+    toggleBarber(el) { const b = barberById(el.dataset.id); if (b) { b.active = b.active === false; save(); render(); } },
+    resetPass(el) {
+      const u = state.users.find(x => x.id === el.dataset.id); if (!u) return;
+      const pass = hash(u.id + Date.now()).slice(0, 8);
+      u.pass = passHash(u.email, pass); save();
+      ui.lastReset = { name: u.name, pass }; render();
+    },
+    delEntry(el) {
+      if (ui.confirm !== el.dataset.id) { ui.confirm = el.dataset.id; render(); return; }
+      state.entries = state.entries.filter(e => e.id !== el.dataset.id); ui.confirm = null; save(); toast('Lançamento excluído.'); render();
+    },
+    defaultWeights() { state.weights = Object.fromEntries(INDICATORS.map(i => [i.key, i.weight])); save(); toast('Pesos padrão restaurados.'); render(); },
+    resetDemo() {
+      if (ui.confirm !== 'demo') { ui.confirm = 'demo'; render(); return; }
+      state = DB.reset(); ui.confirm = null; DB.session.set(state.users[0].id, true); toast('Dados de demonstração restaurados. Você entrou como Gestor Demo.'); location.hash = 'inicio'; render();
+    },
+    clearData() {
+      if (ui.confirm !== 'clear') { ui.confirm = 'clear'; render(); return; }
+      const me = currentUser();
+      state.barbers = []; state.entries = []; state.invites = []; state.demo = false;
+      state.users = state.users.filter(u => u.id === me.id);
+      ui.confirm = null; save(); toast('Equipe e lançamentos apagados.'); render();
+    },
+    copyKey() { copyText(state.apiKey, $('#api-key')); },
+    newKey() {
+      if (ui.confirm !== 'key') { ui.confirm = 'key'; render(); return; }
+      state.apiKey = 'gbia_' + hash(String(Date.now())) + hash('k' + Math.random()); ui.confirm = null; save(); toast('Nova chave gerada.'); render();
+    },
+  };
+
+  const FORMS = {
+    login(f) {
+      const email = val(f, 'email').toLowerCase(), pass = f.elements.pass.value;
+      if (!email || !pass) return setMsg(f, 'Preencha e-mail e senha.');
+      const u = state.users.find(x => x.email.toLowerCase() === email);
+      if (!u || u.pass !== passHash(email, pass)) return setMsg(f, 'E-mail ou senha incorretos.');
+      if (u.status === 'pendente') return setMsg(f, 'Seu cadastro está aguardando a aprovação do gestor.');
+      if (u.status === 'recusado') return setMsg(f, 'Seu acesso não foi aprovado. Fale com o gestor da barbearia.');
+      DB.session.set(u.id, f.elements.remember.checked);
+      location.hash = 'inicio'; render();
+    },
+    signup(f) {
+      const company = val(f, 'company'), name = val(f, 'name'), email = val(f, 'email').toLowerCase(), pass = f.elements.pass.value;
+      if (!company || !name) return setMsg(f, 'Preencha o nome da barbearia e o seu nome.');
+      if (!validEmail(email)) return setMsg(f, 'Digite um e-mail válido.');
+      if (pass.length < 6) return setMsg(f, 'A senha precisa ter pelo menos 6 caracteres.');
+      if (!state.demo && state.users.some(u => u.email.toLowerCase() === email)) return setMsg(f, 'Este e-mail já tem conta. Use Entrar.');
+      const gestor = { id: uid('u_'), name, email, pass: passHash(email, pass), role: 'gestor', status: 'ativo', barberId: null };
+      state = DB.replace(emptyState({ name: company, cnpj: '', phone: '', email, logo: null }, gestor));
+      DB.session.set(gestor.id, true);
+      toast('Conta criada. Agora cadastre sua equipe.');
+      location.hash = 'barbeiros'; render();
+    },
+    invite(f) {
+      const code = f.dataset.code;
+      const inv = state.invites.find(i => i.code === code && !i.used);
+      if (!inv) return setMsg(f, 'Este convite não é mais válido.');
+      const name = val(f, 'name'), email = val(f, 'email').toLowerCase(), pass = f.elements.pass.value;
+      if (!name) return setMsg(f, 'Digite seu nome.');
+      if (!validEmail(email)) return setMsg(f, 'Digite um e-mail válido.');
+      if (pass.length < 6) return setMsg(f, 'A senha precisa ter pelo menos 6 caracteres.');
+      if (state.users.some(u => u.email.toLowerCase() === email && u.status !== 'recusado')) return setMsg(f, 'Este e-mail já está cadastrado.');
+      state.users.push({ id: uid('u_'), name, email, phone: val(f, 'phone'), pass: passHash(email, pass), role: 'barbeiro', status: 'pendente', barberId: inv.barberId });
+      inv.used = true; save();
+      history.replaceState(null, '', location.pathname + location.search);
+      ui.authMode = 'pendente'; renderAuth('pendente');
+    },
+    recover(f) {
+      if (!validEmail(val(f, 'email'))) return setMsg(f, 'Digite um e-mail válido.');
+      setMsg(f, 'Pedido registrado. Avise o gestor para gerar sua nova senha.', true);
+    },
+    entry(f) {
+      const date = val(f, 'date'), barberId = val(f, 'barberId');
+      if (!date) return setMsg(f, 'Escolha a data.');
+      const entry = { barberId, date };
+      let any = false;
+      for (const fl of FIELDS) {
+        const raw = val(f, fl.key);
+        entry[fl.key] = raw === '' ? null : Number(raw);
+        if (raw !== '') any = true;
+        if (entry[fl.key] !== null && (Number.isNaN(entry[fl.key]) || entry[fl.key] < 0)) return setMsg(f, `"${fl.label}" precisa ser um número positivo.`);
+      }
+      if (entry.hOcup != null && entry.hDisp != null && entry.hOcup > entry.hDisp) return setMsg(f, 'Horas ocupadas não podem passar das horas disponíveis.');
+      if (!any) return setMsg(f, 'Preencha pelo menos um número.');
+      upsertEntry(state, entry); save();
+      ui.entryDate = date; ui.entryBarber = barberId;
+      toast(`Lançamento de ${barberById(barberId).name} salvo.`); render();
+    },
+    async addBarber(f) {
+      const name = val(f, 'name');
+      if (!name) return setMsg(f, 'Digite o nome do barbeiro.');
+      let photo = null;
+      const file = f.elements.photo.files[0];
+      if (file) { try { photo = await readImage(file); } catch (e) { return setMsg(f, e.message); } }
+      state.barbers.push({ id: uid('b_'), name, photo, active: true }); save();
+      toast(`${name} adicionado. Agora envie o convite.`); render();
+    },
+    weights(f) {
+      const w = {};
+      for (const i of INDICATORS) {
+        const v = Number(val(f, i.key));
+        if (Number.isNaN(v) || v < 0 || v > 100) return setMsg(f, `Peso de "${i.label}" deve ficar entre 0 e 100.`);
+        w[i.key] = Math.round(v);
+      }
+      state.weights = w; save(); toast('Pesos salvos.'); render();
+    },
+    import(f) {
+      let data;
+      try { data = JSON.parse(f.elements.json.value); } catch (e) { return setMsg(f, 'O texto não é um JSON válido. Confira vírgulas e aspas.'); }
+      try {
+        const res = importEntries(state, Array.isArray(data) ? data : [data]); save();
+        setMsg(f, `${res.ok} lançamento(s) importado(s).${res.errors.length ? ' Problemas: ' + res.errors.join(' ') : ''}`, res.errors.length === 0);
+      } catch (e) { setMsg(f, e.message); }
+    },
+    company(f) {
+      const name = val(f, 'name');
+      if (!name) return setMsg(f, 'O nome da barbearia é obrigatório.');
+      Object.assign(state.company, { name, cnpj: val(f, 'cnpj'), phone: val(f, 'phone'), email: val(f, 'email') });
+      save(); toast('Dados da barbearia salvos.'); render();
+    },
+    profile(f) {
+      const u = currentUser();
+      const name = val(f, 'name'), email = val(f, 'email').toLowerCase(), pass = f.elements.pass.value;
+      if (!name) return setMsg(f, 'Digite seu nome.');
+      if (!validEmail(email)) return setMsg(f, 'Digite um e-mail válido.');
+      if (state.users.some(x => x.id !== u.id && x.email.toLowerCase() === email)) return setMsg(f, 'Este e-mail já é usado por outra conta.');
+      if (pass && pass.length < 6) return setMsg(f, 'A nova senha precisa ter pelo menos 6 caracteres.');
+      const emailChanged = email !== u.email.toLowerCase();
+      if (emailChanged && !pass) return setMsg(f, 'Para trocar o e-mail, digite também uma nova senha.');
+      u.name = name; u.email = email;
+      if (pass) u.pass = passHash(email, pass);
+      save(); toast('Cadastro atualizado.'); render();
+    },
+  };
+
+  const CHANGES = {
+    perfBarber(el) { ui.perfBarber = el.value; render(); },
+    entryKey() {
+      const f = $('form[data-form="entry"]');
+      ui.entryDate = val(f, 'date'); ui.entryBarber = val(f, 'barberId');
+      f.querySelector('[data-fields]').innerHTML = entryForm(ui.entryBarber, ui.entryDate);
+    },
+    async barberPhoto(el) {
+      const b = barberById(el.dataset.id);
+      try { b.photo = await readImage(el.files[0]); save(); toast('Foto atualizada.'); render(); } catch (e) { toast(e.message); }
+    },
+    async myPhoto(el) {
+      const b = barberById(currentUser()?.barberId);
+      if (!b) { toast('Seu cadastro não está ligado a um barbeiro.'); return; }
+      try { b.photo = await readImage(el.files[0]); save(); toast('Foto atualizada.'); render(); } catch (e) { toast(e.message); }
+    },
+    async companyLogo(el) {
+      try { state.company.logo = await readImage(el.files[0]); save(); toast('Logo atualizado.'); render(); } catch (e) { toast(e.message); }
+    },
+  };
+
+  root.addEventListener('click', e => {
+    const el = e.target.closest('[data-action]');
+    if (el && ACTIONS[el.dataset.action]) { ACTIONS[el.dataset.action](el, e); return; }
+    const pop = $('.popover');
+    if (pop && !pop.hidden && !e.target.closest('.popover')) pop.hidden = true;
+  });
+  root.addEventListener('submit', e => {
+    const f = e.target.closest('form[data-form]');
+    if (!f) return;
+    e.preventDefault();
+    FORMS[f.dataset.form]?.(f);
+  });
+  root.addEventListener('change', e => {
+    const el = e.target.closest('[data-change]');
+    if (el && CHANGES[el.dataset.change]) CHANGES[el.dataset.change](el);
+  });
+  window.addEventListener('hashchange', () => {
+    ui.confirm = null; ui.invite = null; ui.lastReset = null;
+    render();
+    if (location.hash === '#apresentacao' && document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+    window.scrollTo(0, 0);
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      if (location.hash === '#apresentacao') ACTIONS.exitTV();
+      const d = $('.drawer'); if (d && d.classList.contains('open')) ACTIONS.closeDrawer();
+      const p = $('.popover'); if (p) p.hidden = true;
+    }
+  });
+
+  splash(render);
+})();
