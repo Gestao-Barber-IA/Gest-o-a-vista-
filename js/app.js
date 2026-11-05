@@ -235,7 +235,7 @@
       { r: 'inicio', t: 'Início', i: 'grid' },
       { r: 'time', t: 'Time e ranking', i: 'trophy' },
       { r: 'lancamentos', t: 'Lançamentos', i: 'wallet', g: 1 },
-      { r: 'gestao-visual', t: 'Gestão Visual', i: 'signal', soon: 1 },
+      { r: 'gestao-visual', t: 'Gestão Visual', i: 'signal' },
       { r: 'fechamento', t: 'Fechamento', i: 'clipboard', g: 1, soon: 1 },
     ] },
     { group: 'GP · Gestão de pessoas', items: [
@@ -261,7 +261,6 @@
     ] },
   ];
   const SOON_TEXT = {
-    'gestao-visual': 'Quadro visual da loja com metas do dia, ocupação da agenda e alertas.',
     fechamento: 'Fechamento do caixa e da comissão de cada barbeiro no fim do período.',
     tarefas: 'Tarefas do dia para cada barbeiro, com prazo e confirmação.',
     metas: 'Metas individuais e da equipe, com acompanhamento em tempo real.',
@@ -326,30 +325,84 @@
     return R.title.type === 'mvp' ? `<span class="chip chip-mvp">${icon('diamond')} MVP</span>` : `<span class="chip chip-destaque">${icon('bolt')} Destaque</span>`;
   }
 
+  // Coroa do 1º lugar: azul com diamante (MVP), dourada (Destaque) ou prata.
+  function crownSvg(tier) {
+    const id = 'cg-' + tier;
+    const gem = tier === 'tier-mvp'
+      ? `<polygon points="49,-4 60,-18 71,-4 60,10" fill="url(#${id})" stroke="#e8f6ff" stroke-width="1.5"/><path d="M49 -4h22M55 -4l5 14 5-14" stroke="#e8f6ff" stroke-width="1" fill="none"/>`
+      : `<circle cx="60" cy="-2" r="6" fill="url(#${id})" stroke="#fff" stroke-width="1.2"/>`;
+    return `<svg viewBox="0 -22 120 100" aria-hidden="true">
+      <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset=".45" stop-color="var(--tc)"/><stop offset="1" stop-color="var(--tc2)"/></linearGradient></defs>
+      <path d="M12 62 6 18l26 22L60 6l28 34 26-22-6 44z" fill="url(#${id})" stroke="#fff" stroke-opacity=".7" stroke-width="1.6" stroke-linejoin="round"/>
+      <rect x="10" y="62" width="100" height="12" rx="3" fill="url(#${id})" stroke="#fff" stroke-opacity=".7" stroke-width="1.4"/>
+      <circle cx="6" cy="16" r="4" fill="#fff"/><circle cx="114" cy="16" r="4" fill="#fff"/>
+      <circle cx="35" cy="68" r="2.6" fill="#0b1630"/><circle cx="60" cy="68" r="3.2" fill="#0b1630"/><circle cx="85" cy="68" r="2.6" fill="#0b1630"/>
+      ${gem}
+      <g class="twinkle"><path d="M60 -22v10M55 -17h10" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></g>
+    </svg>`;
+  }
+
+  function pdPhoto(b) {
+    const ini = (b.name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase();
+    return `<div class="pd-photo"><span>${b.photo ? `<img src="${esc(b.photo)}" alt="">` : esc(ini)}</span></div>`;
+  }
+
+  const barsSvg = `<svg viewBox="0 0 24 20" aria-hidden="true"><rect x="1" y="12" width="5" height="8" rx="1" fill="var(--tc)"/><rect x="9.5" y="7" width="5" height="13" rx="1" fill="var(--tc)"/><rect x="18" y="1" width="5" height="19" rx="1" fill="var(--tc)" opacity=".75"/></svg>`;
+
   function podium(R) {
     const rows = R.rows;
     if (!rows.length) return emptyBarbers();
+    const sparks = Array.from({ length: 12 }, (_, i) =>
+      `<span style="left:${8 + ((i * 37) % 84)}%;--dl:${((i * 0.73) % 4).toFixed(2)}s;--dur:${(3.2 + (i % 4) * 0.6).toFixed(1)}s"></span>`).join('');
     const card = (row, place) => {
-      if (!row) return `<div class="pod pod-${place} pod-empty"><span class="pod-place">${ord(place)} lugar</span></div>`;
+      const delay = { 1: '0.15s', 2: '0s', 3: '0.3s' }[place];
+      if (!row) return `<div class="pd pd-${place} tier-silver pd-empty" style="--in:${delay}"><div class="pd-float"><div class="pd-card"><div class="pd-frame"><div class="pd-inner"><span class="muted">Vago</span></div></div>
+        <div class="pd-badge"><span>${ord(place)}<small>LUGAR</small></span></div></div></div><div class="pd-base"></div></div>`;
       const b = row.barber;
-      const isTop = place === 1;
-      const t = isTop && R.title.barberId === b.id ? R.title.type : null;
-      const cls = t === 'mvp' ? 'is-mvp' : t === 'destaque' ? 'is-destaque' : '';
-      const medal = isTop ? icon('trophy') : icon(place === 2 ? 'medal' : 'award');
-      return `<div class="pod pod-${place} ${cls}">
-        <span class="pod-medal">${medal}</span>
-        ${t === 'mvp' ? `<span class="pod-title">${icon('diamond')} MVP</span>` : t === 'destaque' ? `<span class="pod-title">${icon('bolt')} DESTAQUE</span>` : (isTop ? '<span style="height:18px"></span>' : '')}
-        <span class="pod-money num">${money0(row.sums.fat)}</span>
-        ${avatar(b, isTop ? 76 : 58)}
-        <span class="pod-place">${ord(place)} lugar</span>
-        <span class="pod-name">${esc(b.name)}</span>
-        <span class="pod-pts num">${score(row.overall)} pts</span>
-        <span class="pod-leads num" title="Indicadores em 1º lugar">${row.leads.length} / ${R.N}</span>
-        <a class="pod-btn" href="#perfil-${esc(b.id)}">Ver perfil</a>
-        ${isTop ? icon('crown') : ''}
+      const t = place === 1 && R.title.barberId === b.id ? R.title.type : null;
+      const tier = place === 2 ? 'tier-silver' : place === 3 ? 'tier-bronze' : t === 'mvp' ? 'tier-mvp' : t === 'destaque' ? 'tier-gold' : 'tier-plat';
+      const leadsTxt = `${row.leads.length} / ${R.N}`;
+      const middle = t
+        ? `<div class="pd-title"><span>${icon(t === 'mvp' ? 'diamond' : 'crown')}<span><b>${t === 'mvp' ? 'MVP' : 'DESTAQUE'}</b><i class="num">${leadsTxt}</i></span></span></div>`
+        : '';
+      return `<div class="pd pd-${place} ${tier}" style="--in:${delay};--fd:${place === 1 ? '0s' : place === 2 ? '-2s' : '-4s'}">
+        <div class="pd-beam"></div>
+        ${place === 1 ? `<div class="pd-sparks">${sparks}</div>` : ''}
+        <div class="pd-float">
+          <div class="pd-card">
+            ${place === 1 ? `<div class="pd-crown">${crownSvg(tier)}</div>` : ''}
+            <div class="pd-frame"><div class="pd-inner">
+              ${pdPhoto(b)}
+              <div class="pd-name">${esc(b.name)}</div>
+              <hr class="pd-line">
+              ${place === 1 ? middle : ''}
+              <div class="pd-pts">${score(row.overall)}<small>pts</small></div>
+              <div class="pd-money"><span class="pd-coin">$</span>${money0(row.sums.fat)}</div>
+              ${t ? '' : `<div class="pd-leads" title="1º lugar em ${row.leads.length} de ${R.N} indicadores">${barsSvg}<span>${leadsTxt}</span></div>`}
+            </div></div>
+            <div class="pd-badge"><span>${ord(place)}<small>LUGAR</small></span></div>
+            <a class="pd-link" href="#perfil-${esc(b.id)}" aria-label="Ver perfil de ${esc(b.name)}, ${ord(place)} lugar"></a>
+          </div>
+        </div>
+        <div class="pd-base"><i></i><i></i></div>
       </div>`;
     };
-    return `<div class="podium">${card(rows[1], 2)}${card(rows[0], 1)}${card(rows[2], 3)}</div>`;
+    return `<div class="podium-x"><div class="pd-row">${card(rows[1], 2)}${card(rows[0], 1)}${card(rows[2], 3)}</div></div>`;
+  }
+
+  function podiumLegend(R) {
+    return `<div class="pd-legend">
+      <div class="lg-mvp">${icon('diamond')}<span><b>MVP</b>Lidera ${R.mvpNeed} ou mais indicadores.<em>Contorno azul (diamante).</em></span></div>
+      <div class="lg-gold">${icon('crown')}<span><b>Destaque</b>Lidera ${R.half} indicadores.<em>Contorno dourado.</em></span></div>
+      <div class="lg-pts">${icon('trophy')}<span><b>Classificação por pontos</b>Sem título no período: contorno prata e bronze.</span></div>
+    </div>`;
+  }
+
+  function pageGestaoVisual() {
+    const R = computeRanking(state, range());
+    return `${periodNav()}
+      <section class="section"><h2 class="section-title">Pódio e ranking ao vivo</h2>${podium(R)}${R.rows.length ? podiumLegend(R) : ''}</section>
+      <section class="section"><h2 class="section-title">Ranking em tempo real</h2>${rankingList(R)}</section>`;
   }
 
   function prevPositions() {
@@ -448,7 +501,7 @@
       ${periodNav()}
       <div class="shortcuts">${shortcuts.map(([r, t, i]) => `<a class="shortcut" href="#${r}">${icon(i)}<span>${t}</span></a>`).join('')}</div>
       <div class="home-cols">
-        <section class="section"><h2 class="section-title">Pódio do período</h2>${podium(R)}
+        <section class="section"><h2 class="section-title">Pódio do período</h2>${podium(R)}${R.rows.length ? podiumLegend(R) : ''}
           <p class="section-note">Pontuação geral = média ponderada dos ${R.N} indicadores com dados. O título vai para quem lidera ${R.half} ou mais.</p></section>
         <section class="section"><h2 class="section-title">Ranking em tempo real</h2>${rankingList(R)}</section>
       </div>
@@ -747,6 +800,7 @@ Content-Type: application/json</pre>
 
   const PAGES = {
     inicio: { t: 'Início', r: pageInicio },
+    'gestao-visual': { t: 'Gestão Visual', r: pageGestaoVisual },
     time: { t: 'Time e ranking', r: pageTime },
     performance: { t: 'Minha performance', r: pagePerformance },
     lancamentos: { t: 'Lançamentos', r: pageLancamentos, g: 1 },
@@ -762,7 +816,7 @@ Content-Type: application/json</pre>
   function renderTV() {
     const R = computeRanking(state, range());
     const slides = [
-      ['Pódio do período', podium(R)],
+      ['Pódio do período', podium(R) + (R.rows.length ? podiumLegend(R) : '')],
       ['Ranking em tempo real', rankingList(R)],
       ['Destaques', titleCard(R) + highlights(R)],
     ];
