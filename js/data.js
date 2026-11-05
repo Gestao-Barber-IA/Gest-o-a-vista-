@@ -246,7 +246,9 @@
     }
 
     const N = active.length;
-    const half = Math.ceil(N / 2);
+    // Sem dados suficientes no período, a regra usa os indicadores ativos (ex.: 8 → Destaque 4, MVP 5).
+    const Nrule = N >= 2 ? N : INDICATORS.filter(i => !hidden.includes(i.key) && (weights[i.key] ?? i.weight) > 0).length;
+    const half = Math.ceil(Nrule / 2);
     const mvpNeed = half + 1;
     let title = { type: null, barberId: null };
     if (N >= 2 && rows.length >= 2) {
@@ -262,7 +264,7 @@
     });
     rows.forEach((r, i) => { r.pos = i + 1; });
 
-    return { rows, active, inactive, N, half, mvpNeed, title, range };
+    return { rows, active, inactive, N, Nrule, half, mvpNeed, title, range };
   }
 
 

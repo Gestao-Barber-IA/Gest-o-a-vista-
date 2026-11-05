@@ -394,7 +394,7 @@
   function podiumLegend(R) {
     return `<div class="pd-legend">
       <div class="lg-mvp">${icon('diamond')}<span><b>MVP</b>Lidera ${R.mvpNeed} ou mais indicadores.<em>Contorno azul (diamante).</em></span></div>
-      <div class="lg-gold">${icon('crown')}<span><b>Destaque</b>Lidera ${R.half} indicadores.<em>Contorno dourado.</em></span></div>
+      <div class="lg-gold">${icon('crown')}<span><b>Destaque</b>Lidera no mínimo ${R.half} indicadores.<em>Contorno dourado.</em></span></div>
       <div class="lg-pts">${icon('trophy')}<span><b>Classificação por pontos</b>Sem título no período: contorno prata e bronze.</span></div>
     </div>`;
   }
@@ -456,7 +456,7 @@
   }
 
   function titleCard(R) {
-    const rule = `Destaque: 1º lugar em pelo menos ${R.half} de ${R.N} indicadores. MVP: em ${R.mvpNeed}.`;
+    const rule = `Destaque: 1º lugar em no mínimo ${R.half} de ${R.Nrule} indicadores. MVP: em ${R.mvpNeed} ou mais.`;
     if (!R.title.type) {
       return `<div class="card title-card is-none">
         <div class="eyebrow">${icon('trophy')} Título do período</div>
@@ -514,7 +514,7 @@
       <div class="shortcuts">${shortcuts.map(([r, t, i]) => `<a class="shortcut" href="#${r}">${icon(i)}<span>${t}</span></a>`).join('')}</div>
       <div class="home-cols">
         <section class="section"><h2 class="section-title">Pódio do período</h2>${podium(R)}${R.rows.length ? podiumLegend(R) : ''}
-          <p class="section-note">Pontuação geral = média ponderada dos ${R.N} indicadores com dados. O título vai para quem lidera ${R.half} ou mais.</p></section>
+          <p class="section-note">${R.N ? `Pontuação geral = média ponderada dos ${R.N} indicadores com dados.` : 'Ainda não há resultados lançados neste período.'} Destaque lidera no mínimo ${R.half} indicadores; MVP lidera ${R.mvpNeed} ou mais.</p></section>
         <section class="section"><h2 class="section-title">Ranking em tempo real</h2>${rankingList(R)}</section>
       </div>
       <section class="section"><h2 class="section-title">Destaques por indicador</h2>${highlights(R)}${titleCard(R)}${inactiveNote(R)}</section>
@@ -1105,10 +1105,10 @@ Content-Type: application/json</pre>
       <h3>3. Pontuação geral</h3>
       <p>É a média das notas, ponderada pelos pesos.</p>
       <h3>4. Destaque e MVP</h3>
-      <p>Neste período há <b>${R.N}</b> indicadores com dados.</p>
+      <p>Neste período a regra considera <b>${R.Nrule}</b> indicadores${R.N >= 2 ? ' com dados' : ' ativos (ainda sem dados suficientes)'}.</p>
       <ul>
-        <li><b>Destaque do período:</b> 1º lugar em pelo menos metade dos indicadores (${R.half}).</li>
-        <li><b>MVP:</b> 1º lugar em um a mais que a metade (${R.mvpNeed}).</li>
+        <li><b>Destaque do período:</b> 1º lugar em no mínimo metade dos indicadores (${R.half}).</li>
+        <li><b>MVP:</b> 1º lugar em um a mais que a metade (${R.mvpNeed} ou mais).</li>
         <li>O Destaque vira MVP quando conquista mais um 1º lugar. Nunca há Destaque e MVP ao mesmo tempo.</li>
         <li>Empate no 1º lugar conta para todos os empatados. Se duas pessoas chegarem ao critério, leva quem lidera mais indicadores e, depois, quem tem a maior pontuação geral.</li>
         <li>Quando a metade não é número inteiro, arredonda para cima.</li>
