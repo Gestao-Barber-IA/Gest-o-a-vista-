@@ -237,7 +237,7 @@
       { r: 'time', t: 'Time e ranking', i: 'trophy' },
       { r: 'lancamentos', t: 'Lançamentos', i: 'wallet', g: 1 },
       { r: 'gestao-visual', t: 'Gestão Visual', i: 'signal' },
-      { r: 'fechamento', t: 'Fechamento do mês', i: 'clipboard', g: 1, soon: 1 },
+      { r: 'fechamento', t: 'Fechamento do mês', i: 'clipboard', g: 1 },
     ] },
     { group: 'GP · Gestão de pessoas', items: [
       { r: 'performance', t: 'Minha performance', i: 'chart' },
@@ -262,7 +262,6 @@
     ] },
   ];
   const SOON_TEXT = {
-    fechamento: 'Fechamento do caixa e da comissão de cada barbeiro no fim do período.',
     tarefas: 'Tarefas do dia para cada barbeiro, com prazo e confirmação.',
     metas: 'Metas individuais e da equipe, com acompanhamento em tempo real.',
     premios: 'Prêmios ligados às metas, para motivar o time.',
@@ -1122,6 +1121,216 @@ Content-Type: application/json</pre>
     </section>`;
   }
 
+  // ---------- Fechamento do mês (apresentação para a equipe) ----------
+  function pageFechamento() {
+    const ym = ui.fxMonth || addMonths(curYm(), new Date().getDate() <= 10 ? -1 : 0);
+    ui.fxMonth = ym;
+    const R = monthR(ym);
+    const top = R.rows.slice(0, 3);
+    const total = R.rows.reduce((a, r) => a + r.sums.fat, 0);
+    const t = R.title.type ? R.rows.find(r => r.barber.id === R.title.barberId) : null;
+    return `<section class="card fc-head">
+        <div class="fc-brand">${logo('fc-logo')}<div><h2>Fechamento do mês</h2><p>Cada atendimento conta.</p></div></div>
+        <div class="fc-controls">
+          <label class="field"><span>Mês do fechamento</span><select class="input" id="fc-month" data-change="fxMonth">${monthOptions(ym)}</select></label>
+          <button class="btn btn-primary fc-start" data-action="fxStart" ${R.rows.length && R.active.length ? '' : 'disabled'}>${icon('monitor')} Iniciar fechamento</button>
+        </div>
+        ${R.rows.length && R.active.length ? '' : '<p class="section-note">Este mês ainda não tem resultados lançados.</p>'}
+      </section>
+      ${R.rows.length && R.active.length ? `<section class="section card">
+        <h2 class="section-title">Resumo de ${esc(ymLabel(ym).replace(' de ', '/'))}</h2>
+        <div class="perf-stats">
+          <div class="stat"><span>Faturamento da equipe</span><b class="num">${money0(total)}</b></div>
+          <div class="stat"><span>Barbeiros</span><b class="num">${R.rows.length}</b></div>
+          <div class="stat"><span>Indicadores</span><b class="num">${R.N}</b></div>
+          <div class="stat"><span>Título</span><b>${t ? (R.title.type === 'mvp' ? 'MVP' : 'Destaque') + ' · ' + esc(first(t.barber.name)) : 'Nenhum'}</b></div>
+        </div>
+        <ol class="fc-top">${top.map(r => `<li>${avatar(r.barber, 40)}<span><b>${ord(r.pos)} ${esc(r.barber.name)}</b><small class="muted num">${score(r.overall)} pts · ${r.leads.length}/${R.N} lideradas</small></span></li>`).join('')}</ol>
+        <p class="section-note">A apresentação mostra cada barbeiro do último ao 4º colocado, depois revela o pódio com suspense. Use em tela cheia na TV da loja.</p>
+      </section>` : ''}`;
+  }
+
+  function fxPhoto(b) {
+    const ini = (b.name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase();
+    return `<div class="fx-photo"><span>${b.photo ? `<img src="${esc(b.photo)}" alt="">` : esc(ini)}</span></div>`;
+  }
+  function fxSlides(ym) {
+    const R = monthR(ym);
+    const rows = R.rows, s = [{ k: 'intro' }];
+    for (let i = rows.length - 1; i >= 3; i--) s.push({ k: 'card', row: rows[i] });
+    s.push({ k: 'podium' });
+    for (const p of [3, 2, 1]) if (rows[p - 1]) s.push({ k: 'card', row: rows[p - 1], place: p });
+    s.push({ k: 'final' });
+    return { R, s };
+  }
+  const fxDots = n => Array.from({ length: n }, (_, i) => `<i class="fx-dot" style="left:${(i * 37.7) % 100}%;top:${(i * 61.3) % 100}%;--d:${(i % 7) * 0.9}s;--s:${2 + (i % 4)}px"></i>`).join('');
+  const fxConfetti = n => Array.from({ length: n }, (_, i) => `<i class="fx-cf" style="left:${(i * 47.3) % 100}%;--d:${((i * 0.37) % 2.6).toFixed(2)}s;--r:${(i * 53) % 360}deg;--c:${['#d6b46a', '#6cc8ff', '#ffffff', '#f4a95c', '#9b8cff'][i % 5]};--x:${((i % 9) - 4) * 14}px"></i>`).join('');
+
+  function fxTier(R, row, place) {
+    if (place === 3) return { cls: 'fx-bronze', label: 'Bronze' };
+    if (place === 2) return { cls: 'fx-silver', label: 'Prata' };
+    if (place === 1) {
+      if (R.title.barberId === row.barber.id && R.title.type === 'mvp') return { cls: 'fx-mvp', label: 'MVP' };
+      if (R.title.barberId === row.barber.id) return { cls: 'fx-gold', label: 'Destaque' };
+      return { cls: 'fx-gold', label: 'Ouro' };
+    }
+    return { cls: 'fx-plain', label: ord(row.pos) };
+  }
+
+  function fxSlideHtml(R, sl, ym) {
+    const n = R.rows.length, month = esc(ymLabel(ym).replace(' de ', '/'));
+    if (sl.k === 'intro') return `<div class="fx-slide fx-intro">
+        <div class="fx-emblem"><span class="fx-orbit"></span><span class="fx-orbit o2"></span>${logo('fx-logo')}</div>
+        <p class="fx-kicker">${esc(state.company.name)}</p>
+        <h1 class="fx-title">Fechamento</h1>
+        <p class="fx-month">${month}</p>
+        <p class="fx-tag">Cada atendimento conta.</p>
+        <p class="fx-count"><b data-count="${n}">0</b> barbeiros</p>
+        <p class="fx-hint">Toque, deslize ou use as setas</p></div>`;
+    if (sl.k === 'podium') {
+      const t1 = fxTier(R, R.rows[0], 1);
+      return `<div class="fx-slide fx-pintro">
+        <h1 class="fx-title gold">É hora do pódio</h1>
+        <p class="fx-month">Os três melhores de ${month}</p>
+        <div class="fx-chips"><span class="c-bronze">Bronze</span><span class="c-silver">Prata</span><span class="${t1.cls === 'fx-mvp' ? 'c-mvp' : 'c-gold'}">${t1.label}</span></div>
+        <div class="fx-spot"></div><div class="fx-spot s2"></div><div class="fx-spot s3"></div></div>`;
+    }
+    if (sl.k === 'final') {
+      const top = R.rows.slice(0, 3);
+      return `<div class="fx-slide fx-final">
+        <h1 class="fx-title gold">Parabéns ao pódio</h1>
+        <div class="fx-fgrid">${top.map((r, i) => { const t = fxTier(R, r, i + 1); return `<div class="fx-fcard ${t.cls}" style="--d:${0.4 + i * 0.25}s">
+          ${fxPhoto(r.barber)}<b class="num">${ord(i + 1)}</b><span>${esc(r.barber.name)}</span><strong class="num">${t.label === 'MVP' || t.label === 'Destaque' ? `${r.leads.length}/${R.N}` : score(r.overall)}</strong><small>${t.label}</small></div>`; }).join('')}</div>
+        <p class="fx-tag gold">Cada atendimento conta.</p>
+        <p class="fx-thanks">Obrigado a cada um que fez este mês acontecer.</p>
+        <p class="fx-kicker">${esc(state.company.name)} · Gestão Barber IA</p>
+        <div class="fx-confetti">${fxConfetti(70)}</div></div>`;
+    }
+    const r = sl.row, place = sl.place, tier = fxTier(R, r, place);
+    const titled = place === 1 && R.title.barberId === r.barber.id;
+    const crown = place === 1 ? `<div class="fx-crown">${crownSvg(tier.cls === 'fx-mvp' ? 'tier-mvp' : 'tier-gold')}</div>` : place ? `<div class="fx-gem">${icon('diamond')}</div>` : '';
+    const leads = `<div class="fx-leads ${titled ? 'big' : ''}"><b class="num"><span data-count="${r.leads.length}">0</span><i>/</i>${R.N}</b><small>Categorias lideradas</small><div class="fx-bar"><i style="--w:${R.N ? (r.leads.length / R.N) * 100 : 0}%"></i></div></div>`;
+    const scoreBlock = `<div class="fx-score ${titled ? 'small' : ''}"><small>Pontuação</small><b class="num" data-count="${r.overall.toFixed(1)}" data-dec="1">0</b></div>`;
+    return `<div class="fx-slide fx-cardwrap ${place ? 'is-suspense' : ''}" data-place="${place || ''}">
+      <article class="fx-card ${tier.cls}">
+        <div class="fx-card-in">
+          ${crown}
+          ${fxPhoto(r.barber)}
+          <span class="fx-badge">${tier.label}</span>
+          <h2 class="fx-name">${esc(r.barber.name)}</h2>
+          <p class="fx-role">${esc(r.barber.role || 'Barbeiro')}</p>
+          <span class="fx-pos num">${place ? `${ord(place)} lugar` : `${ord(r.pos)} de ${n}`}</span>
+          ${titled ? leads + scoreBlock : scoreBlock + leads}
+          <div class="fx-inds">${R.active.map((ind, k) => `<div class="fx-ind ${ind.leaders.includes(r.barber.id) ? 'lead' : ''}" style="--d:${0.5 + k * 0.09}s">
+            <small>${esc(ind.label)}</small><b class="num">${fmt(ind, r.values[ind.key])}${ind.key === 'check' ? ' pts' : ''}</b><span class="num">${ord(r.ranks[ind.key])} de ${n}</span><div class="fx-bar"><i style="--w:${Math.max(3, r.scores[ind.key])}%"></i></div></div>`).join('')}</div>
+        </div>
+        ${place ? `<div class="fx-suspense"><p>E o pódio é de…</p><span class="fx-drum"><i></i><i></i><i></i></span></div>` : ''}
+        ${place === 1 ? `<div class="fx-confetti">${fxConfetti(80)}</div>` : ''}
+      </article></div>`;
+  }
+
+  function fxCount(scope) {
+    scope.querySelectorAll('[data-count]').forEach(el => {
+      const target = Number(el.dataset.count), dec = Number(el.dataset.dec || 0);
+      const f = dec ? nf1 : nf0;
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) { el.textContent = f.format(target); return; }
+      const t0 = performance.now(), dur = 1500;
+      const step = now => {
+        const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+        el.textContent = f.format(target * e);
+        if (p < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
+  }
+
+  function fxRender() {
+    const fx = ui.fx; if (!fx) return;
+    let ov = document.getElementById('fx');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.id = 'fx'; ov.className = 'fx'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Apresentação do fechamento do mês');
+      ov.innerHTML = `<div class="fx-bg">${fxDots(34)}</div><div class="fx-stage" aria-live="polite"></div><nav class="fx-ctrl"></nav>`;
+      document.body.appendChild(ov);
+      fxBind(ov);
+    }
+    const { R, s } = fxSlides(fx.ym);
+    fx.total = s.length;
+    fx.i = Math.max(0, Math.min(fx.i, s.length - 1));
+    const sl = s[fx.i];
+    const stage = ov.querySelector('.fx-stage');
+    stage.innerHTML = fxSlideHtml(R, sl, fx.ym);
+    ov.dataset.kind = sl.k + (sl.place ? '-' + sl.place : '');
+    ov.querySelector('.fx-ctrl').innerHTML = `
+      <button class="fx-btn" data-fx="prev" aria-label="Anterior" ${fx.i === 0 ? 'disabled' : ''}>${icon('left')}</button>
+      <span class="fx-pages">${s.map((_, k) => `<i class="${k === fx.i ? 'on' : k < fx.i ? 'done' : ''}"></i>`).join('')}</span>
+      <button class="fx-btn" data-fx="next" aria-label="Próximo" ${fx.i === s.length - 1 ? 'disabled' : ''}>${icon('right')}</button>
+      <button class="fx-btn sm" data-fx="full" aria-label="Tela cheia">${icon('expand')}</button>
+      <button class="fx-btn sm" data-fx="close" aria-label="Fechar apresentação">${icon('x')}</button>`;
+    clearTimeout(fx.timer);
+    const slide = stage.firstElementChild;
+    if (slide.classList.contains('is-suspense')) {
+      Sound.play('rufar');
+      fx.timer = setTimeout(() => fxReveal(slide, sl.place), 2800);
+    } else {
+      fxCount(slide);
+      if (sl.k === 'podium') Sound.play('sino');
+      if (sl.k === 'final') Sound.play('aplausos');
+    }
+  }
+  function fxReveal(slide, place) {
+    if (!slide || !slide.classList.contains('is-suspense')) return;
+    slide.classList.remove('is-suspense'); slide.classList.add('is-revealed');
+    Sound.play(place === 1 ? 'fanfarra' : 'moeda');
+    if (place === 1) setTimeout(() => Sound.play('aplausos'), 900);
+    fxCount(slide);
+  }
+  function fxGo(d) {
+    const fx = ui.fx; if (!fx) return;
+    const slide = document.querySelector('#fx .fx-slide');
+    if (d > 0 && slide && slide.classList.contains('is-suspense')) { clearTimeout(fx.timer); fxReveal(slide, Number(slide.dataset.place)); return; }
+    const ni = fx.i + d;
+    if (ni < 0 || ni >= fx.total) return;
+    fx.i = ni; fx.dir = d; fxRender();
+  }
+  function fxClose() {
+    const ov = document.getElementById('fx');
+    if (ui.fx) clearTimeout(ui.fx.timer);
+    ui.fx = null;
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    if (ov) { ov.classList.add('fx-out'); setTimeout(() => ov.remove(), 350); }
+  }
+  function fxBind(ov) {
+    ov.addEventListener('click', e => {
+      const b = e.target.closest('[data-fx]');
+      if (b) {
+        e.stopPropagation();
+        const a = b.dataset.fx;
+        if (a === 'prev') fxGo(-1); else if (a === 'next') fxGo(1); else if (a === 'close') fxClose();
+        else if (a === 'full') { const d = document.documentElement; if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); else if (d.requestFullscreen) d.requestFullscreen().catch(() => toast('Este aparelho não permite tela cheia.')); else toast('Este aparelho não permite tela cheia.'); }
+        return;
+      }
+      if (e.target.closest('.fx-card-in') && e.target.closest('.fx-inds')) return; // deixa rolar os indicadores
+      if (ui.fx?.moved) return;
+      fxGo(e.clientX < window.innerWidth * 0.3 ? -1 : 1);
+    });
+    let x0 = null, y0 = null;
+    ov.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; if (ui.fx) ui.fx.moved = false; }, { passive: true });
+    ov.addEventListener('touchend', e => {
+      if (x0 === null) return;
+      const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) { if (ui.fx) ui.fx.moved = true; fxGo(dx < 0 ? 1 : -1); setTimeout(() => { if (ui.fx) ui.fx.moved = false; }, 350); }
+      else if (Math.abs(dy) > 10 && ui.fx) { ui.fx.moved = true; setTimeout(() => { if (ui.fx) ui.fx.moved = false; }, 350); }
+      x0 = null;
+    }, { passive: true });
+  }
+  document.addEventListener('keydown', e => {
+    if (!ui.fx) return;
+    if (['ArrowRight', 'PageDown', ' ', 'Enter'].includes(e.key)) { e.preventDefault(); fxGo(1); }
+    else if (['ArrowLeft', 'PageUp'].includes(e.key)) { e.preventDefault(); fxGo(-1); }
+    else if (e.key === 'Escape') fxClose();
+  });
+
   function pageSoon(route) {
     const item = NAV.flatMap(g => g.items).find(i => i.r === route);
     return `<div class="card empty">${icon(item?.i || 'clock')}<h2>${esc(item?.t || 'Em breve')}</h2>
@@ -1132,6 +1341,7 @@ Content-Type: application/json</pre>
   const PAGES = {
     inicio: { t: 'Início', r: pageInicio },
     'gestao-visual': { t: 'Gestão Visual', r: pageGestaoVisual },
+    fechamento: { t: 'Fechamento do mês', r: pageFechamento, g: 1 },
     time: { t: 'Time e ranking', r: pageTime },
     performance: { t: 'Minha performance', r: pagePerformance },
     lancamentos: { t: 'Lançamentos', r: pageLancamentos, g: 1 },
@@ -1269,6 +1479,17 @@ Content-Type: application/json</pre>
         for (let i = 0; i < len; i++) { const clap = (i % 2200) < 500 && Math.random() < 0.6; d[i] = (Math.random() * 2 - 1) * (clap ? 0.9 : 0.15) * (1 - i / len); }
         const src = c.createBufferSource(), fl = c.createBiquadFilter(), g = c.createGain();
         fl.type = 'bandpass'; fl.frequency.value = 1800; g.gain.value = 0.5; src.buffer = buf; src.connect(fl).connect(g).connect(c.destination); src.start(t);
+      } else if (kind === 'rufar') {
+        // rufar de tambor: batidas cada vez mais rápidas por ~2,6 s
+        let tt = t;
+        for (let k = 0; k < 40; k++) {
+          const len = Math.floor(c.sampleRate * 0.05), buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
+          for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+          const src = c.createBufferSource(), fl = c.createBiquadFilter(), g = c.createGain();
+          fl.type = 'bandpass'; fl.frequency.value = 260; fl.Q.value = 0.8; g.gain.value = 0.25 + (k / 40) * 0.5;
+          src.buffer = buf; src.connect(fl).connect(g).connect(c.destination); src.start(tt);
+          tt += Math.max(0.035, 0.11 - k * 0.0022);
+        }
       } else { this.tone(c, 880, t, 1.4, 'sine', 0.25); this.tone(c, 1760, t, 0.8, 'sine', 0.07); this.tone(c, 1318, t + 0.12, 1.1, 'sine', 0.1); }
     },
   };
@@ -1492,6 +1713,13 @@ Content-Type: application/json</pre>
       u.pass = passHash(u.email, pass); save();
       ui.lastReset = { name: u.name, pass }; render();
     },
+    fxStart() {
+      ui.fx = { ym: ui.fxMonth || curYm(), i: 0 };
+      Sound.ensure(); keepAwake();
+      const d = document.documentElement;
+      if (d.requestFullscreen) d.requestFullscreen().catch(() => {});
+      fxRender();
+    },
     teamPick(el) {
       ui.teamBarber = el.dataset.id;
       const u = currentUser();
@@ -1629,6 +1857,7 @@ Content-Type: application/json</pre>
     tvSoundKind(el) { Sound.kind = el.value; Sound.play(el.value, true); },
     perfBarber(el) { ui.perfBarber = el.value; render(); },
     teamMonth(el) { ui.teamMonth = el.value; render(); },
+    fxMonth(el) { ui.fxMonth = el.value; render(); },
     async barberPhoto(el) {
       const b = barberById(el.dataset.id);
       try { b.photo = await readImage(el.files[0]); save(); toast('Foto atualizada.'); render(); } catch (e) { toast(e.message); }
@@ -1669,6 +1898,7 @@ Content-Type: application/json</pre>
     if (el && CHANGES[el.dataset.change]) CHANGES[el.dataset.change](el);
   });
   window.addEventListener('hashchange', () => {
+    if (ui.fx) fxClose();
     ui.confirm = null; ui.invite = null; ui.lastReset = null;
     render();
     if (location.hash === '#apresentacao') {
