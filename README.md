@@ -34,6 +34,13 @@ Acesso de demonstração: `gestor@demo.com` ou `barbeiro@demo.com`, senha `demo1
 
 Carreira = média das pontuações mensais do barbeiro. Bronze abaixo de 70, Prata a partir de 70, Ouro a partir de 85, Diamante a partir de 95.
 
-## Próximo passo
+## Nuvem (Supabase)
 
-Hoje os dados ficam salvos no navegador do aparelho. Para vários aparelhos, convites reais, login com Google/Apple/Microsoft e a API recebendo dados de outro sistema, o app precisa ser ligado a um servidor (sugestão: Supabase). A camada `DB` em `js/data.js` foi separada para essa troca.
+Com `js/config.js` preenchido, o app usa o Supabase: login de verdade, confirmação de e-mail, **recuperação de senha por e-mail**, convites entre aparelhos, dados na nuvem e ranking ao vivo em todos os aparelhos. Sem configuração, continua no modo de demonstração local.
+
+Passo a passo: [`supabase/LEIAME.md`](supabase/LEIAME.md).
+
+- `supabase/schema.sql`: tabelas, regras de acesso (cada barbearia só vê os próprios dados; só o gestor altera), cadastro por convite e aprovação
+- `supabase/functions/lancamentos`: API que recebe os resultados de outro sistema
+- `supabase/email/`: e-mails em português com a marca
+- `js/cloud.js`: ligação do app com o Supabase

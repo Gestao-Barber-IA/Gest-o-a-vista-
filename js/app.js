@@ -3,7 +3,10 @@
   'use strict';
   const { DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, importEntries, upsertEntry, gapTo, emptyState, monthRange, addMonths, monthFromIntegration, levelOf, isNum, passHash, uid, iso, fromIso, hash, icon, logo } = window.GB;
 
-  let state = DB.load();
+  const Cloud = window.GB.Cloud || { enabled: false };
+  const blankState = () => ({ version: 2, demo: false, cloud: true, company: { name: '', cnpj: '', phone: '', email: '', logo: null }, users: [], barbers: [], entries: [], monthly: [], invites: [],
+    weights: Object.fromEntries(window.GB.INDICATORS.map(i => [i.key, i.weight])), goals: { team: { ...window.GB.DEFAULT_GOALS }, byBarber: {} }, hidden: ['fid'], apiKey: '' });
+  let state = Cloud.enabled ? blankState() : DB.load();
   const ui = {
     period: DB.pref.get('period', 'mes'),
     offset: 0,
@@ -22,7 +25,7 @@
   const $ = (s, r = document) => r.querySelector(s);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   let rkCache = {};
-  const save = () => { DB.save(state); rkCache = {}; };
+  const save = () => { if (Cloud.enabled) Cloud.save(state); else DB.save(state); rkCache = {}; };
 
   // ---------- formatação ----------
   const nf0 = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
@@ -45,6 +48,7 @@
 
   // ---------- sessão ----------
   function currentUser() {
+    if (Cloud.enabled) return Cloud.user ? state.users.find(u => u.id === Cloud.user.id && u.status === 'ativo') || null : null;
     const id = DB.session.get();
     return state.users.find(u => u.id === id && u.status === 'ativo') || null;
   }
@@ -155,16 +159,23 @@
 
   function renderAuth(mode, code) {
     let inner = '';
+    if (mode === 'convite' && Cloud.enabled && (!ui.inviteInfo || ui.inviteInfo.code !== code)) {
+      root.innerHTML = authShell(`<div class="empty" style="padding:10px 0">${icon('clock')}<h2>Abrindo convite…</h2></div>`);
+      Cloud.getInvite(code).then(info => { ui.inviteInfo = { code, info }; renderAuth('convite', code); })
+        .catch(() => { ui.inviteInfo = { code, info: null }; renderAuth('convite', code); });
+      return;
+    }
     if (mode === 'convite') {
-      const inv = state.invites.find(i => i.code === code && !i.used);
-      const b = inv && barberById(inv.barberId);
+      const inv = Cloud.enabled ? (ui.inviteInfo.info ? { code } : null) : state.invites.find(i => i.code === code && !i.used);
+      const b = Cloud.enabled ? (ui.inviteInfo.info ? { name: ui.inviteInfo.info.barber } : null) : inv && barberById(inv.barberId);
+      const coName = Cloud.enabled ? (ui.inviteInfo.info ? ui.inviteInfo.info.company : '') : state.company.name;
       if (!inv || !b) {
         inner = `<div class="empty" style="padding:10px 0">${icon('link')}<h2>Convite inválido</h2>
           <p>Este link já foi usado ou foi cancelado. Peça um novo convite ao gestor da barbearia.</p>
           <a class="btn" href="#inicio" data-action="authMode" data-mode="entrar">Ir para o login</a></div>`;
       } else {
         inner = `
-          <p class="auth-lead"><b style="color:var(--fg)">${esc(state.company.name)}</b> convidou você para a equipe. Faça seu cadastro e aguarde o gestor aprovar sua entrada.</p>
+          <p class="auth-lead"><b style="color:var(--fg)">${esc(coName)}</b> convidou você para a equipe. Faça seu cadastro e aguarde o gestor aprovar sua entrada.</p>
           <form class="form" data-form="invite" data-code="${esc(code)}" novalidate>
             <label class="field"><span>Nome *</span><input class="input" id="inv-name" name="name" required value="${esc(b.name)}" autocomplete="name"></label>
             <label class="field"><span>E-mail *</span><input class="input" id="inv-email" name="email" type="email" required autocomplete="email" placeholder="voce@email.com"></label>
@@ -178,13 +189,31 @@
       inner = `<div class="empty" style="padding:10px 0">${icon('clock')}<h2>Cadastro enviado</h2>
         <p>Agora é só aguardar. Assim que o gestor aprovar, você entra com seu e-mail e senha.</p>
         <button class="btn" data-action="authMode" data-mode="entrar">Voltar para o login</button></div>`;
+    } else if (mode === 'confirmar') {
+      inner = `<div class="empty" style="padding:10px 0">${icon('mail')}<h2>Confirme seu e-mail</h2>
+        <p>Enviamos uma mensagem para <b style="color:var(--fg)">${esc(ui.authEmail || 'o seu e-mail')}</b>. Abra o link para ativar a conta${ui.authInvite ? '. Depois, é só aguardar o gestor aprovar sua entrada' : ''}.</p>
+        <p class="section-note">Não chegou? Confira a pasta de spam ou lixo eletrônico.</p>
+        <button class="btn" data-action="authMode" data-mode="entrar">Ir para o login</button></div>`;
+    } else if (mode === 'recusado' || mode === 'semPerfil') {
+      inner = `<div class="empty" style="padding:10px 0">${icon('lock')}<h2>${mode === 'recusado' ? 'Acesso não aprovado' : 'Conta sem barbearia'}</h2>
+        <p>${mode === 'recusado' ? 'O gestor não aprovou este cadastro. Fale com a barbearia para receber um novo convite.' : 'Este login não está ligado a nenhuma barbearia. Peça um convite ao gestor ou crie a conta da sua barbearia.'}</p>
+        <button class="btn" data-action="logout">Sair</button></div>`;
+    } else if (mode === 'novaSenha') {
+      inner = `
+        <p class="auth-lead">Crie sua nova senha.</p>
+        <form class="form" data-form="newPass" novalidate>
+          <label class="field"><span>Nova senha *</span><input class="input" id="np-pass" name="pass" type="password" required minlength="6" autocomplete="new-password"><small>Mínimo de 6 caracteres.</small></label>
+          <label class="field"><span>Repita a nova senha *</span><input class="input" id="np-pass2" name="pass2" type="password" required minlength="6" autocomplete="new-password"></label>
+          <p class="form-msg" data-msg></p>
+          <button class="btn btn-primary btn-block" type="submit">${icon('check')} Salvar nova senha</button>
+        </form>`;
     } else if (mode === 'recuperar') {
       inner = `
-        <p class="auth-lead">Informe seu e-mail. O gestor da barbearia pode gerar uma senha nova para você em <b>Barbeiros</b>.</p>
+        <p class="auth-lead">${Cloud.enabled ? 'Digite o e-mail da sua conta. Vamos enviar um link para você criar uma senha nova.' : 'Informe seu e-mail. O gestor da barbearia pode gerar uma senha nova para você em <b>Barbeiros</b>.'}</p>
         <form class="form" data-form="recover" novalidate>
           <label class="field"><span>E-mail *</span><input class="input" id="rec-email" name="email" type="email" required autocomplete="email"></label>
           <p class="form-msg" data-msg></p>
-          <button class="btn btn-primary btn-block" type="submit">Pedir nova senha</button>
+          <button class="btn btn-primary btn-block" type="submit">${icon('mail')} ${Cloud.enabled ? 'Enviar link por e-mail' : 'Pedir nova senha'}</button>
         </form>
         <div class="auth-links"><button class="link-btn" data-action="authMode" data-mode="entrar">Voltar para o login</button></div>`;
     } else if (mode === 'criar') {
@@ -203,6 +232,7 @@
     } else {
       inner = `${tabs('entrar')}
         <p class="auth-lead">Entre com sua conta.</p>
+        ${ui.authMsg ? `<p class="form-msg ${ui.authMsg.ok ? 'ok' : ''}" role="status">${esc(ui.authMsg.text)}</p>` : ''}
         <form class="form" data-form="login" novalidate>
           <label class="field"><span>E-mail *</span><input class="input" id="li-email" name="email" type="email" required autocomplete="email" placeholder="voce@barbearia.com"></label>
           <div class="field"><label for="li-pass" style="font-weight:600;font-size:.95rem">Senha *</label>
@@ -228,6 +258,7 @@
           <span class="muted" style="align-self:center">senha: demo123</span></div></div>` : ''}`;
     }
     root.innerHTML = authShell(inner);
+    ui.authMsg = null;
   }
 
   // ---------- menu ----------
@@ -969,7 +1000,7 @@
         <div class="grow"><b>${esc(b.name)}</b>${status} ${b.active === false ? '<span class="chip chip-soft">inativo</span>' : ''}${u ? `<div class="muted" style="font-size:.88rem">${esc(u.email)}</div>` : ''}</div>
         <div class="btn-row">
           ${!u ? `<button class="btn btn-sm btn-primary" data-action="invite" data-id="${esc(b.id)}">${icon('link')} ${inv ? 'Ver convite' : 'Convidar'}</button>` : ''}
-          ${u && u.status === 'ativo' ? `<button class="btn btn-sm" data-action="resetPass" data-id="${esc(u.id)}">${icon('lock')} Nova senha</button>` : ''}
+          ${u && u.status === 'ativo' ? `<button class="btn btn-sm" data-action="resetPass" data-id="${esc(u.id)}">${icon('lock')} ${Cloud.enabled ? 'Enviar redefinição de senha' : 'Nova senha'}</button>` : ''}
           <label class="btn btn-sm" style="cursor:pointer">${icon('camera')} Foto<input type="file" accept="image/*" hidden data-change="barberPhoto" data-id="${esc(b.id)}"></label>
           <button class="btn btn-sm" data-action="toggleBarber" data-id="${esc(b.id)}">${b.active === false ? 'Reativar' : 'Desativar'}</button>
         </div>
@@ -1028,10 +1059,10 @@
         </form>
       </section>
       <section class="section card">
-        <h2 class="section-title">Dados deste aparelho</h2>
-        <p class="section-note">Nesta versão os dados ficam salvos neste navegador. Quando o app for ligado a um servidor, eles passam a valer em todos os aparelhos.</p>
+        <h2 class="section-title">${Cloud.enabled ? 'Dados da barbearia' : 'Dados deste aparelho'}</h2>
+        <p class="section-note">${Cloud.enabled ? `Os dados ficam salvos na nuvem e valem em todos os aparelhos. ${Cloud.error ? `<b style="color:var(--danger)">Última tentativa de salvar falhou: ${esc(Cloud.error)}</b>` : 'Tudo sincronizado.'}` : 'Nesta versão os dados ficam salvos neste navegador. Quando o app for ligado a um servidor, eles passam a valer em todos os aparelhos.'}</p>
         <div class="btn-row">
-          <button class="btn ${ui.confirm === 'demo' ? 'btn-danger' : ''}" data-action="resetDemo">${ui.confirm === 'demo' ? 'Confirmar: apagar e restaurar demonstração' : 'Restaurar dados de demonstração'}</button>
+          ${Cloud.enabled ? '' : `<button class="btn ${ui.confirm === 'demo' ? 'btn-danger' : ''}" data-action="resetDemo">${ui.confirm === 'demo' ? 'Confirmar: apagar e restaurar demonstração' : 'Restaurar dados de demonstração'}</button>`}
           <button class="btn btn-danger" data-action="clearData">${ui.confirm === 'clear' ? 'Confirmar: apagar equipe e lançamentos' : 'Apagar equipe e lançamentos'}</button>
         </div>
       </section>`;
@@ -1048,11 +1079,11 @@
         <div class="field"><span>Chave da API</span><div class="invite-link" id="api-key">${esc(state.apiKey)}</div></div>
         <div class="btn-row"><button class="btn btn-sm" data-action="copyKey">${icon('copy')} Copiar chave</button>
         <button class="btn btn-sm ${ui.confirm === 'key' ? 'btn-danger' : ''}" data-action="newKey">${ui.confirm === 'key' ? 'Confirmar: a chave antiga para de funcionar' : 'Gerar nova chave'}</button></div>
-        <pre class="code">POST /api/v1/lancamentos
+        <pre class="code">POST ${esc(Cloud.enabled ? Cloud.apiUrl : '/api/v1/lancamentos')}
 Authorization: Bearer ${esc(state.apiKey)}
 Content-Type: application/json</pre>
         <p class="section-note">Campos aceitos: <code>data</code> (AAAA-MM-DD), <code>barbeiro</code> (nome) ou <code>barbeiro_id</code>, ${FIELDS.map(f => `<code>${f.api}</code>`).join(', ')}. Campos ausentes ficam em branco. Enviar a mesma data e barbeiro de novo substitui os números.</p>
-        <p class="section-note"><b>Atenção:</b> o endereço acima passa a receber dados quando o app for publicado com servidor. Até lá, teste o formato colando os dados abaixo.</p>
+        <p class="section-note">${Cloud.enabled ? 'O endereço acima funciona depois que a função <code>lancamentos</code> for publicada no Supabase (veja o guia em <code>supabase/LEIAME.md</code>). Abaixo dá para importar os dados colando o JSON.' : '<b>Atenção:</b> o endereço acima passa a receber dados quando o app for publicado com servidor. Até lá, teste o formato colando os dados abaixo.'}</p>
       </section>
       <section class="section card">
         <h2 class="section-title">Testar importação</h2>
@@ -1593,7 +1624,7 @@ Content-Type: application/json</pre>
   }
 
   function renderTV() {
-    state = DB.load();
+    if (!Cloud.enabled) state = DB.load();
     const R = computeRanking(state, range());
     liveDetect(R);
     const slides = [tvRanking, tvGuardians, tvAlerts];
@@ -1676,12 +1707,21 @@ Content-Type: application/json</pre>
   const ACTIONS = {
     authMode(el, ev) { ev.preventDefault(); ui.authMode = el.dataset.mode; if (location.hash.startsWith('#convite-')) location.hash = ''; renderAuth(ui.authMode); },
     togglePass() { const i = $('#li-pass'); i.type = i.type === 'password' ? 'text' : 'password'; },
-    social(el) { toast(`Entrar com ${el.dataset.name} será ligado junto com o servidor.`); },
+    async social(el) {
+      if (!Cloud.enabled) { toast(`Entrar com ${el.dataset.name} será ligado junto com o servidor.`); return; }
+      const provider = { Google: 'google', Apple: 'apple', Microsoft: 'azure' }[el.dataset.name];
+      const { error } = await Cloud.oauth(provider);
+      if (error) toast(Cloud.message(error));
+    },
     demoFill(el) { $('#li-email').value = el.dataset.email; $('#li-pass').value = 'demo123'; $('#li-pass').focus(); },
     openDrawer() { $('.drawer').classList.add('open'); $('.scrim').hidden = false; },
     closeDrawer() { $('.drawer').classList.remove('open'); $('.scrim').hidden = true; },
     togglePopover() { const p = $('.popover'); p.hidden = !p.hidden; },
-    logout() { DB.session.clear(); ui.authMode = 'entrar'; location.hash = ''; render(); },
+    async logout() {
+      if (Cloud.enabled) { await Cloud.signOut(); state = blankState(); rkCache = {}; }
+      else DB.session.clear();
+      ui.authMode = 'entrar'; location.hash = ''; render();
+    },
     period(el) { ui.period = el.dataset.period; ui.offset = 0; DB.pref.set('period', ui.period); render(); },
     shift(el) { ui.offset = Math.min(0, ui.offset + Number(el.dataset.dir)); ui.confirm = null; render(); },
     fontSize() {
@@ -1707,8 +1747,13 @@ Content-Type: application/json</pre>
     copyInvite(el) { const inv = state.invites.find(i => i.barberId === el.dataset.id && !i.used); if (inv) copyText(inviteLink(inv.code), $('#inv-' + CSS.escape(el.dataset.id))); },
     cancelInvite(el) { state.invites = state.invites.filter(i => !(i.barberId === el.dataset.id && !i.used)); ui.invite = null; save(); render(); },
     toggleBarber(el) { const b = barberById(el.dataset.id); if (b) { b.active = b.active === false; save(); render(); } },
-    resetPass(el) {
+    async resetPass(el) {
       const u = state.users.find(x => x.id === el.dataset.id); if (!u) return;
+      if (Cloud.enabled) {
+        const { error } = await Cloud.reset(u.email);
+        toast(error ? Cloud.message(error) : `Enviamos para ${u.email} um link para criar uma senha nova.`);
+        return;
+      }
       const pass = hash(u.id + Date.now()).slice(0, 8);
       u.pass = passHash(u.email, pass); save();
       ui.lastReset = { name: u.name, pass }; render();
@@ -1744,20 +1789,34 @@ Content-Type: application/json</pre>
       if (ui.confirm !== 'clear') { ui.confirm = 'clear'; render(); return; }
       const me = currentUser();
       state.barbers = []; state.entries = []; state.monthly = []; state.invites = []; state.demo = false;
-      state.users = state.users.filter(u => u.id === me.id);
+      if (!Cloud.enabled) state.users = state.users.filter(u => u.id === me.id);
       ui.confirm = null; save(); toast('Equipe e lançamentos apagados.'); render();
     },
     copyKey() { copyText(state.apiKey, $('#api-key')); },
     newKey() {
       if (ui.confirm !== 'key') { ui.confirm = 'key'; render(); return; }
+      if (Cloud.enabled) {
+        Cloud.rotateKey().then(k => { state.apiKey = k; ui.confirm = null; toast('Nova chave gerada.'); render(); }).catch(e => toast(Cloud.message(e)));
+        return;
+      }
       state.apiKey = 'gbia_' + hash(String(Date.now())) + hash('k' + Math.random()); ui.confirm = null; save(); toast('Nova chave gerada.'); render();
     },
   };
 
   const FORMS = {
-    login(f) {
+    async login(f) {
       const email = val(f, 'email').toLowerCase(), pass = f.elements.pass.value;
       if (!email || !pass) return setMsg(f, 'Preencha e-mail e senha.');
+      if (Cloud.enabled) {
+        setMsg(f, 'Entrando…', true);
+        const { error } = await Cloud.signIn(email, pass);
+        if (error) return setMsg(f, Cloud.message(error));
+        DB.pref.set('ephemeral', f.elements.remember.checked ? '0' : '1');
+        try { sessionStorage.setItem('gbia.alive', '1'); } catch (e) { /* opcional */ }
+        if (await loadCloud()) { if (location.hash === '#inicio') render(); else location.hash = 'inicio'; }
+        else render();
+        return;
+      }
       const u = state.users.find(x => x.email.toLowerCase() === email);
       if (!u || u.pass !== passHash(email, pass)) return setMsg(f, 'E-mail ou senha incorretos.');
       if (u.status === 'pendente') return setMsg(f, 'Seu cadastro está aguardando a aprovação do gestor.');
@@ -1765,11 +1824,18 @@ Content-Type: application/json</pre>
       DB.session.set(u.id, f.elements.remember.checked);
       location.hash = 'inicio'; render();
     },
-    signup(f) {
+    async signup(f) {
       const company = val(f, 'company'), name = val(f, 'name'), email = val(f, 'email').toLowerCase(), pass = f.elements.pass.value;
       if (!company || !name) return setMsg(f, 'Preencha o nome da barbearia e o seu nome.');
       if (!validEmail(email)) return setMsg(f, 'Digite um e-mail válido.');
       if (pass.length < 6) return setMsg(f, 'A senha precisa ter pelo menos 6 caracteres.');
+      if (Cloud.enabled) {
+        setMsg(f, 'Criando conta…', true);
+        const { data, error } = await Cloud.signUp(email, pass, { company, name });
+        if (error) return setMsg(f, Cloud.message(error));
+        if (data.session) { if (await loadCloud()) { toast('Conta criada. Agora cadastre sua equipe.'); location.hash = 'barbeiros'; } render(); return; }
+        ui.authEmail = email; ui.authInvite = false; ui.authMode = 'confirmar'; renderAuth('confirmar'); return;
+      }
       if (!state.demo && state.users.some(u => u.email.toLowerCase() === email)) return setMsg(f, 'Este e-mail já tem conta. Use Entrar.');
       const gestor = { id: uid('u_'), name, email, pass: passHash(email, pass), role: 'gestor', status: 'ativo', barberId: null };
       state = DB.replace(emptyState({ name: company, cnpj: '', phone: '', email, logo: null }, gestor));
@@ -1777,23 +1843,50 @@ Content-Type: application/json</pre>
       toast('Conta criada. Agora cadastre sua equipe.');
       location.hash = 'barbeiros'; render();
     },
-    invite(f) {
+    async invite(f) {
       const code = f.dataset.code;
-      const inv = state.invites.find(i => i.code === code && !i.used);
-      if (!inv) return setMsg(f, 'Este convite não é mais válido.');
       const name = val(f, 'name'), email = val(f, 'email').toLowerCase(), pass = f.elements.pass.value;
       if (!name) return setMsg(f, 'Digite seu nome.');
       if (!validEmail(email)) return setMsg(f, 'Digite um e-mail válido.');
       if (pass.length < 6) return setMsg(f, 'A senha precisa ter pelo menos 6 caracteres.');
+      if (Cloud.enabled) {
+        setMsg(f, 'Enviando cadastro…', true);
+        const { data, error } = await Cloud.signUp(email, pass, { invite_code: code, name, phone: val(f, 'phone') });
+        if (error) return setMsg(f, Cloud.message(error, 'invite'));
+        history.replaceState(null, '', location.pathname);
+        if (data.session) { await loadCloud(); render(); return; }
+        ui.authEmail = email; ui.authInvite = true; ui.authMode = 'confirmar'; renderAuth('confirmar'); return;
+      }
+      const inv = state.invites.find(i => i.code === code && !i.used);
+      if (!inv) return setMsg(f, 'Este convite não é mais válido.');
       if (state.users.some(u => u.email.toLowerCase() === email && u.status !== 'recusado')) return setMsg(f, 'Este e-mail já está cadastrado.');
       state.users.push({ id: uid('u_'), name, email, phone: val(f, 'phone'), pass: passHash(email, pass), role: 'barbeiro', status: 'pendente', barberId: inv.barberId });
       inv.used = true; save();
       history.replaceState(null, '', location.pathname + location.search);
       ui.authMode = 'pendente'; renderAuth('pendente');
     },
-    recover(f) {
-      if (!validEmail(val(f, 'email'))) return setMsg(f, 'Digite um e-mail válido.');
+    async recover(f) {
+      const email = val(f, 'email').toLowerCase();
+      if (!validEmail(email)) return setMsg(f, 'Digite um e-mail válido.');
+      if (Cloud.enabled) {
+        setMsg(f, 'Enviando…', true);
+        const { error } = await Cloud.reset(email);
+        if (error) return setMsg(f, Cloud.message(error));
+        return setMsg(f, `Pronto. Se existir uma conta com ${email}, você vai receber um link para criar a senha nova. Confira também o spam.`, true);
+      }
       setMsg(f, 'Pedido registrado. Avise o gestor para gerar sua nova senha.', true);
+    },
+    async newPass(f) {
+      const pass = f.elements.pass.value, pass2 = f.elements.pass2.value;
+      if (pass.length < 6) return setMsg(f, 'A senha precisa ter pelo menos 6 caracteres.');
+      if (pass !== pass2) return setMsg(f, 'As duas senhas não são iguais.');
+      setMsg(f, 'Salvando…', true);
+      const { error } = await Cloud.updatePassword(pass);
+      if (error) return setMsg(f, Cloud.message(error));
+      Cloud.recovery = false;
+      history.replaceState(null, '', location.pathname);
+      toast('Senha alterada.');
+      if (await loadCloud() && location.hash !== '#inicio') location.hash = 'inicio'; else render();
     },
     async addBarber(f) {
       const name = val(f, 'name');
@@ -1838,7 +1931,7 @@ Content-Type: application/json</pre>
       Object.assign(state.company, { name, cnpj: val(f, 'cnpj'), phone: val(f, 'phone'), email: val(f, 'email') });
       save(); toast('Dados da barbearia salvos.'); render();
     },
-    profile(f) {
+    async profile(f) {
       const u = currentUser();
       const name = val(f, 'name'), email = val(f, 'email').toLowerCase(), pass = f.elements.pass.value;
       if (!name) return setMsg(f, 'Digite seu nome.');
@@ -1846,6 +1939,13 @@ Content-Type: application/json</pre>
       if (state.users.some(x => x.id !== u.id && x.email.toLowerCase() === email)) return setMsg(f, 'Este e-mail já é usado por outra conta.');
       if (pass && pass.length < 6) return setMsg(f, 'A nova senha precisa ter pelo menos 6 caracteres.');
       const emailChanged = email !== u.email.toLowerCase();
+      if (Cloud.enabled) {
+        u.name = name; save();
+        if (pass) { const { error } = await Cloud.updatePassword(pass); if (error) return setMsg(f, Cloud.message(error)); }
+        if (emailChanged) { const { error } = await Cloud.updateEmail(email); if (error) return setMsg(f, Cloud.message(error)); }
+        toast(emailChanged ? `Enviamos um link de confirmação para ${email}. O e-mail muda depois que você confirmar.` : 'Cadastro atualizado.');
+        render(); return;
+      }
       if (emailChanged && !pass) return setMsg(f, 'Para trocar o e-mail, digite também uma nova senha.');
       u.name = name; u.email = email;
       if (pass) u.pass = passHash(email, pass);
@@ -1918,11 +2018,69 @@ Content-Type: application/json</pre>
 
   // Atualiza a tela da loja quando outra aba deste aparelho lança resultados.
   window.addEventListener('storage', e => {
-    if (e.key !== 'gbia.v1') return;
+    if (Cloud.enabled || e.key !== 'gbia.v1') return;
     if (location.hash === '#apresentacao') renderTV();
     else if (['', '#inicio', '#gestao-visual'].includes(location.hash) && currentUser()) { state = DB.load(); rkCache = {}; render(); }
   });
   document.addEventListener('visibilitychange', () => { if (!document.hidden && location.hash === '#apresentacao') keepAwake(); });
 
-  splash(render);
+  // ---------- nuvem: carregar, ouvir mudanças e iniciar ----------
+  async function loadCloud() {
+    try {
+      const r = await Cloud.load();
+      if (r.status === 'ativo') { state = r.state; rkCache = {}; Cloud.subscribe(); ui.authMode = 'entrar'; return true; }
+      state = blankState();
+      ui.authMode = r.status === 'pendente' ? 'pendente' : r.status === 'recusado' ? 'recusado' : r.status === 'sem-perfil' ? 'semPerfil' : 'entrar';
+    } catch (e) {
+      state = blankState();
+      ui.authMsg = { text: 'Não foi possível carregar os dados: ' + Cloud.message(e) };
+      ui.authMode = 'entrar';
+    }
+    return false;
+  }
+  function isTyping() {
+    const a = document.activeElement;
+    return a && root.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);
+  }
+  if (Cloud.enabled) {
+    Cloud.onError = msg => toast('Não foi possível salvar na nuvem: ' + msg);
+    Cloud.onRemote = next => {
+      const apply = () => {
+        state = next; rkCache = {};
+        if (ui.fx) return;
+        if (location.hash === '#apresentacao') renderTV();
+        else if (['#time', '#lancamentos'].includes(location.hash)) refreshTeam();
+        else render();
+      };
+      if (isTyping()) { root.addEventListener('focusout', () => setTimeout(() => { if (!isTyping()) apply(); }, 50), { once: true }); }
+      else apply();
+    };
+    Cloud.onAuth = async (event) => {
+      if (event === 'PASSWORD_RECOVERY') { ui.authMode = 'novaSenha'; renderAuth('novaSenha'); return; }
+      if (event === 'SIGNED_OUT') { state = blankState(); ui.authMode = 'entrar'; render(); return; }
+      if (event === 'PROFILE_CHANGED') { await loadCloud(); render(); }
+    };
+  }
+  async function bootCloud() {
+    await Cloud.init();
+    const params = new URLSearchParams(location.search);
+    const h = location.hash;
+    const err = /error_description=([^&]+)/.exec(h);
+    if (err) ui.authMsg = { text: Cloud.message(decodeURIComponent(err[1].replace(/\+/g, ' '))) };
+    if (/access_token|error_description|type=/.test(h)) history.replaceState(null, '', location.pathname + location.search);
+    // "Lembrar-me" desmarcado: encerra a sessão quando o navegador foi fechado.
+    let alive = false; try { alive = sessionStorage.getItem('gbia.alive') === '1'; } catch (e) { /* opcional */ }
+    if (Cloud.user && DB.pref.get('ephemeral', '0') === '1' && !alive) await Cloud.signOut();
+    try { sessionStorage.setItem('gbia.alive', '1'); } catch (e) { /* opcional */ }
+    if (Cloud.user && (Cloud.recovery || params.has('redefinir'))) { ui.authMode = 'novaSenha'; return; }
+    if (params.has('redefinir')) history.replaceState(null, '', location.pathname + location.hash);
+    if (Cloud.user) await loadCloud();
+  }
+  if (Cloud.enabled) {
+    const wait = new Promise(r => setTimeout(r, 1900));
+    splash(() => {});
+    Promise.all([bootCloud(), wait]).then(() => { if (ui.authMode === 'novaSenha') renderAuth('novaSenha'); else render(); });
+  } else {
+    splash(render);
+  }
 })();
