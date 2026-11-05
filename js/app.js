@@ -366,7 +366,7 @@
       const middle = t
         ? `<div class="pd-title"><span>${icon(t === 'mvp' ? 'diamond' : 'crown')}<span><b>${t === 'mvp' ? 'MVP' : 'DESTAQUE'}</b><i class="num">${leadsTxt}</i></span></span></div>`
         : '';
-      return `<div class="pd pd-${place} ${tier}" style="--in:${delay};--fd:${place === 1 ? '0s' : place === 2 ? '-2s' : '-4s'}">
+      return `<div class="pd pd-${place} ${tier}" data-id="${esc(b.id)}" data-pos="${place}" style="--in:${delay};--fd:${place === 1 ? '0s' : place === 2 ? '-2s' : '-4s'}">
         <div class="pd-beam"></div>
         ${place === 1 ? `<div class="pd-sparks">${sparks}</div>` : ''}
         <div class="pd-float">
@@ -401,6 +401,7 @@
 
   function pageGestaoVisual() {
     const R = computeRanking(state, range());
+    liveDetect(R);
     return `${periodNav()}
       <section class="section"><h2 class="section-title">Pódio e ranking ao vivo</h2>${podium(R)}${R.rows.length ? podiumLegend(R) : ''}</section>
       <section class="section"><h2 class="section-title">Ranking em tempo real</h2>${rankingList(R)}</section>`;
@@ -427,12 +428,14 @@
         ? `<small class="rank-sub sub-mvp">${icon('diamond')} MVP · ${r.leads.length}/${R.N}</small>`
         : t === 'destaque'
           ? `<small class="rank-sub sub-gold">${icon('crown')} Destaque · ${r.leads.length}/${R.N}</small>`
-          : `<small class="rank-sub">${r.leads.length}/${R.N} indicadores</small>`;
+          : `<small class="rank-sub">${r.leads.length}/${R.N} ${liveRecent(R, r.barber.id) ? 'ind.' : 'indicadores'}</small>`;
       const zone = r.pos <= 3 ? 'top' : (n >= 5 && r.pos > n - 2 ? 'low' : '');
-      return `<li><a class="rank-row ${zone}" href="#perfil-${esc(r.barber.id)}">
+      const nowD = liveRecent(R, r.barber.id);
+      const nowChip = nowD ? `<span class="rk-now ${nowD > 0 ? 'up' : 'down'}" title="Mudança nos últimos 15 minutos">${nowD > 0 ? '↑' : '↓'}${Math.abs(nowD)} agora</span>` : '';
+      return `<li><a class="rank-row ${zone}" data-id="${esc(r.barber.id)}" data-pos="${r.pos}" href="#perfil-${esc(r.barber.id)}">
         <span class="rank-pos num">${ord(r.pos)}</span>
         ${avatar(r.barber, 46)}
-        <span class="rank-who"><b><span class="rank-name">${esc(r.barber.name)}</span><span class="rank-money num">${money0(r.sums.fat)}</span></b>${sub}</span>
+        <span class="rank-who"><b><span class="rank-name">${esc(r.barber.name)}</span><span class="rank-money num">${money0(r.sums.fat)}</span></b>${sub.replace('</small>', nowChip + '</small>')}</span>
         <span class="rank-score num">${score(r.overall)}</span>
         ${trend}
       </a></li>`;
@@ -506,6 +509,7 @@
   // ---------- páginas ----------
   function pageInicio(user) {
     const R = computeRanking(state, range());
+    liveDetect(R);
     const shortcuts = isGestor(user)
       ? [['lancamentos', 'Lançar resultados', 'bolt'], ['time', 'Time e ranking', 'trophy'], ['barbeiros', 'Barbeiros', 'users'], ['apresentacao', 'Tela da loja', 'crown']]
       : [['performance', 'Minha performance', 'award'], ['time', 'Time e ranking', 'trophy'], ['ajuda', 'Como pontuo', 'help'], ['apresentacao', 'Tela da loja', 'crown']];
@@ -1139,6 +1143,100 @@ Content-Type: application/json</pre>
     ajuda: { t: 'Central de ajuda', r: pageAjuda },
   };
 
+  // ---------- ranking ao vivo: ultrapassagens ----------
+  const LIVE_MS = 15 * 60 * 1000; // "agora" vale por 15 minutos
+  const readJSON = (k, d) => { try { return JSON.parse(DB.pref.get(k, '') || 'null') || d; } catch (e) { return d; } };
+  const rangeKey = r => r.start + '_' + r.end;
+
+  // Compara com a última posição vista neste aparelho e registra quem subiu e quem desceu.
+  function liveDetect(R) {
+    const key = rangeKey(R.range);
+    const store = readJSON('live', {});
+    const recent = readJSON('liveRecent', {});
+    const now = Date.now();
+    const rec = recent[key] || {};
+    for (const id of Object.keys(rec)) if (now - rec[id].at > LIVE_MS) delete rec[id];
+    const pos = Object.fromEntries(R.rows.map(r => [r.barber.id, r.pos]));
+    const prev = store[key];
+    const events = [];
+    let anim = null;
+    if (prev && R.active.length) {
+      const old = prev.pos;
+      const changed = R.rows.filter(r => old[r.barber.id] && old[r.barber.id] !== r.pos);
+      for (const r of changed) {
+        const id = r.barber.id, d = old[id] - r.pos;
+        rec[id] = { diff: (rec[id]?.diff || 0) + d, at: now };
+        if (rec[id].diff === 0) delete rec[id];
+      }
+      for (const r of changed.filter(r => old[r.barber.id] > r.pos).sort((a, b) => a.pos - b.pos)) {
+        const passed = R.rows.filter(o => old[o.barber.id] && old[o.barber.id] < old[r.barber.id] && o.pos > r.pos).map(o => o.barber);
+        if (passed.length) events.push({ up: r.barber, down: passed, pos: r.pos, leader: r.pos === 1 });
+      }
+      if (changed.length) anim = { old, leaderChanged: prev.leader && prev.leader !== R.rows[0]?.barber.id };
+    }
+    store[key] = { pos, leader: R.rows[0]?.barber.id, at: now };
+    const keys = Object.keys(store).sort((a, b) => store[b].at - store[a].at).slice(0, 8);
+    DB.pref.set('live', JSON.stringify(Object.fromEntries(keys.map(k => [k, store[k]]))));
+    recent[key] = rec;
+    DB.pref.set('liveRecent', JSON.stringify(Object.fromEntries(Object.entries(recent).filter(([k]) => keys.includes(k)))));
+    if (anim) ui.liveAnim = anim;
+    if (events.length) ui.liveQueue = (ui.liveQueue || []).concat(events);
+    return events;
+  }
+  function liveRecent(R, id) {
+    const r = (readJSON('liveRecent', {})[rangeKey(R.range)] || {})[id];
+    return r && Date.now() - r.at < LIVE_MS ? r.diff : 0;
+  }
+
+  // Depois de desenhar: linhas deslizam da posição antiga e cartões do pódio trocam de lugar.
+  function applyLive() {
+    const a = ui.liveAnim;
+    ui.liveAnim = null;
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (a) {
+      document.querySelectorAll('.rank-list').forEach(list => {
+        const rows = [...list.querySelectorAll('.rank-row[data-id]')];
+        if (rows.length < 2) return;
+        const step = rows[1].getBoundingClientRect().top - rows[0].getBoundingClientRect().top;
+        rows.forEach(el => {
+          const was = a.old[el.dataset.id], now = Number(el.dataset.pos);
+          if (!was || was === now) return;
+          el.classList.add(was > now ? 'rk-up' : 'rk-down');
+          if (!reduce && el.animate) el.animate([{ transform: `translateY(${(was - now) * step}px)` }, { transform: 'none' }], { duration: 1100, easing: 'cubic-bezier(.2,.8,.2,1)' });
+          setTimeout(() => el.classList.remove('rk-up', 'rk-down'), 6000);
+        });
+      });
+      document.querySelectorAll('.pd[data-id]').forEach(el => {
+        const was = a.old[el.dataset.id], now = Number(el.dataset.pos);
+        if (was && was !== now) el.classList.add(was > now ? 'pd-swap-up' : 'pd-swap-down');
+        if (now === 1 && a.leaderChanged) el.classList.add('pd-new-leader');
+      });
+    }
+    runLiveQueue();
+  }
+
+  function runLiveQueue() {
+    if (ui.liveBusy || !(ui.liveQueue || []).length) return;
+    const ev = ui.liveQueue.shift();
+    ui.liveBusy = true;
+    const tv = location.hash === '#apresentacao';
+    const others = ev.down.map(b => first(b.name));
+    const txt = `${first(ev.up.name)} passou ${others.length > 1 ? others.slice(0, -1).join(', ') + ' e ' + others[others.length - 1] : others[0]}`;
+    const el = document.createElement('div');
+    el.className = 'ov-banner' + (tv ? ' ov-tv' : '') + (ev.leader ? ' ov-leader' : '');
+    el.setAttribute('role', 'status');
+    el.innerHTML = `<div class="ov-faces"><span class="ov-up">${avatar(ev.up, tv ? 72 : 48)}<i>${icon('up')}</i></span>
+        <span class="ov-arrow">${icon('right')}</span>
+        <span class="ov-down">${avatar(ev.down[0], tv ? 60 : 40)}<i>${icon('down')}</i></span></div>
+      <div class="ov-text"><small>${ev.leader ? 'Novo líder do ranking' : 'Ultrapassagem'}</small><b>${esc(txt)}</b>
+        <span>e subiu para o ${ord(ev.pos)} lugar${ev.down.length === 1 ? `. ${esc(first(ev.down[0].name))} caiu para o ${ord(ev.pos + 1)}.` : '.'}</span></div>`;
+    document.body.appendChild(el);
+    if (tv) Sound.play(ev.leader ? 'fanfarra' : undefined);
+    const hide = () => { el.classList.add('ov-out'); setTimeout(() => { el.remove(); ui.liveBusy = false; runLiveQueue(); }, 450); };
+    el.addEventListener('click', hide);
+    setTimeout(hide, tv ? 7000 : 5000);
+  }
+
   // ---------- sons (gerados no navegador, sem arquivos) ----------
   const Sound = {
     ctx: null,
@@ -1273,19 +1371,10 @@ Content-Type: application/json</pre>
       ${cards ? `<div class="al-grid">${cards}</div>` : '<div class="card muted">Sem barbeiros no ranking.</div>'}`;
   }
 
-  function tvCheckChanges(R) {
-    const snap = { leader: R.rows[0]?.barber.id, title: R.title.type + ':' + R.title.barberId, pos: Object.fromEntries(R.rows.map(r => [r.barber.id, r.pos])) };
-    const old = ui.tvSnap;
-    ui.tvSnap = snap;
-    if (!old) return;
-    if (old.leader !== snap.leader || old.title !== snap.title) { Sound.play('fanfarra'); toast('Mudou o 1º lugar!'); return; }
-    if (Object.keys(snap.pos).some(id => old.pos[id] && snap.pos[id] < old.pos[id])) Sound.play();
-  }
-
   function renderTV() {
     state = DB.load();
     const R = computeRanking(state, range());
-    tvCheckChanges(R);
+    liveDetect(R);
     const slides = [tvRanking, tvGuardians, tvAlerts];
     const i = ((ui.tvIndex % slides.length) + slides.length) % slides.length;
     const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1306,6 +1395,7 @@ Content-Type: application/json</pre>
       <div class="tv-body">${slides[i](R)}</div>
       <nav class="tv-dots" aria-label="Telas">${slides.map((_, k) => `<button class="${k === i ? 'on' : ''}" data-action="tvGo" data-i="${k}" aria-label="Tela ${k + 1}"></button>`).join('')}</nav>
     </div>`;
+    applyLive();
     clearTimeout(ui.tvTimer);
     ui.tvTimer = setTimeout(() => { ui.tvIndex = i + 1; if (location.hash === '#apresentacao') { renderTV(); window.scrollTo(0, 0); } }, TV_SECONDS * 1000);
   }
@@ -1351,6 +1441,7 @@ Content-Type: application/json</pre>
       <button class="fab" data-action="openDrawer" aria-label="Abrir menu">${icon('menu')}</button>
       ${drawer(user, route)}
       ${popover(user)}`;
+    applyLive();
   }
 
   // ---------- ações ----------
@@ -1596,7 +1687,11 @@ Content-Type: application/json</pre>
   });
 
   // Atualiza a tela da loja quando outra aba deste aparelho lança resultados.
-  window.addEventListener('storage', e => { if (e.key === 'gbia.v1' && location.hash === '#apresentacao') renderTV(); });
+  window.addEventListener('storage', e => {
+    if (e.key !== 'gbia.v1') return;
+    if (location.hash === '#apresentacao') renderTV();
+    else if (['', '#inicio', '#gestao-visual'].includes(location.hash) && currentUser()) { state = DB.load(); rkCache = {}; render(); }
+  });
   document.addEventListener('visibilitychange', () => { if (!document.hidden && location.hash === '#apresentacao') keepAwake(); });
 
   splash(render);
