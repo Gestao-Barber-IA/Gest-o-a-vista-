@@ -1,7 +1,7 @@
 /* Gestão Barber IA — telas e interação. */
 (function () {
   'use strict';
-  const { DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, importEntries, upsertEntry, gapTo, emptyState, passHash, uid, iso, fromIso, hash, icon, logo } = window.GB;
+  const { DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, importEntries, upsertEntry, gapTo, emptyState, monthRange, addMonths, monthFromIntegration, levelOf, isNum, passHash, uid, iso, fromIso, hash, icon, logo } = window.GB;
 
   let state = DB.load();
   const ui = {
@@ -21,7 +21,8 @@
   const root = document.getElementById('app');
   const $ = (s, r = document) => r.querySelector(s);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const save = () => DB.save(state);
+  let rkCache = {};
+  const save = () => { DB.save(state); rkCache = {}; };
 
   // ---------- formatação ----------
   const nf0 = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
@@ -520,12 +521,352 @@
       ${classification(R)}`;
   }
 
-  function pageTime() {
-    const R = computeRanking(state, range());
-    return `${periodNav()}
-      ${titleCard(R)}
-      <section class="section"><h2 class="section-title">Ranking completo</h2>${rankingList(R) || emptyBarbers()}</section>
-      ${classification(R)}${inactiveNote(R)}`;
+  // ---------- Time e ranking (por mês) ----------
+  const curYm = () => iso(new Date()).slice(0, 7);
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  const ymLabel = ym => cap(monthRange(ym).label);
+  const ymShort = ym => { const l = monthRange(ym).label; return cap(l.slice(0, 3)) + '/' + ym.slice(2, 4); };
+  const monthR = ym => rkCache[ym] || (rkCache[ym] = computeRanking(state, monthRange(ym)));
+  const ROLES = ['Barbeiro', 'Barbeiro líder', 'Aprendiz', 'Recepcionista', 'Gerente'];
+  const RADAR_COLORS = ['#d6b46a', '#5b9dff', '#ff5fa8', '#52d37e'];
+  const fmtGoal = (ind, v) => fmt(ind, v);
+
+  function firstYm() {
+    let min = curYm();
+    for (const e of state.entries) if (e.date.slice(0, 7) < min) min = e.date.slice(0, 7);
+    for (const m of state.monthly || []) if (m.month < min) min = m.month;
+    return min;
+  }
+  function monthsUntil(ym) {
+    const out = []; let k = firstYm();
+    while (k <= ym && out.length < 60) { out.push(k); k = addMonths(k, 1); }
+    return out;
+  }
+  const hasData = row => row && Object.keys(row.sums.n).length > 0;
+
+  // Carreira = média das pontuações mensais em que o barbeiro teve dados.
+  function career(barberId, ym) {
+    const months = [];
+    let sum = 0, n = 0;
+    for (const k of monthsUntil(ym)) {
+      const R = monthR(k);
+      const row = R.rows.find(r => r.barber.id === barberId);
+      if (!hasData(row) || !R.active.length) continue;
+      sum += row.overall; n++;
+      months.push({ ym: k, score: row.overall, career: sum / n });
+    }
+    const cur = months.length ? months[months.length - 1] : null;
+    const value = n ? sum / n : 0;
+    const prev = cur && cur.ym === ym ? (months.length > 1 ? months[months.length - 2].career : null) : null;
+    return { months, value, delta: prev === null ? null : value - prev };
+  }
+  function careerByInd(barberId, ym) {
+    const acc = {};
+    for (const k of monthsUntil(ym)) {
+      const R = monthR(k);
+      const row = R.rows.find(r => r.barber.id === barberId);
+      if (!hasData(row)) continue;
+      for (const ind of R.active) { (acc[ind.key] = acc[ind.key] || []).push(row.scores[ind.key]); }
+    }
+    return Object.fromEntries(Object.entries(acc).map(([k, v]) => [k, v.reduce((a, b) => a + b, 0) / v.length]));
+  }
+
+  // ---------- gráficos em SVG ----------
+  function lineSvg({ labels, series, yMax, yFmt = v => nf0.format(v), height = 210 }) {
+    const W = 360, H = height, L = 46, Rt = 14, T = 14, B = 30;
+    const max = yMax || Math.max(1, ...series.flatMap(s => s.values.filter(v => v != null))) * 1.15;
+    const nice = (() => { const p = Math.pow(10, Math.floor(Math.log10(max))); return Math.ceil(max / p) * p; })();
+    const x = i => labels.length < 2 ? (L + W - Rt) / 2 : L + (i * (W - L - Rt)) / (labels.length - 1);
+    const y = v => T + (1 - v / nice) * (H - T - B);
+    const ticks = [0, 0.25, 0.5, 0.75, 1].map(t => t * nice);
+    const grid = ticks.map(t => `<line x1="${L}" x2="${W - Rt}" y1="${y(t)}" y2="${y(t)}" class="ch-grid"/><text x="${L - 6}" y="${y(t) + 4}" class="ch-y">${esc(yFmt(t))}</text>`).join('');
+    const step = Math.ceil(labels.length / 5);
+    const xl = labels.map((l, i) => (i % step === 0 || i === labels.length - 1) ? `<text x="${x(i)}" y="${H - 8}" class="ch-x">${esc(l)}</text>` : '').join('');
+    const paths = series.map(s => {
+      const pts = s.values.map((v, i) => v == null ? null : [x(i), y(v)]).filter(Boolean);
+      if (!pts.length) return '';
+      const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+      const area = s.fill ? `<path d="${d} L${pts[pts.length - 1][0]} ${y(0)} L${pts[0][0]} ${y(0)} Z" fill="${s.color}" opacity=".14"/>` : '';
+      const dots = pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="${i === pts.length - 1 ? 5 : 3.5}" fill="${s.color}" ${s.dashed ? 'opacity=".6"' : ''}><title>${esc(labels[s.values.findIndex((v, k) => k >= i && v != null)] || '')}: ${esc(yFmt(s.values.filter(v => v != null)[i]))}</title></circle>`).join('');
+      return `${area}<path d="${d}" fill="none" stroke="${s.color}" stroke-width="${s.dashed ? 2 : 3}" ${s.dashed ? 'stroke-dasharray="5 5" opacity=".7"' : ''} stroke-linejoin="round" stroke-linecap="round"/>${dots}`;
+    }).join('');
+    return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img">${grid}${xl}${paths}</svg>`;
+  }
+
+  function radarSvg(axes, series) {
+    const W = 400, H = 360, cx = W / 2, cy = H / 2 + 4, Rr = 118, n = axes.length;
+    if (n < 3) return '<p class="muted">São necessários pelo menos 3 indicadores com dados para o radar.</p>';
+    const pt = (i, v) => { const a = -Math.PI / 2 + (i * 2 * Math.PI) / n; return [cx + Math.cos(a) * Rr * v / 100, cy + Math.sin(a) * Rr * v / 100]; };
+    const rings = [20, 40, 60, 80, 100].map(v => `<polygon points="${axes.map((_, i) => pt(i, v).join(',')).join(' ')}" class="rd-ring"/>`).join('');
+    const spokes = axes.map((_, i) => { const [x2, y2] = pt(i, 100); return `<line x1="${cx}" y1="${cy}" x2="${x2}" y2="${y2}" class="rd-ring"/>`; }).join('');
+    const labels = axes.map((a, i) => {
+      const [x2, y2] = pt(i, 122);
+      const anchor = Math.abs(x2 - cx) < 8 ? 'middle' : x2 > cx ? 'start' : 'end';
+      const words = a.label.split(' ');
+      const lines = words.length > 2 ? [words.slice(0, 2).join(' '), words.slice(2).join(' ')] : words.length === 2 && a.label.length > 12 ? words : [a.label];
+      return `<text x="${x2}" y="${y2 - (lines.length - 1) * 7 + 4}" text-anchor="${anchor}" class="rd-label">${lines.map((l, k) => `<tspan x="${x2}" dy="${k ? 14 : 0}">${esc(l)}</tspan>`).join('')}</text>`;
+    }).join('');
+    const polys = series.map(s => {
+      const pts = axes.map((a, i) => pt(i, Math.max(0, Math.min(100, s.values[a.key] ?? 0))));
+      const dots = s.dashed ? '' : pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="${s.color}"><title>${esc(s.name)} · ${esc(axes[i].label)}: ${score(s.values[axes[i].key] ?? 0)}</title></circle>`).join('');
+      return `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${s.color}" fill-opacity="${s.dashed ? 0 : 0.18}" stroke="${s.color}" stroke-width="${s.dashed ? 1.6 : 2.4}" ${s.dashed ? 'stroke-dasharray="5 4" stroke-opacity=".75"' : ''} stroke-linejoin="round"/>${dots}`;
+    }).join('');
+    return `<svg class="chart radar" viewBox="0 0 ${W} ${H}" role="img">${rings}${spokes}${polys}${labels}</svg>`;
+  }
+
+  // ---------- blocos da tela Time ----------
+  function monthOptions(sel) {
+    const opts = []; let k = curYm();
+    const min = addMonths(curYm(), -11) < firstYm() ? addMonths(curYm(), -11) : firstYm();
+    while (k >= min && opts.length < 24) { opts.push(k); k = addMonths(k, -1); }
+    return opts.map(o => `<option value="${o}" ${o === sel ? 'selected' : ''}>${ymLabel(o).replace(' de ', '/')}</option>`).join('');
+  }
+  function monthPicker(ym, user) {
+    return `<div class="card tm-month">
+      <label class="field"><span class="tm-eyebrow">Mês dos dados</span>
+        <select class="input" id="tm-month" data-change="teamMonth">${monthOptions(ym)}</select></label>
+      ${isGestor(user) ? `<span class="chip chip-ok tm-saved" id="tm-saved">${icon('check')} Salvo automaticamente</span>` : ''}
+    </div>`;
+  }
+
+  function classCards(R, ym) {
+    if (!R.rows.length) return emptyBarbers();
+    return `<div class="cc-list">${R.rows.map(r => {
+      const c = career(r.barber.id, ym);
+      const lv = levelOf(c.value);
+      const d = c.delta;
+      const delta = d === null ? '<span class="muted">primeiro mês</span>' : `<span class="cc-delta ${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '▲ +' : '▼ '}${nf1.format(d)} pts no mês</span>`;
+      return `<article class="cc cc-p${r.pos <= 3 ? r.pos : 'n'} ${ui.teamBarber === r.barber.id ? 'is-sel' : ''}" data-action="teamPick" data-id="${esc(r.barber.id)}" tabindex="0" role="button" aria-label="Ver métricas de ${esc(r.barber.name)}">
+        <span class="cc-pos num">${r.pos}</span>
+        ${avatar(r.barber, 60)}
+        <div class="cc-body">
+          <b class="cc-name">${esc(r.barber.name)} ${titleChip(R, r.barber.id)}</b>
+          <span class="muted num">${r.leads.length} de ${R.N} em 1º · ${money0(r.sums.fat)}</span>
+          <div class="cc-meta"><span class="lv ${lv.cls}">${lv.name}</span>${delta}<span class="muted num">carreira ${nf1.format(c.value)}</span></div>
+          <div class="cc-chips">${R.active.map(i => `<span class="rk-chip ${i.leaders.includes(r.barber.id) ? 'lead' : ''}">${esc(i.label)}: <b class="num">${ord(r.ranks[i.key])}</b></span>`).join('')}</div>
+        </div>
+        <span class="cc-score num">${score(r.overall)}</span>
+      </article>`;
+    }).join('')}</div>`;
+  }
+
+  function teamTop(ym) {
+    const R = monthR(ym);
+    return `<section class="section"><h2 class="section-title">Destaques por indicador</h2>${highlights(R)}${titleCard(R)}${inactiveNote(R)}</section>
+      <section class="section"><h2 class="section-title">Classificação geral</h2>
+        <p class="section-note">Toque num barbeiro para ver as métricas, a carreira e as metas dele.</p>${classCards(R, ym)}</section>`;
+  }
+
+  function editorFields(b, ym) {
+    const rec = (state.monthly || []).find(m => m.barberId === b.id && m.month === ym) || {};
+    const integ = monthFromIntegration(state, b.id, ym);
+    const R = monthR(ym);
+    const row = R.rows.find(r => r.barber.id === b.id);
+    return GB.MONTH_FIELDS.map(f => {
+      if (f.calc) {
+        const t = row && row.sums.cli > 0 ? row.sums.fat / row.sums.cli : null;
+        return `<div class="field"><span class="tm-flabel">${esc(f.label)}<span class="lock">${icon('chart')} Calculado</span></span>
+          <input class="input num" id="m-${f.key}" value="${t == null ? '' : nf2.format(t)}" readonly tabindex="-1" placeholder="Faturamento ÷ clientes"></div>`;
+      }
+      const locked = f.daily && isNum(integ[f.key]) && !isNum(rec[f.key]);
+      if (locked) {
+        const v = integ[f.key];
+        const shown = f.key.endsWith('Pct') ? nf2.format(v) : (f.step === '0.01' ? nf2.format(v) : nf0.format(v));
+        return `<div class="field"><span class="tm-flabel">${esc(f.label)}<span class="lock">${icon('lock')} Vindo da integração</span></span>
+          <input class="input num" id="m-${f.key}" value="${shown}" readonly tabindex="-1"></div>`;
+      }
+      return `<label class="field"><span class="tm-flabel">${esc(f.label)}</span>
+        <input class="input input-edit num" id="m-${f.key}" name="${f.key}" type="number" inputmode="decimal" min="0" ${f.max ? `max="${f.max}"` : ''} step="${f.step}" value="${isNum(rec[f.key]) ? rec[f.key] : ''}" placeholder="—" data-auto="month" data-id="${esc(b.id)}"></label>`;
+    }).join('');
+  }
+
+  function teamEditor(ym) {
+    const list = state.barbers.filter(b => b.active !== false);
+    if (!list.length) return emptyBarbers();
+    const sel = barberById(ui.teamBarber) && barberById(ui.teamBarber).active !== false ? barberById(ui.teamBarber) : list[0];
+    ui.teamBarber = sel.id;
+    const R = monthR(ym);
+    const row = R.rows.find(r => r.barber.id === sel.id);
+    const goals = state.goals?.byBarber?.[sel.id] || {};
+    return `<div class="tm-carousel" role="list">${list.map(b => {
+      const r = R.rows.find(x => x.barber.id === b.id);
+      return `<button class="tm-car ${b.id === sel.id ? 'on' : ''}" role="listitem" data-action="teamPick" data-id="${esc(b.id)}">${avatar(b, 64)}<b>${esc(b.name)}</b><span class="muted num" data-pts="${esc(b.id)}">${r ? score(r.overall) : '—'} pts</span></button>`;
+    }).join('')}</div>
+    <section class="section card tm-edit">
+      <h2 class="section-title">Editar métricas de ${esc(sel.name)} · ${esc(ymLabel(ym).replace(' de ', '/'))}</h2>
+      <div class="tm-photo">${avatar(sel, 96)}<label class="btn btn-sm" style="cursor:pointer">${icon('camera')} Trocar foto<input type="file" accept="image/*" hidden data-change="barberPhoto" data-id="${esc(sel.id)}"></label></div>
+      <div class="tm-fixed"><small>Nome (fixo)</small><b>${esc(sel.name)}</b></div>
+      <div class="grid-2">
+        <label class="field"><span class="tm-flabel">Instagram</span><input class="input input-edit" id="m-instagram" name="instagram" value="${esc(sel.instagram || '')}" placeholder="@usuario" data-auto="barber" data-id="${esc(sel.id)}"></label>
+        <label class="field"><span class="tm-flabel">Cargo na empresa</span><select class="input input-edit" id="m-role" name="role" data-auto="barber" data-id="${esc(sel.id)}">${ROLES.map(r => `<option ${r === (sel.role || 'Barbeiro') ? 'selected' : ''}>${r}</option>`).join('')}</select></label>
+      </div>
+      <div class="grid-2" id="tm-fields">${editorFields(sel, ym)}</div>
+      <details class="tm-goals"><summary>Metas individuais de ${esc(sel.name.split(' ')[0])} <span class="muted">(em branco = meta da equipe)</span></summary>
+        <div class="grid-2">${INDICATORS.map(i => `<label class="field"><span class="tm-flabel">${esc(i.label)}</span><input class="input input-edit num" id="g-${i.key}" name="${i.key}" type="number" min="0" step="any" value="${isNum(goals[i.key]) ? goals[i.key] : ''}" placeholder="Equipe: ${esc(fmtGoal(i, GB.goalFor(state, '', i.key)))}" data-auto="goal" data-id="${esc(sel.id)}"></label>`).join('')}</div>
+      </details>
+      <p class="section-note" id="tm-pos">${row ? `Posição atual: ${ord(row.pos)} · pontuação ${score(row.overall)} / 100.` : ''} Tudo é salvo automaticamente no mês selecionado.</p>
+    </section>`;
+  }
+
+  function strengths(row, prevRow, R, barberId) {
+    // No mês em andamento, metas de soma ficam proporcionais aos dias já passados.
+    const ym = ui.teamMonth || curYm();
+    const today = new Date();
+    const frac = ym === curYm() ? today.getDate() / new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate() : 1;
+    const SUMS = ['fat', 'check', 'serv', 'cli', 'planos', 'prod'];
+    const items = R.active.map(ind => {
+      const v = row.values[ind.key];
+      const goal = GB.goalFor(state, barberId, ind.key) * (SUMS.includes(ind.key) ? frac : 1);
+      const pct = goal > 0 && v != null ? (v / goal) * 100 : 0;
+      const dv = prevRow && prevRow.scores[ind.key] != null ? row.scores[ind.key] - prevRow.scores[ind.key] : null;
+      return { ind, v, goal, pct, dv };
+    }).sort((a, b) => b.pct - a.pct);
+    const half = Math.ceil(items.length / 2);
+    const strong = items.slice(0, Math.min(3, half));
+    const weak = items.slice(Math.max(half, items.length - 3)).reverse();
+    const card = (it, kind) => {
+      const tone = it.pct >= 100 ? 'ok' : it.pct >= 70 ? 'mid' : 'bad';
+      const msg = kind === 'strong'
+        ? (it.pct >= 100 ? 'Meta batida. Mantenha o ritmo.' : it.pct >= 70 ? 'Perto da meta. Continue avançando.' : 'Está entre os seus melhores números, mas ainda abaixo da meta.')
+        : (it.pct < 33 ? 'Prioridade: menos de 1/3 da meta.' : it.pct < 70 ? 'Atenção: abaixo de 70% da meta.' : 'Quase lá. Um empurrão fecha a meta.');
+      return `<div class="st-item">
+        <div class="st-top"><b>${esc(it.ind.label)}</b><span class="num">${nf0.format(it.pct)}% da meta</span></div>
+        <div class="st-bar st-${tone}"><i style="width:${Math.min(100, Math.max(2, it.pct))}%"></i></div>
+        <p class="st-msg">${msg} <span class="num">${fmt(it.ind, it.v)} de ${fmt(it.ind, it.goal)}.</span>${it.dv === null ? '' : ` Variação do mês: <b class="num ${it.dv >= 0 ? 'delta-up' : 'delta-down'}">${it.dv >= 0 ? '+' : ''}${nf1.format(it.dv)} pts</b>.`}</p>
+      </div>`;
+    };
+    const note = frac < 1 ? `<p class="section-note">Mês em andamento: metas de faturamento, serviços, clientes, Checklist POP, planos e produtos estão proporcionais aos ${today.getDate()} dias já passados.</p>` : '';
+    return `<section class="section card"><h2 class="section-title st-good">Onde é forte</h2>${note}<div class="stack">${strong.map(i => card(i, 'strong')).join('')}</div></section>
+      ${weak.length ? `<section class="section card"><h2 class="section-title st-badt">Onde precisa melhorar</h2><div class="stack">${weak.map(i => card(i, 'weak')).join('')}</div></section>` : ''}`;
+  }
+
+  function teamInsights(barberId, ym) {
+    const b = barberById(barberId);
+    if (!b) return '';
+    const R = monthR(ym);
+    const row = R.rows.find(r => r.barber.id === b.id);
+    if (!row) return `<div class="card muted">${esc(b.name)} está inativo e não aparece no ranking.</div>`;
+    const prevRow = monthR(addMonths(ym, -1)).rows.find(r => r.barber.id === b.id);
+    const last6 = Array.from({ length: 6 }, (_, i) => addMonths(ym, i - 5));
+    const fatVals = last6.map(k => { const r = monthR(k).rows.find(x => x.barber.id === b.id); return hasData(r) ? r.sums.fat : null; });
+    const c = career(b.id, ym);
+    const lv = levelOf(c.value);
+    const cm = c.months.slice(-6);
+    return `
+      <section class="section card"><h2 class="section-title">Faturamento de ${esc(b.name.split(' ')[0])} · últimos 6 meses</h2>
+        ${lineSvg({ labels: last6.map(ymShort), series: [{ values: fatVals, color: '#d6b46a', fill: true }], yFmt: v => v >= 1000 ? 'R$' + nf0.format(v / 1000) + 'k' : 'R$' + nf0.format(v) })}</section>
+      <section class="section card">
+        <div class="lv-head">
+          <span class="lv-badge ${lv.cls}">${icon(lv.name === 'Diamante' ? 'diamond' : lv.name === 'Ouro' ? 'crown' : 'award')}</span>
+          <div><small class="tm-eyebrow">Nível atual</small><b class="lv-name">${lv.name}</b></div>
+          <div class="lv-career"><small class="tm-eyebrow">Média da carreira</small><b class="num">${nf1.format(c.value)} pts</b>
+            ${c.delta === null ? '' : `<span class="num ${c.delta >= 0 ? 'delta-up' : 'delta-down'}">${c.delta >= 0 ? '+' : ''}${nf1.format(c.delta)} pts neste mês</span>`}</div>
+        </div>
+        <p class="lv-need">${lv.next ? `Faltam <b class="num">${nf1.format(lv.need)} pts</b> de média para chegar ao nível ${lv.next}.` : 'Nível máximo alcançado.'}</p>
+        <p class="section-note">Níveis pela média de carreira: ${GB.LEVELS.map(l => `${l.name} ${l.min ? 'a partir de ' + l.min : 'abaixo de 70'}`).join(' · ')}.</p>
+        ${cm.length ? lineSvg({ labels: cm.map(m => ymShort(m.ym)), series: [{ values: cm.map(m => m.score), color: '#5b9dff', dashed: true }, { values: cm.map(m => m.career), color: '#d6b46a' }], yMax: 100, yFmt: v => nf0.format(v) }) : ''}
+        <div class="ch-legend"><span><i style="background:#d6b46a"></i>Média da carreira</span><span><i class="dash" style="border-color:#5b9dff"></i>Pontuação do mês</span></div>
+      </section>
+      ${strengths(row, prevRow, R, b.id)}`;
+  }
+
+  function teamRadars(ym) {
+    const R = monthR(ym);
+    if (!R.rows.length) return '';
+    let sel = (ui.radarSel || []).filter(id => R.rows.some(r => r.barber.id === id));
+    if (!sel.length) sel = R.rows.slice(0, 2).map(r => r.barber.id);
+    ui.radarSel = sel;
+    const color = id => RADAR_COLORS[sel.indexOf(id) % RADAR_COLORS.length];
+    const chips = R.rows.map(r => {
+      const on = sel.includes(r.barber.id);
+      return `<button class="rd-chip ${on ? 'on' : ''}" style="${on ? `--c:${color(r.barber.id)}` : ''}" data-action="radarToggle" data-id="${esc(r.barber.id)}" aria-pressed="${on}">${avatar(r.barber, 30)}${esc(r.barber.name)}</button>`;
+    }).join('');
+    const monthSeries = sel.map(id => { const r = R.rows.find(x => x.barber.id === id); return { name: r.barber.name, color: color(id), values: r.scores }; });
+    const prevYm = addMonths(ym, -1);
+    const careerSeries = sel.flatMap(id => {
+      const name = barberById(id).name;
+      return [{ name: name + ' (antes)', color: color(id), dashed: true, values: careerByInd(id, prevYm) }, { name, color: color(id), values: careerByInd(id, ym) }];
+    });
+    const legend = sel.map(id => `<span><i style="background:${color(id)}"></i>${esc(barberById(id).name)}</span>`).join('');
+    return `<section class="section card">
+      <h2 class="section-title">Radares de competência</h2>
+      <p class="section-note">Escolha até 4 barbeiros para comparar. Escala de 0 a 100, a mesma do ranking: 100 é o líder do indicador.</p>
+      <div class="rd-chips">${chips}</div>
+      <div class="rd-grid">
+        <div class="rd-box"><h3>Radar do mês · ${esc(ymLabel(ym).replace(' de ', '/'))}</h3>${radarSvg(R.active, monthSeries)}<div class="ch-legend">${legend}</div></div>
+        <div class="rd-box"><h3>Radar de carreira · acumulado até ${esc(ymLabel(ym).replace(' de ', '/'))}</h3>${radarSvg(R.active, careerSeries)}<div class="ch-legend">${legend}<span><i class="dash" style="border-color:var(--muted)"></i>Carreira até o mês anterior</span></div></div>
+      </div>
+      <p class="section-note">Carreira: média das notas de todos os meses em cada indicador.</p>
+    </section>`;
+  }
+
+  function pageTime(user) {
+    const ym = ui.teamMonth || curYm();
+    if (!isGestor(user) && user.barberId) ui.teamBarber = user.barberId;
+    if (!barberById(ui.teamBarber)) ui.teamBarber = monthR(ym).rows[0]?.barber.id;
+    return `${monthPicker(ym, user)}
+      <div id="tm-top" class="tm-block">${teamTop(ym)}</div>
+      ${isGestor(user) ? `<div id="tm-editor" class="tm-block">${teamEditor(ym)}</div>` : ''}
+      <div id="tm-insights" class="tm-block">${ui.teamBarber ? teamInsights(ui.teamBarber, ym) : ''}</div>
+      <div id="tm-radar" class="tm-block">${teamRadars(ym)}</div>`;
+  }
+
+  function pageLancamentos(user) {
+    const ym = ui.teamMonth || curYm();
+    return `${monthPicker(ym, user)}
+      <p class="section-note">Lance os totais do mês de cada barbeiro. Campos com cadeado vêm da integração e não podem ser editados aqui.</p>
+      <div id="tm-editor" class="tm-block">${teamEditor(ym)}</div>
+      <a class="btn" href="#integracao">${icon('plug')} Integração com outro sistema</a>`;
+  }
+
+  // Atualiza as partes da tela sem perder o campo que está sendo digitado.
+  function refreshTeam() {
+    const ym = ui.teamMonth || curYm();
+    const top = $('#tm-top'); if (top) top.innerHTML = teamTop(ym);
+    const ins = $('#tm-insights'); if (ins && ui.teamBarber) ins.innerHTML = teamInsights(ui.teamBarber, ym);
+    const rd = $('#tm-radar'); if (rd) rd.innerHTML = teamRadars(ym);
+    const R = monthR(ym);
+    document.querySelectorAll('[data-pts]').forEach(el => { const r = R.rows.find(x => x.barber.id === el.dataset.pts); el.textContent = (r ? score(r.overall) : '—') + ' pts'; });
+    const row = R.rows.find(r => r.barber.id === ui.teamBarber);
+    const pos = $('#tm-pos'); if (pos && row) pos.textContent = `Posição atual: ${ord(row.pos)} · pontuação ${score(row.overall)} / 100. Tudo é salvo automaticamente no mês selecionado.`;
+    const tk = $('#m-ticket'); if (tk && row) tk.value = row.sums.cli > 0 ? nf2.format(row.sums.fat / row.sums.cli) : '';
+  }
+
+  let autoTimer = null;
+  function autoSave(el) {
+    const chip = $('#tm-saved');
+    if (chip) { chip.className = 'chip chip-warn tm-saved'; chip.innerHTML = `${icon('clock')} Salvando…`; }
+    clearTimeout(autoTimer);
+    autoTimer = setTimeout(() => {
+      const ym = ui.teamMonth || curYm();
+      const id = el.dataset.id, kind = el.dataset.auto, key = el.name;
+      const raw = el.value.trim();
+      let ok = true;
+      if (kind === 'barber') {
+        const b = barberById(id); if (b) b[key] = raw;
+      } else {
+        const v = raw === '' ? null : Number(raw.replace(',', '.'));
+        if (v !== null && (Number.isNaN(v) || v < 0 || (el.max && v > Number(el.max)))) ok = false;
+        else if (kind === 'month') {
+          state.monthly = state.monthly || [];
+          let rec = state.monthly.find(m => m.barberId === id && m.month === ym);
+          if (!rec) { rec = { barberId: id, month: ym }; state.monthly.push(rec); }
+          rec[key] = v;
+        } else if (kind === 'goal') {
+          state.goals = state.goals || { team: {}, byBarber: {} };
+          const g = (state.goals.byBarber[id] = state.goals.byBarber[id] || {});
+          if (v === null) delete g[key]; else g[key] = v;
+        }
+      }
+      el.classList.toggle('input-bad', !ok);
+      if (chip) {
+        chip.className = ok ? 'chip chip-ok tm-saved' : 'chip chip-bad tm-saved';
+        chip.innerHTML = ok ? `${icon('check')} Salvo automaticamente` : `${icon('x')} Valor inválido em "${esc(el.closest('.field')?.querySelector('.tm-flabel')?.firstChild?.textContent || key)}"`;
+      }
+      if (!ok) return;
+      save();
+      refreshTeam();
+    }, 450);
   }
 
   function perfFor(barberId, user) {
@@ -595,45 +936,6 @@
       return id ? perfFor(id, user) : emptyBarbers();
     }
     return user.barberId ? perfFor(user.barberId, user) : `<div class="card muted">Seu cadastro ainda não está ligado a um barbeiro. Fale com o gestor.</div>`;
-  }
-
-  function entryForm(barberId, date) {
-    const e = state.entries.find(x => x.barberId === barberId && x.date === date) || {};
-    return FIELDS.map(f => `<label class="field"><span>${esc(f.label)}</span>
-      <input class="input num" id="f-${f.key}" name="${f.key}" type="number" inputmode="decimal" min="0" step="${f.step}" value="${e[f.key] ?? ''}"></label>`).join('');
-  }
-
-  function pageLancamentos() {
-    if (!state.barbers.length) return emptyBarbers();
-    const r = range();
-    const date = ui.entryDate || iso(new Date());
-    const bid = ui.entryBarber && barberById(ui.entryBarber) ? ui.entryBarber : state.barbers[0].id;
-    const list = state.entries.filter(e => e.date >= r.start && e.date <= r.end).sort((a, b) => b.date.localeCompare(a.date) || (barberById(a.barberId)?.name || '').localeCompare(barberById(b.barberId)?.name || '')).slice(0, 60);
-    return `
-      <section class="section card">
-        <h2 class="section-title">Lançar resultado do dia</h2>
-        <p class="section-note">Um lançamento por barbeiro por dia. Salvar de novo na mesma data substitui os números. Deixe em branco o que não quiser lançar.</p>
-        <form class="form" data-form="entry" novalidate>
-          <div class="grid-2">
-            <label class="field"><span>Data</span><input class="input" type="date" id="f-date" name="date" value="${date}" max="${iso(new Date())}" data-change="entryKey" required></label>
-            <label class="field"><span>Barbeiro</span><select class="input" id="f-barber" name="barberId" data-change="entryKey">
-              ${state.barbers.filter(b => b.active !== false).map(b => `<option value="${esc(b.id)}" ${b.id === bid ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>
-          </div>
-          <div class="grid-2" data-fields>${entryForm(bid, date)}</div>
-          <p class="form-msg" data-msg></p>
-          <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar lançamento</button>
-          <a class="btn" href="#integracao">${icon('plug')} Importar de outro sistema</a></div>
-        </form>
-      </section>
-      <section class="section">
-        <h2 class="section-title">Lançamentos do período</h2>
-        ${periodNav()}
-        ${list.length ? `<div class="table-wrap card" style="padding:8px"><table style="min-width:620px"><thead><tr><th>Data</th><th>Barbeiro</th><th>Faturamento</th><th>Serviços</th><th>Clientes</th><th>Planos</th><th></th></tr></thead><tbody>
-          ${list.map(e => `<tr><td class="num">${dateBR(e.date)}</td><td>${esc(barberById(e.barberId)?.name || 'Removido')}</td>
-            <td>${e.fat != null ? money2(e.fat) : '—'}</td><td>${e.serv ?? '—'}</td><td>${e.cli ?? '—'}</td><td>${e.planos ?? '—'}</td>
-            <td><button class="btn btn-sm ${ui.confirm === e.id ? 'btn-danger' : ''}" data-action="delEntry" data-id="${esc(e.id)}" aria-label="Excluir lançamento">${ui.confirm === e.id ? 'Confirmar' : icon('trash')}</button></td></tr>`).join('')}
-          </tbody></table></div>` : '<div class="card muted">Nenhum lançamento neste período.</div>'}
-      </section>`;
   }
 
   function inviteLink(code) { return location.href.split('#')[0] + '#convite-' + code; }
@@ -706,6 +1008,16 @@
           <p class="form-msg" data-msg></p>
           <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar pesos</button>
           <button class="btn" type="button" data-action="defaultWeights">Voltar aos pesos padrão</button></div>
+        </form>
+      </section>
+      <section class="section card">
+        <h2 class="section-title">Metas mensais da equipe</h2>
+        <p class="section-note">Valem para todos os barbeiros. Para ajustar a meta de alguém, abra o barbeiro em Time e ranking, em "Metas individuais". Percentuais em %, valores em R$.</p>
+        <form class="form" data-form="goals" novalidate>
+          <div class="grid-2">${INDICATORS.map(i => `<label class="field"><span>${esc(i.label)}</span><input class="input num" id="gt-${i.key}" name="${i.key}" type="number" min="0" step="any" value="${GB.goalFor(state, '', i.key)}"></label>`).join('')}</div>
+          <p class="form-msg" data-msg></p>
+          <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar metas</button>
+          <button class="btn" type="button" data-action="defaultGoals">Voltar às metas padrão</button></div>
         </form>
       </section>
       <section class="section card">
@@ -1001,6 +1313,7 @@ Content-Type: application/json</pre>
   // ---------- render principal ----------
   function render() {
     clearTimeout(ui.tvTimer);
+    rkCache = {};
     const h = decodeURIComponent(location.hash.slice(1));
     if (h.startsWith('convite-')) { renderAuth('convite', h.slice(8)); return; }
     const user = currentUser();
@@ -1084,10 +1397,21 @@ Content-Type: application/json</pre>
       u.pass = passHash(u.email, pass); save();
       ui.lastReset = { name: u.name, pass }; render();
     },
-    delEntry(el) {
-      if (ui.confirm !== el.dataset.id) { ui.confirm = el.dataset.id; render(); return; }
-      state.entries = state.entries.filter(e => e.id !== el.dataset.id); ui.confirm = null; save(); toast('Lançamento excluído.'); render();
+    teamPick(el) {
+      ui.teamBarber = el.dataset.id;
+      const u = currentUser();
+      if (!isGestor(u)) { refreshTeam(); $('#tm-insights')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+      const ed = $('#tm-editor');
+      if (ed) { ed.innerHTML = teamEditor(ui.teamMonth || curYm()); refreshTeam(); ed.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+      else render();
     },
+    radarToggle(el) {
+      const id = el.dataset.id; let sel = ui.radarSel || [];
+      if (sel.includes(id)) { if (sel.length > 1) sel = sel.filter(x => x !== id); }
+      else { sel = [...sel, id]; if (sel.length > 4) sel = sel.slice(1); }
+      ui.radarSel = sel; const rd = $('#tm-radar'); if (rd) rd.innerHTML = teamRadars(ui.teamMonth || curYm());
+    },
+    defaultGoals() { state.goals = { ...(state.goals || {}), team: { ...GB.DEFAULT_GOALS } }; save(); toast('Metas padrão restauradas.'); render(); },
     defaultWeights() { state.weights = Object.fromEntries(INDICATORS.map(i => [i.key, i.weight])); save(); toast('Pesos padrão restaurados.'); render(); },
     resetDemo() {
       if (ui.confirm !== 'demo') { ui.confirm = 'demo'; render(); return; }
@@ -1096,7 +1420,7 @@ Content-Type: application/json</pre>
     clearData() {
       if (ui.confirm !== 'clear') { ui.confirm = 'clear'; render(); return; }
       const me = currentUser();
-      state.barbers = []; state.entries = []; state.invites = []; state.demo = false;
+      state.barbers = []; state.entries = []; state.monthly = []; state.invites = []; state.demo = false;
       state.users = state.users.filter(u => u.id === me.id);
       ui.confirm = null; save(); toast('Equipe e lançamentos apagados.'); render();
     },
@@ -1148,30 +1472,13 @@ Content-Type: application/json</pre>
       if (!validEmail(val(f, 'email'))) return setMsg(f, 'Digite um e-mail válido.');
       setMsg(f, 'Pedido registrado. Avise o gestor para gerar sua nova senha.', true);
     },
-    entry(f) {
-      const date = val(f, 'date'), barberId = val(f, 'barberId');
-      if (!date) return setMsg(f, 'Escolha a data.');
-      const entry = { barberId, date };
-      let any = false;
-      for (const fl of FIELDS) {
-        const raw = val(f, fl.key);
-        entry[fl.key] = raw === '' ? null : Number(raw);
-        if (raw !== '') any = true;
-        if (entry[fl.key] !== null && (Number.isNaN(entry[fl.key]) || entry[fl.key] < 0)) return setMsg(f, `"${fl.label}" precisa ser um número positivo.`);
-      }
-      if (entry.hOcup != null && entry.hDisp != null && entry.hOcup > entry.hDisp) return setMsg(f, 'Horas ocupadas não podem passar das horas disponíveis.');
-      if (!any) return setMsg(f, 'Preencha pelo menos um número.');
-      upsertEntry(state, entry); save();
-      ui.entryDate = date; ui.entryBarber = barberId;
-      toast(`Lançamento de ${barberById(barberId).name} salvo.`); render();
-    },
     async addBarber(f) {
       const name = val(f, 'name');
       if (!name) return setMsg(f, 'Digite o nome do barbeiro.');
       let photo = null;
       const file = f.elements.photo.files[0];
       if (file) { try { photo = await readImage(file); } catch (e) { return setMsg(f, e.message); } }
-      state.barbers.push({ id: uid('b_'), name, photo, active: true }); save();
+      state.barbers.push({ id: uid('b_'), name, photo, active: true, role: 'Barbeiro', instagram: '' }); save();
       toast(`${name} adicionado. Agora envie o convite.`); render();
     },
     weights(f) {
@@ -1182,6 +1489,15 @@ Content-Type: application/json</pre>
         w[i.key] = Math.round(v);
       }
       state.weights = w; save(); toast('Pesos salvos.'); render();
+    },
+    goals(f) {
+      const g = {};
+      for (const i of INDICATORS) {
+        const v = Number(val(f, i.key).replace(',', '.'));
+        if (Number.isNaN(v) || v < 0) return setMsg(f, `Meta de "${i.label}" precisa ser um número positivo.`);
+        g[i.key] = v;
+      }
+      state.goals = { byBarber: {}, ...(state.goals || {}), team: g }; save(); toast('Metas da equipe salvas.'); render();
     },
     import(f) {
       let data;
@@ -1215,11 +1531,7 @@ Content-Type: application/json</pre>
   const CHANGES = {
     tvSoundKind(el) { Sound.kind = el.value; Sound.play(el.value, true); },
     perfBarber(el) { ui.perfBarber = el.value; render(); },
-    entryKey() {
-      const f = $('form[data-form="entry"]');
-      ui.entryDate = val(f, 'date'); ui.entryBarber = val(f, 'barberId');
-      f.querySelector('[data-fields]').innerHTML = entryForm(ui.entryBarber, ui.entryDate);
-    },
+    teamMonth(el) { ui.teamMonth = el.value; render(); },
     async barberPhoto(el) {
       const b = barberById(el.dataset.id);
       try { b.photo = await readImage(el.files[0]); save(); toast('Foto atualizada.'); render(); } catch (e) { toast(e.message); }
@@ -1246,7 +1558,16 @@ Content-Type: application/json</pre>
     e.preventDefault();
     FORMS[f.dataset.form]?.(f);
   });
+  root.addEventListener('input', e => {
+    const el = e.target.closest('[data-auto]');
+    if (el && el.tagName !== 'SELECT') autoSave(el);
+  });
+  root.addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('article[data-action]')) { e.preventDefault(); ACTIONS[e.target.dataset.action](e.target, e); }
+  });
   root.addEventListener('change', e => {
+    const au = e.target.closest('select[data-auto]');
+    if (au) { autoSave(au); return; }
     const el = e.target.closest('[data-change]');
     if (el && CHANGES[el.dataset.change]) CHANGES[el.dataset.change](el);
   });

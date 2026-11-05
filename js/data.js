@@ -99,18 +99,108 @@
   }
 
   // ---------- agregação e pontuação ----------
-  function aggregate(entries, barberId, range) {
+  // Campos do fechamento mensal (lançados pelo gestor ou vindos da integração).
+  const MONTH_FIELDS = [
+    { key: 'fat', label: 'Faturamento (R$)', step: '0.01', daily: 'fat' },
+    { key: 'agend', label: 'Agendamentos', step: '1' },
+    { key: 'cli', label: 'Clientes atendidos', step: '1', daily: 'cli' },
+    { key: 'serv', label: 'Serviços realizados', step: '1', daily: 'serv' },
+    { key: 'ticket', label: 'Ticket médio (R$)', calc: true },
+    { key: 'ocupPct', label: 'Taxa de ocupação (%)', step: '0.1', daily: 'hDisp', max: 100 },
+    { key: 'fidPct', label: 'Taxa de fidelização (%)', step: '0.1', daily: 'ret', max: 100 },
+    { key: 'prod', label: 'Venda de produtos (R$)', step: '0.01', daily: 'prod' },
+    { key: 'check', label: 'Pontos POP', step: '1', daily: 'check' },
+    { key: 'planos', label: 'Planos mensais vendidos', step: '1', daily: 'planos' },
+  ];
+
+  const monthKey = d => d.slice(0, 7);
+  function monthRange(ym) {
+    const [y, m] = ym.split('-').map(Number);
+    const start = new Date(y, m - 1, 1), end = new Date(y, m, 0);
+    return { type: 'mes', start: iso(start), end: iso(end), label: `${MONTHS[m - 1]} de ${y}`, ym };
+  }
+  function addMonths(ym, n) {
+    const [y, m] = ym.split('-').map(Number);
+    const d = new Date(y, m - 1 + n, 1);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+  }
+  // Meses inteiros contidos no intervalo (só esses usam o total mensal).
+  function fullMonths(range) {
+    const out = [];
+    let ym = monthKey(range.start);
+    while (ym <= monthKey(range.end)) {
+      const r = monthRange(ym);
+      if (r.start >= range.start && r.end <= range.end) out.push(ym);
+      ym = addMonths(ym, 1);
+    }
+    return out;
+  }
+  const isNum = v => v !== null && v !== undefined && v !== '' && !Number.isNaN(Number(v));
+
+  function aggregate(state, barberId, range) {
     const s = { fat: 0, serv: 0, cli: 0, check: 0, hDisp: 0, hOcup: 0, planos: 0, ret: 0, prod: 0, n: {} };
-    for (const e of entries) {
+    const add = (k, v) => { s[k] += Number(v); s.n[k] = (s.n[k] || 0) + 1; };
+    const months = fullMonths(range);
+    const recs = Object.fromEntries((state.monthly || []).filter(m => m.barberId === barberId && months.includes(m.month)).map(m => [m.month, m]));
+    // Somas diárias por mês, para combinar com o total mensal.
+    const dailyCli = {};
+    for (const e of state.entries) {
       if (e.barberId !== barberId || e.date < range.start || e.date > range.end) continue;
+      const rec = recs[monthKey(e.date)];
+      if (isNum(e.cli)) dailyCli[monthKey(e.date)] = (dailyCli[monthKey(e.date)] || 0) + Number(e.cli);
       for (const f of FIELDS) {
-        const v = e[f.key];
-        if (v === null || v === undefined || v === '' || Number.isNaN(Number(v))) continue;
-        s[f.key] += Number(v);
-        s.n[f.key] = (s.n[f.key] || 0) + 1;
+        if (!isNum(e[f.key])) continue;
+        if (rec) {
+          const mk = f.key === 'hDisp' || f.key === 'hOcup' ? 'ocupPct' : f.key === 'ret' ? 'fidPct' : f.key;
+          if (isNum(rec[mk])) continue; // o total do mês substitui os dias
+        }
+        add(f.key, e[f.key]);
+      }
+    }
+    for (const ym of months) {
+      const rec = recs[ym];
+      if (!rec) continue;
+      for (const k of ['fat', 'cli', 'serv', 'prod', 'check', 'planos']) if (isNum(rec[k])) add(k, rec[k]);
+      if (isNum(rec.ocupPct)) { add('hDisp', 100); s.hOcup += Number(rec.ocupPct); s.n.hOcup = (s.n.hOcup || 0) + 1; }
+      if (isNum(rec.fidPct)) {
+        const cli = isNum(rec.cli) ? Number(rec.cli) : (dailyCli[ym] || 0);
+        if (cli > 0) add('ret', (Number(rec.fidPct) / 100) * cli);
       }
     }
     return s;
+  }
+
+  // O que a integração já trouxe para o barbeiro no mês (campos travados no formulário).
+  function monthFromIntegration(state, barberId, ym) {
+    const r = monthRange(ym);
+    const out = {}; let hD = 0, hO = 0, cli = 0, ret = 0;
+    for (const e of state.entries) {
+      if (e.barberId !== barberId || e.date < r.start || e.date > r.end) continue;
+      for (const k of ['fat', 'cli', 'serv', 'prod', 'check', 'planos']) if (isNum(e[k])) out[k] = (out[k] || 0) + Number(e[k]);
+      if (isNum(e.hDisp)) { hD += Number(e.hDisp); hO += Number(e.hOcup || 0); }
+      if (isNum(e.cli)) cli += Number(e.cli);
+      if (isNum(e.ret)) ret += Number(e.ret);
+    }
+    if (hD > 0) out.ocupPct = (hO / hD) * 100;
+    if (ret > 0 && cli > 0) out.fidPct = (ret / cli) * 100;
+    return out;
+  }
+
+  const DEFAULT_GOALS = { fat: 6000, check: 24, ocup: 75, ticket: 60, serv: 130, cli: 110, planos: 4, fid: 50, prod: 500 };
+  const goalFor = (state, barberId, key) => {
+    const ind = state.goals?.byBarber?.[barberId]?.[key];
+    return isNum(ind) ? Number(ind) : Number(state.goals?.team?.[key] ?? DEFAULT_GOALS[key]);
+  };
+
+  // Níveis de carreira pela média das pontuações mensais.
+  const LEVELS = [
+    { name: 'Bronze', min: 0, cls: 'lv-bronze' }, { name: 'Prata', min: 70, cls: 'lv-silver' },
+    { name: 'Ouro', min: 85, cls: 'lv-gold' }, { name: 'Diamante', min: 95, cls: 'lv-diamond' },
+  ];
+  function levelOf(v) {
+    let i = 0; LEVELS.forEach((l, k) => { if (v >= l.min) i = k; });
+    const next = LEVELS[i + 1];
+    return { ...LEVELS[i], next: next ? next.name : null, need: next ? Math.max(0, next.min - v) : 0 };
   }
 
   /**
@@ -127,7 +217,7 @@
   function computeRanking(state, range) {
     const barbers = state.barbers.filter(b => b.active !== false);
     const weights = state.weights || {};
-    const rows = barbers.map(b => ({ barber: b, sums: aggregate(state.entries, b.id, range), values: {}, ranks: {}, scores: {}, leads: [], overall: 0 }));
+    const rows = barbers.map(b => ({ barber: b, sums: aggregate(state, b.id, range), values: {}, ranks: {}, scores: {}, leads: [], overall: 0 }));
 
     const active = [], inactive = [];
     for (const ind of INDICATORS) {
@@ -238,7 +328,7 @@
       ['Bruno Rocha', 0.85, 1.15, 0.7], ['Caio Ferreira', 0.95, 0.9, 0.8], ['Mateus Pinto', 0.8, 1.0, 0.75],
       ['Júlia Ramos', 0.65, 1.1, 0.6],
     ];
-    const barbers = people.map(([name]) => ({ id: uid('b_'), name, photo: null, active: true }));
+    const barbers = people.map(([name]) => ({ id: uid('b_'), name, photo: null, active: true, role: 'Barbeiro', instagram: '' }));
     const entries = [];
     const today = new Date();
     for (let d = 100; d >= 0; d--) {
@@ -251,20 +341,30 @@
         const fat = Math.round(serv * (34 + r() * 18) * price * 100) / 100;
         const hDisp = 8;
         const hOcup = Math.min(hDisp, Math.round(serv * (0.45 + r() * 0.2) * 2) / 2);
-        entries.push({
-          id: uid('e_'), barberId: barbers[i].id, date: iso(day),
-          fat, serv, cli, hDisp, hOcup,
-          check: r() < 0.55 + disc * 0.35 ? 1 : 0,
-          planos: r() < 0.06 * vol ? 1 : 0,
-          prod: r() < 0.3 ? Math.round((20 + r() * 60) * 100) / 100 : 0,
-          ret: null,
-        });
+        entries.push({ id: uid('e_'), barberId: barbers[i].id, date: iso(day), fat, serv, cli, hDisp, hOcup });
+      });
+    }
+    // Lançamentos manuais do mês: Pontos POP, planos e venda de produtos.
+    const monthly = [];
+    const curYm = iso(today).slice(0, 7);
+    for (let k = 3; k >= 0; k--) {
+      const ym = addMonths(curYm, -k);
+      const r2 = monthRange(ym);
+      const days = ym === curYm ? today.getDate() : Number(r2.end.slice(8));
+      const frac = days / 30;
+      people.forEach(([, vol, , disc], i) => {
+        monthly.push({ barberId: barbers[i].id, month: ym,
+          check: Math.round((10 + r() * 10 + disc * 8) * frac),
+          planos: Math.round(r() * 4 * vol * frac),
+          prod: Math.round((150 + r() * 450) * frac) });
       });
     }
     const gestorId = uid('u_');
     return {
-      version: 1,
+      version: 2,
       demo: true,
+      monthly,
+      goals: { team: { ...DEFAULT_GOALS }, byBarber: {} },
       company: { name: 'Barbearia Demonstração', cnpj: '00.000.000/0001-00', phone: '(11) 90000-0000', email: 'gestor@demo.com', logo: null },
       users: [
         { id: gestorId, name: 'Gestor Demo', email: 'gestor@demo.com', pass: passHash('gestor@demo.com', 'demo123'), role: 'gestor', status: 'ativo', barberId: null },
@@ -281,7 +381,8 @@
 
   function emptyState(company, gestor) {
     return {
-      version: 1, demo: false, company, users: [gestor], invites: [], barbers: [], entries: [],
+      version: 2, demo: false, company, users: [gestor], invites: [], barbers: [], entries: [], monthly: [],
+      goals: { team: { ...DEFAULT_GOALS }, byBarber: {} },
       weights: Object.fromEntries(INDICATORS.map(i => [i.key, i.weight])),
       apiKey: 'gbia_' + hash(String(Date.now())) + hash('k' + Math.random()),
     };
@@ -291,7 +392,18 @@
   const DB = {
     load() {
       const raw = safeGet('localStorage', KEY);
-      if (raw) { try { return JSON.parse(raw); } catch (e) { /* recria abaixo */ } }
+      if (raw) {
+        try {
+          const st = JSON.parse(raw);
+          if (st.version !== 2) {
+            if (st.demo) { const d = demoState(); DB.save(d); return d; }
+            st.monthly = st.monthly || []; st.goals = st.goals || { team: { ...DEFAULT_GOALS }, byBarber: {} }; st.version = 2;
+            st.barbers.forEach(b => { b.role = b.role || 'Barbeiro'; });
+            DB.save(st);
+          }
+          return st;
+        } catch (e) { /* recria abaixo */ }
+      }
       const s = demoState();
       DB.save(s);
       return s;
@@ -344,5 +456,5 @@
     else state.entries.push({ id: uid('e_'), ...entry });
   }
 
-  window.GB = Object.assign(window.GB || {}, { DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, emptyState, passHash, uid, iso, fromIso, hash });
+  window.GB = Object.assign(window.GB || {}, { DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
 })();
