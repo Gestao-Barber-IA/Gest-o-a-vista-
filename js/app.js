@@ -237,7 +237,7 @@
       { r: 'time', t: 'Time e ranking', i: 'trophy' },
       { r: 'lancamentos', t: 'Lançamentos', i: 'wallet', g: 1 },
       { r: 'gestao-visual', t: 'Gestão Visual', i: 'signal' },
-      { r: 'fechamento', t: 'Fechamento', i: 'clipboard', g: 1, soon: 1 },
+      { r: 'fechamento', t: 'Fechamento do mês', i: 'clipboard', g: 1, soon: 1 },
     ] },
     { group: 'GP · Gestão de pessoas', items: [
       { r: 'performance', t: 'Minha performance', i: 'chart' },
