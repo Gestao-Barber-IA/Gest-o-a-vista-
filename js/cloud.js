@@ -110,7 +110,7 @@
     invites: { key: i => i.code, row: (i, cid) => ({ code: i.code, company_id: cid, barber_id: i.barberId, used: !!i.used }), list: s => s.invites, pk: r => ({ code: r.code }) },
     entries: { key: e => e.id, row: (e, cid) => ({ id: e.id, company_id: cid, barber_id: e.barberId, date: e.date, data: pick(e, ENTRY_KEYS), source: e.source || 'manual' }), list: s => s.entries, pk: r => ({ id: r.id }) },
     pop: { key: r => r.barberId + '|' + r.day, row: (r, cid) => ({ id: r.barberId + '|' + r.day, company_id: cid, barber_id: r.barberId, day: r.day, data: { ev: r.ev || {}, notes: r.notes || {}, msg: r.msg || {}, res: r.res || null, by: r.by || null, at: r.at || null } }), list: s => s.pop || [], pk: r => ({ id: r.id }) },
-    monthly: { key: m => m.barberId + '|' + m.month, row: (m, cid) => ({ company_id: cid, barber_id: m.barberId, month: m.month, data: pick(m, MONTH_KEYS) }), list: s => s.monthly || [], pk: r => ({ barber_id: r.barber_id, month: r.month }) },
+    monthly: { key: m => m.barberId + '|' + m.month, row: (m, cid) => ({ company_id: cid, barber_id: m.barberId, month: m.month, data: { ...pick(m, MONTH_KEYS), ...(m._adj && Object.keys(m._adj).length ? { _adj: m._adj } : {}) } }), list: s => s.monthly || [], pk: r => ({ barber_id: r.barber_id, month: r.month }) },
   };
   const TNAME = { pop: 'pop_records' };
   const tbl = t => TNAME[t] || t;

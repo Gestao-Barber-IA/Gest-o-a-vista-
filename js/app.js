@@ -347,27 +347,26 @@
     { items: [
       { r: 'inicio', t: 'Início', i: 'grid' },
       { r: 'time', t: 'Time e ranking', i: 'trophy' },
+      { r: 'performance', t: 'Minha performance', i: 'chart' },
       { r: 'lancamentos', t: 'Lançamentos', i: 'wallet', g: 1, a: 1 },
-      { r: 'gestao-visual', t: 'Gestão Visual', i: 'signal' },
+    ] },
+    { group: 'Apresentações', items: [
+      { r: 'apresentacao', t: 'Tela da loja', i: 'monitor' },
       { r: 'fechamento', t: 'Fechamento do mês', i: 'clipboard', g: 1, a: 1 },
     ] },
     { group: 'GP · Gestão de pessoas', items: [
-      { r: 'performance', t: 'Minha performance', i: 'chart' },
       { r: 'barbeiros', t: 'Barbeiros', i: 'users', g: 1 },
+      { r: 'organograma', t: 'Organograma', i: 'org', g: 1 },
+      { r: 'checklist', t: 'Checklist Agenda Cheia', i: 'checksq' },
       { r: 'tarefas', t: 'Tarefas', i: 'clipboard', soon: 1 },
       { r: 'metas', t: 'Metas', i: 'target', soon: 1 },
       { r: 'premios', t: 'Prêmios e metas', i: 'gift', soon: 1 },
       { r: 'sonhos', t: 'Sonhos', i: 'rocket', soon: 1 },
-      { r: 'checklist', t: 'Checklist Agenda Cheia', i: 'checksq' },
     ] },
     { group: 'Gestor', g: 1, items: [
-      { r: 'empresa', t: 'Minha empresa', i: 'building' },
-      { r: 'integracao', t: 'Integração & API', i: 'plug' },
-      { r: 'apresentacao', t: 'Modo apresentação', i: 'monitor' },
       { r: 'configuracoes', t: 'Configurações', i: 'gear' },
       { r: 'assinatura', t: 'Assinatura', i: 'card', cloud: 1 },
       { r: 'admin', t: 'Painel do SaaS', i: 'gauge', admin: 1 },
-      { r: 'organograma', t: 'Organograma', i: 'org' },
       { r: 'cockpit', t: 'Cockpit do gestor', i: 'gauge', soon: 1 },
     ] },
     { group: 'Conta', items: [
@@ -398,7 +397,6 @@
       <nav class="drawer" aria-label="Menu principal">
         ${brand()}
         ${groups}
-        <div class="period-box"><div class="nav-group">Período</div>${periods}</div>
         <div class="nav-sep"></div>
         ${canOfferInstall() ? `<button class="nav-item" data-action="installApp">${icon('download')}<span>Adicionar à tela de início</span></button>` : ''}
         <button class="nav-item" data-action="logout">${icon('logout')}<span>Sair</span></button>
@@ -411,15 +409,10 @@
     const who = isGestor(user) ? { name: c.name, photo: c.logo } : (b || { name: user.name });
     return `
       <div class="popover" hidden role="dialog" aria-label="Perfil">
-        <div class="popover-head">${avatar(who, 64)}<div><b>${esc(isGestor(user) ? c.name : user.name)}</b><span>${esc(user.email)}</span></div></div>
-        <label class="btn btn-dark btn-block" style="cursor:pointer">${icon('camera')} Atualizar foto
+        <div class="popover-head">${avatar(who, 64)}<div><b>${esc(user.name)}</b><span>${esc(user.email)}</span>${isGestor(user) ? `<span>${esc(c.name)}</span>` : ''}</div></div>
+        <label class="btn btn-dark btn-block" style="cursor:pointer">${icon('camera')} ${isGestor(user) ? 'Trocar logo da barbearia' : 'Atualizar foto'}
           <input type="file" accept="image/*" hidden data-change="${isGestor(user) ? 'companyLogo' : 'myPhoto'}"></label>
-        <ul class="info-list">
-          ${c.cnpj ? `<li>${icon('card')}<span>CNPJ: <b>${esc(c.cnpj)}</b></span></li>` : ''}
-          ${c.phone ? `<li>${icon('phone')}<b>${esc(c.phone)}</b></li>` : ''}
-          <li>${icon('building')}<b>${esc(c.name)}</b></li>
-          ${c.email ? `<li>${icon('mail')}<b>${esc(c.email)}</b></li>` : ''}
-        </ul>
+        <a class="btn btn-block" href="#cadastro">${icon('idcard')} Meu cadastro</a>
         <button class="btn btn-danger btn-block" data-action="logout">${icon('logout')} Sair</button>
       </div>`;
   }
@@ -512,13 +505,7 @@
     </div>`;
   }
 
-  function pageGestaoVisual() {
-    const R = computeRanking(state, range());
-    liveDetect(R);
-    return `${periodNav()}
-      <section class="section"><h2 class="section-title">Pódio e ranking ao vivo</h2>${podium(R)}${R.rows.length ? podiumLegend(R) : ''}</section>
-      <section class="section"><h2 class="section-title">Ranking em tempo real</h2>${rankingList(R)}</section>`;
-  }
+
 
   function prevPositions() {
     const P = computeRanking(state, range(ui.offset - 1));
@@ -572,12 +559,11 @@
   }
 
   function titleCard(R) {
-    const rule = `Destaque: 1º lugar em no mínimo ${R.half} de ${R.Nrule} indicadores. MVP: em ${R.mvpNeed} ou mais.`;
     if (!R.title.type) {
       return `<div class="card title-card is-none">
         <div class="eyebrow">${icon('trophy')} Título do período</div>
         <h3>Ninguém conquistou título ainda</h3>
-        <p class="muted">${R.N >= 2 ? esc(rule) : 'São necessários pelo menos 2 indicadores com dados.'}</p></div>`;
+        <p class="muted">${R.N >= 2 ? `Destaque: 1º lugar em pelo menos ${R.half} indicadores. MVP: em ${R.mvpNeed}.` : 'Ainda não há indicadores suficientes com dados.'}</p></div>`;
     }
     const row = R.rows.find(r => r.barber.id === R.title.barberId);
     const names = row.leads.map(k => INDICATORS.find(i => i.key === k).label).join(' · ');
@@ -587,7 +573,7 @@
       <h3>${esc(row.barber.name)}</h3>
       <p><b>${row.leads.length} de ${R.N} indicadores em 1º lugar</b></p>
       <p class="muted">${esc(names)}</p>
-      <p class="muted" style="font-size:.88rem;margin-top:6px">${esc(rule)}${mvp ? '' : ' Mais um 1º lugar e vira MVP.'}</p>
+      ${mvp ? '' : '<p class="muted" style="font-size:.88rem;margin-top:6px">Mais um 1º lugar e vira MVP.</p>'}
     </div>`;
   }
 
@@ -597,20 +583,7 @@
     return `<p class="section-note">Indicadores ainda sem dados (não aparecem e não pontuam): ${none.map(i => esc(i.label)).join(', ')}.</p>`;
   }
 
-  function classification(R) {
-    if (!R.rows.length || !R.active.length) return '';
-    const head = R.active.map(i => `<th>${esc(i.label)} <small>(${i.weight} pts)</small></th>`).join('');
-    const body = R.rows.map(r => `<tr>
-      <td class="num"><b>${ord(r.pos)}</b></td>
-      <td><span class="td-who">${avatar(r.barber, 36)}<span>${esc(r.barber.name)}</span></span></td>
-      ${R.active.map(i => `<td class="${r.ranks[i.key] === 1 && i.leaders.includes(r.barber.id) ? 'lead-cell' : ''}">${ord(r.ranks[i.key])} <small>(${score(r.scores[i.key])} pts)</small></td>`).join('')}
-      <td class="td-score">${score(r.overall)}</td></tr>`).join('');
-    return `<section class="section card">
-      <h2 class="section-title">Classificação geral</h2>
-      <p class="section-note">Posição em cada indicador e nota proporcional (1º = 100, último = 0). A pontuação geral é a média ponderada das notas pelos pesos.</p>
-      <div class="table-wrap"><table><thead><tr><th>Rank</th><th>Barbeiro</th>${head}<th>Pontuação</th></tr></thead><tbody>${body}</tbody></table></div>
-    </section>`;
-  }
+
 
   function emptyBarbers() {
     const u = currentUser();
@@ -620,22 +593,24 @@
   }
 
   // ---------- páginas ----------
+  // Período do Início e da Tela da loja: Semana, Mês ou Trimestre, com setas.
+  function periodBar() {
+    const seg = Object.entries(PERIOD_NAMES).map(([k, v]) => `<button type="button" class="${ui.period === k ? 'on' : ''}" aria-pressed="${ui.period === k}" data-action="period" data-period="${k}">${v}</button>`).join('');
+    return `<div class="period-bar"><div class="seg" role="group" aria-label="Período">${seg}</div>${periodNav()}</div>`;
+  }
+  const howLink = () => `<a class="how-link" href="#ajuda">${icon('help')} Como funciona a pontuação</a>`;
+
   function pageInicio(user) {
     const R = computeRanking(state, range());
     liveDetect(R);
-    const shortcuts = isGestor(user)
-      ? [['lancamentos', 'Lançar resultados', 'bolt'], ['time', 'Time e ranking', 'trophy'], ['barbeiros', 'Barbeiros', 'users'], ['apresentacao', 'Tela da loja', 'crown']]
-      : [['performance', 'Minha performance', 'award'], ['time', 'Time e ranking', 'trophy'], ['ajuda', 'Como pontuo', 'help'], ['apresentacao', 'Tela da loja', 'crown']];
     return `
-      ${periodNav()}
-      <div class="shortcuts">${shortcuts.map(([r, t, i]) => `<a class="shortcut" href="#${r}">${icon(i)}<span>${t}</span></a>`).join('')}</div>
+      ${periodBar()}
       <div class="home-cols">
-        <section class="section"><h2 class="section-title">Pódio do período</h2>${podium(R)}${R.rows.length ? podiumLegend(R) : ''}
-          <p class="section-note">${R.N ? `Pontuação geral = média ponderada dos ${R.N} indicadores com dados.` : 'Ainda não há resultados lançados neste período.'} Destaque lidera no mínimo ${R.half} indicadores; MVP lidera ${R.mvpNeed} ou mais.</p></section>
-        <section class="section"><h2 class="section-title">Ranking em tempo real</h2>${rankingList(R)}</section>
+        <section class="section"><h2 class="section-title">Pódio do período</h2>${podium(R)}</section>
+        <section class="section"><h2 class="section-title">Ranking em tempo real</h2>${rankingList(R)}${R.N ? '' : '<p class="section-note">Ainda não há resultados lançados neste período.</p>'}</section>
       </div>
-      <section class="section"><h2 class="section-title">Destaques por indicador</h2>${highlights(R)}${titleCard(R)}${inactiveNote(R)}</section>
-      ${classification(R)}`;
+      ${R.rows.length ? titleCard(R) : ''}
+      ${howLink()}`;
   }
 
   // ---------- Time e ranking (por mês) ----------
@@ -786,12 +761,31 @@
         return `<div class="field"><span class="tm-flabel">${esc(f.label)}<span class="lock">${icon('chart')} Calculado</span></span>
           <input class="input num" id="m-${f.key}" value="${t == null ? '' : nf2.format(t)}" readonly tabindex="-1" placeholder="Faturamento ÷ clientes"></div>`;
       }
-      const locked = (f.key === 'check' && integ._pop) || (f.daily && isNum(integ[f.key]) && !isNum(rec[f.key]));
-      if (locked) {
-        const v = integ[f.key];
-        const shown = f.key.endsWith('Pct') ? nf2.format(v) : (f.step === '0.01' ? nf2.format(v) : nf0.format(v));
-        return `<div class="field"><span class="tm-flabel">${esc(f.label)}<span class="lock">${icon('lock')} ${f.key === 'check' && integ._pop ? 'Vindo do checklist' : 'Vindo da integração'}</span></span>
-          <input class="input num" id="m-${f.key}" value="${shown}" readonly tabindex="-1"></div>`;
+      const fmtV = v => f.key.endsWith('Pct') ? nf2.format(v) + '%' : (f.step === '0.01' ? money2(v) : nf0.format(v));
+      if (f.key === 'check' && integ._pop) {
+        return `<div class="field"><span class="tm-flabel">${esc(f.label)}<span class="lock">${icon('lock')} Vindo do checklist</span></span>
+          <input class="input num" id="m-${f.key}" value="${nf1.format(integ[f.key])}" readonly tabindex="-1"></div>`;
+      }
+      const fromApi = f.daily && isNum(integ[f.key]);
+      const own = isGestor(currentUser());
+      if (fromApi && !isNum(rec[f.key])) {
+        // Valor da integração: travado. Só o dono destrava para um ajuste manual.
+        const ask = ui.confirm === 'unlock' + b.id + f.key;
+        return `<div class="field"><span class="tm-flabel">${esc(f.label)}${own
+            ? `<button type="button" class="lock lock-btn" data-action="apiUnlock" data-id="${esc(b.id)}" data-k="${f.key}" aria-label="Destravar ${esc(f.label)} para ajuste manual">${icon('lock')} Vindo da integração</button>`
+            : `<span class="lock">${icon('lock')} Vindo da integração</span>`}</span>
+          <input class="input num" id="m-${f.key}" value="${fmtV(integ[f.key])}" readonly tabindex="-1">
+          ${ask ? `<div class="unlock-ask" role="alert"><p>Este número veio da integração. Ajustar à mão substitui o valor da API neste mês.</p>
+            <div class="btn-row"><button type="button" class="btn btn-sm btn-primary" data-action="apiAdjust" data-id="${esc(b.id)}" data-k="${f.key}">${icon('edit')} Ajustar</button>
+            <button type="button" class="btn btn-sm" data-action="apiUnlockCancel">Cancelar</button></div></div>` : ''}</div>`;
+      }
+      if (fromApi && isNum(rec[f.key])) {
+        const adj = rec._adj && rec._adj[f.key];
+        const meta = `API: ${fmtV(integ[f.key])}${adj ? ` · ajustado por ${esc(adj.by || 'gestão')} em ${new Date(adj.at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}`;
+        return `<div class="field"><label for="m-${f.key}" class="tm-flabel">${esc(f.label)}<span class="lock lock-adj">${icon('edit')} Ajuste manual</span></label>
+          <input class="input ${own ? 'input-edit' : ''} num" id="m-${f.key}" name="${f.key}" type="number" inputmode="decimal" min="0" ${f.max ? `max="${f.max}"` : ''} step="${f.step}" value="${rec[f.key]}" ${own ? `data-auto="month" data-id="${esc(b.id)}"` : 'readonly tabindex="-1"'}>
+          <small class="adj-meta">${meta}</small>
+          ${own ? `<button type="button" class="link-btn adj-undo" data-action="apiRevert" data-id="${esc(b.id)}" data-k="${f.key}">${icon('undo')} Voltar ao valor da integração</button>` : ''}</div>`;
       }
       return `<label class="field"><span class="tm-flabel">${esc(f.label)}</span>
         <input class="input input-edit num" id="m-${f.key}" name="${f.key}" type="number" inputmode="decimal" min="0" ${f.max ? `max="${f.max}"` : ''} step="${f.step}" value="${isNum(rec[f.key]) ? rec[f.key] : ''}" placeholder="—" data-auto="month" data-id="${esc(b.id)}"></label>`;
@@ -935,7 +929,6 @@
     if (!barberById(ui.teamBarber)) ui.teamBarber = monthR(ym).rows[0]?.barber.id;
     return `${monthPicker(ym, user)}
       <div id="tm-top" class="tm-block">${teamTop(ym)}</div>
-      ${isGestor(user) ? `<div id="tm-editor" class="tm-block">${teamEditor(ym)}</div>` : ''}
       <div id="tm-insights" class="tm-block">${ui.teamBarber ? teamInsights(ui.teamBarber, ym) : ''}</div>
       <div id="tm-radar" class="tm-block">${teamRadars(ym)}</div>`;
   }
@@ -945,7 +938,12 @@
     return `${monthPicker(ym, user)}
       <p class="section-note">Lance os totais do mês de cada barbeiro. Campos com cadeado vêm da integração e não podem ser editados aqui.</p>
       <div id="tm-editor" class="tm-block">${teamEditor(ym)}</div>
-      <a class="btn" href="#integracao">${icon('plug')} Integração com outro sistema</a>`;
+      ${isGestor(user) ? `<a class="btn" href="#integracao">${icon('plug')} Integração com outro sistema</a>` : ''}`;
+  }
+
+  function refreshEditorFields() {
+    const box = document.getElementById('tm-fields'), b = barberById(ui.teamBarber);
+    if (box && b) box.innerHTML = editorFields(b, ui.teamMonth || curYm()); else render();
   }
 
   // Atualiza as partes da tela sem perder o campo que está sendo digitado.
@@ -981,6 +979,7 @@
           let rec = state.monthly.find(m => m.barberId === id && m.month === ym);
           if (!rec) { rec = { barberId: id, month: ym }; state.monthly.push(rec); }
           rec[key] = v;
+          if (rec._adj && rec._adj[key]) { if (v === null) delete rec._adj[key]; else rec._adj[key] = { by: (currentUser() || {}).name, at: Date.now() }; }
         } else if (kind === 'goal') {
           state.goals = state.goals || { team: {}, byBarber: {} };
           const g = (state.goals.byBarber[id] = state.goals.byBarber[id] || {});
@@ -1105,7 +1104,7 @@
             ${cols.map(c => `<td>${c[1](r)}</td>`).join('')}<td class="td-score">${score(r.overall)}</td></tr>`).join('')}
         </tbody></table></div>
       </section>` : emptyBarbers()}
-      <div id="tm-radar" class="tm-block" data-only="1">${has ? teamRadars(ym, true) : ''}</div>`;
+      <p class="section-note">Para comparar competências no radar, veja Time e ranking.</p>`;
   }
 
   function pagePerformance(user) {
@@ -1173,10 +1172,19 @@
         ${state.barbers.length ? `<ul class="list">${rows}</ul>` : '<div class="card muted">Ninguém cadastrado ainda.</div>'}</section>`;
   }
 
-  function pageConfig() {
+  function pageConfig(part) {
     const w = state.weights;
     const hidden = state.hidden || [];
     const total = INDICATORS.filter(i => !hidden.includes(i.key)).reduce((a, i) => a + Number(w[i.key] ?? i.weight), 0);
+    if (part === 'dados') return `
+      <section class="section card">
+        <h2 class="section-title">${Cloud.enabled ? 'Dados da barbearia' : 'Dados deste aparelho'}</h2>
+        <p class="section-note">${Cloud.enabled ? `Os dados ficam salvos na nuvem e valem em todos os aparelhos. ${Cloud.error ? `<b style="color:var(--danger)">Última tentativa de salvar falhou: ${esc(Cloud.error)}</b>` : 'Tudo sincronizado.'}` : 'Nesta versão os dados ficam salvos neste navegador. Quando o app for ligado a um servidor, eles passam a valer em todos os aparelhos.'}</p>
+        <div class="btn-row">
+          ${Cloud.enabled ? '' : `<button class="btn ${ui.confirm === 'demo' ? 'btn-danger' : ''}" data-action="resetDemo">${ui.confirm === 'demo' ? 'Confirmar: apagar e restaurar demonstração' : 'Restaurar dados de demonstração'}</button>`}
+          <button class="btn btn-danger" data-action="clearData">${ui.confirm === 'clear' ? 'Confirmar: apagar equipe e lançamentos' : 'Apagar equipe e lançamentos'}</button>
+        </div>
+      </section>`;
     return `
       <section class="section card">
         <h2 class="section-title">Indicadores e pesos</h2>
@@ -1199,15 +1207,14 @@
           <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar metas</button>
           <button class="btn" type="button" data-action="defaultGoals">Voltar às metas padrão</button></div>
         </form>
-      </section>
-      <section class="section card">
-        <h2 class="section-title">${Cloud.enabled ? 'Dados da barbearia' : 'Dados deste aparelho'}</h2>
-        <p class="section-note">${Cloud.enabled ? `Os dados ficam salvos na nuvem e valem em todos os aparelhos. ${Cloud.error ? `<b style="color:var(--danger)">Última tentativa de salvar falhou: ${esc(Cloud.error)}</b>` : 'Tudo sincronizado.'}` : 'Nesta versão os dados ficam salvos neste navegador. Quando o app for ligado a um servidor, eles passam a valer em todos os aparelhos.'}</p>
-        <div class="btn-row">
-          ${Cloud.enabled ? '' : `<button class="btn ${ui.confirm === 'demo' ? 'btn-danger' : ''}" data-action="resetDemo">${ui.confirm === 'demo' ? 'Confirmar: apagar e restaurar demonstração' : 'Restaurar dados de demonstração'}</button>`}
-          <button class="btn btn-danger" data-action="clearData">${ui.confirm === 'clear' ? 'Confirmar: apagar equipe e lançamentos' : 'Apagar equipe e lançamentos'}</button>
-        </div>
       </section>`;
+  }
+
+  const CFG_TABS = [['empresa', 'Empresa', 'building'], ['indicadores', 'Indicadores e metas', 'chart'], ['integracao', 'Integração & API', 'plug'], ['dados', 'Dados', 'gear']];
+  function pageConfiguracoes() {
+    const t = CFG_TABS.some(x => x[0] === ui.cfgTab) ? ui.cfgTab : 'empresa';
+    const body = t === 'empresa' ? pageEmpresa() : t === 'indicadores' ? pageConfig() : t === 'integracao' ? pageIntegracao() : pageConfig('dados');
+    return `<div class="org-tabs cfg-tabs" role="toolbar">${CFG_TABS.map(([k, l, i]) => `<button type="button" class="${t === k ? 'on' : ''}" aria-pressed="${t === k}" data-action="cfgTab" data-t="${k}">${icon(i)}<span>${l}</span></button>`).join('')}</div>${body}`;
   }
 
   function pageIntegracao() {
@@ -1303,8 +1310,7 @@ Content-Type: application/json</pre>
   // ---------- Fechamento do mês (apresentação para a equipe) ----------
   function pageFechamento() {
     const amNote = isGestor(currentUser()) ? '' : '<p class="section-note">O fechamento mostra só as pessoas da sua área.</p>';
-    const ym = ui.fxMonth || addMonths(curYm(), new Date().getDate() <= 10 ? -1 : 0);
-    ui.fxMonth = ym;
+    const ym = ui.teamMonth || curYm();
     const R = scopedR(ym);
     const top = R.rows.slice(0, 3);
     const total = R.rows.reduce((a, r) => a + r.sums.fat, 0);
@@ -1313,7 +1319,7 @@ Content-Type: application/json</pre>
         ${amNote}
         <div class="fc-brand">${logo('fc-logo')}<div><h2>Fechamento do mês</h2><p>Cada atendimento conta.</p></div></div>
         <div class="fc-controls">
-          <label class="field"><span>Mês do fechamento</span><select class="input" id="fc-month" data-change="fxMonth">${monthOptions(ym)}</select></label>
+          <label class="field"><span>Mês do fechamento</span><select class="input" id="fc-month" data-change="teamMonth">${monthOptions(ym)}</select></label>
           <button class="btn btn-primary fc-start" data-action="fxStart" ${R.rows.length && R.active.length ? '' : 'disabled'}>${icon('monitor')} Iniciar fechamento</button>
         </div>
         ${R.rows.length && R.active.length ? '' : '<p class="section-note">Este mês ainda não tem resultados lançados.</p>'}
@@ -2078,7 +2084,7 @@ Content-Type: application/json</pre>
   function pageChecklist(user) {
     popPruneLocal();
     const cfg = popCfg();
-    if (!ui.popMonth) ui.popMonth = curYm();
+    ui.popMonth = ui.teamMonth || curYm();
     const ym = ui.popMonth;
     const people = popPeople();
     if (!people.length) return `<div class="card empty">${icon('checksq')}<h2>Sem profissionais</h2><p>${isGestor(user) ? 'Cadastre os barbeiros em Barbeiros para usar o checklist.' : 'Seu cadastro ainda não está ligado a um barbeiro. Fale com o gestor.'}</p></div>`;
@@ -2226,7 +2232,6 @@ Content-Type: application/json</pre>
 
   const PAGES = {
     inicio: { t: 'Início', r: pageInicio },
-    'gestao-visual': { t: 'Gestão Visual', r: pageGestaoVisual },
     fechamento: { t: 'Fechamento do mês', r: pageFechamento, g: 1, a: 1 },
     organograma: { t: 'Organograma', r: pageOrganograma, g: 1 },
     checklist: { t: 'Checklist Agenda Cheia', r: pageChecklist },
@@ -2234,11 +2239,9 @@ Content-Type: application/json</pre>
     performance: { t: 'Minha performance', r: pagePerformance },
     lancamentos: { t: 'Lançamentos', r: pageLancamentos, g: 1, a: 1 },
     barbeiros: { t: 'Barbeiros', r: pageBarbeiros, g: 1 },
-    configuracoes: { t: 'Configurações', r: pageConfig, g: 1 },
+    configuracoes: { t: 'Configurações', r: pageConfiguracoes, g: 1 },
     assinatura: { t: 'Assinatura', r: pageAssinatura, g: 1 },
     admin: { t: 'Painel do SaaS', r: pageAdmin, g: 1 },
-    integracao: { t: 'Integração & API', r: pageIntegracao, g: 1 },
-    empresa: { t: 'Minha empresa', r: pageEmpresa, g: 1 },
     cadastro: { t: 'Meu cadastro', r: pageCadastro },
     ajuda: { t: 'Central de ajuda', r: pageAjuda },
   };
@@ -2526,6 +2529,9 @@ Content-Type: application/json</pre>
     if (!user) { renderAuth(ui.authMode); return; }
 
     let route = h || 'inicio';
+    const alias = { empresa: 'empresa', integracao: 'integracao' };
+    if (alias[route]) { ui.cfgTab = alias[route]; route = 'configuracoes'; }
+    if (route === 'gestao-visual') route = 'inicio';
     if (route === 'apresentacao') { renderTV(); return; }
     let page, title;
     if (route.startsWith('perfil-')) {
@@ -2543,8 +2549,8 @@ Content-Type: application/json</pre>
     root.innerHTML = `
       <header class="topbar">
         <button class="icon-btn" data-action="openDrawer" aria-label="Abrir menu">${icon('menu')}</button>
-        <div class="topbar-title"><h1>${esc(title)}</h1><p>Período: ${esc(PERIOD_NAMES[ui.period])} · ${esc(range().label)}</p></div>
-        <a class="icon-btn" href="#apresentacao" aria-label="Modo apresentação" title="Modo apresentação">${icon('monitor')}</a>
+        <div class="topbar-title"><h1>${esc(title)}</h1><p>${esc(state.company.name || 'Gestão Barber IA')}</p></div>
+        <a class="icon-btn" href="#apresentacao" aria-label="Tela da loja" title="Tela da loja">${icon('monitor')}</a>
         <button class="icon-btn" data-action="fontSize" aria-label="Tamanho da letra" title="Tamanho da letra">${icon('type')}</button>
         ${isGestor(user) ? `<a class="icon-btn" href="#barbeiros" aria-label="Aprovações pendentes: ${pending}">${icon('bell')}${pending ? `<span class="badge-dot">${pending}</span>` : ''}</a>` : ''}
         <button class="avatar-btn" data-action="togglePopover" aria-label="Perfil e conta">${avatar(who, 40)}</button>
@@ -2704,6 +2710,7 @@ Content-Type: application/json</pre>
       c.items.splice(i, 1); ui.confirm = null; save(); render();
     },
     popItemMove(el) { const c = popCfgW(), i = Number(el.dataset.i), j = i + Number(el.dataset.d); if (j < 0 || j >= c.items.length) return; [c.items[i], c.items[j]] = [c.items[j], c.items[i]]; save(); render(); },
+    cfgTab(el) { ui.cfgTab = el.dataset.t; ui.confirm = null; render(); },
     orgTab(el) { ui.orgTab = el.dataset.t; ui.orgSheet = null; ui.confirm = null; render(); },
     orgGo(el) { ui.orgNode = el.dataset.id || null; render(); },
     orgEdit(el) { ui.orgSheet = { id: el.dataset.id }; ui.confirm = null; render(); setTimeout(() => $('#os-name')?.focus(), 30); },
@@ -2760,17 +2767,38 @@ Content-Type: application/json</pre>
       await adminDo(el.dataset.id, { sub_status: 'blocked' }, 'Barbearia bloqueada.');
     },
     fxStart() {
-      ui.fx = { ym: ui.fxMonth || curYm(), i: 0 };
+      ui.fx = { ym: ui.teamMonth || curYm(), i: 0 };
       Sound.ensure(); keepAwake();
       const d = document.documentElement;
       if (d.requestFullscreen) d.requestFullscreen().catch(() => {});
       fxRender();
     },
+    apiUnlock(el) { ui.confirm = 'unlock' + el.dataset.id + el.dataset.k; refreshEditorFields(); },
+    apiUnlockCancel() { ui.confirm = null; refreshEditorFields(); },
+    apiAdjust(el) {
+      const u = currentUser(); if (!isGestor(u)) return;
+      const ym = ui.teamMonth || curYm(), id = el.dataset.id, k = el.dataset.k;
+      const integ = monthFromIntegration(state, id, ym);
+      state.monthly = state.monthly || [];
+      let rec = state.monthly.find(m => m.barberId === id && m.month === ym);
+      if (!rec) { rec = { barberId: id, month: ym }; state.monthly.push(rec); }
+      rec[k] = Math.round(Number(integ[k]) * 100) / 100;
+      rec._adj = { ...(rec._adj || {}), [k]: { by: u.name, at: Date.now() } };
+      ui.confirm = null; save(); refreshEditorFields(); refreshTeam();
+      setTimeout(() => { const i = document.getElementById('m-' + k); if (i) { i.focus(); i.select(); } }, 30);
+      toast('Campo destravado. O valor digitado substitui o da integração neste mês.');
+    },
+    apiRevert(el) {
+      const ym = ui.teamMonth || curYm(), id = el.dataset.id, k = el.dataset.k;
+      const rec = (state.monthly || []).find(m => m.barberId === id && m.month === ym); if (!rec) return;
+      rec[k] = null; if (rec._adj) delete rec._adj[k];
+      save(); refreshEditorFields(); refreshTeam(); toast('Voltou para o valor da integração.');
+    },
     teamPick(el) {
       ui.teamBarber = el.dataset.id;
       const u = currentUser();
       if (!isGestor(u) && !seeNum(el.dataset.id)) { ui.teamBarber = u.barberId; toast('Você vê o ranking de todos e os números só seus.'); return; }
-      if (!isGestor(u) && !$('#tm-editor')) { refreshTeam(); $('#tm-insights')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+      if (!$('#tm-editor')) { refreshTeam(); $('#tm-insights')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
       const ed = $('#tm-editor');
       if (ed) { ed.innerHTML = teamEditor(ui.teamMonth || curYm()); refreshTeam(); ed.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
       else render();
@@ -3036,7 +3064,7 @@ Content-Type: application/json</pre>
     tvSoundKind(el) { Sound.kind = el.value; Sound.play(el.value, true); },
     perfBarber(el) { ui.perfBarber = el.value; render(); },
     teamMonth(el) { ui.teamMonth = el.value; render(); },
-    popMonth(el) { ui.popMonth = el.value; ui.popDraft = null; render(); },
+    popMonth(el) { ui.teamMonth = ui.popMonth = el.value; ui.popDraft = null; render(); },
     async popPhoto(el) {
       const f = el.files && el.files[0]; if (!f || !ui.popDraft) return;
       try { ui.popDraft.photo = await readImage(f, 1100, 0.72); render(); } catch (e) { toast(e.message); }
@@ -3048,7 +3076,6 @@ Content-Type: application/json</pre>
       toast(el.checked ? 'Lembretes ligados. O app avisa enquanto a meta do dia não for batida.' : 'Lembretes desligados.');
     },
     orgLevelName(el) { const l = org().levels.find(x => x.id === el.dataset.id); if (l && el.value.trim()) { l.name = el.value.trim(); save(); render(); } },
-    fxMonth(el) { ui.fxMonth = el.value; render(); },
     async barberPhoto(el) {
       const b = barberById(el.dataset.id);
       try { b.photo = await readImage(el.files[0]); save(); toast('Foto atualizada.'); render(); } catch (e) { toast(e.message); }
@@ -3127,7 +3154,7 @@ Content-Type: application/json</pre>
   window.addEventListener('storage', e => {
     if (Cloud.enabled || e.key !== 'gbia.v1') return;
     if (location.hash === '#apresentacao') renderTV();
-    else if (['', '#inicio', '#gestao-visual'].includes(location.hash) && currentUser()) { state = DB.load(); rkCache = {}; render(); }
+    else if (['', '#inicio'].includes(location.hash) && currentUser()) { state = DB.load(); rkCache = {}; render(); }
   });
   document.addEventListener('visibilitychange', () => { if (!document.hidden && location.hash === '#apresentacao') keepAwake(); });
 
