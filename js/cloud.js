@@ -28,7 +28,9 @@
     if (/provider is not enabled|Unsupported provider/i.test(m)) return 'Este tipo de login ainda não foi ativado. O gestor pode ativá-lo no painel do Supabase. Por enquanto, entre com e-mail e senha.';
     if (/expired|invalid.*token|otp/i.test(m)) return 'O link expirou ou já foi usado. Peça um novo.';
     if (/Failed to fetch|NetworkError|network/i.test(m)) return 'Sem conexão com a internet. Confira a rede e tente de novo.';
-    if (/row-level security|permission denied/i.test(m)) return 'Você não tem permissão para fazer isso.';
+    if (/Limite do plano/i.test(m)) return m.replace(/^.*?(Limite do plano)/, '$1');
+    if (/só podem ser alterados pelo pagamento|disponível nos planos pagos|Acesso restrito/i.test(m)) return m;
+    if (/row-level security|permission denied/i.test(m)) return 'Você não tem permissão para fazer isso. Se a assinatura venceu, atualize a página.';
     return m || 'Algo deu errado. Tente de novo.';
   };
 
@@ -59,6 +61,25 @@
   };
   Cloud.signOut = async () => { Cloud.unsubscribe(); Cloud.last = null; Cloud.profile = null; await c.auth.signOut(); Cloud.user = null; };
   Cloud.getInvite = async code => { const { data, error } = await c.rpc('get_invite', { p_code: code }); if (error) throw error; return data; };
+  // Assinatura no Asaas (função "assinatura" no Supabase).
+  Cloud.billingAction = async (action, payload = {}) => {
+    const { data, error } = await c.functions.invoke('assinatura', { body: { action, ...payload } });
+    if (error) {
+      let msg = error.message;
+      try { const b = await error.context.json(); if (b && b.erro) msg = b.erro; } catch (e) { /* usa a mensagem padrão */ }
+      if (/Failed to send a request|Function not found|404/i.test(msg)) msg = 'O pagamento ainda não está disponível. Avise o suporte do Gestão Barber IA.';
+      throw new Error(msg);
+    }
+    if (data && data.erro) throw new Error(data.erro);
+    return data;
+  };
+  // Painel do dono do SaaS.
+  Cloud.admin = {
+    list: async () => { const { data, error } = await c.rpc('admin_companies'); if (error) throw error; return data || []; },
+    update: async (id, patch) => { const { error } = await c.rpc('admin_update_company', { p_id: id, p_patch: patch }); if (error) throw error; },
+    plans: async () => { const { data, error } = await c.from('plans').select('*').order('sort'); if (error) throw error; return data; },
+    savePlan: async (id, patch) => { const { error } = await c.from('plans').update(patch).eq('id', id); if (error) throw error; },
+  };
   Cloud.rotateKey = async () => { const { data, error } = await c.rpc('rotate_api_key'); if (error) throw error; return data; };
 
   // ---------- conversão entre o app e as tabelas ----------
@@ -118,6 +139,17 @@
     if (prof.status !== 'ativo') return { status: prof.status };
     const cid = prof.company_id, gestor = prof.role === 'gestor';
     const q = (p) => p.then(r => { if (r.error) throw r.error; return r.data; });
+    // Situação da assinatura: bloqueada mostra só a tela de pagamento.
+    const [billing, plans] = await Promise.all([
+      q(c.rpc('company_access')),
+      q(c.from('plans').select('*').eq('active', true).order('sort')),
+    ]);
+    Cloud.billing = billing; Cloud.plans = plans;
+    if (billing && billing.access === 'blocked') {
+      const co = await q(c.from('companies').select('name, email, phone, logo').eq('id', cid).single());
+      Cloud.last = null;
+      return { status: 'bloqueado', billing, plans, company: co, role: prof.role };
+    }
     const [co, profs, barbers, entries, monthly, invites, key] = await Promise.all([
       q(c.from('companies').select('*').eq('id', cid).single()),
       q(c.from('profiles').select('*').eq('company_id', cid)),
@@ -140,6 +172,7 @@
       goals: st.goals || { team: { ...GB.DEFAULT_GOALS }, byBarber: {} },
       hidden: Array.isArray(st.hidden) ? st.hidden : ['fid'],
       apiKey: key ? key.key : '',
+      billing, plans,
     };
     Cloud.last = snapshot(state, cid);
     return { status: 'ativo', state };
@@ -222,11 +255,11 @@
     clearTimeout(rtTimer);
     rtTimer = setTimeout(async () => {
       if (Cloud.busy()) { remote(); return; }
-      const before = Cloud.last;
+      const before = Cloud.last, beforeBilling = JSON.stringify(Cloud.billing);
       try {
         const r = await Cloud.load();
         if (r.status !== 'ativo') { if (Cloud.onAuth) Cloud.onAuth('PROFILE_CHANGED'); return; }
-        if (sameSnap(before, Cloud.last)) return; // eco do que este aparelho salvou
+        if (sameSnap(before, Cloud.last) && beforeBilling === JSON.stringify(Cloud.billing)) return; // eco do que este aparelho salvou
         if (Cloud.onRemote) Cloud.onRemote(r.state);
       } catch (e) { /* tenta de novo na próxima mudança */ }
     }, 700);

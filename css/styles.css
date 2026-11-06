@@ -434,6 +434,29 @@ pre.code { margin: 0; padding: 14px; border-radius: 14px; background: var(--bg);
 
 
 
+
+/* ---------- Assinatura (SaaS) ---------- */
+.sub-banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px var(--gutter-r) 10px var(--gutter-l); background: rgba(127, 157, 240, 0.12); border-bottom: 1px solid rgba(127, 157, 240, 0.3); font-weight: 600; }
+.sub-banner.warn { background: rgba(242, 193, 78, 0.14); border-bottom-color: rgba(242, 193, 78, 0.4); }
+.sub-banner span { flex: 1; min-width: 180px; }
+.sub-banner .ico { color: var(--accent); }
+.sub-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px; }
+.plan { position: relative; display: grid; gap: 6px; align-content: start; padding: 18px 16px; border-radius: 20px; border: 1.5px solid var(--line); background: var(--surface-2); cursor: pointer; }
+.plan input { position: absolute; top: 16px; right: 16px; width: 20px; height: 20px; accent-color: var(--accent); }
+.plan:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 0 24px var(--accent-glow); background: linear-gradient(180deg, rgba(214, 180, 106, 0.1), var(--surface-2)); }
+.plan.is-off { opacity: 0.5; cursor: not-allowed; }
+.plan-name { font-family: var(--font-display); font-weight: 800; font-size: 1.15rem; padding-right: 28px; }
+.plan-price { color: var(--muted); }
+.plan-price b { font-family: var(--font-display); font-size: 1.6rem; color: var(--fg); }
+.plan-lim { font-weight: 700; color: var(--accent); }
+.plan-feat { margin: 4px 0 0; padding-left: 1.1em; color: #d8d3c8; font-size: 0.9rem; display: grid; gap: 2px; }
+.plan-why { color: var(--danger); }
+.block-pay { display: grid; gap: 16px; }
+.adm-row { align-items: flex-start; }
+.adm-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; margin-top: 6px; font-size: 0.88rem; }
+.adm-plan { padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+
 /* ---------- Fechamento do mês ---------- */
 .fc-head { display: grid; gap: 18px; }
 .fc-brand { display: flex; gap: 16px; align-items: center; }
