@@ -457,6 +457,52 @@ pre.code { margin: 0; padding: 14px; border-radius: 14px; background: var(--bg);
 
 
 
+/* ---------- Organograma ---------- */
+.org-tabs { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 5px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); justify-self: start; max-width: 100%; }
+.org-tabs button { display: inline-flex; align-items: center; gap: 8px; border: 0; background: none; color: var(--fg); padding: 10px 16px; border-radius: 14px; font-weight: 600; }
+.org-tabs button.on { background: var(--accent); color: var(--accent-ink); }
+.org-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.org-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; color: var(--muted); }
+.org-crumbs button { border: 0; background: none; color: var(--accent); padding: 4px 2px; display: inline-flex; gap: 6px; align-items: center; font-size: 1rem; }
+.org-crumbs button.on { color: var(--fg); font-weight: 700; }
+.org-crumbs .ico { width: 18px; height: 18px; }
+.org-list { display: grid; gap: 12px; }
+.org-card { position: relative; display: grid; gap: 4px; text-align: left; padding: 16px 48px 16px 18px; border-radius: 22px; border: 1px solid var(--line-accent); background: var(--surface); color: var(--fg); box-shadow: 0 8px 26px rgba(214, 180, 106, 0.06); }
+.org-card:hover { border-color: var(--accent); }
+.org-card b { font-size: 1.2rem; }
+.org-card > .ico { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); }
+.org-lv { font-family: var(--font-display); font-weight: 700; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.org-here { display: grid; gap: 4px; }
+.org-here b { font-size: 1.1rem; }
+.org-here .btn { justify-self: start; margin-top: 6px; }
+.org-chain { display: grid; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.org-chain-line { display: flex; gap: 18px; overflow-x: auto; padding: 4px 2px 6px; justify-content: safe center; }
+.org-chain-item { display: grid; justify-items: center; gap: 8px; flex: none; }
+.org-chain-row { display: flex; align-items: center; gap: 8px; }
+.org-node { display: flex; gap: 12px; align-items: flex-start; text-align: left; width: 230px; padding: 14px 16px; border-radius: 20px; border: 1px solid var(--line-accent); background: var(--surface); color: var(--fg); }
+.org-node .ico { color: var(--accent); flex: none; margin-top: 2px; }
+.org-node span { display: grid; min-width: 0; }
+.org-node b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.org-node small { color: var(--muted); }
+.org-plus { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface-2); color: var(--fg); }
+.org-below { display: inline-flex; gap: 6px; align-items: center; border: 0; background: none; color: var(--fg); font-weight: 600; padding: 4px 8px; }
+.org-levels { margin: 0; padding-left: 1.4em; display: grid; gap: 8px; }
+.org-levels li { display: flex; gap: 8px; align-items: center; }
+.org-levels .input { max-width: 260px; padding: 8px 12px; }
+.org-inline { display: flex; gap: 10px; flex-wrap: wrap; }
+.org-inline .input { flex: 1 1 180px; }
+.org-tree { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.org-tree li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 6px 0 6px calc(var(--d) * 22px); border-left: 0; }
+.org-lvchip { padding: 3px 10px; border-radius: 8px; background: var(--surface-2); color: var(--muted); font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.org-tree .link-btn { color: var(--accent); }
+.org-del { width: 34px; height: 34px; }
+.org-del.is-confirm { width: auto; padding: 0 10px; color: var(--danger); }
+.org-sheet-wrap { position: fixed; inset: 0; z-index: 95; display: grid; align-items: end; }
+.org-sheet { max-height: 88vh; overflow-y: auto; }
+.org-sheet h2 { margin: 0; font-size: 1.2rem; }
+.org-people { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; display: grid; gap: 8px; margin: 0; }
+.org-people legend { padding: 0 6px; font-weight: 600; }
+
 /* ---------- Performance da equipe ---------- */
 .pc-empty { padding: 16px 18px; border: 1.5px dashed var(--line); border-radius: var(--radius); color: #d8d3c8; }
 .pc-totals { grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); }

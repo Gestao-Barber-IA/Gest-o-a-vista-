@@ -104,7 +104,7 @@
       out.tables[t] = map;
     }
     const co = s.company;
-    out.company = JSON.stringify({ name: co.name, cnpj: co.cnpj || '', phone: co.phone || '', email: co.email || '', logo: co.logo || null, settings: { weights: s.weights, goals: s.goals, hidden: s.hidden } });
+    out.company = JSON.stringify({ name: co.name, cnpj: co.cnpj || '', phone: co.phone || '', email: co.email || '', logo: co.logo || null, settings: { weights: s.weights, goals: s.goals, hidden: s.hidden, org: s.org || null } });
     for (const u of s.users) out.users[u.id] = JSON.stringify({ name: u.name, phone: u.phone || '', status: u.status });
     return out;
   }
@@ -171,6 +171,7 @@
       weights: st.weights || Object.fromEntries(GB.INDICATORS.map(i => [i.key, i.weight])),
       goals: st.goals || { team: { ...GB.DEFAULT_GOALS }, byBarber: {} },
       hidden: Array.isArray(st.hidden) ? st.hidden : ['fid'],
+      org: st.org || null,
       apiKey: key ? key.key : '',
       billing, plans,
     };
