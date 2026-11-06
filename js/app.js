@@ -2004,7 +2004,7 @@ Content-Type: application/json</pre>
     const shown = rows.slice(0, ui.popRevAll ? 60 : 5);
     return `<section class="section card pop-review">
       <div class="pop-dhead"><div><h2 class="pop-h2">${icon('checksq')} Conferência</h2><p class="muted">${rows.length} prova(s) aguardando. Os pontos entram no ranking quando você aprova.</p></div>
-        <button class="btn btn-sm btn-ok" data-action="popOkAll">${ui.confirm === 'popOkAll' ? `Confirmar: aprovar ${rows.length}` : 'Aprovar todas'}</button></div>
+</div>
       <ul class="pop-rlist">${shown.map(x => `<li>
         <button class="pop-evimg" data-action="popView" data-bid="${esc(x.b.id)}" data-day="${esc(x.r.day)}" data-it="${esc(x.it.id)}" data-i="${x.i}" aria-label="Ver prova">${proofImg(x.e)}</button>
         <div class="pop-evbody"><b>${esc(x.b.name)}</b><span class="muted">Dia ${Number(x.r.day.slice(8))} · ${esc(x.it.title)}${x.it.type === 'phones' ? ' · ' + esc(x.e.phone || '') : ''}</span>${x.e.desc ? `<p>${esc(x.e.desc)}</p>` : ''}
@@ -2683,15 +2683,6 @@ Content-Type: application/json</pre>
     popEvOk(el) { popReview(el, 'aprovado'); },
     popEvNo(el) { popReview(el, 'recusado'); },
     popEvUndo(el) { popReview(el, 'pendente'); },
-    popOkAll() {
-      if (ui.confirm !== 'popOkAll') { ui.confirm = 'popOkAll'; render(); return; }
-      ui.confirm = null; let n = 0; const u = currentUser();
-      for (const r of (state.pop || [])) {
-        if (!r.day.startsWith(ui.popMonth) || !r.ev || !canReview(r.barberId)) continue;
-        for (const l of Object.values(r.ev)) for (const e of (l || [])) if (e.status === 'pendente') { e.status = 'aprovado'; e.reviewedBy = u.id; e.reviewedAt = Date.now(); n++; }
-      }
-      save(); toast(`${n} prova(s) aprovada(s).`); render();
-    },
     popView(el) { ui.popView = { bid: el.dataset.bid || ui.popBarber, day: el.dataset.day || `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`, it: el.dataset.it, i: Number(el.dataset.i) }; render(); },
     popViewClose() { ui.popView = null; render(); },
     popRevMore() { ui.popRevAll = true; render(); },
