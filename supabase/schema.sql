@@ -80,6 +80,12 @@ create index if not exists monthly_company_month on public.monthly (company_id, 
 create index if not exists profiles_company on public.profiles (company_id);
 create index if not exists barbers_company on public.barbers (company_id);
 
+-- Permissões das tabelas para quem está logado (as regras abaixo limitam o que cada um vê).
+-- Garante o funcionamento mesmo com "Expor automaticamente novas tabelas" desligado.
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on public.companies, public.profiles, public.barbers, public.invites,
+  public.entries, public.monthly, public.api_keys to authenticated;
+
 -- ---------- Funções de apoio às regras ----------
 create or replace function public.my_company() returns uuid
 language sql stable security definer set search_path = public as $$
