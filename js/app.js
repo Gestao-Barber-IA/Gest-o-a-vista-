@@ -600,11 +600,28 @@
   }
   const howLink = () => `<a class="how-link" href="#ajuda">${icon('help')} Como funciona a pontuação</a>`;
 
+  // Na Semana só entram resultados diários; os lançamentos à mão são totais do mês.
+  function monthOnlyData(R) {
+    if (ui.period !== 'semana' || R.active.length) return false;
+    const r = range(), months = new Set([r.start.slice(0, 7), r.end.slice(0, 7)]);
+    return (state.monthly || []).some(m => months.has(m.month) && Object.keys(m).some(k => !['barberId', 'month', '_adj'].includes(k) && isNum(m[k])));
+  }
+  // Semana sem dados diários, mas com lançamentos do mês: usa o mês (Tela da loja).
+  function tvRange() {
+    const r = range();
+    if (ui.period !== 'semana') return r;
+    const R = computeRanking(state, r);
+    if (!monthOnlyData(R)) return r;
+    return periodRange('mes', 0, fromIso(r.end > iso(new Date()) ? iso(new Date()) : r.end));
+  }
+
   function pageInicio(user) {
     const R = computeRanking(state, range());
     liveDetect(R);
     return `
       ${periodBar()}
+      ${monthOnlyData(R) ? `<div class="card week-note"><p>${icon('help')}<span>Os resultados lançados à mão são <b>totais do mês</b>, por isso não aparecem na visão por semana. A Semana mostra só resultados diários (da integração ou do checklist).</span></p>
+        <button class="btn btn-primary btn-sm" data-action="period" data-period="mes">Ver o mês</button></div>` : ''}
       <div class="home-cols">
         <section class="section"><h2 class="section-title">Pódio do período</h2>${podium(R)}</section>
         <section class="section"><h2 class="section-title">Ranking em tempo real</h2>${rankingList(R)}${R.N ? '' : '<p class="section-note">Ainda não há resultados lançados neste período.</p>'}</section>
@@ -2488,7 +2505,8 @@ Content-Type: application/json</pre>
 
   function renderTV() {
     if (!Cloud.enabled) state = DB.load();
-    const R = computeRanking(state, range());
+    const tr = tvRange();
+    const R = computeRanking(state, tr);
     liveDetect(R);
     const slides = [tvRanking, tvGuardians, tvAlerts];
     const i = ((ui.tvIndex % slides.length) + slides.length) % slides.length;
@@ -2497,7 +2515,7 @@ Content-Type: application/json</pre>
       <div class="tv-progress" aria-hidden="true"><i style="animation-duration:${TV_SECONDS}s${reduce ? ';animation:none;width:100%' : ''}"></i></div>
       <header class="tv-head">
         ${logo('tv-logo')}
-        <div class="tv-title"><b>${esc(state.company.name)}</b><span>Tela da loja · ${esc(PERIOD_NAMES[ui.period])}: ${esc(range().label)}</span></div>
+        <div class="tv-title"><b>${esc(state.company.name)}</b><span>Tela da loja · ${esc(tr.type === 'mes' ? 'Mês' : PERIOD_NAMES[ui.period])}: ${esc(tr.label)}</span></div>
         <div class="tv-controls">
           <button class="btn btn-sm" data-action="tvSound" aria-pressed="${Sound.on}">${icon('sound')} ${Sound.on ? 'Sons ativos' : 'Sons desligados'}</button>
           <select class="input tv-select" id="tv-sound" data-change="tvSoundKind" aria-label="Escolher e testar som">
