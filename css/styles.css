@@ -148,6 +148,8 @@ textarea.input { min-height: 160px; font-family: ui-monospace, SFMono-Regular, M
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
 .topbar {
   position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  /* No app instalado (iPhone), a barra fica abaixo do relógio: o conteúdo desce junto. */
+  margin-top: env(safe-area-inset-top, 0px);
   display: flex; align-items: center; gap: 10px;
   padding: 12px var(--gutter-r) 12px var(--gutter-l);
   background: color-mix(in srgb, var(--surface) 94%, transparent);
