@@ -2,6 +2,7 @@
 -- Gestão Barber IA — banco de dados no Supabase
 -- Como usar: Supabase → SQL Editor → New query → cole tudo → Run.
 -- Pode rodar de novo sem problema: o script recria funções e regras.
+-- Inclui a base do app e a parte de assinatura (SaaS).
 -- =====================================================================
 
 -- ---------- Tabelas ----------
@@ -239,3 +240,218 @@ do $$ begin
   begin alter publication supabase_realtime add table public.profiles; exception when duplicate_object then null; end;
   begin alter publication supabase_realtime add table public.companies; exception when duplicate_object then null; end;
 end $$;
+
+-- =====================================================================
+-- ASSINATURA (SaaS): planos, teste grátis, bloqueio e painel do dono do SaaS
+-- =====================================================================
+
+-- ---------- Planos ----------
+create table if not exists public.plans (
+  id text primary key,
+  name text not null,
+  max_barbers int,                 -- null = ilimitado
+  price_cents int not null,        -- valor mensal em centavos
+  api boolean not null default true,
+  active boolean not null default true,
+  sort int not null default 0
+);
+insert into public.plans (id, name, max_barbers, price_cents, sort) values
+  ('essencial', 'Essencial', 4, 9900, 1),
+  ('profissional', 'Profissional', 10, 17900, 2),
+  ('premium', 'Premium', null, 27900, 3)
+on conflict (id) do nothing;
+
+-- ---------- Assinatura de cada barbearia ----------
+alter table public.companies add column if not exists plan_id text references public.plans;
+alter table public.companies add column if not exists sub_status text not null default 'trial';
+alter table public.companies add column if not exists trial_ends_at timestamptz not null default now() + interval '7 days';
+alter table public.companies add column if not exists paid_until date;
+alter table public.companies add column if not exists asaas_customer_id text;
+alter table public.companies add column if not exists asaas_subscription_id text;
+alter table public.companies add column if not exists invoice_url text;
+alter table public.companies add column if not exists cpf_cnpj text not null default '';
+alter table public.companies add column if not exists terms_accepted_at timestamptz;
+alter table public.companies drop constraint if exists companies_sub_status_check;
+alter table public.companies add constraint companies_sub_status_check
+  check (sub_status in ('trial', 'pending', 'active', 'overdue', 'canceled', 'courtesy', 'blocked'));
+create index if not exists companies_asaas_sub on public.companies (asaas_subscription_id);
+create index if not exists companies_asaas_cus on public.companies (asaas_customer_id);
+
+-- Dono(s) do SaaS.
+create table if not exists public.platform_admins (user_id uuid primary key references auth.users on delete cascade);
+alter table public.platform_admins enable row level security;
+alter table public.plans enable row level security;
+
+grant select on public.plans to anon, authenticated;
+grant insert, update on public.plans to authenticated;
+
+-- ---------- Regra de acesso ----------
+-- trial    : 7 dias desde o cadastro, só lançamento manual
+-- pending  : assinou e aguarda o 1º pagamento (vale até 1 dia depois do fim do teste)
+-- active / courtesy / canceled : vale até paid_until (+1 dia para compensação)
+-- overdue / blocked : bloqueado
+create or replace function public.access_of(c public.companies) returns text
+language sql stable as $$
+  select case
+    when c.sub_status = 'trial' and now() < c.trial_ends_at then 'trial'
+    when c.sub_status = 'pending' and now() < c.trial_ends_at + interval '1 day' then 'trial'
+    when c.sub_status in ('active', 'courtesy', 'canceled') and c.paid_until is not null
+         and current_date <= c.paid_until + 1 then 'paid'
+    else 'blocked'
+  end
+$$;
+
+create or replace function public.is_platform_admin() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from platform_admins where user_id = auth.uid())
+$$;
+
+-- Barbearia do usuário, só se o acesso estiver liberado (usado em todas as regras de dados).
+create or replace function public.my_company() returns uuid
+language sql stable security definer set search_path = public as $$
+  select p.company_id from profiles p join companies c on c.id = p.company_id
+  where p.id = auth.uid() and p.status = 'ativo' and access_of(c) <> 'blocked'
+$$;
+
+-- Barbearia do usuário mesmo bloqueada (para mostrar a tela de pagamento).
+create or replace function public.my_company_any() returns uuid
+language sql stable security definer set search_path = public as $$
+  select company_id from profiles where id = auth.uid() and status = 'ativo'
+$$;
+
+drop policy if exists companies_read on public.companies;
+create policy companies_read on public.companies for select using (id = my_company_any());
+
+-- Campos de assinatura só mudam pelo servidor (Asaas), pelo SQL Editor ou pelo dono do SaaS.
+-- (Roda com o papel de quem fez a alteração: usuários do app são "authenticated".)
+create or replace function public.guard_company() returns trigger
+language plpgsql security invoker set search_path = public as $$
+begin
+  if current_user not in ('authenticated', 'anon') or is_platform_admin() then
+    return new;
+  end if;
+  if new.plan_id is distinct from old.plan_id or new.sub_status is distinct from old.sub_status
+     or new.trial_ends_at is distinct from old.trial_ends_at or new.paid_until is distinct from old.paid_until
+     or new.asaas_customer_id is distinct from old.asaas_customer_id
+     or new.asaas_subscription_id is distinct from old.asaas_subscription_id
+     or new.invoice_url is distinct from old.invoice_url or new.cpf_cnpj is distinct from old.cpf_cnpj then
+    raise exception 'Os dados da assinatura só podem ser alterados pelo pagamento.';
+  end if;
+  return new;
+end $$;
+drop trigger if exists guard_company on public.companies;
+create trigger guard_company before update on public.companies for each row execute function public.guard_company();
+
+-- Situação da assinatura para o app.
+create or replace function public.company_access() returns json
+language sql stable security definer set search_path = public as $$
+  select json_build_object(
+    'access', access_of(c), 'status', c.sub_status, 'plan_id', c.plan_id,
+    'trial_ends_at', c.trial_ends_at, 'paid_until', c.paid_until, 'invoice_url', c.invoice_url,
+    'has_subscription', c.asaas_subscription_id is not null, 'cpf_cnpj', c.cpf_cnpj,
+    'max_barbers', case when access_of(c) = 'paid' then pl.max_barbers else null end,
+    'api', access_of(c) = 'paid' and (c.sub_status = 'courtesy' or coalesce(pl.api, false)),
+    'admin', is_platform_admin())
+  from profiles p join companies c on c.id = p.company_id left join plans pl on pl.id = c.plan_id
+  where p.id = auth.uid() and p.status = 'ativo'
+$$;
+grant execute on function public.company_access() to authenticated;
+
+-- ---------- Limite de barbeiros do plano ----------
+create or replace function public.guard_barber_limit() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare lim int; n int; c public.companies;
+begin
+  if not new.active or (tg_op = 'UPDATE' and old.active) then return new; end if;
+  select * into c from companies where id = new.company_id;
+  if access_of(c) <> 'paid' then return new; end if;  -- no teste não há limite
+  select max_barbers into lim from plans where id = c.plan_id;
+  if lim is null then return new; end if;
+  select count(*) into n from barbers where company_id = new.company_id and active and id <> new.id;
+  if n >= lim then
+    raise exception 'Limite do plano: até % barbeiros ativos. Mude de plano para cadastrar mais.', lim;
+  end if;
+  return new;
+end $$;
+drop trigger if exists guard_barber_limit on public.barbers;
+create trigger guard_barber_limit before insert or update of active on public.barbers
+  for each row execute function public.guard_barber_limit();
+
+-- ---------- Chave da API só nos planos pagos ----------
+create or replace function public.rotate_api_key() returns text
+language plpgsql security definer set search_path = public as $$
+declare k text := 'gbia_' || replace(gen_random_uuid()::text, '-', ''); c public.companies;
+begin
+  if not is_gestor() then raise exception 'Somente o gestor.'; end if;
+  select * into c from companies where id = my_company();
+  if access_of(c) <> 'paid' then raise exception 'A integração por API está disponível nos planos pagos.'; end if;
+  insert into api_keys (company_id, key) values (c.id, k)
+  on conflict (company_id) do update set key = excluded.key;
+  return k;
+end $$;
+
+-- ---------- Cadastro: guarda o aceite dos termos ----------
+create or replace function public.handle_new_user() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  meta jsonb := coalesce(new.raw_user_meta_data, '{}'::jsonb);
+  inv public.invites;
+  cid uuid;
+begin
+  if meta ? 'invite_code' then
+    select * into inv from invites where code = meta->>'invite_code' and not used for update;
+    if inv.code is null then
+      raise exception 'Convite inválido ou já usado.';
+    end if;
+    insert into profiles (id, company_id, name, email, phone, role, status, barber_id)
+    values (new.id, inv.company_id, coalesce(meta->>'name', ''), coalesce(new.email, ''), coalesce(meta->>'phone', ''), 'barbeiro', 'pendente', inv.barber_id);
+    update invites set used = true where code = inv.code;
+  else
+    insert into companies (name, email, phone, terms_accepted_at)
+    values (coalesce(nullif(meta->>'company', ''), 'Minha barbearia'), coalesce(new.email, ''), coalesce(meta->>'phone', ''),
+            case when meta ? 'terms_accepted_at' then now() end)
+    returning id into cid;
+    insert into profiles (id, company_id, name, email, phone, role, status)
+    values (new.id, cid, coalesce(nullif(meta->>'name', ''), meta->>'full_name', ''), coalesce(new.email, ''), coalesce(meta->>'phone', ''), 'gestor', 'ativo');
+    insert into api_keys (company_id, key) values (cid, 'gbia_' || replace(gen_random_uuid()::text, '-', ''));
+  end if;
+  return new;
+end $$;
+
+-- ---------- Painel do dono do SaaS ----------
+drop policy if exists plans_read on public.plans;
+create policy plans_read on public.plans for select using (true);
+drop policy if exists plans_admin_ins on public.plans;
+create policy plans_admin_ins on public.plans for insert with check (is_platform_admin());
+drop policy if exists plans_admin_upd on public.plans;
+create policy plans_admin_upd on public.plans for update using (is_platform_admin());
+
+create or replace function public.admin_companies() returns json
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not is_platform_admin() then raise exception 'Acesso restrito.'; end if;
+  return coalesce((
+    select json_agg(row_to_json(t) order by t.created_at desc) from (
+      select c.id, c.name, c.email, c.phone, c.cpf_cnpj, c.created_at, c.plan_id, c.sub_status, access_of(c) as access,
+             c.trial_ends_at, c.paid_until, c.asaas_subscription_id is not null as has_subscription,
+             (select count(*) from barbers b where b.company_id = c.id and b.active) as barbers,
+             (select count(*) from profiles p where p.company_id = c.id and p.status = 'ativo') as users,
+             greatest((select max(updated_at) from entries e where e.company_id = c.id),
+                      (select max(updated_at) from monthly m where m.company_id = c.id)) as last_activity,
+             (select p.name from profiles p where p.company_id = c.id and p.role = 'gestor' order by p.created_at limit 1) as owner
+      from companies c) t), '[]'::json);
+end $$;
+grant execute on function public.admin_companies() to authenticated;
+
+create or replace function public.admin_update_company(p_id uuid, p_patch jsonb) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not is_platform_admin() then raise exception 'Acesso restrito.'; end if;
+  update companies set
+    plan_id = case when p_patch ? 'plan_id' then nullif(p_patch->>'plan_id', '') else plan_id end,
+    sub_status = coalesce(p_patch->>'sub_status', sub_status),
+    trial_ends_at = coalesce((p_patch->>'trial_ends_at')::timestamptz, trial_ends_at),
+    paid_until = case when p_patch ? 'paid_until' then (p_patch->>'paid_until')::date else paid_until end
+  where id = p_id;
+end $$;
+grant execute on function public.admin_update_company(uuid, jsonb) to authenticated;

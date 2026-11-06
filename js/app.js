@@ -194,6 +194,11 @@
         <p>Enviamos uma mensagem para <b style="color:var(--fg)">${esc(ui.authEmail || 'o seu e-mail')}</b>. Abra o link para ativar a conta${ui.authInvite ? '. Depois, é só aguardar o gestor aprovar sua entrada' : ''}.</p>
         <p class="section-note">Não chegou? Confira a pasta de spam ou lixo eletrônico.</p>
         <button class="btn" data-action="authMode" data-mode="entrar">Ir para o login</button></div>`;
+    } else if (mode === 'bloqueado') {
+      root.innerHTML = authShell(blockedScreen());
+      clearInterval(ui.blockPoll);
+      ui.blockPoll = setInterval(() => { if (!document.hidden && ui.authMode === 'bloqueado') ACTIONS.recheckAccess(null, null, true); }, 30000);
+      return;
     } else if (mode === 'recusado' || mode === 'semPerfil') {
       inner = `<div class="empty" style="padding:10px 0">${icon('lock')}<h2>${mode === 'recusado' ? 'Acesso não aprovado' : 'Conta sem barbearia'}</h2>
         <p>${mode === 'recusado' ? 'O gestor não aprovou este cadastro. Fale com a barbearia para receber um novo convite.' : 'Este login não está ligado a nenhuma barbearia. Peça um convite ao gestor ou crie a conta da sua barbearia.'}</p>
@@ -224,6 +229,9 @@
           <label class="field"><span>Seu nome *</span><input class="input" id="su-name" name="name" required autocomplete="name"></label>
           <label class="field"><span>E-mail *</span><input class="input" id="su-email" name="email" type="email" required autocomplete="email" placeholder="voce@barbearia.com"></label>
           <label class="field"><span>Senha *</span><input class="input" id="su-pass" name="pass" type="password" required minlength="6" autocomplete="new-password"><small>Mínimo de 6 caracteres.</small></label>
+          ${Cloud.enabled ? `<label class="field"><span>WhatsApp</span><input class="input" id="su-phone" name="phone" type="tel" autocomplete="tel" placeholder="(00) 00000-0000"></label>
+          <p class="section-note">7 dias grátis para testar, sem cartão. No teste, os resultados são lançados à mão.</p>
+          <label class="check"><input type="checkbox" id="su-terms" name="terms"><span><b>Li e aceito os <a href="termos.html" target="_blank" rel="noopener">Termos de uso</a> e a <a href="privacidade.html" target="_blank" rel="noopener">Política de privacidade</a></b></span></label>` : ''}
           ${state.demo ? '<p class="section-note">Neste aparelho, criar uma conta nova substitui os dados de demonstração. Dá para restaurá-los depois em Configurações.</p>' : ''}
           <p class="form-msg" data-msg></p>
           <button class="btn btn-primary btn-block" type="submit">${icon('check')} Criar conta</button>
@@ -284,6 +292,8 @@
       { r: 'integracao', t: 'Integração & API', i: 'plug' },
       { r: 'apresentacao', t: 'Modo apresentação', i: 'monitor' },
       { r: 'configuracoes', t: 'Configurações', i: 'gear' },
+      { r: 'assinatura', t: 'Assinatura', i: 'card', cloud: 1 },
+      { r: 'admin', t: 'Painel do SaaS', i: 'gauge', admin: 1 },
       { r: 'organograma', t: 'Organograma', i: 'org', soon: 1 },
       { r: 'cockpit', t: 'Cockpit do gestor', i: 'gauge', soon: 1 },
     ] },
@@ -305,7 +315,7 @@
   function drawer(user, route) {
     const g = isGestor(user);
     const groups = NAV.filter(gr => !gr.g || g).map(gr => {
-      const items = gr.items.filter(it => !it.g || g).map(it => `
+      const items = gr.items.filter(it => (!it.g || g) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
         <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}</a>`).join('');
       return (gr.group ? `<div class="nav-group">${esc(gr.group)}</div>` : '') + items;
     }).join('');
@@ -1019,6 +1029,7 @@
     return `${pendingHtml}
       <section class="section card">
         <h2 class="section-title">Adicionar barbeiro</h2>
+        ${billing() && billing().max_barbers ? `<p class="section-note">Seu plano: <b class="num">${activeBarbers()} de ${billing().max_barbers}</b> barbeiros ativos. <a href="#assinatura">Trocar de plano</a></p>` : ''}
         <form class="form" data-form="addBarber" novalidate>
           <div class="grid-2"><label class="field"><span>Nome *</span><input class="input" id="nb-name" name="name" required></label>
           <label class="field"><span>Foto</span><input class="input" id="nb-photo" name="photo" type="file" accept="image/*"></label></div>
@@ -1069,6 +1080,11 @@
   }
 
   function pageIntegracao() {
+    if (billing() && !billing().api) {
+      return `<section class="section card empty">${icon('plug')}<h2>Integração com o seu sistema</h2>
+        <p>Nos planos pagos, a agenda ou o caixa que você já usa envia os resultados direto para o Gestão Barber IA, sem digitar nada. No teste grátis, os resultados são lançados à mão em Lançamentos.</p>
+        <div class="btn-row" style="justify-content:center"><a class="btn btn-primary" href="#assinatura">${icon('card')} Ver planos</a><a class="btn" href="#lancamentos">Lançar à mão</a></div></section>`;
+    }
     const ex = JSON.stringify([
       { data: iso(new Date()), barbeiro: state.barbers[0]?.name || 'Nome do barbeiro', faturamento: 420.5, servicos: 9, clientes: 8, checklist_pop: 1, horas_disponiveis: 8, horas_ocupadas: 6.5, planos_mensais: 1, clientes_retorno: 5, venda_produtos: 60 },
     ], null, 2);
@@ -1362,6 +1378,176 @@ Content-Type: application/json</pre>
     else if (e.key === 'Escape') fxClose();
   });
 
+  // ---------- Assinatura (SaaS) ----------
+  const STATUS_TXT = { trial: 'Teste grátis', pending: 'Aguardando pagamento', active: 'Ativa', overdue: 'Pagamento atrasado', canceled: 'Cancelada', courtesy: 'Cortesia', blocked: 'Bloqueada' };
+  const priceTxt = p => 'R$ ' + nf2.format(p.price_cents / 100);
+  const fmtDate = d => d ? new Date(String(d).length <= 10 ? d + 'T12:00:00' : d).toLocaleDateString('pt-BR') : '—';
+  const daysLeft = d => Math.max(0, Math.ceil((new Date(d).getTime() - Date.now()) / 86400000));
+  const billing = () => (Cloud.enabled && state.billing) || null;
+  const activeBarbers = () => state.barbers.filter(b => b.active !== false).length;
+  const planById = id => (state.plans || Cloud.plans || []).find(p => p.id === id);
+
+  function trialBanner(user) {
+    const b = billing();
+    if (!b || !isGestor(user) || location.hash === '#assinatura') return '';
+    if (b.access === 'trial') {
+      const d = daysLeft(b.trial_ends_at);
+      const txt = b.status === 'pending' ? `Assinatura feita. A 1ª cobrança vence em ${fmtDate(b.trial_ends_at)}.` : `Teste grátis: ${d === 0 ? 'termina hoje' : `faltam ${d} dia${d > 1 ? 's' : ''}`}.`;
+      return `<div class="sub-banner ${d <= 2 ? 'warn' : ''}">${icon('clock')}<span>${txt}</span><a class="btn btn-sm btn-primary" href="#assinatura">${b.status === 'pending' ? 'Ver assinatura' : 'Assinar agora'}</a></div>`;
+    }
+    if (b.access === 'paid' && b.status === 'canceled') {
+      return `<div class="sub-banner warn">${icon('clock')}<span>Assinatura cancelada. O acesso vai até ${fmtDate(b.paid_until)}.</span><a class="btn btn-sm btn-primary" href="#assinatura">Reativar</a></div>`;
+    }
+    return '';
+  }
+
+  function plansGrid(plans, current, mode) {
+    const n = activeBarbers();
+    return `<div class="plan-grid">${plans.map(p => {
+      const fits = p.max_barbers === null || n <= p.max_barbers;
+      const isCur = p.id === current;
+      return `<label class="plan ${isCur ? 'is-cur' : ''} ${fits ? '' : 'is-off'}">
+        <input type="radio" name="plan_id" value="${esc(p.id)}" ${isCur || (!current && p.sort === 2 && fits) ? 'checked' : ''} ${fits ? '' : 'disabled'}>
+        <span class="plan-name">${esc(p.name)}${isCur ? ' <span class="chip chip-ok">atual</span>' : ''}</span>
+        <span class="plan-price"><b class="num">${priceTxt(p)}</b>/mês</span>
+        <span class="plan-lim">${p.max_barbers === null ? 'Barbeiros ilimitados' : `Até ${p.max_barbers} barbeiros`}</span>
+        <ul class="plan-feat"><li>Ranking, pódio e tela da loja</li><li>Fechamento do mês animado</li><li>${p.api ? 'Integração por API com seu sistema' : 'Lançamento manual'}</li></ul>
+        ${fits ? '' : `<small class="plan-why">Você tem ${n} barbeiros ativos.</small>`}
+      </label>`;
+    }).join('')}</div>`;
+  }
+
+  function subscribeForm(b, plans, compact) {
+    return `<form class="form" data-form="subscribe" novalidate>
+      ${plansGrid(plans, null, 'new')}
+      <div class="grid-2">
+        <label class="field"><span>CPF ou CNPJ de quem paga *</span><input class="input" id="sb-doc" name="cpf_cnpj" inputmode="numeric" autocomplete="off" value="${esc(b.cpf_cnpj || '')}" placeholder="Somente números"></label>
+        <label class="field"><span>Nome ou razão social *</span><input class="input" id="sb-name" name="name" value="${esc(state.company.name || '')}"></label>
+      </div>
+      <label class="field"><span>WhatsApp para avisos de cobrança</span><input class="input" id="sb-phone" name="phone" type="tel" value="${esc(state.company.phone || '')}" placeholder="(00) 00000-0000"></label>
+      <p class="section-note">Pagamento mensal por PIX, boleto ou cartão. ${b.access === 'trial' && b.status === 'trial' ? `A 1ª cobrança vence em ${fmtDate(b.trial_ends_at)}, no fim do teste grátis.` : 'A 1ª cobrança vence hoje.'} Você pode trocar de plano ou cancelar quando quiser.</p>
+      <p class="form-msg" data-msg></p>
+      <button class="btn btn-primary btn-block" type="submit">${icon('check')} Assinar</button>
+    </form>`;
+  }
+
+  function pageAssinatura() {
+    const b = billing();
+    if (!b) return `<div class="card muted">A assinatura aparece quando o app está ligado à nuvem.</div>`;
+    const plans = state.plans || [];
+    const cur = planById(b.plan_id);
+    const statusChip = `<span class="chip ${b.access === 'blocked' ? 'chip-bad' : b.access === 'trial' || b.status === 'canceled' ? 'chip-warn' : 'chip-ok'}">${STATUS_TXT[b.status] || b.status}</span>`;
+    let summary = '';
+    if (b.status === 'courtesy') summary = `Acesso cortesia${b.paid_until ? ` até ${fmtDate(b.paid_until)}` : ''}.`;
+    else if (b.access === 'trial' && b.status === 'trial') summary = `Teste grátis até ${fmtDate(b.trial_ends_at)} (${daysLeft(b.trial_ends_at)} dia(s)). No teste, os resultados são lançados à mão; a integração por API faz parte dos planos pagos.`;
+    else if (b.status === 'pending') summary = `Plano ${esc(cur ? cur.name : '')} escolhido. A 1ª cobrança vence em ${fmtDate(b.access === 'trial' ? b.trial_ends_at : new Date())}.`;
+    else if (b.status === 'active') summary = `Plano ${esc(cur ? cur.name : '')}, pago até ${fmtDate(b.paid_until)}. A próxima cobrança chega por e-mail${state.company.phone ? ' e WhatsApp' : ''}.`;
+    else if (b.status === 'canceled') summary = `Assinatura cancelada. O acesso continua até ${fmtDate(b.paid_until)}.`;
+    const usage = cur && cur.max_barbers !== null ? `<p class="section-note">Barbeiros ativos: <b class="num">${activeBarbers()} de ${cur.max_barbers}</b>.</p>` : '';
+    const canNew = !b.has_subscription || ['canceled', 'blocked', 'trial'].includes(b.status) && !b.has_subscription;
+    return `
+      <section class="section card">
+        <div class="sub-head"><h2 class="section-title">Sua assinatura</h2>${statusChip}</div>
+        <p>${summary}</p>${usage}
+        ${b.invoice_url && b.status !== 'active' && b.status !== 'courtesy' ? `<a class="btn btn-primary" href="${esc(b.invoice_url)}" target="_blank" rel="noopener">${icon('wallet')} Pagar fatura</a>` : ''}
+        ${b.has_subscription ? `<button class="btn btn-sm" data-action="subInvoice">${icon('wallet')} Ver fatura em aberto</button>` : ''}
+      </section>
+      ${b.status === 'courtesy' ? '' : canNew ? `<section class="section card"><h2 class="section-title">Escolha seu plano</h2>${subscribeForm(b, plans)}</section>` : `
+      <section class="section card">
+        <h2 class="section-title">Trocar de plano</h2>
+        <form class="form" data-form="changePlan" novalidate>${plansGrid(plans, b.plan_id, 'change')}
+          <p class="section-note">O novo valor vale a partir da próxima cobrança.</p>
+          <p class="form-msg" data-msg></p>
+          <button class="btn btn-primary" type="submit">${icon('check')} Trocar plano</button>
+        </form>
+      </section>
+      <section class="section card">
+        <h2 class="section-title">Cancelar assinatura</h2>
+        <p class="section-note">As próximas cobranças param. ${b.paid_until ? `O acesso continua até ${fmtDate(b.paid_until)}; depois o app fica bloqueado.` : 'O app fica bloqueado.'} Seus dados continuam guardados se você voltar.</p>
+        <button class="btn ${ui.confirm === 'cancelSub' ? 'btn-danger' : ''}" data-action="subCancel">${ui.confirm === 'cancelSub' ? 'Confirmar cancelamento' : 'Cancelar assinatura'}</button>
+      </section>`}
+      <p class="section-note"><a href="termos.html" target="_blank" rel="noopener">Termos de uso</a> · <a href="privacidade.html" target="_blank" rel="noopener">Política de privacidade</a></p>`;
+  }
+
+  // Tela de bloqueio (assinatura vencida ou teste encerrado).
+  function blockedScreen() {
+    const info = ui.blockInfo || {};
+    const b = info.billing || {};
+    if (info.role !== 'gestor') {
+      return `<div class="empty" style="padding:10px 0">${icon('lock')}<h2>Acesso suspenso</h2>
+        <p>O acesso de ${esc(info.company?.name || 'sua barbearia')} ao Gestão Barber IA está suspenso. Fale com o gestor da barbearia.</p>
+        <button class="btn" data-action="logout">Sair</button></div>`;
+    }
+    const title = b.status === 'trial' || b.status === 'pending' && !b.paid_until ? 'Seu teste grátis terminou' : b.status === 'overdue' ? 'Pagamento em atraso' : 'Assinatura inativa';
+    const why = b.status === 'overdue' ? 'A última cobrança não foi paga. Pague a fatura para liberar o app na hora.' : b.status === 'pending' ? 'Falta pagar a 1ª cobrança para liberar o app.' : 'Escolha um plano para continuar usando. Seus dados estão guardados.';
+    state.company = { ...state.company, ...(info.company || {}) };
+    state.plans = info.plans || [];
+    const canNew = !b.has_subscription || ['trial', 'canceled', 'blocked'].includes(b.status) && !b.has_subscription;
+    return `<div class="block-pay">
+      <div class="empty" style="padding:0">${icon('lock')}<h2>${title}</h2><p>${why}</p></div>
+      ${b.invoice_url ? `<a class="btn btn-primary btn-block" href="${esc(b.invoice_url)}" target="_blank" rel="noopener">${icon('wallet')} Pagar fatura</a>` : ''}
+      ${canNew ? subscribeForm({ ...b, access: 'blocked' }, info.plans || []) : ''}
+      <div class="btn-row" style="justify-content:center"><button class="btn btn-sm" data-action="recheckAccess">${icon('check')} Já paguei, atualizar</button>
+      <button class="btn btn-sm" data-action="logout">Sair</button></div>
+      <p class="section-note" style="text-align:center">Depois do pagamento, o app libera sozinho em alguns minutos. PIX e cartão liberam mais rápido que boleto.</p>
+    </div>`;
+  }
+
+  // ---------- Painel do dono do SaaS ----------
+  function pageAdmin() {
+    const b = billing();
+    if (!b || !b.admin) return `<div class="card muted">Área restrita.</div>`;
+    if (!ui.adminData) {
+      ui.adminData = 'loading';
+      Promise.all([Cloud.admin.list(), Cloud.admin.plans()]).then(([list, plans]) => { ui.adminData = { list, plans }; render(); })
+        .catch(e => { ui.adminData = { error: Cloud.message(e) }; render(); });
+    }
+    if (ui.adminData === 'loading') return `<div class="card muted">Carregando barbearias…</div>`;
+    if (ui.adminData.error) return `<div class="card">${esc(ui.adminData.error)} <button class="btn btn-sm" data-action="adminReload">Tentar de novo</button></div>`;
+    const { list, plans } = ui.adminData;
+    const pmap = Object.fromEntries(plans.map(p => [p.id, p]));
+    const paying = list.filter(c => c.status !== 'courtesy' && c.access === 'paid' && ['active', 'canceled'].includes(c.sub_status));
+    const mrr = paying.filter(c => c.sub_status === 'active').reduce((a, c) => a + (pmap[c.plan_id]?.price_cents || 0), 0) / 100;
+    const f = ui.adminFilter || 'todas';
+    const groups = { todas: () => true, teste: c => c.access === 'trial', pagantes: c => c.access === 'paid' && c.sub_status !== 'courtesy', bloqueadas: c => c.access === 'blocked', cortesia: c => c.sub_status === 'courtesy' };
+    const rows = list.filter(groups[f]);
+    const kpi = (l, v) => `<div class="stat"><span>${l}</span><b class="num">${v}</b></div>`;
+    return `
+      <section class="section card">
+        <h2 class="section-title">Resumo do SaaS</h2>
+        <div class="perf-stats">
+          ${kpi('Barbearias', list.length)}${kpi('Em teste', list.filter(groups.teste).length)}${kpi('Pagantes', paying.length)}
+          ${kpi('Bloqueadas', list.filter(groups.bloqueadas).length)}${kpi('Receita mensal', 'R$ ' + nf2.format(mrr))}
+        </div>
+      </section>
+      <section class="section">
+        <div class="btn-row">${Object.keys(groups).map(k => `<button class="btn btn-sm ${k === f ? 'btn-primary' : ''}" data-action="adminFilter" data-f="${k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join('')}
+          <button class="btn btn-sm" data-action="adminReload">${icon('check')} Atualizar</button></div>
+        <ul class="list">${rows.map(c => `<li class="list-row adm-row">
+          <div class="grow"><b>${esc(c.name)}</b><span class="muted">${esc(c.owner || '')} · ${esc(c.email || '')}${c.phone ? ' · ' + esc(c.phone) : ''}</span>
+            <div class="adm-meta"><span class="chip ${c.access === 'blocked' ? 'chip-bad' : c.access === 'trial' ? 'chip-warn' : 'chip-ok'}">${STATUS_TXT[c.sub_status] || c.sub_status}</span>
+            <span class="muted">${c.plan_id ? esc(pmap[c.plan_id]?.name || c.plan_id) : 'sem plano'} · ${c.barbers} barbeiros · ${c.users} acessos</span>
+            <span class="muted">${c.access === 'trial' ? 'teste até ' + fmtDate(c.trial_ends_at) : c.paid_until ? 'pago até ' + fmtDate(c.paid_until) : ''} · cadastro ${fmtDate(c.created_at)}${c.last_activity ? ' · último lançamento ' + fmtDate(c.last_activity) : ''}</span></div></div>
+          <div class="btn-row">
+            <button class="btn btn-sm" data-action="adminTrial" data-id="${esc(c.id)}">+7 dias de teste</button>
+            <button class="btn btn-sm" data-action="adminCourtesy" data-id="${esc(c.id)}">Cortesia 30 dias</button>
+            ${c.access === 'blocked' ? '' : `<button class="btn btn-sm btn-danger" data-action="adminBlock" data-id="${esc(c.id)}">${ui.confirm === 'blk' + c.id ? 'Confirmar bloqueio' : 'Bloquear'}</button>`}
+          </div></li>`).join('') || '<li class="card muted">Nenhuma barbearia neste filtro.</li>'}</ul>
+      </section>
+      <section class="section card">
+        <h2 class="section-title">Planos e preços</h2>
+        <p class="section-note">Novos preços valem para novas assinaturas. Assinaturas já feitas mantêm o valor até a barbearia trocar de plano.</p>
+        <form class="form" data-form="adminPlans" novalidate>
+          ${plans.map(p => `<div class="grid-2 adm-plan">
+            <label class="field"><span>${esc(p.name)}: preço mensal (R$)</span><input class="input num" name="price_${esc(p.id)}" id="pp-${esc(p.id)}" type="number" min="0" step="0.01" value="${(p.price_cents / 100).toFixed(2)}"></label>
+            <label class="field"><span>Máximo de barbeiros (vazio = ilimitado)</span><input class="input num" name="max_${esc(p.id)}" id="pm-${esc(p.id)}" type="number" min="1" step="1" value="${p.max_barbers ?? ''}"></label>
+          </div>`).join('')}
+          <p class="form-msg" data-msg></p>
+          <button class="btn btn-primary" type="submit">${icon('check')} Salvar planos</button>
+        </form>
+      </section>`;
+  }
+
   function pageSoon(route) {
     const item = NAV.flatMap(g => g.items).find(i => i.r === route);
     return `<div class="card empty">${icon(item?.i || 'clock')}<h2>${esc(item?.t || 'Em breve')}</h2>
@@ -1378,6 +1564,8 @@ Content-Type: application/json</pre>
     lancamentos: { t: 'Lançamentos', r: pageLancamentos, g: 1 },
     barbeiros: { t: 'Barbeiros', r: pageBarbeiros, g: 1 },
     configuracoes: { t: 'Configurações', r: pageConfig, g: 1 },
+    assinatura: { t: 'Assinatura', r: pageAssinatura, g: 1 },
+    admin: { t: 'Painel do SaaS', r: pageAdmin, g: 1 },
     integracao: { t: 'Integração & API', r: pageIntegracao, g: 1 },
     empresa: { t: 'Minha empresa', r: pageEmpresa, g: 1 },
     cadastro: { t: 'Meu cadastro', r: pageCadastro },
@@ -1689,6 +1877,7 @@ Content-Type: application/json</pre>
         ${isGestor(user) ? `<a class="icon-btn" href="#barbeiros" aria-label="Aprovações pendentes: ${pending}">${icon('bell')}${pending ? `<span class="badge-dot">${pending}</span>` : ''}</a>` : ''}
         <button class="avatar-btn" data-action="togglePopover" aria-label="Perfil e conta">${avatar(who, 40)}</button>
       </header>
+      ${trialBanner(user)}
       <main class="main" id="main">${page.r(user)}</main>
       <button class="fab" data-action="openDrawer" aria-label="Abrir menu">${icon('menu')}</button>
       ${drawer(user, route)}
@@ -1746,7 +1935,12 @@ Content-Type: application/json</pre>
     },
     copyInvite(el) { const inv = state.invites.find(i => i.barberId === el.dataset.id && !i.used); if (inv) copyText(inviteLink(inv.code), $('#inv-' + CSS.escape(el.dataset.id))); },
     cancelInvite(el) { state.invites = state.invites.filter(i => !(i.barberId === el.dataset.id && !i.used)); ui.invite = null; save(); render(); },
-    toggleBarber(el) { const b = barberById(el.dataset.id); if (b) { b.active = b.active === false; save(); render(); } },
+    toggleBarber(el) {
+      const b = barberById(el.dataset.id); if (!b) return;
+      const lim = billing() && billing().max_barbers;
+      if (b.active === false && lim && activeBarbers() >= lim) { toast(`Seu plano permite até ${lim} barbeiros ativos. Troque de plano em Assinatura.`); return; }
+      b.active = b.active === false; save(); render();
+    },
     async resetPass(el) {
       const u = state.users.find(x => x.id === el.dataset.id); if (!u) return;
       if (Cloud.enabled) {
@@ -1757,6 +1951,40 @@ Content-Type: application/json</pre>
       const pass = hash(u.id + Date.now()).slice(0, 8);
       u.pass = passHash(u.email, pass); save();
       ui.lastReset = { name: u.name, pass }; render();
+    },
+    async recheckAccess(el, ev, silent) {
+      const ok = await loadCloud();
+      if (ok) { toast('Pagamento confirmado. Bem-vindo de volta!'); if (location.hash === '#inicio') render(); else location.hash = 'inicio'; return; }
+      if (!silent) { toast('Ainda não recebemos a confirmação do pagamento. PIX e cartão levam alguns minutos; boleto até 3 dias úteis.'); render(); }
+    },
+    async subInvoice() {
+      try {
+        const r = await Cloud.billingAction('fatura');
+        if (r.invoiceUrl) { state.billing.invoice_url = r.invoiceUrl; toast('Fatura encontrada.'); render(); }
+        else toast('Não há fatura em aberto.');
+      } catch (e) { toast(e.message); }
+    },
+    async subCancel() {
+      if (ui.confirm !== 'cancelSub') { ui.confirm = 'cancelSub'; render(); return; }
+      ui.confirm = null;
+      try { await Cloud.billingAction('cancelar'); toast('Assinatura cancelada.'); await loadCloud(); render(); }
+      catch (e) { toast(e.message); render(); }
+    },
+    adminFilter(el) { ui.adminFilter = el.dataset.f; render(); },
+    adminReload() { ui.adminData = null; render(); },
+    async adminTrial(el) {
+      const c = ui.adminData.list.find(x => x.id === el.dataset.id);
+      const base = Math.max(Date.now(), new Date(c.trial_ends_at).getTime());
+      await adminDo(c.id, { sub_status: c.access === 'paid' ? c.sub_status : 'trial', trial_ends_at: new Date(base + 7 * 86400000).toISOString() }, '7 dias de teste a mais.');
+    },
+    async adminCourtesy(el) {
+      const d = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+      await adminDo(el.dataset.id, { sub_status: 'courtesy', paid_until: d }, 'Cortesia de 30 dias aplicada.');
+    },
+    async adminBlock(el) {
+      if (ui.confirm !== 'blk' + el.dataset.id) { ui.confirm = 'blk' + el.dataset.id; render(); return; }
+      ui.confirm = null;
+      await adminDo(el.dataset.id, { sub_status: 'blocked' }, 'Barbearia bloqueada.');
     },
     fxStart() {
       ui.fx = { ym: ui.fxMonth || curYm(), i: 0 };
@@ -1803,7 +2031,44 @@ Content-Type: application/json</pre>
     },
   };
 
+  async function adminDo(id, patch, msg) {
+    try { await Cloud.admin.update(id, patch); toast(msg); ui.adminData = null; render(); }
+    catch (e) { toast(Cloud.message(e)); }
+  }
+
   const FORMS = {
+    async subscribe(f) {
+      const plan = f.querySelector('input[name="plan_id"]:checked');
+      if (!plan) return setMsg(f, 'Escolha um plano.');
+      const doc = val(f, 'cpf_cnpj').replace(/\D/g, '');
+      if (doc.length !== 11 && doc.length !== 14) return setMsg(f, 'Digite um CPF (11 números) ou CNPJ (14 números).');
+      if (!val(f, 'name')) return setMsg(f, 'Digite o nome ou a razão social de quem paga.');
+      setMsg(f, 'Criando sua assinatura…', true);
+      try {
+        const r = await Cloud.billingAction('assinar', { plan_id: plan.value, cpf_cnpj: doc, name: val(f, 'name'), phone: val(f, 'phone') });
+        await loadCloud();
+        toast(r.invoiceUrl ? 'Assinatura criada. Use o botão Pagar fatura.' : 'Assinatura criada.');
+        render();
+      } catch (e) { setMsg(f, e.message); }
+    },
+    async changePlan(f) {
+      const plan = f.querySelector('input[name="plan_id"]:checked');
+      if (!plan || plan.value === billing().plan_id) return setMsg(f, 'Escolha um plano diferente do atual.');
+      setMsg(f, 'Trocando…', true);
+      try { await Cloud.billingAction('trocar', { plan_id: plan.value }); await loadCloud(); toast('Plano trocado.'); render(); }
+      catch (e) { setMsg(f, e.message); }
+    },
+    async adminPlans(f) {
+      try {
+        for (const p of ui.adminData.plans) {
+          const price = Math.round(Number(val(f, 'price_' + p.id)) * 100);
+          const maxRaw = val(f, 'max_' + p.id);
+          if (!(price >= 0)) return setMsg(f, `Preço do plano ${p.name} inválido.`);
+          await Cloud.admin.savePlan(p.id, { price_cents: price, max_barbers: maxRaw === '' ? null : Math.max(1, Math.round(Number(maxRaw))) });
+        }
+        toast('Planos salvos.'); ui.adminData = null; await loadCloud(); render();
+      } catch (e) { setMsg(f, Cloud.message(e)); }
+    },
     async login(f) {
       const email = val(f, 'email').toLowerCase(), pass = f.elements.pass.value;
       if (!email || !pass) return setMsg(f, 'Preencha e-mail e senha.');
@@ -1830,8 +2095,9 @@ Content-Type: application/json</pre>
       if (!validEmail(email)) return setMsg(f, 'Digite um e-mail válido.');
       if (pass.length < 6) return setMsg(f, 'A senha precisa ter pelo menos 6 caracteres.');
       if (Cloud.enabled) {
+        if (!f.elements.terms.checked) return setMsg(f, 'Para criar a conta, aceite os Termos de uso e a Política de privacidade.');
         setMsg(f, 'Criando conta…', true);
-        const { data, error } = await Cloud.signUp(email, pass, { company, name });
+        const { data, error } = await Cloud.signUp(email, pass, { company, name, phone: val(f, 'phone'), terms_accepted_at: new Date().toISOString() });
         if (error) return setMsg(f, Cloud.message(error));
         if (data.session) { if (await loadCloud()) { toast('Conta criada. Agora cadastre sua equipe.'); location.hash = 'barbeiros'; } render(); return; }
         ui.authEmail = email; ui.authInvite = false; ui.authMode = 'confirmar'; renderAuth('confirmar'); return;
@@ -1893,6 +2159,8 @@ Content-Type: application/json</pre>
       if (!name) return setMsg(f, 'Digite o nome do barbeiro.');
       let photo = null;
       const file = f.elements.photo.files[0];
+      const lim = billing() && billing().max_barbers;
+      if (lim && activeBarbers() >= lim) return setMsg(f, `Seu plano permite até ${lim} barbeiros ativos. Troque de plano em Assinatura para cadastrar mais.`);
       if (file) { try { photo = await readImage(file); } catch (e) { return setMsg(f, e.message); } }
       state.barbers.push({ id: uid('b_'), name, photo, active: true, role: 'Barbeiro', instagram: '' }); save();
       toast(`${name} adicionado. Agora envie o convite.`); render();
@@ -2028,9 +2296,10 @@ Content-Type: application/json</pre>
   async function loadCloud() {
     try {
       const r = await Cloud.load();
-      if (r.status === 'ativo') { state = r.state; rkCache = {}; Cloud.subscribe(); ui.authMode = 'entrar'; return true; }
+      if (r.status === 'ativo') { state = r.state; rkCache = {}; Cloud.subscribe(); ui.authMode = 'entrar'; clearInterval(ui.blockPoll); return true; }
       state = blankState();
-      ui.authMode = r.status === 'pendente' ? 'pendente' : r.status === 'recusado' ? 'recusado' : r.status === 'sem-perfil' ? 'semPerfil' : 'entrar';
+      if (r.status === 'bloqueado') ui.blockInfo = r;
+      ui.authMode = r.status === 'bloqueado' ? 'bloqueado' : r.status === 'pendente' ? 'pendente' : r.status === 'recusado' ? 'recusado' : r.status === 'sem-perfil' ? 'semPerfil' : 'entrar';
     } catch (e) {
       state = blankState();
       ui.authMsg = { text: 'Não foi possível carregar os dados: ' + Cloud.message(e) };
@@ -2043,7 +2312,21 @@ Content-Type: application/json</pre>
     return a && root.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);
   }
   if (Cloud.enabled) {
-    Cloud.onError = msg => toast('Não foi possível salvar na nuvem: ' + msg);
+    Cloud.onError = async msg => {
+      toast(/Limite do plano/.test(msg) ? msg : 'Não foi possível salvar na nuvem: ' + msg);
+      // Volta para o que está salvo no servidor, para a tela não mostrar algo que não foi gravado.
+      await loadCloud();
+      if (ui.fx || location.hash === '#apresentacao') return;
+      render();
+    };
+    // Confere a assinatura a cada 10 minutos (o teste ou o mês pode vencer com o app aberto).
+    setInterval(async () => {
+      if (!Cloud.user || !state.billing || document.hidden) return;
+      try {
+        const { data } = await Cloud.client.rpc('company_access');
+        if (data && data.access !== state.billing.access) { await loadCloud(); render(); }
+      } catch (e) { /* tenta de novo depois */ }
+    }, 600000);
     Cloud.onRemote = next => {
       const apply = () => {
         state = next; rkCache = {};

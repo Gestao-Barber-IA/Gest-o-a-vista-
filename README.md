@@ -44,3 +44,12 @@ Passo a passo: [`supabase/LEIAME.md`](supabase/LEIAME.md).
 - `supabase/functions/lancamentos`: API que recebe os resultados de outro sistema
 - `supabase/email/`: e-mails em português com a marca
 - `js/cloud.js`: ligação do app com o Supabase
+
+## Assinatura (SaaS)
+
+- Teste grátis de 7 dias, só com lançamento manual; a integração por API é dos planos pagos
+- Planos por número de barbeiros (Essencial até 4, Profissional até 10, Premium ilimitado), com preços editáveis no Painel do SaaS
+- Cobrança mensal pelo Asaas (PIX, boleto ou cartão): `supabase/functions/assinatura` e `supabase/functions/asaas-webhook`
+- Sem pagamento, o acesso é bloqueado no servidor (regras do banco), e os dados continuam guardados
+- Painel do dono do SaaS: barbearias, situação, receita mensal, teste extra, cortesia e bloqueio
+- `termos.html` e `privacidade.html`, com aceite no cadastro

@@ -28,6 +28,12 @@ Deno.serve(async (req) => {
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
   const { data: k } = await db.from("api_keys").select("company_id").eq("key", key).maybeSingle();
   if (!k) return json({ erro: "Chave da API inválida." }, 401);
+  // A integração por API só vale nos planos pagos e com a assinatura em dia.
+  const { data: co } = await db.from("companies").select("sub_status, paid_until, plan_id").eq("id", k.company_id).single();
+  const { data: plan } = co?.plan_id ? await db.from("plans").select("api").eq("id", co.plan_id).maybeSingle() : { data: null };
+  const paidUntil = co?.paid_until ? new Date(co.paid_until + "T23:59:59Z").getTime() + 86400000 : 0;
+  const paid = !!co && ["active", "courtesy", "canceled"].includes(co.sub_status) && paidUntil >= Date.now();
+  if (!paid || !(plan?.api || co.sub_status === "courtesy")) return json({ erro: "A integração por API está disponível nos planos pagos, com a assinatura em dia." }, 402);
 
   let body: unknown;
   try { body = await req.json(); } catch { return json({ erro: "O corpo precisa ser JSON." }, 400); }
