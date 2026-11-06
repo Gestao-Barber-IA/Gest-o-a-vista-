@@ -380,7 +380,7 @@
     metas: 'Metas individuais e da equipe, com acompanhamento em tempo real.',
     premios: 'Prêmios ligados às metas, para motivar o time.',
     sonhos: 'Cada barbeiro registra um sonho e acompanha quanto falta para realizá-lo.',
-    checklist: 'Procedimento padrão POP Agenda Cheia, que alimenta o indicador Checklist POP do ranking.',
+    checklist: 'Procedimento padrão POP Agenda Cheia, que alimenta o indicador Checklist Agenda Cheia do ranking.',
     cockpit: 'Visão rápida do gestor com os principais números do negócio.',
   };
 
@@ -856,7 +856,7 @@
         <p class="st-msg">${msg} <span class="num">${fmt(it.ind, it.v)} de ${fmt(it.ind, it.goal)}.</span>${it.dv === null ? '' : ` Variação do mês: <b class="num ${it.dv >= 0 ? 'delta-up' : 'delta-down'}">${it.dv >= 0 ? '+' : ''}${nf1.format(it.dv)} pts</b>.`}</p>
       </div>`;
     };
-    const note = frac < 1 ? `<p class="section-note">Mês em andamento: metas de faturamento, serviços, clientes, Checklist POP, planos e produtos estão proporcionais aos ${today.getDate()} dias já passados.</p>` : '';
+    const note = frac < 1 ? `<p class="section-note">Mês em andamento: metas de faturamento, serviços, clientes, Checklist Agenda Cheia, planos e produtos estão proporcionais aos ${today.getDate()} dias já passados.</p>` : '';
     return `<section class="section card"><h2 class="section-title st-good">Onde é forte</h2>${note}<div class="stack">${strong.map(i => card(i, 'strong')).join('')}</div></section>
       ${weak.length ? `<section class="section card"><h2 class="section-title st-badt">Onde precisa melhorar</h2><div class="stack">${weak.map(i => card(i, 'weak')).join('')}</div></section>` : ''}`;
   }
@@ -2086,7 +2086,7 @@ Content-Type: application/json</pre>
     switch (g.kind) {
       case 'fat': return `faturar mais ${money0(g.delta)}`;
       case 'ocup': return `ocupar mais ${nf1.format(g.delta)} pontos percentuais da agenda`;
-      case 'check': return `somar mais ${g.delta} ponto(s) no Checklist POP`;
+      case 'check': return `somar mais ${g.delta} ponto(s) no Checklist Agenda Cheia`;
       case 'planos': return `vender mais ${g.delta} plano(s) mensal(is)`;
       case 'serv': return `fazer mais ${g.delta} serviço(s)`;
       default: return '';

@@ -42,7 +42,7 @@
   const INDICATORS = [
     { key: 'fat', label: 'Faturamento', weight: 22, fmt: 'money',
       calc: s => s.n.fat ? s.fat : null },
-    { key: 'check', label: 'Checklist POP', weight: 15, fmt: 'int',
+    { key: 'check', label: 'Checklist Agenda Cheia', weight: 15, fmt: 'int',
       calc: s => s.n.check ? s.check : null },
     { key: 'ocup', label: 'Taxa de ocupação', weight: 10, fmt: 'pct',
       calc: s => s.n.hDisp && s.hDisp > 0 ? (s.hOcup / s.hDisp) * 100 : null },
@@ -65,7 +65,7 @@
     { key: 'fat', label: 'Faturamento (R$)', api: 'faturamento', step: '0.01' },
     { key: 'serv', label: 'Serviços realizados', api: 'servicos', step: '1' },
     { key: 'cli', label: 'Clientes atendidos', api: 'clientes', step: '1' },
-    { key: 'check', label: 'Checklist POP (pontos)', api: 'checklist_pop', step: '1' },
+    { key: 'check', label: 'Checklist Agenda Cheia (pontos)', api: 'checklist_pop', step: '1' },
     { key: 'hDisp', label: 'Horas disponíveis', api: 'horas_disponiveis', step: '0.5' },
     { key: 'hOcup', label: 'Horas ocupadas', api: 'horas_ocupadas', step: '0.5' },
     { key: 'planos', label: 'Planos mensais vendidos', api: 'planos_mensais', step: '1' },
@@ -109,7 +109,7 @@
     { key: 'ocupPct', label: 'Taxa de ocupação (%)', step: '0.1', daily: 'hDisp', max: 100 },
     { key: 'fidPct', label: 'Taxa de fidelização (%)', step: '0.1', daily: 'ret', max: 100 },
     { key: 'prod', label: 'Venda de produtos (R$)', step: '0.01', daily: 'prod' },
-    { key: 'check', label: 'Pontos POP', step: '1', daily: 'check' },
+    { key: 'check', label: 'Pontos Checklist Agenda Cheia', step: '1', daily: 'check' },
     { key: 'planos', label: 'Planos mensais vendidos', step: '1', daily: 'planos' },
   ];
 
