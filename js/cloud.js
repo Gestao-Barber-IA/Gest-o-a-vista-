@@ -25,7 +25,7 @@
     if (/Password should be at least/i.test(m)) return 'A senha precisa ter pelo menos 6 caracteres.';
     if (/Database error saving new user/i.test(m)) return ctx === 'invite' ? 'Este convite é inválido ou já foi usado. Peça um novo ao gestor.' : 'Não foi possível criar a conta. Tente de novo.';
     if (/only request this after|rate limit|too many/i.test(m)) return 'Muitas tentativas seguidas. Aguarde um minuto e tente de novo.';
-    if (/provider is not enabled|Unsupported provider/i.test(m)) return 'Este tipo de login ainda não foi ativado no Supabase.';
+    if (/provider is not enabled|Unsupported provider/i.test(m)) return 'Este tipo de login ainda não foi ativado. O gestor pode ativá-lo no painel do Supabase. Por enquanto, entre com e-mail e senha.';
     if (/expired|invalid.*token|otp/i.test(m)) return 'O link expirou ou já foi usado. Peça um novo.';
     if (/Failed to fetch|NetworkError|network/i.test(m)) return 'Sem conexão com a internet. Confira a rede e tente de novo.';
     if (/row-level security|permission denied/i.test(m)) return 'Você não tem permissão para fazer isso.';
@@ -48,7 +48,15 @@
   Cloud.reset = email => c.auth.resetPasswordForEmail(email, { redirectTo: Cloud.base() + '?redefinir=1' });
   Cloud.updatePassword = password => c.auth.updateUser({ password });
   Cloud.updateEmail = email => c.auth.updateUser({ email }, { emailRedirectTo: Cloud.base() });
-  Cloud.oauth = provider => c.auth.signInWithOAuth({ provider, options: { redirectTo: Cloud.base() } });
+  // Confere se o login social está ativo no Supabase antes de sair do app.
+  Cloud.oauth = async provider => {
+    try {
+      const r = await fetch(CFG.supabaseUrl.replace(/\/$/, '') + '/auth/v1/settings', { headers: { apikey: CFG.supabaseAnonKey } });
+      const st = await r.json();
+      if (st.external && st.external[provider] === false) return { error: { message: 'provider is not enabled' } };
+    } catch (e) { /* segue e deixa o Supabase responder */ }
+    return c.auth.signInWithOAuth({ provider, options: { redirectTo: Cloud.base() } });
+  };
   Cloud.signOut = async () => { Cloud.unsubscribe(); Cloud.last = null; Cloud.profile = null; await c.auth.signOut(); Cloud.user = null; };
   Cloud.getInvite = async code => { const { data, error } = await c.rpc('get_invite', { p_code: code }); if (error) throw error; return data; };
   Cloud.rotateKey = async () => { const { data, error } = await c.rpc('rotate_api_key'); if (error) throw error; return data; };
