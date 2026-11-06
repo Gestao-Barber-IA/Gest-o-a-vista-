@@ -118,6 +118,11 @@ img { max-width: 100%; }
 .input:focus { border-color: var(--accent); outline: none; }
 textarea.input { min-height: 160px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; resize: vertical; }
 .input-wrap { position: relative; }
+.pw-label { font-weight: 600; font-size: 0.95rem; }
+.trial-note { display: grid; gap: 8px; padding: 14px 16px; border-radius: var(--radius-sm); border: 1px solid var(--line-accent); background: rgba(214, 180, 106, 0.06); }
+.trial-note p { margin: 0; display: flex; gap: 10px; align-items: flex-start; color: #d8d3c8; font-size: 0.95rem; line-height: 1.4; }
+.trial-note p b { color: var(--accent); font-size: 1rem; }
+.trial-note .ico { flex: none; margin-top: 1px; color: var(--accent); }
 .input-wrap .input { padding-right: 48px; }
 .input-wrap button { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); background: none; border: 0; color: var(--muted); padding: 8px; display: grid; }
 .check { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); cursor: pointer; }
@@ -427,6 +432,23 @@ pre.code { margin: 0; padding: 14px; border-radius: 14px; background: var(--bg);
 .prose { max-width: 70ch; }
 .prose h3 { margin: 18px 0 6px; }
 .prose p, .prose li { color: #d7d2e0; }
+
+/* ---------- Instalar na tela de início ---------- */
+.inst-wrap { position: fixed; inset: 0; z-index: 95; display: grid; align-items: end; }
+.inst-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); animation: inst-fade 0.25s ease both; }
+.inst-sheet { position: relative; display: grid; gap: 14px; width: 100%; max-width: 520px; margin: 0 auto; padding: 22px max(20px, env(safe-area-inset-right, 0px)) calc(20px + env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px));
+  background: var(--surface); border: 1px solid var(--line-accent); border-bottom: 0; border-radius: 26px 26px 0 0; box-shadow: 0 -20px 60px rgba(0, 0, 0, 0.6); animation: inst-up 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.inst-head { display: flex; gap: 14px; align-items: center; }
+.inst-head h2 { margin: 0; font-size: 1.15rem; line-height: 1.25; }
+.inst-head p { margin: 4px 0 0; color: var(--muted); font-size: 0.95rem; }
+.inst-logo { width: 64px; height: 64px; border-radius: 16px; flex: none; }
+.inst-steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.inst-steps li { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); }
+.inst-steps .ico { vertical-align: -4px; color: var(--accent); }
+.inst-n { display: grid; place-items: center; width: 28px; height: 28px; flex: none; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-weight: 800; }
+.inst-tip { margin: 0; color: var(--muted); font-size: 0.88rem; }
+@keyframes inst-up { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes inst-fade { from { opacity: 0; } to { opacity: 1; } }
 
 /* ---------- Toast ---------- */
 .toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 60; background: var(--fg); color: var(--bg); padding: 12px 18px; border-radius: 14px; font-weight: 600; max-width: calc(100vw - 32px); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); }

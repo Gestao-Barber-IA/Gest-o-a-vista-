@@ -146,6 +146,14 @@
   }
 
   // ---------- login, cadastro e convite ----------
+  // Campo de senha com botão de mostrar/ocultar.
+  function passField(id, name, label, opts = {}) {
+    return `<div class="field"><label for="${id}" class="pw-label">${label}</label>
+      <div class="input-wrap"><input class="input" id="${id}" name="${name}" type="password" ${opts.required === false ? '' : 'required'} ${opts.min ? `minlength="${opts.min}"` : ''} autocomplete="${opts.auto || 'new-password'}" ${opts.ph ? `placeholder="${opts.ph}"` : ''}>
+      <button type="button" data-action="togglePass" data-target="${id}" aria-label="Mostrar senha" aria-pressed="false">${icon('eye')}</button></div>
+      ${opts.hint ? `<small>${opts.hint}</small>` : ''}</div>`;
+  }
+
   function authShell(inner) {
     return `<div class="auth"><div class="auth-card">${brand('brand--lg')}${inner}
       <p class="auth-foot">Cada atendimento conta.</p></div></div>`;
@@ -180,7 +188,8 @@
             <label class="field"><span>Nome *</span><input class="input" id="inv-name" name="name" required value="${esc(b.name)}" autocomplete="name"></label>
             <label class="field"><span>E-mail *</span><input class="input" id="inv-email" name="email" type="email" required autocomplete="email" placeholder="voce@email.com"></label>
             <label class="field"><span>WhatsApp</span><input class="input" id="inv-phone" name="phone" type="tel" autocomplete="tel" placeholder="(00) 00000-0000"></label>
-            <label class="field"><span>Senha *</span><input class="input" id="inv-pass" name="pass" type="password" required minlength="6" autocomplete="new-password"><small>Mínimo de 6 caracteres.</small></label>
+            ${passField('inv-pass', 'pass', 'Senha *', { min: 6, hint: 'Mínimo de 6 caracteres.' })}
+            ${passField('inv-pass2', 'pass2', 'Confirmar senha *', { min: 6 })}
             <p class="form-msg" data-msg></p>
             <button class="btn btn-primary btn-block" type="submit">${icon('check')} Enviar cadastro</button>
           </form>`;
@@ -207,8 +216,8 @@
       inner = `
         <p class="auth-lead">Crie sua nova senha.</p>
         <form class="form" data-form="newPass" novalidate>
-          <label class="field"><span>Nova senha *</span><input class="input" id="np-pass" name="pass" type="password" required minlength="6" autocomplete="new-password"><small>Mínimo de 6 caracteres.</small></label>
-          <label class="field"><span>Repita a nova senha *</span><input class="input" id="np-pass2" name="pass2" type="password" required minlength="6" autocomplete="new-password"></label>
+          ${passField('np-pass', 'pass', 'Nova senha *', { min: 6, hint: 'Mínimo de 6 caracteres.' })}
+          ${passField('np-pass2', 'pass2', 'Confirmar nova senha *', { min: 6 })}
           <p class="form-msg" data-msg></p>
           <button class="btn btn-primary btn-block" type="submit">${icon('check')} Salvar nova senha</button>
         </form>`;
@@ -228,9 +237,14 @@
           <label class="field"><span>Nome da barbearia *</span><input class="input" id="su-company" name="company" required></label>
           <label class="field"><span>Seu nome *</span><input class="input" id="su-name" name="name" required autocomplete="name"></label>
           <label class="field"><span>E-mail *</span><input class="input" id="su-email" name="email" type="email" required autocomplete="email" placeholder="voce@barbearia.com"></label>
-          <label class="field"><span>Senha *</span><input class="input" id="su-pass" name="pass" type="password" required minlength="6" autocomplete="new-password"><small>Mínimo de 6 caracteres.</small></label>
+          ${passField('su-pass', 'pass', 'Senha *', { min: 6, hint: 'Mínimo de 6 caracteres.' })}
+          ${passField('su-pass2', 'pass2', 'Confirmar senha *', { min: 6 })}
           ${Cloud.enabled ? `<label class="field"><span>WhatsApp</span><input class="input" id="su-phone" name="phone" type="tel" autocomplete="tel" placeholder="(00) 00000-0000"></label>
-          <p class="section-note">7 dias grátis para testar, sem cartão. No teste, os resultados são lançados à mão.</p>
+          <div class="trial-note">
+            <p><b>7 dias grátis para testar, sem cartão.</b></p>
+            <p>${icon('edit')}<span>No teste, você lança os resultados manualmente.</span></p>
+            <p>${icon('plug')}<span>Ao assinar um plano, os resultados passam a ser preenchidos automaticamente pela integração (API) com o seu sistema.</span></p>
+          </div>
           <label class="check"><input type="checkbox" id="su-terms" name="terms"><span><b>Li e aceito os <a href="termos.html" target="_blank" rel="noopener">Termos de uso</a> e a <a href="privacidade.html" target="_blank" rel="noopener">Política de privacidade</a></b></span></label>` : ''}
           ${state.demo ? '<p class="section-note">Neste aparelho, criar uma conta nova substitui os dados de demonstração. Dá para restaurá-los depois em Configurações.</p>' : ''}
           <p class="form-msg" data-msg></p>
@@ -245,7 +259,7 @@
           <label class="field"><span>E-mail *</span><input class="input" id="li-email" name="email" type="email" required autocomplete="email" placeholder="voce@barbearia.com"></label>
           <div class="field"><label for="li-pass" style="font-weight:600;font-size:.95rem">Senha *</label>
             <div class="input-wrap"><input class="input" id="li-pass" name="pass" type="password" required autocomplete="current-password" placeholder="••••••••">
-            <button type="button" data-action="togglePass" aria-label="Mostrar senha">${icon('eye')}</button></div></div>
+            <button type="button" data-action="togglePass" data-target="li-pass" aria-label="Mostrar senha" aria-pressed="false">${icon('eye')}</button></div></div>
           <label class="check"><input type="checkbox" id="li-remember" name="remember" checked><span><b>Lembrar-me neste aparelho</b><small>Você continua conectado até sair.</small></span></label>
           <p class="form-msg" data-msg></p>
           <button class="btn btn-primary btn-block" type="submit">${icon('login')} Entrar</button>
@@ -268,6 +282,65 @@
     root.innerHTML = authShell(inner);
     ui.authMsg = null;
   }
+
+  // ---------- Instalar na tela de início (PWA) ----------
+  const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isMobile = () => isIOS() || /android|mobile/i.test(navigator.userAgent);
+  let installEvt = null;
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; });
+  window.addEventListener('appinstalled', () => { installEvt = null; DB.pref.set('installed', '1'); closeInstall(); toast('Pronto! O Gestão Barber IA está na tela de início.'); });
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  }
+  function canOfferInstall() { return !isStandalone() && DB.pref.get('installed', '0') !== '1'; }
+  // Mostra o convite depois do login, no celular, no máximo uma vez por sessão e não antes de 7 dias se a pessoa disse "Agora não".
+  function maybeOfferInstall() {
+    if (!canOfferInstall() || !isMobile() || document.getElementById('install-sheet')) return;
+    let shown = false; try { shown = sessionStorage.getItem('gbia.installShown') === '1'; } catch (e) { /* opcional */ }
+    if (shown || Date.now() < Number(DB.pref.get('installSnooze', '0'))) return;
+    try { sessionStorage.setItem('gbia.installShown', '1'); } catch (e) { /* opcional */ }
+    setTimeout(() => { if (currentUser() && !ui.fx && location.hash !== '#apresentacao') openInstall(); }, 1200);
+  }
+  function installSteps() {
+    if (isIOS()) {
+      return `<ol class="inst-steps">
+        <li><span class="inst-n">1</span><span>Toque em <b>Compartilhar</b> ${icon('share')} na barra do navegador.</span></li>
+        <li><span class="inst-n">2</span><span>Role e toque em <b>Adicionar à Tela de Início</b> ${icon('plus')}.</span></li>
+        <li><span class="inst-n">3</span><span>Toque em <b>Adicionar</b>, no canto de cima.</span></li></ol>`;
+    }
+    return `<ol class="inst-steps">
+      <li><span class="inst-n">1</span><span>Toque no menu <b>⋮</b> do navegador, no canto de cima.</span></li>
+      <li><span class="inst-n">2</span><span>Toque em <b>Instalar app</b> ou <b>Adicionar à tela inicial</b>.</span></li>
+      <li><span class="inst-n">3</span><span>Confirme em <b>Instalar</b>.</span></li></ol>`;
+  }
+  function openInstall() {
+    closeInstall();
+    const el = document.createElement('div');
+    el.id = 'install-sheet'; el.className = 'inst-wrap';
+    el.innerHTML = `<div class="inst-scrim" data-inst="later"></div>
+      <section class="inst-sheet" role="dialog" aria-modal="true" aria-labelledby="inst-t">
+        <div class="inst-head">${logo('inst-logo')}<div><h2 id="inst-t">Gestão Barber IA na sua tela de início</h2>
+          <p>Abra o app com um toque, em tela cheia, como qualquer aplicativo.</p></div></div>
+        ${installEvt ? `<button class="btn btn-primary btn-block" data-inst="go">${icon('plus')} Adicionar à tela de início</button>` : installSteps()}
+        ${isIOS() ? '<p class="inst-tip">Se não encontrar a opção, abra este endereço no Safari e repita os passos.</p>' : ''}
+        <button class="btn btn-block" data-inst="later">Agora não</button>
+      </section>`;
+    el.addEventListener('click', async e => {
+      const b = e.target.closest('[data-inst]'); if (!b) return;
+      if (b.dataset.inst === 'later') { DB.pref.set('installSnooze', String(Date.now() + 7 * 86400000)); closeInstall(); return; }
+      if (b.dataset.inst === 'go' && installEvt) {
+        const evt = installEvt; installEvt = null;
+        evt.prompt();
+        const r = await evt.userChoice.catch(() => ({ outcome: 'dismissed' }));
+        if (r.outcome === 'accepted') { DB.pref.set('installed', '1'); closeInstall(); }
+        else { DB.pref.set('installSnooze', String(Date.now() + 7 * 86400000)); closeInstall(); }
+      }
+    });
+    document.body.appendChild(el);
+    el.querySelector('.inst-sheet button').focus();
+  }
+  function closeInstall() { const el = document.getElementById('install-sheet'); if (el) el.remove(); }
 
   // ---------- menu ----------
   const NAV = [
@@ -328,6 +401,7 @@
         ${groups}
         <div class="period-box"><div class="nav-group">Período</div>${periods}</div>
         <div class="nav-sep"></div>
+        ${canOfferInstall() ? `<button class="nav-item" data-action="installApp">${icon('download')}<span>Adicionar à tela de início</span></button>` : ''}
         <button class="nav-item" data-action="logout">${icon('logout')}<span>Sair</span></button>
       </nav>`;
   }
@@ -1136,7 +1210,8 @@ Content-Type: application/json</pre>
       <form class="form" data-form="profile" novalidate>
         <label class="field"><span>Nome *</span><input class="input" id="pr-name" name="name" required value="${esc(user.name)}"></label>
         <label class="field"><span>E-mail *</span><input class="input" id="pr-email" name="email" type="email" required value="${esc(user.email)}"></label>
-        <label class="field"><span>Nova senha</span><input class="input" id="pr-pass" name="pass" type="password" minlength="6" autocomplete="new-password"><small>Deixe em branco para manter a atual.</small></label>
+        ${passField('pr-pass', 'pass', 'Nova senha', { required: false, min: 6, hint: 'Deixe em branco para manter a atual.' })}
+        ${passField('pr-pass2', 'pass2', 'Confirmar nova senha', { required: false, min: 6 })}
         <p class="form-msg" data-msg></p>
         <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
       </form></section>`;
@@ -1883,6 +1958,7 @@ Content-Type: application/json</pre>
       ${drawer(user, route)}
       ${popover(user)}`;
     applyLive();
+    maybeOfferInstall();
   }
 
   // ---------- ações ----------
@@ -1895,7 +1971,14 @@ Content-Type: application/json</pre>
 
   const ACTIONS = {
     authMode(el, ev) { ev.preventDefault(); ui.authMode = el.dataset.mode; if (location.hash.startsWith('#convite-')) location.hash = ''; renderAuth(ui.authMode); },
-    togglePass() { const i = $('#li-pass'); i.type = i.type === 'password' ? 'text' : 'password'; },
+    togglePass(el) {
+      const i = document.getElementById(el.dataset.target || 'li-pass'); if (!i) return;
+      const show = i.type === 'password';
+      i.type = show ? 'text' : 'password';
+      el.innerHTML = icon(show ? 'eyeOff' : 'eye');
+      el.setAttribute('aria-pressed', String(show));
+      el.setAttribute('aria-label', show ? 'Ocultar senha' : 'Mostrar senha');
+    },
     async social(el) {
       if (!Cloud.enabled) { toast(`Entrar com ${el.dataset.name} será ligado junto com o servidor.`); return; }
       const provider = { Google: 'google', Apple: 'apple', Microsoft: 'azure' }[el.dataset.name];
@@ -1952,6 +2035,7 @@ Content-Type: application/json</pre>
       u.pass = passHash(u.email, pass); save();
       ui.lastReset = { name: u.name, pass }; render();
     },
+    installApp() { ACTIONS.closeDrawer(); openInstall(); },
     async recheckAccess(el, ev, silent) {
       const ok = await loadCloud();
       if (ok) { toast('Pagamento confirmado. Bem-vindo de volta!'); if (location.hash === '#inicio') render(); else location.hash = 'inicio'; return; }
@@ -2094,6 +2178,7 @@ Content-Type: application/json</pre>
       if (!company || !name) return setMsg(f, 'Preencha o nome da barbearia e o seu nome.');
       if (!validEmail(email)) return setMsg(f, 'Digite um e-mail válido.');
       if (pass.length < 6) return setMsg(f, 'A senha precisa ter pelo menos 6 caracteres.');
+      if (pass !== f.elements.pass2.value) return setMsg(f, 'As senhas não são iguais. Digite a mesma senha nos dois campos.');
       if (Cloud.enabled) {
         if (!f.elements.terms.checked) return setMsg(f, 'Para criar a conta, aceite os Termos de uso e a Política de privacidade.');
         setMsg(f, 'Criando conta…', true);
@@ -2115,6 +2200,7 @@ Content-Type: application/json</pre>
       if (!name) return setMsg(f, 'Digite seu nome.');
       if (!validEmail(email)) return setMsg(f, 'Digite um e-mail válido.');
       if (pass.length < 6) return setMsg(f, 'A senha precisa ter pelo menos 6 caracteres.');
+      if (pass !== f.elements.pass2.value) return setMsg(f, 'As senhas não são iguais. Digite a mesma senha nos dois campos.');
       if (Cloud.enabled) {
         setMsg(f, 'Enviando cadastro…', true);
         const { data, error } = await Cloud.signUp(email, pass, { invite_code: code, name, phone: val(f, 'phone') });
@@ -2145,7 +2231,7 @@ Content-Type: application/json</pre>
     async newPass(f) {
       const pass = f.elements.pass.value, pass2 = f.elements.pass2.value;
       if (pass.length < 6) return setMsg(f, 'A senha precisa ter pelo menos 6 caracteres.');
-      if (pass !== pass2) return setMsg(f, 'As duas senhas não são iguais.');
+      if (pass !== pass2) return setMsg(f, 'As senhas não são iguais. Digite a mesma senha nos dois campos.');
       setMsg(f, 'Salvando…', true);
       const { error } = await Cloud.updatePassword(pass);
       if (error) return setMsg(f, Cloud.message(error));
@@ -2206,6 +2292,7 @@ Content-Type: application/json</pre>
       if (!validEmail(email)) return setMsg(f, 'Digite um e-mail válido.');
       if (state.users.some(x => x.id !== u.id && x.email.toLowerCase() === email)) return setMsg(f, 'Este e-mail já é usado por outra conta.');
       if (pass && pass.length < 6) return setMsg(f, 'A nova senha precisa ter pelo menos 6 caracteres.');
+      if (pass && pass !== f.elements.pass2.value) return setMsg(f, 'As senhas não são iguais. Digite a mesma senha nos dois campos.');
       const emailChanged = email !== u.email.toLowerCase();
       if (Cloud.enabled) {
         u.name = name; save();
@@ -2277,6 +2364,7 @@ Content-Type: application/json</pre>
     window.scrollTo(0, 0);
   });
   document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && document.getElementById('install-sheet')) { closeInstall(); return; }
     if (e.key === 'Escape') {
       if (location.hash === '#apresentacao') ACTIONS.exitTV();
       const d = $('.drawer'); if (d && d.classList.contains('open')) ACTIONS.closeDrawer();
