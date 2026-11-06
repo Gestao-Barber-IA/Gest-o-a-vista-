@@ -169,9 +169,33 @@ create policy invites_all on public.invites for all using (company_id = my_compa
 
 -- Resultados: membros leem; gestor edita.
 create policy entries_read on public.entries for select using (company_id = my_company());
-create policy entries_write on public.entries for all using (company_id = my_company() and can_edit_barber(barber_id)) with check (company_id = my_company() and can_edit_barber(barber_id));
+-- Resultados diários (integração): só o dono e a própria API (servidor) gravam.
+create policy entries_write on public.entries for all using (company_id = my_company() and is_gestor()) with check (company_id = my_company() and is_gestor());
 create policy monthly_read on public.monthly for select using (company_id = my_company());
-create policy monthly_write on public.monthly for all using (company_id = my_company() and can_edit_barber(barber_id)) with check (company_id = my_company() and can_edit_barber(barber_id));
+create policy monthly_ins on public.monthly for insert with check (company_id = my_company() and can_edit_barber(barber_id));
+create policy monthly_upd on public.monthly for update using (company_id = my_company() and can_edit_barber(barber_id)) with check (company_id = my_company() and can_edit_barber(barber_id));
+create policy monthly_del on public.monthly for delete using (company_id = my_company() and is_gestor());
+
+-- Total do mês: campo que já tem número da integração só muda pelo dono (ajuste manual),
+-- e o registro de quem ajustou (_adj) também só o dono altera.
+create or replace function public.guard_monthly() returns trigger
+language plpgsql security invoker set search_path = public as $$
+declare r record;
+begin
+  if current_user not in ('authenticated', 'anon') or is_gestor() then return new; end if;
+  if nullif(new.data->'_adj', 'null'::jsonb) is distinct from (case when tg_op = 'UPDATE' then nullif(old.data->'_adj', 'null'::jsonb) end) then
+    raise exception 'Só o dono pode ajustar valores da integração.';
+  end if;
+  for r in select * from (values ('fat', 'fat'), ('cli', 'cli'), ('serv', 'serv'), ('prod', 'prod'), ('planos', 'planos'), ('ocupPct', 'hDisp'), ('fidPct', 'ret')) v(k, ek) loop
+    if nullif(new.data->r.k, 'null'::jsonb) is distinct from (case when tg_op = 'UPDATE' then nullif(old.data->r.k, 'null'::jsonb) end)
+       and exists (select 1 from entries e where e.barber_id = new.barber_id and to_char(e.date, 'YYYY-MM') = new.month and e.data ? r.ek) then
+      raise exception 'Este campo vem da integração. Só o dono pode ajustar.';
+    end if;
+  end loop;
+  return new;
+end $$;
+drop trigger if exists guard_monthly on public.monthly;
+create trigger guard_monthly before insert or update on public.monthly for each row execute function public.guard_monthly();
 
 -- Checklist: membros leem; o próprio barbeiro, o gestor de área e o dono preenchem.
 create policy pop_read on public.pop_records for select using (company_id = my_company());
