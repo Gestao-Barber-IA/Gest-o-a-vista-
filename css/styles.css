@@ -230,6 +230,10 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .seg { display: inline-grid; grid-auto-flow: column; justify-self: start; gap: 4px; padding: 4px; border-radius: 16px; border: 1px solid var(--line); background: var(--surface); }
 .seg button { border: 0; background: none; color: var(--fg); padding: 9px 16px; border-radius: 12px; font-weight: 600; }
 .seg button.on { background: var(--accent); color: var(--accent-ink); }
+.week-note { display: grid; gap: 10px; border-color: var(--line-accent); }
+.week-note p { margin: 0; display: flex; gap: 10px; align-items: flex-start; color: #d8d3c8; }
+.week-note .ico { flex: none; color: var(--accent); margin-top: 2px; }
+.week-note .btn { justify-self: start; }
 .how-link { justify-self: start; display: inline-flex; gap: 8px; align-items: center; color: var(--accent); text-decoration: none; font-weight: 600; }
 .how-link:hover { text-decoration: underline; }
 .cfg-tabs { margin-bottom: 4px; }
