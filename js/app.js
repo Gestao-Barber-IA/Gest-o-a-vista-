@@ -83,7 +83,7 @@
     setTimeout(() => t.remove(), 2800);
   }
 
-  function readImage(file, max = 256) {
+  function readImage(file, max = 256, q = 0.85) {
     return new Promise((resolve, reject) => {
       if (!file || !file.type.startsWith('image/')) { reject(new Error('Escolha um arquivo de imagem.')); return; }
       const reader = new FileReader();
@@ -96,7 +96,7 @@
           const c = document.createElement('canvas');
           c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
           c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-          resolve(c.toDataURL('image/jpeg', 0.85));
+          resolve(c.toDataURL('image/jpeg', q));
         };
         img.src = reader.result;
       };
@@ -1910,8 +1910,8 @@ Content-Type: application/json</pre>
   function popRecW(bid, day) {
     state.pop = state.pop || [];
     let r = popRec(bid, day);
-    if (!r) { r = { barberId: bid, day, v: {}, notes: {}, msg: {} }; state.pop.push(r); }
-    r.v = r.v || {}; r.notes = r.notes || {}; r.msg = r.msg || {};
+    if (!r) { r = { barberId: bid, day, ev: {}, notes: {}, msg: {} }; state.pop.push(r); }
+    r.ev = r.ev || {}; r.notes = r.notes || {}; r.msg = r.msg || {};
     const u = currentUser();
     r.by = u && u.barberId === bid ? 'profissional' : 'gestao'; r.at = Date.now();
     return r;
@@ -1930,41 +1930,103 @@ Content-Type: application/json</pre>
   }
   function popStatus(bid, day) {
     const cfg = popCfg(), rec = popRec(bid, day);
-    if (!rec || !rec.v || !Object.keys(rec.v).some(k => { const x = rec.v[k]; return Array.isArray(x) ? x.some(Boolean) : !!x; })) return 'none';
+    if (!rec || !rec.ev || !Object.values(rec.ev).some(l => Array.isArray(l) && l.some(GB.evLive))) return 'none';
     return GB.popDayPts(cfg, rec) >= GB.popDayMax(cfg) - 0.01 ? 'done' : 'part';
   }
+  const popPendingOf = (bid, day) => { const rec = popRec(bid, day); return rec && rec.ev ? Object.values(rec.ev).reduce((a, l) => a + (Array.isArray(l) ? l.filter(e => e.status === 'pendente').length : 0), 0) : 0; };
+  // Quem confere: o dono, ou o gestor de área para as pessoas dele (nunca a própria prova).
+  function canReview(bid) { const u = currentUser(); if (!u) return false; if (isGestor(u)) return true; return u.barberId !== bid && areaIds(u, ['gestor']).has(bid); }
+  const popPendingCount = (bid, ym) => (state.pop || []).filter(r => r.barberId === bid && r.day.startsWith(ym) && r.day.length === 10).reduce((a, r) => a + popPendingOf(bid, r.day), 0);
   const popPeople = () => state.barbers.filter(b => b.active !== false && (canEditB(b.id) || (currentUser() || {}).barberId === b.id));
   const canPopEdit = bid => canEditB(bid) || (currentUser() || {}).barberId === bid;
 
-  function popItemCard(it, rec, bid, editing) {
-    const v = rec && rec.v ? rec.v[it.id] : undefined;
-    const pts = GB.popItemPts(it, v);
-    const done = it.type === 'check' ? (v ? 1 : 0) : it.type === 'phones' ? (Array.isArray(v) ? v.filter(GB.validPhone).length : 0) : Number(v || 0);
-    const pct = Math.min(100, done / Math.max(1, it.target) * 100);
-    const ro = !canPopEdit(bid);
-    let ctl = '';
-    if (it.type === 'check') {
-      ctl = `<button class="btn pop-check ${v ? 'on' : ''}" data-action="popToggle" data-it="${esc(it.id)}" ${ro ? 'disabled' : ''} aria-pressed="${!!v}">${icon('check')} ${v ? 'Feito' : 'Marcar como feito'}</button>`;
-    } else if (it.type === 'phones') {
-      const list = Array.isArray(v) && v.length ? v : [''];
-      ctl = `<div class="pop-phones">${list.map((ph, i) => `<div class="pop-phone ${ph && !GB.validPhone(ph) ? 'bad' : ''}">${icon('phone')}<input class="input" type="tel" inputmode="tel" id="ph-${esc(it.id)}-${i}" value="${esc(ph)}" placeholder="Telefone do cliente ${i + 1}" data-pop="phone" data-it="${esc(it.id)}" data-i="${i}" ${ro ? 'readonly' : ''}>
-          ${ro ? '' : `<button class="icon-btn" data-action="popPhoneDel" data-it="${esc(it.id)}" data-i="${i}" aria-label="Remover telefone ${i + 1}">${icon('x')}</button>`}</div>`).join('')}
-        <div class="pop-row">${ro ? '' : `<button class="btn btn-sm" data-action="popPhoneAdd" data-it="${esc(it.id)}">${icon('plus')} Telefone</button>`}<b class="num" id="pc-${esc(it.id)}">${done}/${it.target} válidos</b></div></div>
-        <label class="field"><span class="tm-flabel">Texto da mensagem enviada (prompt)</span><textarea class="input pop-ta" id="pm-${esc(it.id)}" data-pop="msg" data-it="${esc(it.id)}" placeholder="Cole aqui a mensagem ou abordagem que você enviou" ${ro ? 'readonly' : ''}>${esc(rec && rec.msg ? rec.msg[it.id] || '' : '')}</textarea></label>`;
-    } else {
-      const n = Number(it.target) || 1;
-      ctl = `<div class="pop-count">
-        <button class="pop-step" data-action="popCount" data-it="${esc(it.id)}" data-n="${Math.max(0, done - 1)}" ${ro ? 'disabled' : ''} aria-label="Menos um">${icon('dash')}</button>
-        ${Array.from({ length: Math.min(n, 30) }, (_, i) => `<button class="pop-num ${i < done ? 'on' : ''}" data-action="popCount" data-it="${esc(it.id)}" data-n="${i + 1 === done ? i : i + 1}" ${ro ? 'disabled' : ''} aria-label="${i + 1}">${i + 1}</button>`).join('')}
-        <button class="pop-step" data-action="popCount" data-it="${esc(it.id)}" data-n="${Math.min(n, done + 1)}" ${ro ? 'disabled' : ''} aria-label="Mais um">${icon('plus')}</button>
-        <b class="num">${done}/${n}</b></div>`;
-    }
+  const EV_TXT = { pendente: 'Aguardando conferência', aprovado: 'Aprovada', recusado: 'Recusada' };
+  function proofImg(e, cls = '') {
+    if (e.photo) return `<img class="pop-ph ${cls}" src="${esc(e.photo)}" alt="Prova" loading="lazy">`;
+    if (e.path) return `<img class="pop-ph ${cls}" data-proof="${esc(e.path)}" alt="Prova" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">`;
+    return `<span class="pop-ph pop-ph-none ${cls}">${icon('camera')}<small>Exemplo</small></span>`;
+  }
+  function popItemCard(it, rec, bid) {
+    const list = rec && rec.ev && Array.isArray(rec.ev[it.id]) ? rec.ev[it.id] : [];
+    const t = it.type === 'check' ? 1 : Math.max(1, Number(it.target) || 1);
+    const ok = list.filter(e => GB.evOk(it, e)).length, pend = list.filter(e => e.status === 'pendente').length, live = list.filter(GB.evLive).length;
+    const pts = GB.popItemPts(it, list), ppend = GB.popItemPts(it, list, true);
+    const pct = Math.min(100, ok / t * 100), pctP = Math.min(100 - pct, pend / t * 100);
+    const me = currentUser(), mayAdd = canPopEdit(bid) && live < t, rev = canReview(bid);
+    const draft = ui.popDraft && ui.popDraft.it === it.id && ui.popDraft.bid === bid ? ui.popDraft : null;
+    const evs = list.map((e, i) => `<li class="pop-ev st-${e.status}">
+        <button class="pop-evimg" data-action="popView" data-it="${esc(it.id)}" data-i="${i}" aria-label="Ver prova ${i + 1}">${proofImg(e)}</button>
+        <div class="pop-evbody"><b>${it.type === 'phones' ? esc(e.phone || '') : `${it.type === 'check' ? 'Prova' : 'Unidade'} ${i + 1}`}</b>
+          <span class="pop-evst">${EV_TXT[e.status] || ''}${e.by === 'gestao' ? ' · lançada pela gestão' : ''}</span>
+          ${e.desc ? `<p>${esc(e.desc)}</p>` : ''}
+          ${e.status === 'pendente' && rev ? `<div class="btn-row"><button class="btn btn-sm btn-ok" data-action="popEvOk" data-it="${esc(it.id)}" data-i="${i}">${icon('check')} Aprovar</button><button class="btn btn-sm btn-danger" data-action="popEvNo" data-it="${esc(it.id)}" data-i="${i}">${icon('x')} Recusar</button></div>` : ''}
+          ${e.status !== 'pendente' && rev ? `<button class="link-btn" data-action="popEvUndo" data-it="${esc(it.id)}" data-i="${i}">Voltar para conferência</button>` : ''}
+          ${e.status === 'pendente' && canPopEdit(bid) && (!e.byUser || !me || e.byUser === me.id || rev) ? `<button class="link-btn" data-action="popEvDel" data-it="${esc(it.id)}" data-i="${i}">${ui.confirm === 'ev' + it.id + i ? 'Confirmar exclusão' : 'Excluir'}</button>` : ''}
+        </div></li>`).join('');
+    const composer = draft ? `<div class="pop-draft">
+        <div class="pop-draft-ph">${draft.photo ? `<img class="pop-ph big" src="${esc(draft.photo)}" alt="Prova escolhida">` : `<span class="pop-ph big pop-ph-none">${icon('camera')}<small>Anexe a foto ou o print</small></span>`}
+          <div class="btn-row"><label class="btn btn-sm" style="cursor:pointer">${icon('camera')} Tirar foto<input type="file" accept="image/*" capture="environment" hidden data-change="popPhoto"></label>
+          <label class="btn btn-sm" style="cursor:pointer">${icon('upload')} Galeria / print<input type="file" accept="image/*" hidden data-change="popPhoto"></label></div></div>
+        ${it.type === 'phones' ? `<label class="field"><span class="tm-flabel">Telefone do cliente *</span><input class="input" type="tel" inputmode="tel" id="pd-phone" value="${esc(draft.phone || '')}" placeholder="(00) 00000-0000" data-pop="draft" data-k="phone"></label>` : ''}
+        <label class="field"><span class="tm-flabel">Descrição (opcional)</span><textarea class="input pop-ta" id="pd-desc" data-pop="draft" data-k="desc" placeholder="Ex.: story do corte degradê, cliente marcou a barbearia">${esc(draft.desc || '')}</textarea></label>
+        <p class="form-msg" data-msg id="pd-msg"></p>
+        <div class="btn-row"><button class="btn btn-primary" data-action="popConfirm" id="pd-ok" ${draft.photo && (it.type !== 'phones' || GB.validPhone(draft.phone)) && !draft.busy ? '' : 'disabled'}>${icon('check')} ${draft.busy ? 'Enviando…' : 'Confirmar'}</button>
+          <button class="btn" data-action="popAddCancel">Cancelar</button></div>
+        <p class="section-note">${rev ? 'Como você confere esta pessoa, a prova já entra aprovada.' : 'Os pontos entram depois que a gestão aprovar a prova.'}</p>
+      </div>` : '';
     return `<article class="pop-item ${pct >= 100 ? 'is-done' : ''}" id="pi-${esc(it.id)}">
-      <div class="pop-ihead"><div><h3>${esc(it.title)}</h3><p>${esc(it.desc || '')}</p></div><span class="pop-badge num" id="pb-${esc(it.id)}">${fmtPts(pts)}/${fmtPts(it.pts)} pts</span></div>
-      <div class="pop-bar"><i id="pbar-${esc(it.id)}" style="width:${pct}%"></i></div>
-      ${ctl}
-      <label class="field"><span class="tm-flabel">Resultado / observação por pessoa (opcional)</span><textarea class="input pop-ta" id="pn-${esc(it.id)}" data-pop="note" data-it="${esc(it.id)}" placeholder="Ex.: João agendou sábado, Pedro pediu preço" ${ro ? 'readonly' : ''}>${esc(rec && rec.notes ? rec.notes[it.id] || '' : '')}</textarea></label>
+      <div class="pop-ihead"><div><h3>${esc(it.title)}</h3><p>${esc(it.desc || '')}</p></div><span class="pop-badge num">${fmtPts(pts)}/${fmtPts(it.pts)} pts</span></div>
+      <div class="pop-bar"><i style="width:${pct}%"></i><i class="pend" style="width:${pctP}%"></i></div>
+      <p class="pop-ist num"><b>${ok}/${t}</b> aprovadas${pend ? ` · <span class="pend">${pend} aguardando conferência (+${fmtPts(ppend)} pts)</span>` : ''}</p>
+      ${list.length ? `<ul class="pop-evs">${evs}</ul>` : ''}
+      ${composer}
+      ${!draft && mayAdd ? `<button class="btn pop-add" data-action="popAddOpen" data-it="${esc(it.id)}">${icon('camera')} ${it.type === 'check' ? 'Anexar prova e confirmar' : `Adicionar prova ${live + 1} de ${t}`}</button>` : ''}
+      ${!canPopEdit(bid) && !list.length ? '<p class="muted">Sem registro.</p>' : ''}
+      ${it.type === 'phones' ? `<label class="field"><span class="tm-flabel">Texto da mensagem enviada (prompt)</span><textarea class="input pop-ta" id="pm-${esc(it.id)}" data-pop="msg" data-it="${esc(it.id)}" placeholder="Cole aqui a mensagem ou abordagem que você enviou" ${canPopEdit(bid) ? '' : 'readonly'}>${esc(rec && rec.msg ? rec.msg[it.id] || '' : '')}</textarea></label>` : ''}
+      <label class="field"><span class="tm-flabel">Resultado / observação por pessoa (opcional)</span><textarea class="input pop-ta" id="pn-${esc(it.id)}" data-pop="note" data-it="${esc(it.id)}" placeholder="Ex.: João agendou sábado, Pedro pediu preço" ${canPopEdit(bid) ? '' : 'readonly'}>${esc(rec && rec.notes ? rec.notes[it.id] || '' : '')}</textarea></label>
     </article>`;
+  }
+
+  // Provas aguardando conferência (para quem confere).
+  function popReviewPanel(ym) {
+    const cfg = popCfg(), rows = [];
+    for (const b of popPeople()) {
+      if (!canReview(b.id)) continue;
+      for (const r of (state.pop || [])) {
+        if (r.barberId !== b.id || !r.day.startsWith(ym) || r.day.length !== 10 || !r.ev) continue;
+        for (const it of cfg.items) (r.ev[it.id] || []).forEach((e, i) => { if (e.status === 'pendente') rows.push({ b, r, it, e, i }); });
+      }
+    }
+    if (!rows.length) return '';
+    rows.sort((x, y) => x.r.day.localeCompare(y.r.day));
+    const shown = rows.slice(0, ui.popRevAll ? 60 : 5);
+    return `<section class="section card pop-review">
+      <div class="pop-dhead"><div><h2 class="pop-h2">${icon('checksq')} Conferência</h2><p class="muted">${rows.length} prova(s) aguardando. Os pontos entram no ranking quando você aprova.</p></div>
+        <button class="btn btn-sm btn-ok" data-action="popOkAll">${ui.confirm === 'popOkAll' ? `Confirmar: aprovar ${rows.length}` : 'Aprovar todas'}</button></div>
+      <ul class="pop-rlist">${shown.map(x => `<li>
+        <button class="pop-evimg" data-action="popView" data-bid="${esc(x.b.id)}" data-day="${esc(x.r.day)}" data-it="${esc(x.it.id)}" data-i="${x.i}" aria-label="Ver prova">${proofImg(x.e)}</button>
+        <div class="pop-evbody"><b>${esc(x.b.name)}</b><span class="muted">Dia ${Number(x.r.day.slice(8))} · ${esc(x.it.title)}${x.it.type === 'phones' ? ' · ' + esc(x.e.phone || '') : ''}</span>${x.e.desc ? `<p>${esc(x.e.desc)}</p>` : ''}
+          <div class="btn-row"><button class="btn btn-sm btn-ok" data-action="popEvOk" data-bid="${esc(x.b.id)}" data-day="${esc(x.r.day)}" data-it="${esc(x.it.id)}" data-i="${x.i}">${icon('check')} Aprovar</button>
+          <button class="btn btn-sm btn-danger" data-action="popEvNo" data-bid="${esc(x.b.id)}" data-day="${esc(x.r.day)}" data-it="${esc(x.it.id)}" data-i="${x.i}">${icon('x')} Recusar</button></div></div></li>`).join('')}</ul>
+      ${rows.length > shown.length ? `<button class="btn btn-sm" data-action="popRevMore">Ver mais (${rows.length - shown.length})</button>` : ''}
+    </section>`;
+  }
+
+  function popViewer() {
+    const v = ui.popView; if (!v) return '';
+    const r = popRec(v.bid, v.day), it = popCfg().items.find(x => x.id === v.it), e = r && r.ev && r.ev[v.it] ? r.ev[v.it][v.i] : null;
+    if (!e || !it) { ui.popView = null; return ''; }
+    return `<div class="pop-viewer" role="dialog" aria-modal="true" aria-label="Prova"><div class="inst-scrim" data-action="popViewClose"></div>
+      <figure>${proofImg(e, 'full')}<figcaption><b>${esc(barberById(v.bid)?.name || '')} · ${esc(it.title)} · dia ${Number(v.day.slice(8))}</b>${it.type === 'phones' ? `<span>${esc(e.phone || '')}</span>` : ''}${e.desc ? `<span>${esc(e.desc)}</span>` : ''}<span class="pop-evst">${EV_TXT[e.status]}</span></figcaption>
+      <button class="btn" data-action="popViewClose">${icon('x')} Fechar</button></figure></div>`;
+  }
+
+  // Busca as fotos guardadas na nuvem (links temporários).
+  function hydrateProofs() {
+    if (!Cloud.enabled) return;
+    document.querySelectorAll('img[data-proof]').forEach(img => {
+      Cloud.proofUrl(img.dataset.proof).then(u => { img.src = u; img.removeAttribute('data-proof'); }).catch(() => { img.alt = 'Prova indisponível'; });
+    });
   }
 
   function popEditor() {
@@ -2022,7 +2084,7 @@ Content-Type: application/json</pre>
     const dayPts = GB.popDayPts(cfg, rec), dayMax = GB.popDayMax(cfg);
     const M = popMonth(bid, ym), lv = popLevel(M.total);
     // últimos 7 dias até o dia escolhido
-    const days7 = Array.from({ length: 7 }, (_, i) => { const d = fromIso(day); d.setDate(d.getDate() - 6 + i); return iso(d); }).filter(d => d.startsWith(ym));
+    const days7 = Array.from({ length: 7 }, (_, i) => { const d = fromIso(day); d.setDate(d.getDate() - 6 + i); return iso(d); }).filter(d => d.startsWith(ym) || true);
     const vals7 = days7.map(d => d > today ? null : r1(GB.popDayPts(cfg, popRec(bid, d))));
     const won7 = vals7.reduce((a, v) => a + (v || 0), 0), poss7 = vals7.filter(v => v !== null).length * dayMax;
     const resRec = popRec(bid, ym) || {}; const res = resRec.res || {};
@@ -2033,8 +2095,9 @@ Content-Type: application/json</pre>
         <h2 class="pop-h2">Escolha o profissional</h2>
         <p class="pop-today">Hoje: <b class="ok">${cnt('done')} completos</b> · <b class="part">${cnt('part')} incompletos</b> · <b class="none">${cnt('none')} sem registro</b></p>
         <div class="pop-month"><select class="input" id="pop-month" data-change="popMonth">${monthOptions(ym)}</select></div>
-        <div class="pop-people">${people.map((x, i) => `<button class="pop-person ${x.id === bid ? 'on' : ''}" data-action="popPick" data-id="${esc(x.id)}"><span class="pop-av">${avatar(x, 42)}${dot(st[i])}</span><b>${esc(x.name)}</b><span class="num">${fmtPts(popMonth(x.id, ym).total)} pts</span></button>`).join('')}</div>
+        <div class="pop-people">${people.map((x, i) => `<button class="pop-person ${x.id === bid ? 'on' : ''}" data-action="popPick" data-id="${esc(x.id)}"><span class="pop-av">${avatar(x, 42)}${dot(st[i])}</span><b>${esc(x.name)}</b><span class="num">${fmtPts(popMonth(x.id, ym).total)} pts</span>${canReview(x.id) && popPendingCount(x.id, ym) ? `<span class="pop-pcount" title="Provas aguardando conferência">${popPendingCount(x.id, ym)}</span>` : ''}</button>`).join('')}</div>
       </section>
+      ${popReviewPanel(ym)}
       <p class="pop-who">Checklist de <b>${esc(b.name)}</b>${last ? ` · último registro feito ${last.by === 'profissional' ? 'pelo profissional' : 'pela gestão'}` : ' · ainda sem registro neste mês'}</p>
       <div class="pop-tools">
         <p class="pop-phrase">${icon('sparkle')}<span>${esc(cfg.phrase || '')}</span></p>
@@ -2052,9 +2115,10 @@ Content-Type: application/json</pre>
           <span class="pop-cloud" id="pop-saved" title="Salvo">${icon('cloud')}</span></div>
         <span class="tm-flabel">Dia do mês</span>
         <div class="pop-days" id="pop-days">${Array.from({ length: n }, (_, i) => { const d = `${ym}-${String(i + 1).padStart(2, '0')}`; const s2 = popStatus(bid, d); return `<button class="pop-dn ${i + 1 === ui.popDay ? 'on' : ''} st-${s2} ${d > today ? 'future' : ''}" data-action="popDay" data-d="${i + 1}" aria-label="Dia ${i + 1}">${i + 1}</button>`; }).join('')}</div>
-        <p class="pop-sum"><b class="num" id="pop-daypts">${fmtPts(dayPts)}/${fmtPts(dayMax)} pts nesta seção · ${fmtPts(dayPts)} pts no dia</b></p>
+        <p class="pop-sum"><b class="num" id="pop-daypts">${fmtPts(dayPts)}/${fmtPts(dayMax)} pts aprovados no dia</b>${GB.popDayPts(cfg, rec, true) ? ` · <span class="pend num">+${fmtPts(GB.popDayPts(cfg, rec, true))} pts aguardando conferência</span>` : ''}</p>
+        <p class="section-note">Cada unidade precisa de uma prova: foto ou print. Anexe, escreva uma descrição se quiser e toque em Confirmar.</p>
         ${ro ? '<p class="section-note">Você está vendo este checklist sem poder editar.</p>' : ''}
-        <div class="pop-items">${cfg.items.map(it => popItemCard(it, rec, bid, editing)).join('')}</div>
+        <div class="pop-items">${cfg.items.map(it => popItemCard(it, rec, bid)).join('')}</div>
       </section>
       <section class="section card pop-rem">
         <div class="pop-dhead"><div><h2 class="pop-h2">${icon('bell')} Lembretes de posts</h2><p class="muted">Aviso diário para preencher o checklist enquanto a meta do dia não for batida.</p></div>
@@ -2092,30 +2156,26 @@ Content-Type: application/json</pre>
         ${[['cli', 'Clientes atendidos', '1'], ['agend', 'Agendamentos gerados', '1'], ['vendido', 'Valor vendido (R$)', '0.01']].map(([k, l, step]) => `<label class="field"><span class="tm-flabel">${l}</span><input class="input num" type="number" min="0" step="${step}" id="pr-${k}" value="${isNum(res[k]) ? res[k] : ''}" data-pop="res" data-k="${k}" ${ro ? 'readonly' : ''}></label>`).join('')}
       </section>
       <section class="section card"><h2 class="pop-h2">Regras do programa</h2><p class="pop-rules">${esc(cfg.rules || '')}</p></section>
-      <section class="section card"><h2 class="pop-h2">Perde a garantia quem</h2><ul class="pop-lose">${(cfg.lose || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul></section>`;
+      <section class="section card"><h2 class="pop-h2">Perde a garantia quem</h2><ul class="pop-lose">${(cfg.lose || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul></section>
+      ${popViewer()}`;
   }
 
-  // Atualiza os pontos sem redesenhar a tela (enquanto digita telefones).
-  function popRefresh() {
-    const cfg = popCfg(), bid = ui.popBarber, day = `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`, rec = popRec(bid, day);
-    for (const it of cfg.items) {
-      const v = rec && rec.v ? rec.v[it.id] : undefined, pts = GB.popItemPts(it, v);
-      const bb = document.getElementById('pb-' + it.id); if (bb) bb.textContent = `${fmtPts(pts)}/${fmtPts(it.pts)} pts`;
-      const done = it.type === 'phones' ? (Array.isArray(v) ? v.filter(GB.validPhone).length : 0) : null;
-      if (done !== null) { const pc = document.getElementById('pc-' + it.id); if (pc) pc.textContent = `${done}/${it.target} válidos`; const bar = document.getElementById('pbar-' + it.id); if (bar) bar.style.width = Math.min(100, done / Math.max(1, it.target) * 100) + '%'; }
-    }
-    const dp = GB.popDayPts(cfg, rec), el = document.getElementById('pop-daypts');
-    if (el) el.textContent = `${fmtPts(dp)}/${fmtPts(GB.popDayMax(cfg))} pts nesta seção · ${fmtPts(dp)} pts no dia`;
-  }
   let popTimer = null;
   function popInput(el) {
     const bid = ui.popBarber; if (!canPopEdit(bid)) return;
     const day = `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`;
     const kind = el.dataset.pop, it = el.dataset.it;
+    if (kind === 'draft') {
+      if (!ui.popDraft) return;
+      ui.popDraft[el.dataset.k] = el.value;
+      const d = ui.popDraft, item = popCfg().items.find(x => x.id === d.it), btn = $('#pd-ok');
+      if (btn) btn.disabled = !(d.photo && (item.type !== 'phones' || GB.validPhone(d.phone)));
+      if (el.dataset.k === 'phone') el.classList.toggle('input-bad', !!el.value.trim() && !GB.validPhone(el.value));
+      return;
+    }
     if (kind === 'res') { const r = popRecW(bid, ui.popMonth); r.res = r.res || {}; const v = el.value.trim(); r.res[el.dataset.k] = v === '' ? null : Number(v); }
     else {
       const r = popRecW(bid, day);
-      if (kind === 'phone') { const list = Array.isArray(r.v[it]) ? r.v[it] : []; list[Number(el.dataset.i)] = el.value.trim(); r.v[it] = list; el.closest('.pop-phone').classList.toggle('bad', !!el.value.trim() && !GB.validPhone(el.value)); popRefresh(); }
       if (kind === 'note') r.notes[it] = el.value;
       if (kind === 'msg') r.msg[it] = el.value;
     }
@@ -2128,10 +2188,10 @@ Content-Type: application/json</pre>
   function popCsv() {
     const cfg = popCfg(), bid = ui.popBarber, b = barberById(bid), ym = ui.popMonth, n = daysInMonth(ym);
     const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const rows = [['Dia', ...cfg.items.map(i => i.title), 'Pontos do dia']];
+    const rows = [['Dia', ...cfg.items.map(i => i.title + ' (aprovadas)'), 'Pontos aprovados']];
     for (let d = 1; d <= n; d++) {
       const day = `${ym}-${String(d).padStart(2, '0')}`, rec = popRec(bid, day);
-      rows.push([`${String(d).padStart(2, '0')}/${ym.slice(5)}/${ym.slice(0, 4)}`, ...cfg.items.map(it => { const v = rec && rec.v ? rec.v[it.id] : ''; return it.type === 'check' ? (v ? 'sim' : '') : it.type === 'phones' ? (Array.isArray(v) ? v.filter(Boolean).join(' / ') : '') : (v || ''); }), fmtPts(GB.popDayPts(cfg, rec))]);
+      rows.push([`${String(d).padStart(2, '0')}/${ym.slice(5)}/${ym.slice(0, 4)}`, ...cfg.items.map(it => { const l = rec && rec.ev && Array.isArray(rec.ev[it.id]) ? rec.ev[it.id] : []; const okl = l.filter(e => GB.evOk(it, e)), pl = l.filter(e => e.status === 'pendente').length; return (it.type === 'phones' ? okl.map(e => e.phone).join(' / ') : String(okl.length || '')) + (pl ? ` (+${pl} aguardando)` : ''); }), fmtPts(GB.popDayPts(cfg, rec))]);
     }
     const M = popMonth(bid, ym), lv = popLevel(M.total);
     rows.push([], ['Total do mês', fmtPts(M.total) + ' / ' + fmtPts(M.max)], ['Nível', lv.name], ['Garantia', lv.value ? money2(lv.value) : 'Sem garantia']);
@@ -2483,6 +2543,7 @@ Content-Type: application/json</pre>
     applyLive();
     maybeOfferInstall();
     maybeRemindPop(user);
+    hydrateProofs();
   }
 
   // Lembrete do checklist: uma vez por dia, enquanto a meta do dia não foi batida.
@@ -2571,19 +2632,55 @@ Content-Type: application/json</pre>
       u.pass = passHash(u.email, pass); save();
       ui.lastReset = { name: u.name, pass }; render();
     },
-    popPick(el) { ui.popBarber = el.dataset.id; ui.confirm = null; render(); },
-    popDay(el) { ui.popDay = Number(el.dataset.d); ui.confirm = null; render(); },
-    popCount(el) { if (!canPopEdit(ui.popBarber)) return; const r = popRecW(ui.popBarber, `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`); r.v[el.dataset.it] = Number(el.dataset.n); save(); render(); },
-    popToggle(el) { if (!canPopEdit(ui.popBarber)) return; const r = popRecW(ui.popBarber, `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`); r.v[el.dataset.it] = !r.v[el.dataset.it]; save(); render(); },
-    popPhoneAdd(el) {
-      const it = el.dataset.it, r = popRecW(ui.popBarber, `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`);
-      const list = Array.isArray(r.v[it]) && r.v[it].length ? r.v[it] : ['']; list.push(''); r.v[it] = list; render();
-      setTimeout(() => document.getElementById(`ph-${it}-${list.length - 1}`)?.focus(), 30);
+    popPick(el) { ui.popBarber = el.dataset.id; ui.confirm = null; ui.popDraft = null; render(); },
+    popDay(el) { ui.popDay = Number(el.dataset.d); ui.confirm = null; ui.popDraft = null; render(); },
+    popAddOpen(el) {
+      if (!canPopEdit(ui.popBarber)) return;
+      ui.popDraft = { it: el.dataset.it, bid: ui.popBarber, photo: null, phone: '', desc: '' }; ui.confirm = null; render();
+      setTimeout(() => document.getElementById('pi-' + el.dataset.it)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 40);
     },
-    popPhoneDel(el) {
-      const it = el.dataset.it, r = popRecW(ui.popBarber, `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`);
-      const list = Array.isArray(r.v[it]) ? r.v[it] : []; list.splice(Number(el.dataset.i), 1); r.v[it] = list; save(); render();
+    popAddCancel() { ui.popDraft = null; render(); },
+    async popConfirm() {
+      const d = ui.popDraft; if (!d || d.busy) return;
+      const it = popCfg().items.find(x => x.id === d.it), msg = $('#pd-msg');
+      if (!d.photo) { if (msg) msg.textContent = 'Anexe a foto ou o print para confirmar.'; return; }
+      if (it.type === 'phones' && !GB.validPhone(d.phone)) { if (msg) msg.textContent = 'Digite o telefone completo do cliente, com DDD.'; return; }
+      const day = `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`, u = currentUser();
+      const e = { id: uid('e_'), desc: (d.desc || '').trim(), at: Date.now(), by: u && u.barberId === d.bid ? 'profissional' : 'gestao', byUser: u ? u.id : null, status: 'pendente' };
+      if (it.type === 'phones') e.phone = d.phone.trim();
+      if (canReview(d.bid)) { e.status = 'aprovado'; e.reviewedBy = u.id; e.reviewedAt = Date.now(); }
+      if (Cloud.enabled) {
+        d.busy = true; render();
+        try { e.path = await Cloud.uploadProof(`${Cloud.companyId}/${d.bid}/${day}/${e.id}.jpg`, d.photo); }
+        catch (err) { d.busy = false; render(); toast('Não foi possível enviar a foto: ' + Cloud.message(err)); return; }
+      } else e.photo = d.photo;
+      const r = popRecW(d.bid, day); (r.ev[it.id] = r.ev[it.id] || []).push(e);
+      ui.popDraft = null; save();
+      toast(e.status === 'aprovado' ? 'Prova registrada e aprovada.' : 'Prova enviada. Os pontos entram depois da conferência.'); render();
     },
+    popEvDel(el) {
+      const k = 'ev' + el.dataset.it + el.dataset.i;
+      if (ui.confirm !== k) { ui.confirm = k; render(); return; }
+      const r = popRecW(ui.popBarber, `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`), list = r.ev[el.dataset.it] || [];
+      const [e] = list.splice(Number(el.dataset.i), 1);
+      if (e && e.path && Cloud.enabled) Cloud.removeProof(e.path);
+      ui.confirm = null; save(); toast('Prova excluída.'); render();
+    },
+    popEvOk(el) { popReview(el, 'aprovado'); },
+    popEvNo(el) { popReview(el, 'recusado'); },
+    popEvUndo(el) { popReview(el, 'pendente'); },
+    popOkAll() {
+      if (ui.confirm !== 'popOkAll') { ui.confirm = 'popOkAll'; render(); return; }
+      ui.confirm = null; let n = 0; const u = currentUser();
+      for (const r of (state.pop || [])) {
+        if (!r.day.startsWith(ui.popMonth) || !r.ev || !canReview(r.barberId)) continue;
+        for (const l of Object.values(r.ev)) for (const e of (l || [])) if (e.status === 'pendente') { e.status = 'aprovado'; e.reviewedBy = u.id; e.reviewedAt = Date.now(); n++; }
+      }
+      save(); toast(`${n} prova(s) aprovada(s).`); render();
+    },
+    popView(el) { ui.popView = { bid: el.dataset.bid || ui.popBarber, day: el.dataset.day || `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`, it: el.dataset.it, i: Number(el.dataset.i) }; render(); },
+    popViewClose() { ui.popView = null; render(); },
+    popRevMore() { ui.popRevAll = true; render(); },
     popCsv() { popCsv(); },
     popPrint() { document.body.classList.add('printing'); setTimeout(() => { window.print(); document.body.classList.remove('printing'); }, 50); },
     popSave() { save(); toast('Checklist salvo.'); },
@@ -2591,7 +2688,7 @@ Content-Type: application/json</pre>
       if (ui.confirm !== 'popReset') { ui.confirm = 'popReset'; render(); return; }
       ui.confirm = null;
       if (ui.popEdit && isGestor(currentUser())) { state.popCfg = JSON.parse(JSON.stringify(GB.popDefault())); toast('Modelo padrão restaurado.'); }
-      else { const r = popRecW(ui.popBarber, `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`); r.v = {}; r.notes = {}; r.msg = {}; toast('Registro do dia limpo.'); }
+      else { const r = popRecW(ui.popBarber, `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`); for (const k of Object.keys(r.ev)) { const l = r.ev[k] || []; l.filter(e => e.status === 'pendente' && e.path && Cloud.enabled).forEach(e => Cloud.removeProof(e.path)); r.ev[k] = l.filter(e => e.status !== 'pendente'); } r.notes = {}; r.msg = {}; toast('Provas pendentes e anotações do dia foram limpas. Provas já conferidas ficam.'); }
       save(); render();
     },
     popItemAdd() { popCfgW().items.push({ id: uid('it_'), title: 'Novo item', desc: '', type: 'count', target: 1, pts: 1 }); save(); render(); },
@@ -2706,6 +2803,14 @@ Content-Type: application/json</pre>
   async function adminDo(id, patch, msg) {
     try { await Cloud.admin.update(id, patch); toast(msg); ui.adminData = null; render(); }
     catch (e) { toast(Cloud.message(e)); }
+  }
+
+  function popReview(el, status) {
+    const bid = el.dataset.bid || ui.popBarber, day = el.dataset.day || `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`;
+    if (!canReview(bid)) { toast('Somente a gestão confere as provas.'); return; }
+    const r = popRec(bid, day), e = r && r.ev && r.ev[el.dataset.it] ? r.ev[el.dataset.it][Number(el.dataset.i)] : null; if (!e) return;
+    const u = currentUser(); e.status = status; e.reviewedBy = status === 'pendente' ? null : u.id; e.reviewedAt = status === 'pendente' ? null : Date.now();
+    ui.popView = null; save(); toast(status === 'aprovado' ? 'Prova aprovada.' : status === 'recusado' ? 'Prova recusada. Os pontos não contam.' : 'Prova voltou para conferência.'); render();
   }
 
   const FORMS = {
@@ -2926,7 +3031,11 @@ Content-Type: application/json</pre>
     tvSoundKind(el) { Sound.kind = el.value; Sound.play(el.value, true); },
     perfBarber(el) { ui.perfBarber = el.value; render(); },
     teamMonth(el) { ui.teamMonth = el.value; render(); },
-    popMonth(el) { ui.popMonth = el.value; render(); },
+    popMonth(el) { ui.popMonth = el.value; ui.popDraft = null; render(); },
+    async popPhoto(el) {
+      const f = el.files && el.files[0]; if (!f || !ui.popDraft) return;
+      try { ui.popDraft.photo = await readImage(f, 1100, 0.72); render(); } catch (e) { toast(e.message); }
+    },
     popEdit(el) { ui.popEdit = el.checked; ui.confirm = null; render(); },
     async popRem(el) {
       DB.pref.set('popRem', el.checked ? '1' : '0');
@@ -3001,6 +3110,7 @@ Content-Type: application/json</pre>
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && document.getElementById('install-sheet')) { closeInstall(); return; }
     if (e.key === 'Escape' && ui.orgSheet) { ui.orgSheet = null; render(); return; }
+    if (e.key === 'Escape' && ui.popView) { ui.popView = null; render(); return; }
     if (e.key === 'Escape') {
       if (location.hash === '#apresentacao') ACTIONS.exitTV();
       const d = $('.drawer'); if (d && d.classList.contains('open')) ACTIONS.closeDrawer();

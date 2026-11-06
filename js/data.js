@@ -228,19 +228,21 @@
   let popDef = null;
   const popCfgOf = state => (state.popCfg && Array.isArray(state.popCfg.items) ? state.popCfg : (popDef || (popDef = popDefault())));
   const validPhone = p => String(p || '').replace(/\D/g, '').length >= 10;
-  // Pontos de um item: proporcional ao que foi feito até a meta.
-  function popItemPts(it, v) {
-    if (it.type === 'check') return v ? Number(it.pts) : 0;
-    const done = it.type === 'phones' ? (Array.isArray(v) ? v.filter(validPhone).length : 0) : Number(v || 0);
-    const t = Math.max(1, Number(it.target) || 1);
-    return Number(it.pts) * Math.min(done, t) / t;
+  // Cada unidade do checklist é uma prova (foto/print). Só as aprovadas pela gestão contam pontos.
+  const evOk = (it, e) => e && e.status === 'aprovado' && (it.type !== 'phones' || validPhone(e.phone));
+  const evLive = e => e && e.status !== 'recusado';
+  function popItemPts(it, ev, pending) {
+    const list = Array.isArray(ev) ? ev : [];
+    const n = list.filter(e => pending ? (e.status === 'pendente' && (it.type !== 'phones' || validPhone(e.phone))) : evOk(it, e)).length;
+    const t = it.type === 'check' ? 1 : Math.max(1, Number(it.target) || 1);
+    return Number(it.pts) * Math.min(n, t) / t;
   }
   const popDayMax = cfg => cfg.items.reduce((a, it) => a + Number(it.pts || 0), 0);
-  function popDayPts(cfg, rec) {
-    if (!rec || !rec.v) return 0;
-    return cfg.items.reduce((a, it) => a + popItemPts(it, rec.v[it.id]), 0);
+  function popDayPts(cfg, rec, pending) {
+    if (!rec || !rec.ev) return 0;
+    return cfg.items.reduce((a, it) => a + popItemPts(it, rec.ev[it.id], pending), 0);
   }
-  const popDays = (state, barberId) => (state.pop || []).filter(r => r.barberId === barberId && r.day.length === 10 && r.v && Object.keys(r.v).length);
+  const popDays = (state, barberId) => (state.pop || []).filter(r => r.barberId === barberId && r.day.length === 10 && r.ev && Object.values(r.ev).some(l => Array.isArray(l) && l.length));
 
   const DEFAULT_GOALS = { fat: 6000, check: 390, ocup: 75, ticket: 60, serv: 130, cli: 110, planos: 4, fid: 50, prod: 500 };
   const goalFor = (state, barberId, key) => {
@@ -427,14 +429,15 @@
       if (new Date(today.getFullYear(), today.getMonth(), d).getDay() === 0) continue;
       people.forEach(([, vol, , disc], i) => {
         if (r() < 0.15) return;
-        const v = {};
+        const ev = {};
         for (const it of pcfg.items) {
           const k = 0.35 + disc * 0.55 + r() * 0.25;
-          if (it.type === 'check') v[it.id] = r() < k;
-          else if (it.type === 'phones') v[it.id] = Array.from({ length: Math.min(it.target, Math.round(it.target * k * r() * 1.3)) }, () => '119' + String(Math.floor(r() * 1e8)).padStart(8, '0'));
-          else v[it.id] = Math.min(it.target, Math.round(it.target * k * (0.6 + r() * 0.6)));
+          const t = it.type === 'check' ? 1 : it.target;
+          const n = it.type === 'check' ? (r() < k ? 1 : 0) : Math.min(t, Math.round(t * k * (0.6 + r() * 0.6)));
+          ev[it.id] = Array.from({ length: n }, (_, j) => ({ id: uid('e_'), photo: null, demo: true, phone: it.type === 'phones' ? '119' + String(Math.floor(r() * 1e8)).padStart(8, '0') : undefined,
+            desc: '', by: 'profissional', at: Date.now(), status: d < today.getDate() - 1 || r() < 0.6 ? 'aprovado' : 'pendente' }));
         }
-        pop.push({ barberId: barbers[i].id, day, v, by: r() < 0.5 ? 'gestao' : 'profissional', at: Date.now() });
+        pop.push({ barberId: barbers[i].id, day, ev, by: 'profissional', at: Date.now() });
       });
     }
     const gestorId = uid('u_');
@@ -541,5 +544,5 @@
   const visibleInds = state => INDICATORS.filter(i => !(state.hidden || []).includes(i.key));
   const FIELD_IND = { fidPct: 'fid', ocupPct: 'ocup' };
 
-  window.GB = Object.assign(window.GB || {}, { popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
+  window.GB = Object.assign(window.GB || {}, { evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
 })();

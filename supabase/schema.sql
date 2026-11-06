@@ -172,9 +172,61 @@ create policy monthly_write on public.monthly for all using (company_id = my_com
 
 -- Checklist: membros leem; o próprio barbeiro, o gestor de área e o dono preenchem.
 create policy pop_read on public.pop_records for select using (company_id = my_company());
-create policy pop_write on public.pop_records for all
+
+-- Provas do checklist: só a gestão aprova ou recusa; ninguém confere a própria prova (exceto o dono);
+-- prova já conferida não pode ser alterada nem apagada por quem não confere.
+create or replace function public.guard_pop() returns trigger
+language plpgsql security invoker set search_path = public as $$
+declare reviewer boolean;
+begin
+  if current_user not in ('authenticated', 'anon') then return new; end if;
+  reviewer := is_gestor() or (can_edit_barber(new.barber_id) and new.barber_id is distinct from my_barber());
+  if reviewer then return new; end if;
+  if exists (
+    select 1 from jsonb_each(coalesce(new.data->'ev', '{}'::jsonb)) k, jsonb_array_elements(case when jsonb_typeof(k.value) = 'array' then k.value else '[]'::jsonb end) e
+    where coalesce(e->>'status', 'pendente') <> 'pendente'
+      and not exists (select 1 from jsonb_each(coalesce(case when tg_op = 'UPDATE' then old.data->'ev' end, '{}'::jsonb)) k2,
+                      jsonb_array_elements(case when jsonb_typeof(k2.value) = 'array' then k2.value else '[]'::jsonb end) e2
+                      where e2->>'id' = e->>'id' and e2->>'status' = e->>'status')
+  ) then raise exception 'Somente a gestão pode conferir as provas.'; end if;
+  if tg_op = 'UPDATE' and exists (
+    select 1 from jsonb_each(coalesce(old.data->'ev', '{}'::jsonb)) k, jsonb_array_elements(case when jsonb_typeof(k.value) = 'array' then k.value else '[]'::jsonb end) e
+    where coalesce(e->>'status', 'pendente') <> 'pendente'
+      and not exists (select 1 from jsonb_each(coalesce(new.data->'ev', '{}'::jsonb)) k2,
+                      jsonb_array_elements(case when jsonb_typeof(k2.value) = 'array' then k2.value else '[]'::jsonb end) e2
+                      where e2->>'id' = e->>'id' and e2->>'status' = e->>'status')
+  ) then raise exception 'Prova já conferida não pode ser alterada.'; end if;
+  return new;
+end $$;
+drop trigger if exists guard_pop on public.pop_records;
+create trigger guard_pop before insert or update on public.pop_records for each row execute function public.guard_pop();
+drop policy if exists pop_write on public.pop_records;
+create policy pop_ins on public.pop_records for insert
+  with check (company_id = my_company() and (can_edit_barber(barber_id) or barber_id = my_barber()));
+create policy pop_upd on public.pop_records for update
   using (company_id = my_company() and (can_edit_barber(barber_id) or barber_id = my_barber()))
   with check (company_id = my_company() and (can_edit_barber(barber_id) or barber_id = my_barber()));
+create policy pop_del on public.pop_records for delete using (company_id = my_company() and is_gestor());
+
+-- Fotos das provas (Storage, pasta: barbearia/barbeiro/dia/arquivo.jpg). Bucket privado, até 3 MB por imagem.
+do $$ begin
+  if to_regclass('storage.buckets') is not null then
+    insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+    values ('provas', 'provas', false, 3145728, array['image/jpeg', 'image/png', 'image/webp'])
+    on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+    drop policy if exists provas_read on storage.objects;
+    drop policy if exists provas_insert on storage.objects;
+    drop policy if exists provas_delete on storage.objects;
+    create policy provas_read on storage.objects for select to authenticated
+      using (bucket_id = 'provas' and (storage.foldername(name))[1] = my_company()::text);
+    create policy provas_insert on storage.objects for insert to authenticated
+      with check (bucket_id = 'provas' and (storage.foldername(name))[1] = my_company()::text
+        and (can_edit_barber((storage.foldername(name))[2]) or (storage.foldername(name))[2] = my_barber()));
+    create policy provas_delete on storage.objects for delete to authenticated
+      using (bucket_id = 'provas' and (storage.foldername(name))[1] = my_company()::text
+        and (can_edit_barber((storage.foldername(name))[2]) or (storage.foldername(name))[2] = my_barber()));
+  end if;
+end $$;
 
 -- Chave da API: só o gestor.
 create policy api_keys_all on public.api_keys for all using (company_id = my_company() and is_gestor()) with check (company_id = my_company() and is_gestor());

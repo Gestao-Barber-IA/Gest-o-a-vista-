@@ -80,6 +80,24 @@
     plans: async () => { const { data, error } = await c.from('plans').select('*').order('sort'); if (error) throw error; return data; },
     savePlan: async (id, patch) => { const { error } = await c.from('plans').update(patch).eq('id', id); if (error) throw error; },
   };
+  // Provas do checklist (fotos) no armazenamento do Supabase, pasta da barbearia.
+  const PROOFS = 'provas';
+  const urlCache = {};
+  Cloud.uploadProof = async (path, dataUrl) => {
+    const blob = await (await fetch(dataUrl)).blob();
+    const { error } = await c.storage.from(PROOFS).upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+    if (error) throw error;
+    return path;
+  };
+  Cloud.proofUrl = async path => {
+    const hit = urlCache[path];
+    if (hit && hit.exp > Date.now()) return hit.url;
+    const { data, error } = await c.storage.from(PROOFS).createSignedUrl(path, 3600);
+    if (error) throw error;
+    urlCache[path] = { url: data.signedUrl, exp: Date.now() + 3500 * 1000 };
+    return data.signedUrl;
+  };
+  Cloud.removeProof = async path => { try { await c.storage.from(PROOFS).remove([path]); } catch (e) { /* segue */ } };
   Cloud.rotateKey = async () => { const { data, error } = await c.rpc('rotate_api_key'); if (error) throw error; return data; };
 
   // ---------- conversão entre o app e as tabelas ----------
@@ -91,7 +109,7 @@
     barbers: { key: b => b.id, row: (b, cid) => ({ id: b.id, company_id: cid, name: b.name, photo: b.photo || null, active: b.active !== false, role: b.role || 'Barbeiro', instagram: b.instagram || '' }), list: s => s.barbers, pk: r => ({ id: r.id }) },
     invites: { key: i => i.code, row: (i, cid) => ({ code: i.code, company_id: cid, barber_id: i.barberId, used: !!i.used }), list: s => s.invites, pk: r => ({ code: r.code }) },
     entries: { key: e => e.id, row: (e, cid) => ({ id: e.id, company_id: cid, barber_id: e.barberId, date: e.date, data: pick(e, ENTRY_KEYS), source: e.source || 'manual' }), list: s => s.entries, pk: r => ({ id: r.id }) },
-    pop: { key: r => r.barberId + '|' + r.day, row: (r, cid) => ({ id: r.barberId + '|' + r.day, company_id: cid, barber_id: r.barberId, day: r.day, data: { v: r.v || {}, notes: r.notes || {}, msg: r.msg || {}, res: r.res || null, by: r.by || null, at: r.at || null } }), list: s => s.pop || [], pk: r => ({ id: r.id }) },
+    pop: { key: r => r.barberId + '|' + r.day, row: (r, cid) => ({ id: r.barberId + '|' + r.day, company_id: cid, barber_id: r.barberId, day: r.day, data: { ev: r.ev || {}, notes: r.notes || {}, msg: r.msg || {}, res: r.res || null, by: r.by || null, at: r.at || null } }), list: s => s.pop || [], pk: r => ({ id: r.id }) },
     monthly: { key: m => m.barberId + '|' + m.month, row: (m, cid) => ({ company_id: cid, barber_id: m.barberId, month: m.month, data: pick(m, MONTH_KEYS) }), list: s => s.monthly || [], pk: r => ({ barber_id: r.barber_id, month: r.month }) },
   };
   const TNAME = { pop: 'pop_records' };
