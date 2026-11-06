@@ -184,7 +184,7 @@
     const r = monthRange(ym);
     const out = {}; let hD = 0, hO = 0, cli = 0, ret = 0;
     for (const e of state.entries) {
-      if (e.barberId !== barberId || e.date < r.start || e.date > r.end) continue;
+      if (e.source === 'manual' || e.barberId !== barberId || e.date < r.start || e.date > r.end) continue;
       for (const k of ['fat', 'cli', 'serv', 'prod', 'check', 'planos']) if (isNum(e[k])) out[k] = (out[k] || 0) + Number(e[k]);
       if (isNum(e.hDisp)) { hD += Number(e.hDisp); hO += Number(e.hOcup || 0); }
       if (isNum(e.cli)) cli += Number(e.cli);
@@ -243,6 +243,42 @@
     return cfg.items.reduce((a, it) => a + popItemPts(it, rec.ev[it.id], pending), 0);
   }
   const popDays = (state, barberId) => (state.pop || []).filter(r => r.barberId === barberId && r.day.length === 10 && r.ev && Object.values(r.ev).some(l => Array.isArray(l) && l.length));
+
+
+  // ---------- Lançamento manual por dia ----------
+  // Os campos somáveis do Lançamentos mostram o total do mês; ao mudar o total,
+  // a diferença entra no dia escolhido (entrada "manual"), para aparecer na Semana.
+  const SUM_KEYS = ['fat', 'cli', 'serv', 'prod', 'check', 'planos'];
+  const r2 = v => Math.round(v * 100) / 100;
+  const manualEntries = (state, bid, ym) => state.entries.filter(e => e.source === 'manual' && e.barberId === bid && e.date.slice(0, 7) === ym);
+  function manualTotal(state, bid, ym, key) {
+    return r2(manualEntries(state, bid, ym).reduce((a, e) => a + (isNum(e[key]) ? Number(e[key]) : 0), 0));
+  }
+  function manualEntry(state, bid, date) {
+    let e = state.entries.find(x => x.source === 'manual' && x.barberId === bid && x.date === date);
+    if (!e) { e = { id: 'm_' + bid + '_' + date, barberId: bid, date, source: 'manual' }; state.entries.push(e); }
+    return e;
+  }
+  function applyManualTotal(state, bid, ym, key, target, date) {
+    const rec = (state.monthly || []).find(m => m.barberId === bid && m.month === ym);
+    // Total antigo do mês (antes do lançamento por dia) vira o saldo do dia 1.
+    if (rec && isNum(rec[key]) && !(rec._adj && rec._adj[key])) {
+      const e1 = manualEntry(state, bid, monthRange(ym).start);
+      e1[key] = r2((isNum(e1[key]) ? Number(e1[key]) : 0) + Number(rec[key]));
+      rec[key] = null;
+    }
+    let delta = r2((isNum(target) ? Number(target) : 0) - manualTotal(state, bid, ym, key));
+    if (delta > 0) { const e = manualEntry(state, bid, date); e[key] = r2((isNum(e[key]) ? Number(e[key]) : 0) + delta); return; }
+    if (delta === 0) return;
+    // Diminuiu: tira do dia escolhido, depois dos dias anteriores, depois dos seguintes.
+    const list = manualEntries(state, bid, ym).filter(e => isNum(e[key]) && Number(e[key]) > 0)
+      .sort((a, b) => (a.date === date ? -1 : b.date === date ? 1 : 0) || (a.date <= date && b.date <= date ? b.date.localeCompare(a.date) : a.date <= date ? -1 : b.date <= date ? 1 : a.date.localeCompare(b.date)));
+    for (const e of list) {
+      if (delta >= 0) break;
+      const take = Math.min(Number(e[key]), -delta);
+      e[key] = r2(Number(e[key]) - take); delta = r2(delta + take);
+    }
+  }
 
   const DEFAULT_GOALS = { fat: 6000, check: 390, ocup: 75, ticket: 60, serv: 130, cli: 110, planos: 4, fid: 50, prod: 500 };
   const goalFor = (state, barberId, key) => {
@@ -522,7 +558,7 @@
       const b = state.barbers.find(x => x.id === ref) ||
         state.barbers.find(x => x.name.toLowerCase() === String(ref || '').toLowerCase().trim());
       if (!b) { errors.push(`Item ${n}: barbeiro "${ref ?? ''}" não encontrado.`); return; }
-      const entry = { barberId: b.id, date };
+      const entry = { barberId: b.id, date, source: 'api' };
       for (const f of FIELDS) {
         const v = item[f.api];
         entry[f.key] = v === undefined || v === null || v === '' ? null : Number(v);
@@ -535,7 +571,8 @@
   }
 
   function upsertEntry(state, entry) {
-    const i = state.entries.findIndex(e => e.barberId === entry.barberId && e.date === entry.date);
+    const src = entry.source || 'api';
+    const i = state.entries.findIndex(e => e.barberId === entry.barberId && e.date === entry.date && (e.source || 'api') === src);
     if (i >= 0) state.entries[i] = { ...state.entries[i], ...entry };
     else state.entries.push({ id: uid('e_'), ...entry });
   }
@@ -544,5 +581,5 @@
   const visibleInds = state => INDICATORS.filter(i => !(state.hidden || []).includes(i.key));
   const FIELD_IND = { fidPct: 'fid', ocupPct: 'ocup' };
 
-  window.GB = Object.assign(window.GB || {}, { evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
+  window.GB = Object.assign(window.GB || {}, { SUM_KEYS, manualEntries, manualTotal, applyManualTotal, evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
 })();

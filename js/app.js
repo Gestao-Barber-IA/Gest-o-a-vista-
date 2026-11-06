@@ -766,6 +766,7 @@
         <p class="section-note">Toque num barbeiro para ver as métricas, a carreira e as metas dele.</p>${classCards(R, ym)}</section>`;
   }
 
+  const r2v = v => Math.round(v * 100) / 100;
   function editorFields(b, ym) {
     const rec = (state.monthly || []).find(m => m.barberId === b.id && m.month === ym) || {};
     const integ = monthFromIntegration(state, b.id, ym);
@@ -804,9 +805,27 @@
           <small class="adj-meta">${meta}</small>
           ${own ? `<button type="button" class="link-btn adj-undo" data-action="apiRevert" data-id="${esc(b.id)}" data-k="${f.key}">${icon('undo')} Voltar ao valor da integração</button>` : ''}</div>`;
       }
-      return `<label class="field"><span class="tm-flabel">${esc(f.label)}</span>
-        <input class="input input-edit num" id="m-${f.key}" name="${f.key}" type="number" inputmode="decimal" min="0" ${f.max ? `max="${f.max}"` : ''} step="${f.step}" value="${isNum(rec[f.key]) ? rec[f.key] : ''}" placeholder="—" data-auto="month" data-id="${esc(b.id)}"></label>`;
+      const isSum = GB.SUM_KEYS.includes(f.key);
+      const hasMan = isSum && GB.manualEntries(state, b.id, ym).some(e => isNum(e[f.key]));
+      const shownV = isNum(rec[f.key]) ? rec[f.key] : (hasMan ? GB.manualTotal(state, b.id, ym, f.key) : '');
+      return `<label class="field"><span class="tm-flabel">${esc(f.label)}${isSum ? '<span class="lock lock-sum">Total do mês</span>' : ''}</span>
+        <input class="input input-edit num" id="m-${f.key}" name="${f.key}" type="number" inputmode="decimal" min="0" ${f.max ? `max="${f.max}"` : ''} step="${f.step}" value="${shownV}" placeholder="—" data-auto="month" ${isSum ? 'data-sum="1"' : ''} data-id="${esc(b.id)}"></label>`;
     }).join('');
+  }
+
+  // Data em que entra a diferença do lançamento (dentro do mês escolhido).
+  function lanDate(ym) {
+    const r = monthRange(ym), t = iso(new Date());
+    if (ui.lanDate && ui.lanDate >= r.start && ui.lanDate <= r.end) return ui.lanDate;
+    return t >= r.start && t <= r.end ? t : r.end;
+  }
+  // Histórico do mês: o que entrou à mão em cada dia.
+  function lanHistory(b, ym) {
+    const L = { fat: v => money0(v), cli: v => nf0.format(v) + ' clientes', serv: v => nf0.format(v) + ' serviços', prod: v => 'produtos ' + money0(v), check: v => nf1.format(v) + ' pts checklist', planos: v => nf0.format(v) + ' planos' };
+    const days = GB.manualEntries(state, b.id, ym).filter(e => GB.SUM_KEYS.some(k => isNum(e[k]) && Number(e[k]) !== 0)).sort((a, c) => c.date.localeCompare(a.date));
+    if (!days.length) return '';
+    return `<details class="lan-hist" ${ui.lanHistOpen ? 'open' : ''}><summary>Lançamentos por dia em ${esc(ymLabel(ym).replace(' de ', '/'))} (${days.length})</summary>
+      <ul>${days.map(e => `<li><b class="num">${dateBR(e.date).slice(0, 5)}</b><span>${GB.SUM_KEYS.filter(k => isNum(e[k]) && Number(e[k]) !== 0).map(k => L[k](Number(e[k]))).join(' · ')}</span></li>`).join('')}</ul></details>`;
   }
 
   function teamEditor(ym) {
@@ -831,7 +850,11 @@
         <label class="field"><span class="tm-flabel">Instagram</span><input class="input input-edit" id="m-instagram" name="instagram" value="${esc(sel.instagram || '')}" placeholder="@usuario" data-auto="barber" data-id="${esc(sel.id)}"></label>
         <label class="field"><span class="tm-flabel">Cargo na empresa</span><select class="input input-edit" id="m-role" name="role" data-auto="barber" data-id="${esc(sel.id)}">${ROLES.map(r => `<option ${r === (sel.role || 'Barbeiro') ? 'selected' : ''}>${r}</option>`).join('')}</select></label>
       </div>` : ''}
+      <div class="lan-date"><label class="field"><span class="tm-flabel">Data do lançamento</span>
+        <input class="input" type="date" id="m-date" value="${lanDate(ym)}" min="${monthRange(ym).start}" max="${monthRange(ym).end}" data-change="lanDate"></label>
+        <p class="section-note">Os campos mostram o total do mês. Ao mudar um total, a diferença entra nesta data e já aparece na visão por semana.</p></div>
       <div class="grid-2" id="tm-fields">${editorFields(sel, ym)}</div>
+      <div id="tm-hist">${lanHistory(sel, ym)}</div>
       ${own ? `<details class="tm-goals"><summary>Metas individuais de ${esc(sel.name.split(' ')[0])} <span class="muted">(em branco = meta da equipe)</span></summary>
         <div class="grid-2">${GB.visibleInds(state).map(i => `<label class="field"><span class="tm-flabel">${esc(i.label)}</span><input class="input input-edit num" id="g-${i.key}" name="${i.key}" type="number" min="0" step="any" value="${isNum(goals[i.key]) ? goals[i.key] : ''}" placeholder="Equipe: ${esc(fmtGoal(i, GB.goalFor(state, '', i.key)))}" data-auto="goal" data-id="${esc(sel.id)}"></label>`).join('')}</div>
       </details>` : ''}
@@ -974,6 +997,7 @@
     const row = R.rows.find(r => r.barber.id === ui.teamBarber);
     const pos = $('#tm-pos'); if (pos && row) pos.textContent = `Posição atual: ${ord(row.pos)} · pontuação ${score(row.overall)} / 100. Tudo é salvo automaticamente no mês selecionado.`;
     const tk = $('#m-ticket'); if (tk && row) tk.value = row.sums.cli > 0 ? nf2.format(row.sums.fat / row.sums.cli) : '';
+    const hist = $('#tm-hist'), hb = barberById(ui.teamBarber); if (hist && hb) { const open = hist.querySelector('details')?.open; ui.lanHistOpen = !!open; hist.innerHTML = lanHistory(hb, ym); }
   }
 
   let autoTimer = null;
@@ -991,6 +1015,9 @@
       } else {
         const v = raw === '' ? null : Number(raw.replace(',', '.'));
         if (v !== null && (Number.isNaN(v) || v < 0 || (el.max && v > Number(el.max)))) ok = false;
+        else if (kind === 'month' && el.dataset.sum) {
+          GB.applyManualTotal(state, id, ym, key, v, lanDate(ym));
+        }
         else if (kind === 'month') {
           state.monthly = state.monthly || [];
           let rec = state.monthly.find(m => m.barberId === id && m.month === ym);
@@ -3082,6 +3109,7 @@ Content-Type: application/json</pre>
     tvSoundKind(el) { Sound.kind = el.value; Sound.play(el.value, true); },
     perfBarber(el) { ui.perfBarber = el.value; render(); },
     teamMonth(el) { ui.teamMonth = el.value; render(); },
+    lanDate(el) { ui.lanDate = el.value; },
     popMonth(el) { ui.teamMonth = ui.popMonth = el.value; ui.popDraft = null; render(); },
     async popPhoto(el) {
       const f = el.files && el.files[0]; if (!f || !ui.popDraft) return;

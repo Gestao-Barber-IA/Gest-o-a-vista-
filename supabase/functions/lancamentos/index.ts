@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
   });
 
   if (rows.length) {
-    const { error } = await db.from("entries").upsert(rows, { onConflict: "barber_id,date" });
+    const { error } = await db.from("entries").upsert(rows, { onConflict: "barber_id,date,source" });
     if (error) return json({ erro: "Não foi possível gravar: " + error.message, recebidos: 0, problemas: erros }, 500);
   }
   return json({ recebidos: rows.length, problemas: erros }, erros.length && !rows.length ? 400 : 200);

@@ -977,6 +977,15 @@ textarea.input.pop-ta { min-height: 72px; font-family: var(--font-body); font-si
 .tm-flabel { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; font-weight: 600; font-size: 0.86rem; text-transform: uppercase; letter-spacing: 0.04em; color: #d8d3c8; }
 .lock { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; background: var(--surface-3); color: var(--muted); font-size: 0.74rem; text-transform: none; letter-spacing: 0; font-weight: 600; }
 .lock .ico { width: 14px; height: 14px; }
+.lock-sum { background: var(--surface-2); color: var(--muted); font-size: 0.7rem; }
+.lan-date { display: grid; gap: 6px; }
+.lan-date .input { max-width: 220px; }
+.lan-date .section-note { margin: 0; }
+.lan-hist { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 14px; }
+.lan-hist summary { cursor: pointer; font-weight: 600; }
+.lan-hist ul { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.lan-hist li { display: flex; gap: 12px; align-items: baseline; color: #d8d3c8; font-size: 0.92rem; }
+.lan-hist li b { flex: none; color: var(--fg); }
 .lock-btn { border: 1px dashed var(--line-accent); cursor: pointer; font: inherit; font-size: 0.74rem; }
 .lock-btn:hover { color: var(--accent); border-color: var(--accent); }
 .lock-adj { background: rgba(214, 180, 106, 0.16); color: var(--accent); }
