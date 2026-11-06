@@ -240,7 +240,11 @@
           ${passField('su-pass', 'pass', 'Senha *', { min: 6, hint: 'Mínimo de 6 caracteres.' })}
           ${passField('su-pass2', 'pass2', 'Confirmar senha *', { min: 6 })}
           ${Cloud.enabled ? `<label class="field"><span>WhatsApp</span><input class="input" id="su-phone" name="phone" type="tel" autocomplete="tel" placeholder="(00) 00000-0000"></label>
-          <p class="section-note">7 dias grátis para testar, sem cartão. No teste, os resultados são lançados à mão.</p>
+          <div class="trial-note">
+            <p><b>7 dias grátis para testar, sem cartão.</b></p>
+            <p>${icon('edit')}<span>No teste, você lança os resultados manualmente.</span></p>
+            <p>${icon('plug')}<span>Ao assinar um plano, os resultados passam a ser preenchidos automaticamente pela integração (API) com o seu sistema.</span></p>
+          </div>
           <label class="check"><input type="checkbox" id="su-terms" name="terms"><span><b>Li e aceito os <a href="termos.html" target="_blank" rel="noopener">Termos de uso</a> e a <a href="privacidade.html" target="_blank" rel="noopener">Política de privacidade</a></b></span></label>` : ''}
           ${state.demo ? '<p class="section-note">Neste aparelho, criar uma conta nova substitui os dados de demonstração. Dá para restaurá-los depois em Configurações.</p>' : ''}
           <p class="form-msg" data-msg></p>
