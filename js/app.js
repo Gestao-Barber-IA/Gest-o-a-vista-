@@ -358,7 +358,7 @@
       { r: 'metas', t: 'Metas', i: 'target', soon: 1 },
       { r: 'premios', t: 'Prêmios e metas', i: 'gift', soon: 1 },
       { r: 'sonhos', t: 'Sonhos', i: 'rocket', soon: 1 },
-      { r: 'checklist', t: 'Checklist Agenda Cheia', i: 'checksq', soon: 1 },
+      { r: 'checklist', t: 'Checklist Agenda Cheia', i: 'checksq' },
     ] },
     { group: 'Gestor', g: 1, items: [
       { r: 'empresa', t: 'Minha empresa', i: 'building' },
@@ -380,7 +380,6 @@
     metas: 'Metas individuais e da equipe, com acompanhamento em tempo real.',
     premios: 'Prêmios ligados às metas, para motivar o time.',
     sonhos: 'Cada barbeiro registra um sonho e acompanha quanto falta para realizá-lo.',
-    checklist: 'Procedimento padrão da Agenda Cheia, que alimenta o indicador Checklist Agenda Cheia do ranking.',
     cockpit: 'Visão rápida do gestor com os principais números do negócio.',
   };
 
@@ -787,11 +786,11 @@
         return `<div class="field"><span class="tm-flabel">${esc(f.label)}<span class="lock">${icon('chart')} Calculado</span></span>
           <input class="input num" id="m-${f.key}" value="${t == null ? '' : nf2.format(t)}" readonly tabindex="-1" placeholder="Faturamento ÷ clientes"></div>`;
       }
-      const locked = f.daily && isNum(integ[f.key]) && !isNum(rec[f.key]);
+      const locked = (f.key === 'check' && integ._pop) || (f.daily && isNum(integ[f.key]) && !isNum(rec[f.key]));
       if (locked) {
         const v = integ[f.key];
         const shown = f.key.endsWith('Pct') ? nf2.format(v) : (f.step === '0.01' ? nf2.format(v) : nf0.format(v));
-        return `<div class="field"><span class="tm-flabel">${esc(f.label)}<span class="lock">${icon('lock')} Vindo da integração</span></span>
+        return `<div class="field"><span class="tm-flabel">${esc(f.label)}<span class="lock">${icon('lock')} ${f.key === 'check' && integ._pop ? 'Vindo do checklist' : 'Vindo da integração'}</span></span>
           <input class="input num" id="m-${f.key}" value="${shown}" readonly tabindex="-1"></div>`;
       }
       return `<label class="field"><span class="tm-flabel">${esc(f.label)}</span>
@@ -1903,6 +1902,247 @@ Content-Type: application/json</pre>
     return `${orgTabs()}<div class="org-body">${t === 'montar' ? orgMontar() : t === 'avancado' ? orgAvancado() : orgVer()}</div>${orgSheet()}`;
   }
 
+  // ---------- Checklist Agenda Cheia (POP) ----------
+  const popCfg = () => GB.popCfgOf(state);
+  const todayIso = () => iso(new Date());
+  const daysInMonth = ym => Number(monthRange(ym).end.slice(8));
+  const popRec = (bid, day) => (state.pop || []).find(r => r.barberId === bid && r.day === day);
+  function popRecW(bid, day) {
+    state.pop = state.pop || [];
+    let r = popRec(bid, day);
+    if (!r) { r = { barberId: bid, day, v: {}, notes: {}, msg: {} }; state.pop.push(r); }
+    r.v = r.v || {}; r.notes = r.notes || {}; r.msg = r.msg || {};
+    const u = currentUser();
+    r.by = u && u.barberId === bid ? 'profissional' : 'gestao'; r.at = Date.now();
+    return r;
+  }
+  const r1 = v => Math.round(v * 10) / 10;
+  const fmtPts = v => nf1.format(r1(v)).replace(/,0$/, '');
+  function popMonth(bid, ym) {
+    const cfg = popCfg(), n = daysInMonth(ym), max = GB.popDayMax(cfg) * n;
+    let total = 0;
+    for (let d = 1; d <= n; d++) total += GB.popDayPts(cfg, popRec(bid, `${ym}-${String(d).padStart(2, '0')}`));
+    return { total: r1(total), max, pct: max ? total / max * 100 : 0 };
+  }
+  function popLevel(pts) {
+    const lv = [...popCfg().levels].sort((a, b) => b.min - a.min);
+    return lv.find(l => pts >= Number(l.min)) || lv[lv.length - 1];
+  }
+  function popStatus(bid, day) {
+    const cfg = popCfg(), rec = popRec(bid, day);
+    if (!rec || !rec.v || !Object.keys(rec.v).some(k => { const x = rec.v[k]; return Array.isArray(x) ? x.some(Boolean) : !!x; })) return 'none';
+    return GB.popDayPts(cfg, rec) >= GB.popDayMax(cfg) - 0.01 ? 'done' : 'part';
+  }
+  const popPeople = () => state.barbers.filter(b => b.active !== false && (canEditB(b.id) || (currentUser() || {}).barberId === b.id));
+  const canPopEdit = bid => canEditB(bid) || (currentUser() || {}).barberId === bid;
+
+  function popItemCard(it, rec, bid, editing) {
+    const v = rec && rec.v ? rec.v[it.id] : undefined;
+    const pts = GB.popItemPts(it, v);
+    const done = it.type === 'check' ? (v ? 1 : 0) : it.type === 'phones' ? (Array.isArray(v) ? v.filter(GB.validPhone).length : 0) : Number(v || 0);
+    const pct = Math.min(100, done / Math.max(1, it.target) * 100);
+    const ro = !canPopEdit(bid);
+    let ctl = '';
+    if (it.type === 'check') {
+      ctl = `<button class="btn pop-check ${v ? 'on' : ''}" data-action="popToggle" data-it="${esc(it.id)}" ${ro ? 'disabled' : ''} aria-pressed="${!!v}">${icon('check')} ${v ? 'Feito' : 'Marcar como feito'}</button>`;
+    } else if (it.type === 'phones') {
+      const list = Array.isArray(v) && v.length ? v : [''];
+      ctl = `<div class="pop-phones">${list.map((ph, i) => `<div class="pop-phone ${ph && !GB.validPhone(ph) ? 'bad' : ''}">${icon('phone')}<input class="input" type="tel" inputmode="tel" id="ph-${esc(it.id)}-${i}" value="${esc(ph)}" placeholder="Telefone do cliente ${i + 1}" data-pop="phone" data-it="${esc(it.id)}" data-i="${i}" ${ro ? 'readonly' : ''}>
+          ${ro ? '' : `<button class="icon-btn" data-action="popPhoneDel" data-it="${esc(it.id)}" data-i="${i}" aria-label="Remover telefone ${i + 1}">${icon('x')}</button>`}</div>`).join('')}
+        <div class="pop-row">${ro ? '' : `<button class="btn btn-sm" data-action="popPhoneAdd" data-it="${esc(it.id)}">${icon('plus')} Telefone</button>`}<b class="num" id="pc-${esc(it.id)}">${done}/${it.target} válidos</b></div></div>
+        <label class="field"><span class="tm-flabel">Texto da mensagem enviada (prompt)</span><textarea class="input pop-ta" id="pm-${esc(it.id)}" data-pop="msg" data-it="${esc(it.id)}" placeholder="Cole aqui a mensagem ou abordagem que você enviou" ${ro ? 'readonly' : ''}>${esc(rec && rec.msg ? rec.msg[it.id] || '' : '')}</textarea></label>`;
+    } else {
+      const n = Number(it.target) || 1;
+      ctl = `<div class="pop-count">
+        <button class="pop-step" data-action="popCount" data-it="${esc(it.id)}" data-n="${Math.max(0, done - 1)}" ${ro ? 'disabled' : ''} aria-label="Menos um">${icon('dash')}</button>
+        ${Array.from({ length: Math.min(n, 30) }, (_, i) => `<button class="pop-num ${i < done ? 'on' : ''}" data-action="popCount" data-it="${esc(it.id)}" data-n="${i + 1 === done ? i : i + 1}" ${ro ? 'disabled' : ''} aria-label="${i + 1}">${i + 1}</button>`).join('')}
+        <button class="pop-step" data-action="popCount" data-it="${esc(it.id)}" data-n="${Math.min(n, done + 1)}" ${ro ? 'disabled' : ''} aria-label="Mais um">${icon('plus')}</button>
+        <b class="num">${done}/${n}</b></div>`;
+    }
+    return `<article class="pop-item ${pct >= 100 ? 'is-done' : ''}" id="pi-${esc(it.id)}">
+      <div class="pop-ihead"><div><h3>${esc(it.title)}</h3><p>${esc(it.desc || '')}</p></div><span class="pop-badge num" id="pb-${esc(it.id)}">${fmtPts(pts)}/${fmtPts(it.pts)} pts</span></div>
+      <div class="pop-bar"><i id="pbar-${esc(it.id)}" style="width:${pct}%"></i></div>
+      ${ctl}
+      <label class="field"><span class="tm-flabel">Resultado / observação por pessoa (opcional)</span><textarea class="input pop-ta" id="pn-${esc(it.id)}" data-pop="note" data-it="${esc(it.id)}" placeholder="Ex.: João agendou sábado, Pedro pediu preço" ${ro ? 'readonly' : ''}>${esc(rec && rec.notes ? rec.notes[it.id] || '' : '')}</textarea></label>
+    </article>`;
+  }
+
+  function popEditor() {
+    const c = popCfg();
+    const f = (k, label, type = 'text') => `<label class="field"><span class="tm-flabel">${label}</span><input class="input" id="pcfg-${k}" type="${type}" value="${esc(c[k] ?? '')}" data-popcfg="${k}"></label>`;
+    return `<section class="section card pop-edit">
+      ${f('title', 'Programa')}${f('subtitle', 'Subtítulo')}${f('shop', 'Barbearia')}${f('phrase', 'Frase motivacional')}
+      <div class="field"><span class="tm-flabel">Dias no mês</span><b>${daysInMonth(ui.popMonth)} (calendário real, automático)</b></div>
+      ${f('minProfit', 'Meta de lucro mínimo (R$)', 'number')}
+      <h3 class="pop-h3">Itens do checklist</h3>
+      ${c.items.map((it, i) => `<div class="pop-eitem">
+        <div class="grid-2"><label class="field"><span class="tm-flabel">Nome</span><input class="input" id="pei-t-${i}" value="${esc(it.title)}" data-popitem="title" data-i="${i}"></label>
+        <label class="field"><span class="tm-flabel">Tipo</span><select class="input" id="pei-y-${i}" data-popitem="type" data-i="${i}">
+          ${[['count', 'Contador'], ['phones', 'Telefones'], ['check', 'Marcar como feito']].map(([k, l]) => `<option value="${k}" ${it.type === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
+        <label class="field"><span class="tm-flabel">Descrição</span><input class="input" id="pei-d-${i}" value="${esc(it.desc || '')}" data-popitem="desc" data-i="${i}"></label>
+        <div class="grid-2">${it.type === 'check' ? '' : `<label class="field"><span class="tm-flabel">Meta (quantidade)</span><input class="input num" type="number" min="1" id="pei-m-${i}" value="${it.target}" data-popitem="target" data-i="${i}"></label>`}
+        <label class="field"><span class="tm-flabel">Pontos</span><input class="input num" type="number" min="0" step="0.5" id="pei-p-${i}" value="${it.pts}" data-popitem="pts" data-i="${i}"></label></div>
+        <div class="btn-row"><button class="btn btn-sm" data-action="popItemMove" data-i="${i}" data-d="-1" ${i ? '' : 'disabled'}>${icon('up')} Subir</button>
+          <button class="btn btn-sm" data-action="popItemMove" data-i="${i}" data-d="1" ${i < c.items.length - 1 ? '' : 'disabled'}>${icon('down')} Descer</button>
+          <button class="btn btn-sm btn-danger" data-action="popItemDel" data-i="${i}">${ui.confirm === 'pitem' + i ? 'Confirmar exclusão' : 'Excluir'}</button></div>
+      </div>`).join('')}
+      <button class="btn" data-action="popItemAdd">${icon('plus')} Adicionar item</button>
+      <p class="section-note">Soma do dia: <b class="num">${fmtPts(GB.popDayMax(c))} pts</b> · mês de ${daysInMonth(ui.popMonth)} dias: <b class="num">${fmtPts(GB.popDayMax(c) * daysInMonth(ui.popMonth))} pts</b>.</p>
+      <h3 class="pop-h3">Níveis e garantia</h3>
+      ${c.levels.map((l, i) => `<div class="grid-2 pop-elevel">
+        <label class="field"><span class="tm-flabel">Nível</span><input class="input" id="pel-n-${i}" value="${esc(l.name)}" data-poplevel="name" data-i="${i}"></label>
+        <label class="field"><span class="tm-flabel">Garantia (R$, vazio = sem)</span><input class="input num" type="number" min="0" id="pel-v-${i}" value="${l.value ?? ''}" data-poplevel="value" data-i="${i}"></label>
+        <label class="field"><span class="tm-flabel">De (pts)</span><input class="input num" type="number" min="0" id="pel-a-${i}" value="${l.min}" data-poplevel="min" data-i="${i}"></label>
+        <label class="field"><span class="tm-flabel">Até (pts)</span><input class="input num" type="number" min="0" id="pel-b-${i}" value="${l.max}" data-poplevel="max" data-i="${i}"></label>
+      </div>`).join('')}
+      <label class="field"><span class="tm-flabel">Regras do programa</span><textarea class="input pop-ta" id="pcfg-rules" data-popcfg="rules">${esc(c.rules || '')}</textarea></label>
+      <label class="field"><span class="tm-flabel">Perde a garantia quem (um por linha)</span><textarea class="input pop-ta" id="pcfg-lose" data-popcfg="lose">${esc((c.lose || []).join('\n'))}</textarea></label>
+    </section>`;
+  }
+
+  function pageChecklist(user) {
+    const cfg = popCfg();
+    if (!ui.popMonth) ui.popMonth = curYm();
+    const ym = ui.popMonth;
+    const people = popPeople();
+    if (!people.length) return `<div class="card empty">${icon('checksq')}<h2>Sem profissionais</h2><p>${isGestor(user) ? 'Cadastre os barbeiros em Barbeiros para usar o checklist.' : 'Seu cadastro ainda não está ligado a um barbeiro. Fale com o gestor.'}</p></div>`;
+    if (!people.some(b => b.id === ui.popBarber)) ui.popBarber = (people.find(b => b.id === user.barberId) || people[0]).id;
+    const bid = ui.popBarber, b = barberById(bid);
+    const n = daysInMonth(ym);
+    const isCur = ym === curYm();
+    if (!ui.popDay || ui.popDay > n || ui.popDayYm !== ym) { ui.popDay = isCur ? new Date().getDate() : 1; ui.popDayYm = ym; }
+    const day = `${ym}-${String(ui.popDay).padStart(2, '0')}`;
+    const rec = popRec(bid, day);
+    const today = todayIso();
+    const st = people.map(x => popStatus(x.id, today));
+    const cnt = k => st.filter(x => x === k).length;
+    const monthRecs = (state.pop || []).filter(r => r.barberId === bid && r.day.startsWith(ym) && r.at).sort((a, c) => c.at - a.at);
+    const last = monthRecs[0];
+    const editing = !!ui.popEdit && isGestor(user);
+    const dayPts = GB.popDayPts(cfg, rec), dayMax = GB.popDayMax(cfg);
+    const M = popMonth(bid, ym), lv = popLevel(M.total);
+    // últimos 7 dias até o dia escolhido
+    const days7 = Array.from({ length: 7 }, (_, i) => { const d = fromIso(day); d.setDate(d.getDate() - 6 + i); return iso(d); }).filter(d => d.startsWith(ym));
+    const vals7 = days7.map(d => d > today ? null : r1(GB.popDayPts(cfg, popRec(bid, d))));
+    const won7 = vals7.reduce((a, v) => a + (v || 0), 0), poss7 = vals7.filter(v => v !== null).length * dayMax;
+    const resRec = popRec(bid, ym) || {}; const res = resRec.res || {};
+    const ro = !canPopEdit(bid);
+    const dot = k => `<i class="pop-dot ${k}" aria-hidden="true"></i>`;
+    return `
+      <section class="section card">
+        <h2 class="pop-h2">Escolha o profissional</h2>
+        <p class="pop-today">Hoje: <b class="ok">${cnt('done')} completos</b> · <b class="part">${cnt('part')} incompletos</b> · <b class="none">${cnt('none')} sem registro</b></p>
+        <div class="pop-month"><select class="input" id="pop-month" data-change="popMonth">${monthOptions(ym)}</select></div>
+        <div class="pop-people">${people.map((x, i) => `<button class="pop-person ${x.id === bid ? 'on' : ''}" data-action="popPick" data-id="${esc(x.id)}"><span class="pop-av">${avatar(x, 42)}${dot(st[i])}</span><b>${esc(x.name)}</b><span class="num">${fmtPts(popMonth(x.id, ym).total)} pts</span></button>`).join('')}</div>
+      </section>
+      <p class="pop-who">Checklist de <b>${esc(b.name)}</b>${last ? ` · último registro feito ${last.by === 'profissional' ? 'pelo profissional' : 'pela gestão'}` : ' · ainda sem registro neste mês'}</p>
+      <div class="pop-tools">
+        <p class="pop-phrase">${icon('sparkle')}<span>${esc(cfg.phrase || '')}</span></p>
+        ${isGestor(user) ? `<label class="pop-switch"><input type="checkbox" id="pop-edit" data-change="popEdit" ${editing ? 'checked' : ''}><span></span>Editar estrutura</label>` : ''}
+        <div class="btn-row">
+          <button class="icon-btn pop-tb" data-action="popCsv" title="Baixar planilha do mês" aria-label="Baixar planilha do mês">${icon('download')}</button>
+          <button class="icon-btn pop-tb" data-action="popPrint" title="Relatório para imprimir ou salvar em PDF" aria-label="Relatório para imprimir ou salvar em PDF">${icon('file')}</button>
+          <button class="icon-btn pop-tb is-primary" data-action="popSave" title="Salvar agora" aria-label="Salvar agora">${icon('save')}</button>
+          ${ro ? '' : `<button class="icon-btn pop-tb ${ui.confirm === 'popReset' ? 'is-confirm' : ''}" data-action="popReset" title="${editing ? 'Restaurar modelo padrão' : 'Limpar o registro do dia'}" aria-label="${editing ? 'Restaurar modelo padrão' : 'Limpar o registro do dia'}">${ui.confirm === 'popReset' ? 'Confirmar' : icon('undo')}</button>`}
+        </div>
+      </div>
+      ${editing ? popEditor() : `<section class="section card pop-hero"><h2>${esc(cfg.title)}</h2><p>${esc(cfg.subtitle || '')}</p>${cfg.shop ? `<span class="muted">${esc(cfg.shop)}</span>` : ''}</section>`}
+      <section class="section card pop-day">
+        <div class="pop-dhead"><div><h2 class="pop-h2">${icon('sparkle')} Registro do dia</h2><p class="muted">Preencha stories, posts, abordagens e convites. Salva sozinho.</p></div>
+          <span class="pop-cloud" id="pop-saved" title="Salvo">${icon('cloud')}</span></div>
+        <span class="tm-flabel">Dia do mês</span>
+        <div class="pop-days" id="pop-days">${Array.from({ length: n }, (_, i) => { const d = `${ym}-${String(i + 1).padStart(2, '0')}`; const s2 = popStatus(bid, d); return `<button class="pop-dn ${i + 1 === ui.popDay ? 'on' : ''} st-${s2} ${d > today ? 'future' : ''}" data-action="popDay" data-d="${i + 1}" aria-label="Dia ${i + 1}">${i + 1}</button>`; }).join('')}</div>
+        <p class="pop-sum"><b class="num" id="pop-daypts">${fmtPts(dayPts)}/${fmtPts(dayMax)} pts nesta seção · ${fmtPts(dayPts)} pts no dia</b></p>
+        ${ro ? '<p class="section-note">Você está vendo este checklist sem poder editar.</p>' : ''}
+        <div class="pop-items">${cfg.items.map(it => popItemCard(it, rec, bid, editing)).join('')}</div>
+      </section>
+      <section class="section card pop-rem">
+        <div class="pop-dhead"><div><h2 class="pop-h2">${icon('bell')} Lembretes de posts</h2><p class="muted">Aviso diário para preencher o checklist enquanto a meta do dia não for batida.</p></div>
+          <label class="pop-switch"><input type="checkbox" id="pop-rem" data-change="popRem" ${DB.pref.get('popRem', '0') === '1' ? 'checked' : ''}><span></span><span class="sr">Lembretes</span></label></div>
+      </section>
+      <section class="section card">
+        <h2 class="pop-h2">${icon('chart')} Evolução — últimos 7 dias</h2>
+        <p class="muted">Pontos feitos em cada dia, de ${fmtPts(dayMax)} possíveis.</p>
+        ${lineSvg({ labels: days7.map(d => 'Dia ' + Number(d.slice(8))), series: [{ values: vals7, color: '#d6b46a', fill: true }], yMax: dayMax || 1, yFmt: v => fmtPts(v) })}
+        <div class="pc-totals pop-kpis">
+          <div class="pc-stat"><span>Aderência da semana</span><b class="num">${poss7 ? nf0.format(won7 / poss7 * 100) : 0}%</b></div>
+          <div class="pc-stat"><span>Pontos ganhos</span><b class="num">${fmtPts(won7)} pts</b></div>
+          <div class="pc-stat"><span>Pontos deixados na mesa</span><b class="num">${fmtPts(Math.max(0, poss7 - won7))} pts</b></div>
+          <div class="pc-stat"><span>Total no ranking (mês)</span><b class="num">${fmtPts(M.total)} / ${fmtPts(M.max)} pts</b></div>
+        </div>
+        <p class="section-note">Cada dia completo vale ${fmtPts(dayMax)} pts. Completar todos os dias deste mês soma ${fmtPts(M.max)} pts no indicador Checklist Agenda Cheia do ranking.</p>
+      </section>
+      <section class="section card">
+        <h2 class="pop-h2">Níveis e garantia</h2>
+        <div class="pop-levels">${cfg.levels.map(l => `<div class="pop-lv t-${esc(l.tone || 'plain')} ${l === lv ? 'is-cur' : ''}"><div><b>${esc(l.name)}</b><span class="num">${l.min} a ${l.max} pts</span></div><strong class="num">${l.value ? money2(l.value) : 'Sem garantia'}</strong></div>`).join('')}</div>
+      </section>
+      <section class="section card">
+        <h2 class="pop-h2">Resumo do mês</h2>
+        <dl class="pop-res">
+          <div><dt>Pontuação total</dt><dd class="num">${fmtPts(M.total)} / ${fmtPts(M.max)}</dd></div>
+          <div><dt>Percentual</dt><dd class="num">${nf0.format(M.pct)}%</dd></div>
+          <div><dt>Nível alcançado</dt><dd>${esc(lv ? lv.name : '—')}</dd></div>
+          <div><dt>Garantia conquistada</dt><dd>${lv && lv.value ? money2(lv.value) : 'Sem garantia'}</dd></div>
+          ${cfg.minProfit ? `<div><dt>Meta de lucro mínimo</dt><dd class="num">${money2(Number(cfg.minProfit))}</dd></div>` : ''}
+        </dl>
+        <div class="pop-bar big"><i style="width:${Math.min(100, M.pct)}%"></i></div>
+      </section>
+      <section class="section card">
+        <h2 class="pop-h2">Resultados do mês</h2>
+        ${[['cli', 'Clientes atendidos', '1'], ['agend', 'Agendamentos gerados', '1'], ['vendido', 'Valor vendido (R$)', '0.01']].map(([k, l, step]) => `<label class="field"><span class="tm-flabel">${l}</span><input class="input num" type="number" min="0" step="${step}" id="pr-${k}" value="${isNum(res[k]) ? res[k] : ''}" data-pop="res" data-k="${k}" ${ro ? 'readonly' : ''}></label>`).join('')}
+      </section>
+      <section class="section card"><h2 class="pop-h2">Regras do programa</h2><p class="pop-rules">${esc(cfg.rules || '')}</p></section>
+      <section class="section card"><h2 class="pop-h2">Perde a garantia quem</h2><ul class="pop-lose">${(cfg.lose || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul></section>`;
+  }
+
+  // Atualiza os pontos sem redesenhar a tela (enquanto digita telefones).
+  function popRefresh() {
+    const cfg = popCfg(), bid = ui.popBarber, day = `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`, rec = popRec(bid, day);
+    for (const it of cfg.items) {
+      const v = rec && rec.v ? rec.v[it.id] : undefined, pts = GB.popItemPts(it, v);
+      const bb = document.getElementById('pb-' + it.id); if (bb) bb.textContent = `${fmtPts(pts)}/${fmtPts(it.pts)} pts`;
+      const done = it.type === 'phones' ? (Array.isArray(v) ? v.filter(GB.validPhone).length : 0) : null;
+      if (done !== null) { const pc = document.getElementById('pc-' + it.id); if (pc) pc.textContent = `${done}/${it.target} válidos`; const bar = document.getElementById('pbar-' + it.id); if (bar) bar.style.width = Math.min(100, done / Math.max(1, it.target) * 100) + '%'; }
+    }
+    const dp = GB.popDayPts(cfg, rec), el = document.getElementById('pop-daypts');
+    if (el) el.textContent = `${fmtPts(dp)}/${fmtPts(GB.popDayMax(cfg))} pts nesta seção · ${fmtPts(dp)} pts no dia`;
+  }
+  let popTimer = null;
+  function popInput(el) {
+    const bid = ui.popBarber; if (!canPopEdit(bid)) return;
+    const day = `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`;
+    const kind = el.dataset.pop, it = el.dataset.it;
+    if (kind === 'res') { const r = popRecW(bid, ui.popMonth); r.res = r.res || {}; const v = el.value.trim(); r.res[el.dataset.k] = v === '' ? null : Number(v); }
+    else {
+      const r = popRecW(bid, day);
+      if (kind === 'phone') { const list = Array.isArray(r.v[it]) ? r.v[it] : []; list[Number(el.dataset.i)] = el.value.trim(); r.v[it] = list; el.closest('.pop-phone').classList.toggle('bad', !!el.value.trim() && !GB.validPhone(el.value)); popRefresh(); }
+      if (kind === 'note') r.notes[it] = el.value;
+      if (kind === 'msg') r.msg[it] = el.value;
+    }
+    const c = $('#pop-saved'); if (c) c.classList.add('saving');
+    clearTimeout(popTimer);
+    popTimer = setTimeout(() => { save(); const c2 = $('#pop-saved'); if (c2) c2.classList.remove('saving'); }, 600);
+  }
+  function popCfgW() { if (!state.popCfg || !Array.isArray(state.popCfg.items)) state.popCfg = JSON.parse(JSON.stringify(GB.popDefault())); return state.popCfg; }
+
+  function popCsv() {
+    const cfg = popCfg(), bid = ui.popBarber, b = barberById(bid), ym = ui.popMonth, n = daysInMonth(ym);
+    const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const rows = [['Dia', ...cfg.items.map(i => i.title), 'Pontos do dia']];
+    for (let d = 1; d <= n; d++) {
+      const day = `${ym}-${String(d).padStart(2, '0')}`, rec = popRec(bid, day);
+      rows.push([`${String(d).padStart(2, '0')}/${ym.slice(5)}/${ym.slice(0, 4)}`, ...cfg.items.map(it => { const v = rec && rec.v ? rec.v[it.id] : ''; return it.type === 'check' ? (v ? 'sim' : '') : it.type === 'phones' ? (Array.isArray(v) ? v.filter(Boolean).join(' / ') : '') : (v || ''); }), fmtPts(GB.popDayPts(cfg, rec))]);
+    }
+    const M = popMonth(bid, ym), lv = popLevel(M.total);
+    rows.push([], ['Total do mês', fmtPts(M.total) + ' / ' + fmtPts(M.max)], ['Nível', lv.name], ['Garantia', lv.value ? money2(lv.value) : 'Sem garantia']);
+    const csv = '﻿' + rows.map(r => r.map(q).join(';')).join('\r\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = `checklist-${b.name.replace(/\s+/g, '-').toLowerCase()}-${ym}.csv`;
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+    toast('Planilha baixada.');
+  }
+
   function pageSoon(route) {
     const item = NAV.flatMap(g => g.items).find(i => i.r === route);
     return `<div class="card empty">${icon(item?.i || 'clock')}<h2>${esc(item?.t || 'Em breve')}</h2>
@@ -1915,6 +2155,7 @@ Content-Type: application/json</pre>
     'gestao-visual': { t: 'Gestão Visual', r: pageGestaoVisual },
     fechamento: { t: 'Fechamento do mês', r: pageFechamento, g: 1, a: 1 },
     organograma: { t: 'Organograma', r: pageOrganograma, g: 1 },
+    checklist: { t: 'Checklist Agenda Cheia', r: pageChecklist },
     time: { t: 'Time e ranking', r: pageTime },
     performance: { t: 'Minha performance', r: pagePerformance },
     lancamentos: { t: 'Lançamentos', r: pageLancamentos, g: 1, a: 1 },
@@ -2241,6 +2482,19 @@ Content-Type: application/json</pre>
       ${popover(user)}`;
     applyLive();
     maybeOfferInstall();
+    maybeRemindPop(user);
+  }
+
+  // Lembrete do checklist: uma vez por dia, enquanto a meta do dia não foi batida.
+  function maybeRemindPop(user) {
+    if (DB.pref.get('popRem', '0') !== '1' || !user || !user.barberId || location.hash === '#checklist') return;
+    const today = todayIso();
+    if (DB.pref.get('popRemDay', '') === today || popStatus(user.barberId, today) === 'done') return;
+    DB.pref.set('popRemDay', today);
+    setTimeout(() => {
+      toast('Seu Checklist Agenda Cheia de hoje ainda não está completo.');
+      try { if ('Notification' in window && Notification.permission === 'granted' && document.hidden) new Notification('Gestão Barber IA', { body: 'Complete o seu Checklist Agenda Cheia de hoje.', icon: 'assets/icon-192.png' }); } catch (e) { /* opcional */ }
+    }, 1500);
   }
 
   // ---------- ações ----------
@@ -2317,6 +2571,37 @@ Content-Type: application/json</pre>
       u.pass = passHash(u.email, pass); save();
       ui.lastReset = { name: u.name, pass }; render();
     },
+    popPick(el) { ui.popBarber = el.dataset.id; ui.confirm = null; render(); },
+    popDay(el) { ui.popDay = Number(el.dataset.d); ui.confirm = null; render(); },
+    popCount(el) { if (!canPopEdit(ui.popBarber)) return; const r = popRecW(ui.popBarber, `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`); r.v[el.dataset.it] = Number(el.dataset.n); save(); render(); },
+    popToggle(el) { if (!canPopEdit(ui.popBarber)) return; const r = popRecW(ui.popBarber, `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`); r.v[el.dataset.it] = !r.v[el.dataset.it]; save(); render(); },
+    popPhoneAdd(el) {
+      const it = el.dataset.it, r = popRecW(ui.popBarber, `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`);
+      const list = Array.isArray(r.v[it]) && r.v[it].length ? r.v[it] : ['']; list.push(''); r.v[it] = list; render();
+      setTimeout(() => document.getElementById(`ph-${it}-${list.length - 1}`)?.focus(), 30);
+    },
+    popPhoneDel(el) {
+      const it = el.dataset.it, r = popRecW(ui.popBarber, `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`);
+      const list = Array.isArray(r.v[it]) ? r.v[it] : []; list.splice(Number(el.dataset.i), 1); r.v[it] = list; save(); render();
+    },
+    popCsv() { popCsv(); },
+    popPrint() { document.body.classList.add('printing'); setTimeout(() => { window.print(); document.body.classList.remove('printing'); }, 50); },
+    popSave() { save(); toast('Checklist salvo.'); },
+    popReset() {
+      if (ui.confirm !== 'popReset') { ui.confirm = 'popReset'; render(); return; }
+      ui.confirm = null;
+      if (ui.popEdit && isGestor(currentUser())) { state.popCfg = JSON.parse(JSON.stringify(GB.popDefault())); toast('Modelo padrão restaurado.'); }
+      else { const r = popRecW(ui.popBarber, `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`); r.v = {}; r.notes = {}; r.msg = {}; toast('Registro do dia limpo.'); }
+      save(); render();
+    },
+    popItemAdd() { popCfgW().items.push({ id: uid('it_'), title: 'Novo item', desc: '', type: 'count', target: 1, pts: 1 }); save(); render(); },
+    popItemDel(el) {
+      const i = Number(el.dataset.i);
+      if (ui.confirm !== 'pitem' + i) { ui.confirm = 'pitem' + i; render(); return; }
+      const c = popCfgW(); if (c.items.length <= 1) { toast('Mantenha pelo menos um item.'); return; }
+      c.items.splice(i, 1); ui.confirm = null; save(); render();
+    },
+    popItemMove(el) { const c = popCfgW(), i = Number(el.dataset.i), j = i + Number(el.dataset.d); if (j < 0 || j >= c.items.length) return; [c.items[i], c.items[j]] = [c.items[j], c.items[i]]; save(); render(); },
     orgTab(el) { ui.orgTab = el.dataset.t; ui.orgSheet = null; ui.confirm = null; render(); },
     orgGo(el) { ui.orgNode = el.dataset.id || null; render(); },
     orgEdit(el) { ui.orgSheet = { id: el.dataset.id }; ui.confirm = null; render(); setTimeout(() => $('#os-name')?.focus(), 30); },
@@ -2641,6 +2926,13 @@ Content-Type: application/json</pre>
     tvSoundKind(el) { Sound.kind = el.value; Sound.play(el.value, true); },
     perfBarber(el) { ui.perfBarber = el.value; render(); },
     teamMonth(el) { ui.teamMonth = el.value; render(); },
+    popMonth(el) { ui.popMonth = el.value; render(); },
+    popEdit(el) { ui.popEdit = el.checked; ui.confirm = null; render(); },
+    async popRem(el) {
+      DB.pref.set('popRem', el.checked ? '1' : '0');
+      if (el.checked && 'Notification' in window && Notification.permission === 'default') { try { await Notification.requestPermission(); } catch (e) { /* opcional */ } }
+      toast(el.checked ? 'Lembretes ligados. O app avisa enquanto a meta do dia não for batida.' : 'Lembretes desligados.');
+    },
     orgLevelName(el) { const l = org().levels.find(x => x.id === el.dataset.id); if (l && el.value.trim()) { l.name = el.value.trim(); save(); render(); } },
     fxMonth(el) { ui.fxMonth = el.value; render(); },
     async barberPhoto(el) {
@@ -2672,6 +2964,8 @@ Content-Type: application/json</pre>
     FORMS[f.dataset.form]?.(f);
   });
   root.addEventListener('input', e => {
+    const pp = e.target.closest('[data-pop]');
+    if (pp) { popInput(pp); return; }
     const el = e.target.closest('[data-auto]');
     if (el && el.tagName !== 'SELECT') autoSave(el);
   });
@@ -2680,6 +2974,14 @@ Content-Type: application/json</pre>
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('article[data-action]')) { e.preventDefault(); ACTIONS[e.target.dataset.action](e.target, e); }
   });
   root.addEventListener('change', e => {
+    const pc = e.target.closest('[data-popcfg],[data-popitem],[data-poplevel]');
+    if (pc) {
+      const c = popCfgW(), v = pc.value;
+      if (pc.dataset.popcfg) { const k = pc.dataset.popcfg; c[k] = k === 'minProfit' ? Number(v) || 0 : k === 'lose' ? v.split('\n').map(x => x.trim()).filter(Boolean) : v; }
+      if (pc.dataset.popitem) { const it = c.items[Number(pc.dataset.i)], k = pc.dataset.popitem; it[k] = ['target', 'pts'].includes(k) ? Math.max(k === 'target' ? 1 : 0, Number(v) || 0) : v; if (k === 'type' && v === 'check') it.target = 1; }
+      if (pc.dataset.poplevel) { const l = c.levels[Number(pc.dataset.i)], k = pc.dataset.poplevel; l[k] = k === 'name' ? v : k === 'value' ? (v === '' ? null : Number(v)) : Number(v) || 0; }
+      save(); render(); return;
+    }
     const au = e.target.closest('select[data-auto]');
     if (au) { autoSave(au); return; }
     const el = e.target.closest('[data-change]');

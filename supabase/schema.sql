@@ -70,6 +70,17 @@ create table if not exists public.monthly (
   primary key (barber_id, month)
 );
 
+-- Checklist Agenda Cheia: um registro por profissional e dia (AAAA-MM-DD) ou mês (AAAA-MM, resultados do mês).
+create table if not exists public.pop_records (
+  id text primary key,
+  company_id uuid not null references public.companies on delete cascade,
+  barber_id text not null references public.barbers on delete cascade,
+  day text not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+create index if not exists pop_records_company_day on public.pop_records (company_id, day);
+
 -- Chave da API de cada barbearia (só o gestor vê).
 create table if not exists public.api_keys (
   company_id uuid primary key references public.companies on delete cascade,
@@ -85,7 +96,7 @@ create index if not exists barbers_company on public.barbers (company_id);
 -- Garante o funcionamento mesmo com "Expor automaticamente novas tabelas" desligado.
 grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on public.companies, public.profiles, public.barbers, public.invites,
-  public.entries, public.monthly, public.api_keys to authenticated;
+  public.entries, public.monthly, public.api_keys, public.pop_records to authenticated;
 
 -- ---------- Funções de apoio às regras ----------
 create or replace function public.my_company() returns uuid
@@ -126,10 +137,11 @@ alter table public.invites enable row level security;
 alter table public.entries enable row level security;
 alter table public.monthly enable row level security;
 alter table public.api_keys enable row level security;
+alter table public.pop_records enable row level security;
 
 do $$ declare r record; begin
   for r in select policyname, tablename from pg_policies where schemaname = 'public'
-    and tablename in ('companies','profiles','barbers','invites','entries','monthly','api_keys') loop
+    and tablename in ('companies','profiles','barbers','invites','entries','monthly','api_keys','pop_records') loop
     execute format('drop policy %I on public.%I', r.policyname, r.tablename);
   end loop;
 end $$;
@@ -157,6 +169,12 @@ create policy entries_read on public.entries for select using (company_id = my_c
 create policy entries_write on public.entries for all using (company_id = my_company() and can_edit_barber(barber_id)) with check (company_id = my_company() and can_edit_barber(barber_id));
 create policy monthly_read on public.monthly for select using (company_id = my_company());
 create policy monthly_write on public.monthly for all using (company_id = my_company() and can_edit_barber(barber_id)) with check (company_id = my_company() and can_edit_barber(barber_id));
+
+-- Checklist: membros leem; o próprio barbeiro, o gestor de área e o dono preenchem.
+create policy pop_read on public.pop_records for select using (company_id = my_company());
+create policy pop_write on public.pop_records for all
+  using (company_id = my_company() and (can_edit_barber(barber_id) or barber_id = my_barber()))
+  with check (company_id = my_company() and (can_edit_barber(barber_id) or barber_id = my_barber()));
 
 -- Chave da API: só o gestor.
 create policy api_keys_all on public.api_keys for all using (company_id = my_company() and is_gestor()) with check (company_id = my_company() and is_gestor());
@@ -254,6 +272,7 @@ do $$ begin
   begin alter publication supabase_realtime add table public.barbers; exception when duplicate_object then null; end;
   begin alter publication supabase_realtime add table public.profiles; exception when duplicate_object then null; end;
   begin alter publication supabase_realtime add table public.companies; exception when duplicate_object then null; end;
+  begin alter publication supabase_realtime add table public.pop_records; exception when duplicate_object then null; end;
 end $$;
 
 -- =====================================================================
