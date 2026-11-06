@@ -74,3 +74,13 @@ O `schema.sql` já inclui planos, teste grátis de 7 dias, bloqueio e o painel d
    where id = (select company_id from profiles where email = 'SEU_EMAIL' limit 1);
    ```
    Depois, o menu do app mostra **Painel do SaaS**.
+
+## 10. Checklist Agenda Cheia: fotos das provas
+O `schema.sql` cria a tabela `pop_records` e a pasta privada `provas` no Storage.
+
+As fotos são apagadas 7 dias depois do envio (provas aguardando conferência ficam até serem conferidas); a prova, o status e os pontos continuam.
+1. Publique a função `limpar-provas` (sem verificação de JWT):
+   ```
+   npx supabase functions deploy limpar-provas --no-verify-jwt
+   ```
+2. No SQL Editor, rode `supabase/cron.sql` trocando `SEU_PROJECT_REF` pelo do projeto. Ele agenda a limpeza todo dia às 3h15.

@@ -1941,7 +1941,9 @@ Content-Type: application/json</pre>
   const canPopEdit = bid => canEditB(bid) || (currentUser() || {}).barberId === bid;
 
   const EV_TXT = { pendente: 'Aguardando conferência', aprovado: 'Aprovada', recusado: 'Recusada' };
+  const PROOF_DAYS = 7;
   function proofImg(e, cls = '') {
+    if (e.photoGone) return `<span class="pop-ph pop-ph-none ${cls}">${icon('clock')}<small>Foto apagada após ${PROOF_DAYS} dias</small></span>`;
     if (e.photo) return `<img class="pop-ph ${cls}" src="${esc(e.photo)}" alt="Prova" loading="lazy">`;
     if (e.path) return `<img class="pop-ph ${cls}" data-proof="${esc(e.path)}" alt="Prova" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">`;
     return `<span class="pop-ph pop-ph-none ${cls}">${icon('camera')}<small>Exemplo</small></span>`;
@@ -2062,7 +2064,19 @@ Content-Type: application/json</pre>
     </section>`;
   }
 
+  // Modo demonstração: mesma regra da nuvem, apaga as fotos conferidas com mais de 7 dias.
+  function popPruneLocal() {
+    if (Cloud.enabled || ui.popPruned) return;
+    ui.popPruned = true;
+    const lim = Date.now() - PROOF_DAYS * 86400000; let n = 0;
+    for (const r of (state.pop || [])) for (const l of Object.values(r.ev || {})) for (const e of (l || [])) {
+      if (e && e.photo && !e.photoGone && e.status !== 'pendente' && Number(e.at || 0) < lim) { e.photo = null; e.photoGone = true; n++; }
+    }
+    if (n) save();
+  }
+
   function pageChecklist(user) {
+    popPruneLocal();
     const cfg = popCfg();
     if (!ui.popMonth) ui.popMonth = curYm();
     const ym = ui.popMonth;
@@ -2116,7 +2130,7 @@ Content-Type: application/json</pre>
         <span class="tm-flabel">Dia do mês</span>
         <div class="pop-days" id="pop-days">${Array.from({ length: n }, (_, i) => { const d = `${ym}-${String(i + 1).padStart(2, '0')}`; const s2 = popStatus(bid, d); return `<button class="pop-dn ${i + 1 === ui.popDay ? 'on' : ''} st-${s2} ${d > today ? 'future' : ''}" data-action="popDay" data-d="${i + 1}" aria-label="Dia ${i + 1}">${i + 1}</button>`; }).join('')}</div>
         <p class="pop-sum"><b class="num" id="pop-daypts">${fmtPts(dayPts)}/${fmtPts(dayMax)} pts aprovados no dia</b>${GB.popDayPts(cfg, rec, true) ? ` · <span class="pend num">+${fmtPts(GB.popDayPts(cfg, rec, true))} pts aguardando conferência</span>` : ''}</p>
-        <p class="section-note">Cada unidade precisa de uma prova: foto ou print. Anexe, escreva uma descrição se quiser e toque em Confirmar.</p>
+        <p class="section-note">Cada unidade precisa de uma prova: foto ou print. Anexe, escreva uma descrição se quiser e toque em Confirmar. As fotos são apagadas ${PROOF_DAYS} dias depois do envio (as que ainda aguardam conferência ficam até serem conferidas); a prova e os pontos continuam.</p>
         ${ro ? '<p class="section-note">Você está vendo este checklist sem poder editar.</p>' : ''}
         <div class="pop-items">${cfg.items.map(it => popItemCard(it, rec, bid)).join('')}</div>
       </section>
