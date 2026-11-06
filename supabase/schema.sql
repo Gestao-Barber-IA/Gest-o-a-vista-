@@ -70,6 +70,17 @@ create table if not exists public.monthly (
   primary key (barber_id, month)
 );
 
+-- Checklist Agenda Cheia: um registro por profissional e dia (AAAA-MM-DD) ou mês (AAAA-MM, resultados do mês).
+create table if not exists public.pop_records (
+  id text primary key,
+  company_id uuid not null references public.companies on delete cascade,
+  barber_id text not null references public.barbers on delete cascade,
+  day text not null,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+create index if not exists pop_records_company_day on public.pop_records (company_id, day);
+
 -- Chave da API de cada barbearia (só o gestor vê).
 create table if not exists public.api_keys (
   company_id uuid primary key references public.companies on delete cascade,
@@ -85,7 +96,10 @@ create index if not exists barbers_company on public.barbers (company_id);
 -- Garante o funcionamento mesmo com "Expor automaticamente novas tabelas" desligado.
 grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on public.companies, public.profiles, public.barbers, public.invites,
-  public.entries, public.monthly, public.api_keys to authenticated;
+  public.entries, public.monthly, public.api_keys, public.pop_records to authenticated;
+-- As funções do servidor (API, Asaas, limpeza das fotos) usam o papel service_role.
+grant select, insert, update, delete on public.companies, public.profiles, public.barbers, public.invites,
+  public.entries, public.monthly, public.api_keys, public.pop_records to service_role;
 
 -- ---------- Funções de apoio às regras ----------
 create or replace function public.my_company() returns uuid
@@ -126,10 +140,11 @@ alter table public.invites enable row level security;
 alter table public.entries enable row level security;
 alter table public.monthly enable row level security;
 alter table public.api_keys enable row level security;
+alter table public.pop_records enable row level security;
 
 do $$ declare r record; begin
   for r in select policyname, tablename from pg_policies where schemaname = 'public'
-    and tablename in ('companies','profiles','barbers','invites','entries','monthly','api_keys') loop
+    and tablename in ('companies','profiles','barbers','invites','entries','monthly','api_keys','pop_records') loop
     execute format('drop policy %I on public.%I', r.policyname, r.tablename);
   end loop;
 end $$;
@@ -157,6 +172,64 @@ create policy entries_read on public.entries for select using (company_id = my_c
 create policy entries_write on public.entries for all using (company_id = my_company() and can_edit_barber(barber_id)) with check (company_id = my_company() and can_edit_barber(barber_id));
 create policy monthly_read on public.monthly for select using (company_id = my_company());
 create policy monthly_write on public.monthly for all using (company_id = my_company() and can_edit_barber(barber_id)) with check (company_id = my_company() and can_edit_barber(barber_id));
+
+-- Checklist: membros leem; o próprio barbeiro, o gestor de área e o dono preenchem.
+create policy pop_read on public.pop_records for select using (company_id = my_company());
+
+-- Provas do checklist: só a gestão aprova ou recusa; ninguém confere a própria prova (exceto o dono);
+-- prova já conferida não pode ser alterada nem apagada por quem não confere.
+create or replace function public.guard_pop() returns trigger
+language plpgsql security invoker set search_path = public as $$
+declare reviewer boolean;
+begin
+  if current_user not in ('authenticated', 'anon') then return new; end if;
+  reviewer := is_gestor() or (can_edit_barber(new.barber_id) and new.barber_id is distinct from my_barber());
+  if reviewer then return new; end if;
+  if exists (
+    select 1 from jsonb_each(coalesce(new.data->'ev', '{}'::jsonb)) k, jsonb_array_elements(case when jsonb_typeof(k.value) = 'array' then k.value else '[]'::jsonb end) e
+    where coalesce(e->>'status', 'pendente') <> 'pendente'
+      and not exists (select 1 from jsonb_each(coalesce(case when tg_op = 'UPDATE' then old.data->'ev' end, '{}'::jsonb)) k2,
+                      jsonb_array_elements(case when jsonb_typeof(k2.value) = 'array' then k2.value else '[]'::jsonb end) e2
+                      where e2->>'id' = e->>'id' and e2->>'status' = e->>'status')
+  ) then raise exception 'Somente a gestão pode conferir as provas.'; end if;
+  if tg_op = 'UPDATE' and exists (
+    select 1 from jsonb_each(coalesce(old.data->'ev', '{}'::jsonb)) k, jsonb_array_elements(case when jsonb_typeof(k.value) = 'array' then k.value else '[]'::jsonb end) e
+    where coalesce(e->>'status', 'pendente') <> 'pendente'
+      and not exists (select 1 from jsonb_each(coalesce(new.data->'ev', '{}'::jsonb)) k2,
+                      jsonb_array_elements(case when jsonb_typeof(k2.value) = 'array' then k2.value else '[]'::jsonb end) e2
+                      where e2->>'id' = e->>'id' and e2->>'status' = e->>'status')
+  ) then raise exception 'Prova já conferida não pode ser alterada.'; end if;
+  return new;
+end $$;
+drop trigger if exists guard_pop on public.pop_records;
+create trigger guard_pop before insert or update on public.pop_records for each row execute function public.guard_pop();
+drop policy if exists pop_write on public.pop_records;
+create policy pop_ins on public.pop_records for insert
+  with check (company_id = my_company() and (can_edit_barber(barber_id) or barber_id = my_barber()));
+create policy pop_upd on public.pop_records for update
+  using (company_id = my_company() and (can_edit_barber(barber_id) or barber_id = my_barber()))
+  with check (company_id = my_company() and (can_edit_barber(barber_id) or barber_id = my_barber()));
+create policy pop_del on public.pop_records for delete using (company_id = my_company() and is_gestor());
+
+-- Fotos das provas (Storage, pasta: barbearia/barbeiro/dia/arquivo.jpg). Bucket privado, até 3 MB por imagem.
+do $$ begin
+  if to_regclass('storage.buckets') is not null then
+    insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+    values ('provas', 'provas', false, 3145728, array['image/jpeg', 'image/png', 'image/webp'])
+    on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+    drop policy if exists provas_read on storage.objects;
+    drop policy if exists provas_insert on storage.objects;
+    drop policy if exists provas_delete on storage.objects;
+    create policy provas_read on storage.objects for select to authenticated
+      using (bucket_id = 'provas' and (storage.foldername(name))[1] = my_company()::text);
+    create policy provas_insert on storage.objects for insert to authenticated
+      with check (bucket_id = 'provas' and (storage.foldername(name))[1] = my_company()::text
+        and (can_edit_barber((storage.foldername(name))[2]) or (storage.foldername(name))[2] = my_barber()));
+    create policy provas_delete on storage.objects for delete to authenticated
+      using (bucket_id = 'provas' and (storage.foldername(name))[1] = my_company()::text
+        and (can_edit_barber((storage.foldername(name))[2]) or (storage.foldername(name))[2] = my_barber()));
+  end if;
+end $$;
 
 -- Chave da API: só o gestor.
 create policy api_keys_all on public.api_keys for all using (company_id = my_company() and is_gestor()) with check (company_id = my_company() and is_gestor());
@@ -254,6 +327,7 @@ do $$ begin
   begin alter publication supabase_realtime add table public.barbers; exception when duplicate_object then null; end;
   begin alter publication supabase_realtime add table public.profiles; exception when duplicate_object then null; end;
   begin alter publication supabase_realtime add table public.companies; exception when duplicate_object then null; end;
+  begin alter publication supabase_realtime add table public.pop_records; exception when duplicate_object then null; end;
 end $$;
 
 -- =====================================================================
@@ -299,6 +373,7 @@ alter table public.plans enable row level security;
 
 grant select on public.plans to anon, authenticated;
 grant insert, update on public.plans to authenticated;
+grant select, insert, update, delete on public.plans, public.platform_admins to service_role;
 
 -- ---------- Regra de acesso ----------
 -- trial    : 7 dias desde o cadastro, só lançamento manual

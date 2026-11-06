@@ -42,7 +42,7 @@
   const INDICATORS = [
     { key: 'fat', label: 'Faturamento', weight: 22, fmt: 'money',
       calc: s => s.n.fat ? s.fat : null },
-    { key: 'check', label: 'Checklist POP', weight: 15, fmt: 'int',
+    { key: 'check', label: 'Checklist Agenda Cheia', weight: 15, fmt: 'int',
       calc: s => s.n.check ? s.check : null },
     { key: 'ocup', label: 'Taxa de ocupação', weight: 10, fmt: 'pct',
       calc: s => s.n.hDisp && s.hDisp > 0 ? (s.hOcup / s.hDisp) * 100 : null },
@@ -65,7 +65,7 @@
     { key: 'fat', label: 'Faturamento (R$)', api: 'faturamento', step: '0.01' },
     { key: 'serv', label: 'Serviços realizados', api: 'servicos', step: '1' },
     { key: 'cli', label: 'Clientes atendidos', api: 'clientes', step: '1' },
-    { key: 'check', label: 'Checklist POP (pontos)', api: 'checklist_pop', step: '1' },
+    { key: 'check', label: 'Checklist Agenda Cheia (pontos)', api: 'checklist_pop', step: '1' },
     { key: 'hDisp', label: 'Horas disponíveis', api: 'horas_disponiveis', step: '0.5' },
     { key: 'hOcup', label: 'Horas ocupadas', api: 'horas_ocupadas', step: '0.5' },
     { key: 'planos', label: 'Planos mensais vendidos', api: 'planos_mensais', step: '1' },
@@ -109,7 +109,7 @@
     { key: 'ocupPct', label: 'Taxa de ocupação (%)', step: '0.1', daily: 'hDisp', max: 100 },
     { key: 'fidPct', label: 'Taxa de fidelização (%)', step: '0.1', daily: 'ret', max: 100 },
     { key: 'prod', label: 'Venda de produtos (R$)', step: '0.01', daily: 'prod' },
-    { key: 'check', label: 'Pontos POP', step: '1', daily: 'check' },
+    { key: 'check', label: 'Pontos Checklist Agenda Cheia', step: '1', daily: 'check' },
     { key: 'planos', label: 'Planos mensais vendidos', step: '1', daily: 'planos' },
   ];
 
@@ -154,13 +154,22 @@
           const mk = f.key === 'hDisp' || f.key === 'hOcup' ? 'ocupPct' : f.key === 'ret' ? 'fidPct' : f.key;
           if (isNum(rec[mk])) continue; // o total do mês substitui os dias
         }
+        if (f.key === 'check' && popDays(state, barberId).some(r => r.day.slice(0, 7) === monthKey(e.date))) continue;
         add(f.key, e[f.key]);
       }
+    }
+    // Checklist Agenda Cheia: os pontos diários entram no indicador e substituem o total manual do mês.
+    const cfg = popCfgOf(state);
+    const popMonths = new Set();
+    for (const r of popDays(state, barberId)) {
+      if (r.day < range.start || r.day > range.end) continue;
+      add('check', Math.round(popDayPts(cfg, r) * 10) / 10);
+      popMonths.add(r.day.slice(0, 7));
     }
     for (const ym of months) {
       const rec = recs[ym];
       if (!rec) continue;
-      for (const k of ['fat', 'cli', 'serv', 'prod', 'check', 'planos']) if (isNum(rec[k])) add(k, rec[k]);
+      for (const k of ['fat', 'cli', 'serv', 'prod', 'check', 'planos']) if (isNum(rec[k]) && !(k === 'check' && popMonths.has(ym))) add(k, rec[k]);
       if (isNum(rec.ocupPct)) { add('hDisp', 100); s.hOcup += Number(rec.ocupPct); s.n.hOcup = (s.n.hOcup || 0) + 1; }
       if (isNum(rec.fidPct)) {
         const cli = isNum(rec.cli) ? Number(rec.cli) : (dailyCli[ym] || 0);
@@ -182,11 +191,60 @@
       if (isNum(e.ret)) ret += Number(e.ret);
     }
     if (hD > 0) out.ocupPct = (hO / hD) * 100;
+    const pd = popDays(state, barberId).filter(x => x.day.slice(0, 7) === ym);
+    if (pd.length) { const cfg = popCfgOf(state); out.check = Math.round(pd.reduce((a, x) => a + popDayPts(cfg, x), 0) * 10) / 10; out._pop = true; }
     if (ret > 0 && cli > 0) out.fidPct = (ret / cli) * 100;
     return out;
   }
 
-  const DEFAULT_GOALS = { fat: 6000, check: 24, ocup: 75, ticket: 60, serv: 130, cli: 110, planos: 4, fid: 50, prod: 500 };
+
+  // ---------- Checklist Agenda Cheia (POP) ----------
+  function popDefault() {
+    return {
+      title: 'POP — Agenda Lotada', subtitle: 'Checklist diário de performance', shop: '',
+      phrase: 'A sua atitude de hoje gera o teu resultado de amanhã.', minProfit: 4500,
+      items: [
+        { id: 'stories', title: '5 Stories', desc: 'Poste no mínimo 5 stories nas redes sociais', type: 'count', target: 5, pts: 2 },
+        { id: 'abord', title: '5 Abordagens', desc: 'Abordar 5 clientes em frente à barbearia e captar o telefone', type: 'phones', target: 5, pts: 3 },
+        { id: 'convites', title: '10 Convites Instagram', desc: 'Mande mensagem para 10 potenciais clientes e anexe o print', type: 'count', target: 10, pts: 2 },
+        { id: 'public', title: '3 Publicações com o cliente', desc: 'Self ou espelho junto com cliente e marcando @', type: 'count', target: 3, pts: 3 },
+        { id: 'google', title: '4 Avaliações no Google', desc: 'Peça e conquiste 4 avaliações de clientes no Google', type: 'count', target: 4, pts: 3 },
+        { id: 'estrat', title: 'Stories Estratégico', desc: 'postar às 8h30, 12h, 17h30', type: 'count', target: 3, pts: 2 },
+        { id: 'extra', title: 'EXTRA', desc: 'Pró atividade', type: 'count', target: 5, pts: 3 },
+        { id: 'chegada', title: 'Horário de chegada', desc: 'Pontualidade', type: 'check', target: 1, pts: 3 },
+      ],
+      levels: [
+        { name: 'Elite', min: 390, max: 600, value: 4500, tone: 'gold' },
+        { name: 'Ouro', min: 300, max: 389, value: 4250, tone: 'gold' },
+        { name: 'Prata', min: 270, max: 299, value: 4000, tone: 'silver' },
+        { name: 'Bronze', min: 240, max: 269, value: 3750, tone: 'bronze' },
+        { name: 'Em desenvolvimento', min: 210, max: 239, value: 3500, tone: 'plain' },
+        { name: 'Não elegível', min: 0, max: 209, value: null, tone: 'none' },
+      ],
+      rules: 'A garantia de lucro é um benefício concedido aos novos profissionais durante os 3 primeiros meses, condicionado ao cumprimento integral do POP Agenda Lotada, ao alcance da pontuação mínima estabelecida e ao respeito às normas, cultura e padrão de atendimento da barbearia.',
+      lose: ['Não cumprir jornada estabelecida', 'Atrasos sem justificativa', 'Mau atendimento ao cliente', 'Quebra das regras e padrões da empresa', 'Falta sem aviso prévio'],
+    };
+  }
+  let popDef = null;
+  const popCfgOf = state => (state.popCfg && Array.isArray(state.popCfg.items) ? state.popCfg : (popDef || (popDef = popDefault())));
+  const validPhone = p => String(p || '').replace(/\D/g, '').length >= 10;
+  // Cada unidade do checklist é uma prova (foto/print). Só as aprovadas pela gestão contam pontos.
+  const evOk = (it, e) => e && e.status === 'aprovado' && (it.type !== 'phones' || validPhone(e.phone));
+  const evLive = e => e && e.status !== 'recusado';
+  function popItemPts(it, ev, pending) {
+    const list = Array.isArray(ev) ? ev : [];
+    const n = list.filter(e => pending ? (e.status === 'pendente' && (it.type !== 'phones' || validPhone(e.phone))) : evOk(it, e)).length;
+    const t = it.type === 'check' ? 1 : Math.max(1, Number(it.target) || 1);
+    return Number(it.pts) * Math.min(n, t) / t;
+  }
+  const popDayMax = cfg => cfg.items.reduce((a, it) => a + Number(it.pts || 0), 0);
+  function popDayPts(cfg, rec, pending) {
+    if (!rec || !rec.ev) return 0;
+    return cfg.items.reduce((a, it) => a + popItemPts(it, rec.ev[it.id], pending), 0);
+  }
+  const popDays = (state, barberId) => (state.pop || []).filter(r => r.barberId === barberId && r.day.length === 10 && r.ev && Object.values(r.ev).some(l => Array.isArray(l) && l.length));
+
+  const DEFAULT_GOALS = { fat: 6000, check: 390, ocup: 75, ticket: 60, serv: 130, cli: 110, planos: 4, fid: 50, prod: 500 };
   const goalFor = (state, barberId, key) => {
     const ind = state.goals?.byBarber?.[barberId]?.[key];
     return isNum(ind) ? Number(ind) : Number(state.goals?.team?.[key] ?? DEFAULT_GOALS[key]);
@@ -363,11 +421,31 @@
           prod: Math.round((150 + r() * 450) * frac) });
       });
     }
+    // Checklist Agenda Cheia de exemplo no mês atual.
+    const pop = [];
+    const pcfg = popDefault();
+    for (let d = 1; d < today.getDate(); d++) {
+      const day = `${curYm}-${pad(d)}`;
+      if (new Date(today.getFullYear(), today.getMonth(), d).getDay() === 0) continue;
+      people.forEach(([, vol, , disc], i) => {
+        if (r() < 0.15) return;
+        const ev = {};
+        for (const it of pcfg.items) {
+          const k = 0.35 + disc * 0.55 + r() * 0.25;
+          const t = it.type === 'check' ? 1 : it.target;
+          const n = it.type === 'check' ? (r() < k ? 1 : 0) : Math.min(t, Math.round(t * k * (0.6 + r() * 0.6)));
+          ev[it.id] = Array.from({ length: n }, (_, j) => ({ id: uid('e_'), photo: null, demo: true, phone: it.type === 'phones' ? '119' + String(Math.floor(r() * 1e8)).padStart(8, '0') : undefined,
+            desc: '', by: 'profissional', at: Date.now(), status: d < today.getDate() - 1 || r() < 0.6 ? 'aprovado' : 'pendente' }));
+        }
+        pop.push({ barberId: barbers[i].id, day, ev, by: 'profissional', at: Date.now() });
+      });
+    }
     const gestorId = uid('u_');
     return {
       version: 2,
       demo: true,
       monthly,
+      pop,
       hidden: ['fid'],
       goals: { team: { ...DEFAULT_GOALS }, byBarber: {} },
       company: { name: 'Barbearia Demonstração', cnpj: '00.000.000/0001-00', phone: '(11) 90000-0000', email: 'gestor@demo.com', logo: null },
@@ -466,5 +544,5 @@
   const visibleInds = state => INDICATORS.filter(i => !(state.hidden || []).includes(i.key));
   const FIELD_IND = { fidPct: 'fid', ocupPct: 'ocup' };
 
-  window.GB = Object.assign(window.GB || {}, { visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
+  window.GB = Object.assign(window.GB || {}, { evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
 })();

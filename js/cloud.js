@@ -80,6 +80,24 @@
     plans: async () => { const { data, error } = await c.from('plans').select('*').order('sort'); if (error) throw error; return data; },
     savePlan: async (id, patch) => { const { error } = await c.from('plans').update(patch).eq('id', id); if (error) throw error; },
   };
+  // Provas do checklist (fotos) no armazenamento do Supabase, pasta da barbearia.
+  const PROOFS = 'provas';
+  const urlCache = {};
+  Cloud.uploadProof = async (path, dataUrl) => {
+    const blob = await (await fetch(dataUrl)).blob();
+    const { error } = await c.storage.from(PROOFS).upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+    if (error) throw error;
+    return path;
+  };
+  Cloud.proofUrl = async path => {
+    const hit = urlCache[path];
+    if (hit && hit.exp > Date.now()) return hit.url;
+    const { data, error } = await c.storage.from(PROOFS).createSignedUrl(path, 3600);
+    if (error) throw error;
+    urlCache[path] = { url: data.signedUrl, exp: Date.now() + 3500 * 1000 };
+    return data.signedUrl;
+  };
+  Cloud.removeProof = async path => { try { await c.storage.from(PROOFS).remove([path]); } catch (e) { /* segue */ } };
   Cloud.rotateKey = async () => { const { data, error } = await c.rpc('rotate_api_key'); if (error) throw error; return data; };
 
   // ---------- conversão entre o app e as tabelas ----------
@@ -91,10 +109,13 @@
     barbers: { key: b => b.id, row: (b, cid) => ({ id: b.id, company_id: cid, name: b.name, photo: b.photo || null, active: b.active !== false, role: b.role || 'Barbeiro', instagram: b.instagram || '' }), list: s => s.barbers, pk: r => ({ id: r.id }) },
     invites: { key: i => i.code, row: (i, cid) => ({ code: i.code, company_id: cid, barber_id: i.barberId, used: !!i.used }), list: s => s.invites, pk: r => ({ code: r.code }) },
     entries: { key: e => e.id, row: (e, cid) => ({ id: e.id, company_id: cid, barber_id: e.barberId, date: e.date, data: pick(e, ENTRY_KEYS), source: e.source || 'manual' }), list: s => s.entries, pk: r => ({ id: r.id }) },
+    pop: { key: r => r.barberId + '|' + r.day, row: (r, cid) => ({ id: r.barberId + '|' + r.day, company_id: cid, barber_id: r.barberId, day: r.day, data: { ev: r.ev || {}, notes: r.notes || {}, msg: r.msg || {}, res: r.res || null, by: r.by || null, at: r.at || null } }), list: s => s.pop || [], pk: r => ({ id: r.id }) },
     monthly: { key: m => m.barberId + '|' + m.month, row: (m, cid) => ({ company_id: cid, barber_id: m.barberId, month: m.month, data: pick(m, MONTH_KEYS) }), list: s => s.monthly || [], pk: r => ({ barber_id: r.barber_id, month: r.month }) },
   };
-  const ORDER_UP = ['barbers', 'invites', 'entries', 'monthly'];
-  const ORDER_DEL = ['monthly', 'entries', 'invites', 'barbers'];
+  const TNAME = { pop: 'pop_records' };
+  const tbl = t => TNAME[t] || t;
+  const ORDER_UP = ['barbers', 'invites', 'entries', 'monthly', 'pop'];
+  const ORDER_DEL = ['pop', 'monthly', 'entries', 'invites', 'barbers'];
 
   function snapshot(s, cid) {
     const out = { tables: {}, company: '', users: {} };
@@ -104,7 +125,7 @@
       out.tables[t] = map;
     }
     const co = s.company;
-    out.company = JSON.stringify({ name: co.name, cnpj: co.cnpj || '', phone: co.phone || '', email: co.email || '', logo: co.logo || null, settings: { weights: s.weights, goals: s.goals, hidden: s.hidden, org: s.org || null } });
+    out.company = JSON.stringify({ name: co.name, cnpj: co.cnpj || '', phone: co.phone || '', email: co.email || '', logo: co.logo || null, settings: { weights: s.weights, goals: s.goals, hidden: s.hidden, org: s.org || null, pop: s.popCfg || null } });
     for (const u of s.users) out.users[u.id] = JSON.stringify({ name: u.name, phone: u.phone || '', status: u.status });
     return out;
   }
@@ -150,7 +171,7 @@
       Cloud.last = null;
       return { status: 'bloqueado', billing, plans, company: co, role: prof.role };
     }
-    const [co, profs, barbers, entries, monthly, invites, key] = await Promise.all([
+    const [co, profs, barbers, entries, monthly, invites, key, pop] = await Promise.all([
       q(c.from('companies').select('*').eq('id', cid).single()),
       q(c.from('profiles').select('*').eq('company_id', cid)),
       q(c.from('barbers').select('*').eq('company_id', cid).order('created_at')),
@@ -158,6 +179,7 @@
       fetchAll('monthly', cid),
       gestor ? q(c.from('invites').select('*').eq('company_id', cid)) : Promise.resolve([]),
       gestor ? q(c.from('api_keys').select('key').eq('company_id', cid).maybeSingle()) : Promise.resolve(null),
+      fetchAll('pop_records', cid).catch(() => []),
     ]);
     const st = co.settings || {};
     const state = {
@@ -172,6 +194,8 @@
       goals: st.goals || { team: { ...GB.DEFAULT_GOALS }, byBarber: {} },
       hidden: Array.isArray(st.hidden) ? st.hidden : ['fid'],
       org: st.org || null,
+      popCfg: st.pop || null,
+      pop: pop.map(r => ({ barberId: r.barber_id, day: r.day, ...(r.data || {}) })),
       apiKey: key ? key.key : '',
       billing, plans,
     };
@@ -199,9 +223,9 @@
         const now = cur.tables[t], was = last.tables[t];
         const added = [], changed = [];
         for (const k of Object.keys(now)) { if (!was[k]) added.push(now[k].row); else if (was[k].json !== now[k].json) changed.push(now[k].row); }
-        if (added.length) { const { error } = await c.from(t).upsert(added); if (error) throw error; }
+        if (added.length) { const { error } = await c.from(tbl(t)).upsert(added); if (error) throw error; }
         for (const r of changed) {
-          let qb = c.from(t).update(r);
+          let qb = c.from(tbl(t)).update(r);
           for (const [col, v] of Object.entries(TABLES[t].pk(r))) qb = qb.eq(col, v);
           const { error } = await qb; if (error) throw error;
         }
@@ -211,7 +235,7 @@
           const now = cur.tables[t], was = last.tables[t];
           const gone = Object.keys(was).filter(k => !now[k]).map(k => was[k].row);
           for (const r of gone) {
-            let qb = c.from(t).delete();
+            let qb = c.from(tbl(t)).delete();
             for (const [col, v] of Object.entries(TABLES[t].pk(r))) qb = qb.eq(col, v);
             const { error } = await qb; if (error) throw error;
           }
@@ -247,7 +271,7 @@
     Cloud.unsubscribe();
     const cid = Cloud.companyId;
     channel = c.channel('company-' + cid);
-    for (const t of ['entries', 'monthly', 'barbers', 'profiles']) channel.on('postgres_changes', { event: '*', schema: 'public', table: t, filter: 'company_id=eq.' + cid }, remote);
+    for (const t of ['entries', 'monthly', 'barbers', 'profiles', 'pop_records']) channel.on('postgres_changes', { event: '*', schema: 'public', table: t, filter: 'company_id=eq.' + cid }, remote);
     channel.on('postgres_changes', { event: '*', schema: 'public', table: 'companies', filter: 'id=eq.' + cid }, remote);
     channel.subscribe();
   };
