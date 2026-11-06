@@ -786,12 +786,31 @@
         return `<div class="field"><span class="tm-flabel">${esc(f.label)}<span class="lock">${icon('chart')} Calculado</span></span>
           <input class="input num" id="m-${f.key}" value="${t == null ? '' : nf2.format(t)}" readonly tabindex="-1" placeholder="Faturamento ÷ clientes"></div>`;
       }
-      const locked = (f.key === 'check' && integ._pop) || (f.daily && isNum(integ[f.key]) && !isNum(rec[f.key]));
-      if (locked) {
-        const v = integ[f.key];
-        const shown = f.key.endsWith('Pct') ? nf2.format(v) : (f.step === '0.01' ? nf2.format(v) : nf0.format(v));
-        return `<div class="field"><span class="tm-flabel">${esc(f.label)}<span class="lock">${icon('lock')} ${f.key === 'check' && integ._pop ? 'Vindo do checklist' : 'Vindo da integração'}</span></span>
-          <input class="input num" id="m-${f.key}" value="${shown}" readonly tabindex="-1"></div>`;
+      const fmtV = v => f.key.endsWith('Pct') ? nf2.format(v) + '%' : (f.step === '0.01' ? money2(v) : nf0.format(v));
+      if (f.key === 'check' && integ._pop) {
+        return `<div class="field"><span class="tm-flabel">${esc(f.label)}<span class="lock">${icon('lock')} Vindo do checklist</span></span>
+          <input class="input num" id="m-${f.key}" value="${nf1.format(integ[f.key])}" readonly tabindex="-1"></div>`;
+      }
+      const fromApi = f.daily && isNum(integ[f.key]);
+      const own = isGestor(currentUser());
+      if (fromApi && !isNum(rec[f.key])) {
+        // Valor da integração: travado. Só o dono destrava para um ajuste manual.
+        const ask = ui.confirm === 'unlock' + b.id + f.key;
+        return `<div class="field"><span class="tm-flabel">${esc(f.label)}${own
+            ? `<button type="button" class="lock lock-btn" data-action="apiUnlock" data-id="${esc(b.id)}" data-k="${f.key}" aria-label="Destravar ${esc(f.label)} para ajuste manual">${icon('lock')} Vindo da integração</button>`
+            : `<span class="lock">${icon('lock')} Vindo da integração</span>`}</span>
+          <input class="input num" id="m-${f.key}" value="${fmtV(integ[f.key])}" readonly tabindex="-1">
+          ${ask ? `<div class="unlock-ask" role="alert"><p>Este número veio da integração. Ajustar à mão substitui o valor da API neste mês.</p>
+            <div class="btn-row"><button type="button" class="btn btn-sm btn-primary" data-action="apiAdjust" data-id="${esc(b.id)}" data-k="${f.key}">${icon('edit')} Ajustar</button>
+            <button type="button" class="btn btn-sm" data-action="apiUnlockCancel">Cancelar</button></div></div>` : ''}</div>`;
+      }
+      if (fromApi && isNum(rec[f.key])) {
+        const adj = rec._adj && rec._adj[f.key];
+        const meta = `API: ${fmtV(integ[f.key])}${adj ? ` · ajustado por ${esc(adj.by || 'gestão')} em ${new Date(adj.at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}`;
+        return `<div class="field"><label for="m-${f.key}" class="tm-flabel">${esc(f.label)}<span class="lock lock-adj">${icon('edit')} Ajuste manual</span></label>
+          <input class="input ${own ? 'input-edit' : ''} num" id="m-${f.key}" name="${f.key}" type="number" inputmode="decimal" min="0" ${f.max ? `max="${f.max}"` : ''} step="${f.step}" value="${rec[f.key]}" ${own ? `data-auto="month" data-id="${esc(b.id)}"` : 'readonly tabindex="-1"'}>
+          <small class="adj-meta">${meta}</small>
+          ${own ? `<button type="button" class="link-btn adj-undo" data-action="apiRevert" data-id="${esc(b.id)}" data-k="${f.key}">${icon('undo')} Voltar ao valor da integração</button>` : ''}</div>`;
       }
       return `<label class="field"><span class="tm-flabel">${esc(f.label)}</span>
         <input class="input input-edit num" id="m-${f.key}" name="${f.key}" type="number" inputmode="decimal" min="0" ${f.max ? `max="${f.max}"` : ''} step="${f.step}" value="${isNum(rec[f.key]) ? rec[f.key] : ''}" placeholder="—" data-auto="month" data-id="${esc(b.id)}"></label>`;
@@ -948,6 +967,11 @@
       <a class="btn" href="#integracao">${icon('plug')} Integração com outro sistema</a>`;
   }
 
+  function refreshEditorFields() {
+    const box = document.getElementById('tm-fields'), b = barberById(ui.teamBarber);
+    if (box && b) box.innerHTML = editorFields(b, ui.teamMonth || curYm()); else render();
+  }
+
   // Atualiza as partes da tela sem perder o campo que está sendo digitado.
   function refreshTeam() {
     const ym = ui.teamMonth || curYm();
@@ -981,6 +1005,7 @@
           let rec = state.monthly.find(m => m.barberId === id && m.month === ym);
           if (!rec) { rec = { barberId: id, month: ym }; state.monthly.push(rec); }
           rec[key] = v;
+          if (rec._adj && rec._adj[key]) { if (v === null) delete rec._adj[key]; else rec._adj[key] = { by: (currentUser() || {}).name, at: Date.now() }; }
         } else if (kind === 'goal') {
           state.goals = state.goals || { team: {}, byBarber: {} };
           const g = (state.goals.byBarber[id] = state.goals.byBarber[id] || {});
@@ -2765,6 +2790,27 @@ Content-Type: application/json</pre>
       const d = document.documentElement;
       if (d.requestFullscreen) d.requestFullscreen().catch(() => {});
       fxRender();
+    },
+    apiUnlock(el) { ui.confirm = 'unlock' + el.dataset.id + el.dataset.k; refreshEditorFields(); },
+    apiUnlockCancel() { ui.confirm = null; refreshEditorFields(); },
+    apiAdjust(el) {
+      const u = currentUser(); if (!isGestor(u)) return;
+      const ym = ui.teamMonth || curYm(), id = el.dataset.id, k = el.dataset.k;
+      const integ = monthFromIntegration(state, id, ym);
+      state.monthly = state.monthly || [];
+      let rec = state.monthly.find(m => m.barberId === id && m.month === ym);
+      if (!rec) { rec = { barberId: id, month: ym }; state.monthly.push(rec); }
+      rec[k] = Math.round(Number(integ[k]) * 100) / 100;
+      rec._adj = { ...(rec._adj || {}), [k]: { by: u.name, at: Date.now() } };
+      ui.confirm = null; save(); refreshEditorFields(); refreshTeam();
+      setTimeout(() => { const i = document.getElementById('m-' + k); if (i) { i.focus(); i.select(); } }, 30);
+      toast('Campo destravado. O valor digitado substitui o da integração neste mês.');
+    },
+    apiRevert(el) {
+      const ym = ui.teamMonth || curYm(), id = el.dataset.id, k = el.dataset.k;
+      const rec = (state.monthly || []).find(m => m.barberId === id && m.month === ym); if (!rec) return;
+      rec[k] = null; if (rec._adj) delete rec._adj[k];
+      save(); refreshEditorFields(); refreshTeam(); toast('Voltou para o valor da integração.');
     },
     teamPick(el) {
       ui.teamBarber = el.dataset.id;

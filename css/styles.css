@@ -962,6 +962,13 @@ textarea.input.pop-ta { min-height: 72px; font-family: var(--font-body); font-si
 .tm-flabel { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; font-weight: 600; font-size: 0.86rem; text-transform: uppercase; letter-spacing: 0.04em; color: #d8d3c8; }
 .lock { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; background: var(--surface-3); color: var(--muted); font-size: 0.74rem; text-transform: none; letter-spacing: 0; font-weight: 600; }
 .lock .ico { width: 14px; height: 14px; }
+.lock-btn { border: 1px dashed var(--line-accent); cursor: pointer; font: inherit; font-size: 0.74rem; }
+.lock-btn:hover { color: var(--accent); border-color: var(--accent); }
+.lock-adj { background: rgba(214, 180, 106, 0.16); color: var(--accent); }
+.unlock-ask { display: grid; gap: 8px; margin-top: 4px; padding: 12px; border-radius: 14px; border: 1px solid var(--accent); background: rgba(214, 180, 106, 0.08); }
+.unlock-ask p { margin: 0; font-size: 0.92rem; }
+.adj-meta { color: var(--muted); }
+.adj-undo { justify-self: start; display: inline-flex; gap: 6px; align-items: center; color: var(--accent); }
 .tm-goals { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 14px; }
 .tm-goals summary { cursor: pointer; font-weight: 600; }
 .tm-goals[open] summary { margin-bottom: 12px; }
