@@ -457,6 +457,18 @@ pre.code { margin: 0; padding: 14px; border-radius: 14px; background: var(--bg);
 
 
 
+/* ---------- Performance da equipe ---------- */
+.pc-empty { padding: 16px 18px; border: 1.5px dashed var(--line); border-radius: var(--radius); color: #d8d3c8; }
+.pc-totals { grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); }
+.pc-stat { display: grid; gap: 4px; padding: 14px 18px; border-radius: 18px; background: var(--surface-2); }
+.pc-stat span { color: var(--muted); font-size: 0.82rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.pc-stat b { font-family: var(--font-display); font-size: 1.6rem; line-height: 1.1; }
+.pc-table { min-width: 720px; }
+.pc-table tbody tr { cursor: pointer; }
+.pc-table tbody tr:hover td { background: var(--surface-3); }
+.pc-table .td-who { color: var(--fg); text-decoration: none; }
+.rd-single { max-width: 520px; width: 100%; justify-self: center; }
+
 /* ---------- Assinatura (SaaS) ---------- */
 .sub-banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px var(--gutter-r) 10px var(--gutter-l); background: rgba(127, 157, 240, 0.12); border-bottom: 1px solid rgba(127, 157, 240, 0.3); font-weight: 600; }
 .sub-banner.warn { background: rgba(242, 193, 78, 0.14); border-bottom-color: rgba(242, 193, 78, 0.4); }

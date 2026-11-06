@@ -389,7 +389,7 @@
     const g = isGestor(user);
     const groups = NAV.filter(gr => !gr.g || g).map(gr => {
       const items = gr.items.filter(it => (!it.g || g) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
-        <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}</a>`).join('');
+        <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && g ? 'Performance da equipe' : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}</a>`).join('');
       return (gr.group ? `<div class="nav-group">${esc(gr.group)}</div>` : '') + items;
     }).join('');
     const periods = Object.entries(PERIOD_NAMES).map(([k, v]) =>
@@ -889,11 +889,11 @@
       ${strengths(row, prevRow, R, b.id)}`;
   }
 
-  function teamRadars(ym) {
+  function teamRadars(ym, monthOnly) {
     const R = monthR(ym);
     if (!R.rows.length) return '';
     let sel = (ui.radarSel || []).filter(id => R.rows.some(r => r.barber.id === id));
-    if (!sel.length) sel = R.rows.slice(0, 2).map(r => r.barber.id);
+    if (!sel.length) sel = R.rows.slice(0, monthOnly ? 3 : 2).map(r => r.barber.id);
     ui.radarSel = sel;
     const color = id => RADAR_COLORS[sel.indexOf(id) % RADAR_COLORS.length];
     const chips = R.rows.map(r => {
@@ -907,6 +907,15 @@
       return [{ name: name + ' (antes)', color: color(id), dashed: true, values: careerByInd(id, prevYm) }, { name, color: color(id), values: careerByInd(id, ym) }];
     });
     const legend = sel.map(id => `<span><i style="background:${color(id)}"></i>${esc(barberById(id).name)}</span>`).join('');
+    if (monthOnly) {
+      return `<section class="section card">
+        <h2 class="section-title">Radar do mês · ${esc(ymLabel(ym).replace(' de ', '/'))} (100 = líder)</h2>
+        <p class="section-note">Escolha até 4 profissionais para comparar.</p>
+        <div class="rd-chips">${chips}</div>
+        <div class="rd-box rd-single">${radarSvg(R.active, monthSeries)}<div class="ch-legend">${legend}</div></div>
+        <p class="section-note" style="text-align:center">Mesma régua do ranking e do pódio: 100 = líder do indicador. Cada pessoa mostra o percentual do que fez em relação ao líder.</p>
+      </section>`;
+    }
     return `<section class="section card">
       <h2 class="section-title">Radares de competência</h2>
       <p class="section-note">Escolha até 4 barbeiros para comparar. Escala de 0 a 100, a mesma do ranking: 100 é o líder do indicador.</p>
@@ -1049,11 +1058,56 @@
       <section class="section"><h2 class="section-title">Indicadores</h2><div class="ind-grid">${cards}</div></section>`;
   }
 
+  // Visão da barbearia inteira (gestor): totais do mês, detalhe por profissional e radar.
+  function pagePerfCasa() {
+    const ym = ui.teamMonth || curYm();
+    const R = monthR(ym);
+    const vis = k => GB.visibleInds(state).some(i => i.key === k);
+    const rows = [...R.rows].sort((a, b) => b.sums.fat - a.sums.fat);
+    const has = rows.some(r => Object.keys(r.sums.n).length);
+    const sum = k => rows.reduce((a, r) => a + (r.sums[k] || 0), 0);
+    const ids = new Set(rows.map(r => r.barber.id));
+    const agend = (state.monthly || []).filter(m => m.month === ym && ids.has(m.barberId) && isNum(m.agend)).reduce((a, m) => a + Number(m.agend), 0);
+    const fat = sum('fat'), cli = sum('cli');
+    const ocups = rows.map(r => r.values.ocup).filter(v => v != null);
+    const stat = (label, value) => `<div class="pc-stat"><span>${label}</span><b class="num">${value}</b></div>`;
+    const cols = [
+      ['Faturamento', r => money0(r.sums.fat), true],
+      ['Clientes', r => nf0.format(r.sums.cli), true],
+      ['Serviços', r => nf0.format(r.sums.serv), true],
+      ['Ticket médio', r => r.sums.cli > 0 ? money0(r.sums.fat / r.sums.cli) : '—', vis('ticket')],
+      ['Ocupação', r => r.values.ocup != null ? nf1.format(r.values.ocup) + '%' : '—', vis('ocup')],
+      ['Produtos', r => money0(r.sums.prod), vis('prod')],
+      ['Planos', r => nf0.format(r.sums.planos), vis('planos')],
+    ].filter(c => c[2]);
+    return `
+      <div class="card tm-month"><label class="field"><span class="tm-eyebrow">Mês</span>
+        <select class="input" id="pc-month" data-change="teamMonth">${monthOptions(ym)}</select></label></div>
+      ${has ? '' : `<div class="pc-empty">Nenhum dado lançado ainda. Assim que você cadastrar profissionais e lançar as métricas do mês, os totais e o comparativo aparecem aqui automaticamente.</div>`}
+      <section class="section card pc-totals">
+        ${stat('Faturamento total', money0(fat))}
+        ${stat('Agendamentos', nf0.format(agend))}
+        ${stat('Clientes atendidos', nf0.format(cli))}
+        ${stat('Serviços realizados', nf0.format(sum('serv')))}
+        ${vis('prod') ? stat('Venda de produtos', money0(sum('prod'))) : ''}
+        ${vis('planos') ? stat('Planos mensais', nf0.format(sum('planos'))) : ''}
+        ${stat('Ticket médio da casa', cli > 0 ? money0(fat / cli) : '—')}
+        ${vis('ocup') ? stat('Ocupação média', ocups.length ? nf1.format(ocups.reduce((a, v) => a + v, 0) / ocups.length) + '%' : '—') : ''}
+        ${stat('Profissionais', nf0.format(rows.length))}
+      </section>
+      ${rows.length ? `<section class="section card">
+        <h2 class="section-title">Detalhado por profissional</h2>
+        <p class="section-note">Toque num profissional para ver a performance completa dele.</p>
+        <div class="table-wrap"><table class="pc-table"><thead><tr><th>Profissional</th>${cols.map(c => `<th>${c[0]}</th>`).join('')}<th>Pontos</th></tr></thead><tbody>
+          ${rows.map(r => `<tr data-href="#perfil-${esc(r.barber.id)}" tabindex="0"><td><a class="td-who" href="#perfil-${esc(r.barber.id)}">${avatar(r.barber, 36)}<span>${esc(r.barber.name)}</span></a></td>
+            ${cols.map(c => `<td>${c[1](r)}</td>`).join('')}<td class="td-score">${score(r.overall)}</td></tr>`).join('')}
+        </tbody></table></div>
+      </section>` : emptyBarbers()}
+      <div id="tm-radar" class="tm-block" data-only="1">${has ? teamRadars(ym, true) : ''}</div>`;
+  }
+
   function pagePerformance(user) {
-    if (isGestor(user)) {
-      const id = ui.perfBarber && barberById(ui.perfBarber) ? ui.perfBarber : state.barbers[0]?.id;
-      return id ? perfFor(id, user) : emptyBarbers();
-    }
+    if (isGestor(user)) return pagePerfCasa();
     return user.barberId ? perfFor(user.barberId, user) : `<div class="card muted">Seu cadastro ainda não está ligado a um barbeiro. Fale com o gestor.</div>`;
   }
 
@@ -1935,7 +1989,7 @@ Content-Type: application/json</pre>
       const id = route.slice(7);
       page = { r: () => perfFor(id, user) }; title = 'Perfil';
     } else if (PAGES[route]) {
-      page = PAGES[route]; title = page.t;
+      page = PAGES[route]; title = route === 'performance' && isGestor(user) ? 'Performance' : page.t;
     } else if (SOON_TEXT[route]) {
       page = { r: () => pageSoon(route) }; title = NAV.flatMap(g => g.items).find(i => i.r === route).t;
     } else { route = 'inicio'; page = PAGES.inicio; title = page.t; }
@@ -2089,7 +2143,7 @@ Content-Type: application/json</pre>
       const id = el.dataset.id; let sel = ui.radarSel || [];
       if (sel.includes(id)) { if (sel.length > 1) sel = sel.filter(x => x !== id); }
       else { sel = [...sel, id]; if (sel.length > 4) sel = sel.slice(1); }
-      ui.radarSel = sel; const rd = $('#tm-radar'); if (rd) rd.innerHTML = teamRadars(ui.teamMonth || curYm());
+      ui.radarSel = sel; const rd = $('#tm-radar'); if (rd) rd.innerHTML = teamRadars(ui.teamMonth || curYm(), rd.dataset.only === '1');
     },
     defaultGoals() { state.goals = { ...(state.goals || {}), team: { ...GB.DEFAULT_GOALS } }; save(); toast('Metas padrão restauradas.'); render(); },
     defaultWeights() { state.weights = Object.fromEntries(INDICATORS.map(i => [i.key, i.weight])); save(); toast('Pesos padrão restaurados.'); render(); },
@@ -2328,6 +2382,8 @@ Content-Type: application/json</pre>
   };
 
   root.addEventListener('click', e => {
+    const tr = e.target.closest('tr[data-href]');
+    if (tr && !e.target.closest('a')) { location.hash = tr.dataset.href; return; }
     const el = e.target.closest('[data-action]');
     if (el && ACTIONS[el.dataset.action]) { ACTIONS[el.dataset.action](el, e); return; }
     const pop = $('.popover');
@@ -2344,6 +2400,7 @@ Content-Type: application/json</pre>
     if (el && el.tagName !== 'SELECT') autoSave(el);
   });
   root.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.matches('tr[data-href]')) { location.hash = e.target.dataset.href; return; }
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('article[data-action]')) { e.preventDefault(); ACTIONS[e.target.dataset.action](e.target, e); }
   });
   root.addEventListener('change', e => {
