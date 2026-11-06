@@ -283,6 +283,65 @@
     ui.authMsg = null;
   }
 
+  // ---------- Instalar na tela de início (PWA) ----------
+  const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isMobile = () => isIOS() || /android|mobile/i.test(navigator.userAgent);
+  let installEvt = null;
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; });
+  window.addEventListener('appinstalled', () => { installEvt = null; DB.pref.set('installed', '1'); closeInstall(); toast('Pronto! O Gestão Barber IA está na tela de início.'); });
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  }
+  function canOfferInstall() { return !isStandalone() && DB.pref.get('installed', '0') !== '1'; }
+  // Mostra o convite depois do login, no celular, no máximo uma vez por sessão e não antes de 7 dias se a pessoa disse "Agora não".
+  function maybeOfferInstall() {
+    if (!canOfferInstall() || !isMobile() || document.getElementById('install-sheet')) return;
+    let shown = false; try { shown = sessionStorage.getItem('gbia.installShown') === '1'; } catch (e) { /* opcional */ }
+    if (shown || Date.now() < Number(DB.pref.get('installSnooze', '0'))) return;
+    try { sessionStorage.setItem('gbia.installShown', '1'); } catch (e) { /* opcional */ }
+    setTimeout(() => { if (currentUser() && !ui.fx && location.hash !== '#apresentacao') openInstall(); }, 1200);
+  }
+  function installSteps() {
+    if (isIOS()) {
+      return `<ol class="inst-steps">
+        <li><span class="inst-n">1</span><span>Toque em <b>Compartilhar</b> ${icon('share')} na barra do navegador.</span></li>
+        <li><span class="inst-n">2</span><span>Role e toque em <b>Adicionar à Tela de Início</b> ${icon('plus')}.</span></li>
+        <li><span class="inst-n">3</span><span>Toque em <b>Adicionar</b>, no canto de cima.</span></li></ol>`;
+    }
+    return `<ol class="inst-steps">
+      <li><span class="inst-n">1</span><span>Toque no menu <b>⋮</b> do navegador, no canto de cima.</span></li>
+      <li><span class="inst-n">2</span><span>Toque em <b>Instalar app</b> ou <b>Adicionar à tela inicial</b>.</span></li>
+      <li><span class="inst-n">3</span><span>Confirme em <b>Instalar</b>.</span></li></ol>`;
+  }
+  function openInstall() {
+    closeInstall();
+    const el = document.createElement('div');
+    el.id = 'install-sheet'; el.className = 'inst-wrap';
+    el.innerHTML = `<div class="inst-scrim" data-inst="later"></div>
+      <section class="inst-sheet" role="dialog" aria-modal="true" aria-labelledby="inst-t">
+        <div class="inst-head">${logo('inst-logo')}<div><h2 id="inst-t">Gestão Barber IA na sua tela de início</h2>
+          <p>Abra o app com um toque, em tela cheia, como qualquer aplicativo.</p></div></div>
+        ${installEvt ? `<button class="btn btn-primary btn-block" data-inst="go">${icon('plus')} Adicionar à tela de início</button>` : installSteps()}
+        ${isIOS() ? '<p class="inst-tip">Se não encontrar a opção, abra este endereço no Safari e repita os passos.</p>' : ''}
+        <button class="btn btn-block" data-inst="later">Agora não</button>
+      </section>`;
+    el.addEventListener('click', async e => {
+      const b = e.target.closest('[data-inst]'); if (!b) return;
+      if (b.dataset.inst === 'later') { DB.pref.set('installSnooze', String(Date.now() + 7 * 86400000)); closeInstall(); return; }
+      if (b.dataset.inst === 'go' && installEvt) {
+        const evt = installEvt; installEvt = null;
+        evt.prompt();
+        const r = await evt.userChoice.catch(() => ({ outcome: 'dismissed' }));
+        if (r.outcome === 'accepted') { DB.pref.set('installed', '1'); closeInstall(); }
+        else { DB.pref.set('installSnooze', String(Date.now() + 7 * 86400000)); closeInstall(); }
+      }
+    });
+    document.body.appendChild(el);
+    el.querySelector('.inst-sheet button').focus();
+  }
+  function closeInstall() { const el = document.getElementById('install-sheet'); if (el) el.remove(); }
+
   // ---------- menu ----------
   const NAV = [
     { items: [
@@ -342,6 +401,7 @@
         ${groups}
         <div class="period-box"><div class="nav-group">Período</div>${periods}</div>
         <div class="nav-sep"></div>
+        ${canOfferInstall() ? `<button class="nav-item" data-action="installApp">${icon('download')}<span>Adicionar à tela de início</span></button>` : ''}
         <button class="nav-item" data-action="logout">${icon('logout')}<span>Sair</span></button>
       </nav>`;
   }
@@ -1898,6 +1958,7 @@ Content-Type: application/json</pre>
       ${drawer(user, route)}
       ${popover(user)}`;
     applyLive();
+    maybeOfferInstall();
   }
 
   // ---------- ações ----------
@@ -1974,6 +2035,7 @@ Content-Type: application/json</pre>
       u.pass = passHash(u.email, pass); save();
       ui.lastReset = { name: u.name, pass }; render();
     },
+    installApp() { ACTIONS.closeDrawer(); openInstall(); },
     async recheckAccess(el, ev, silent) {
       const ok = await loadCloud();
       if (ok) { toast('Pagamento confirmado. Bem-vindo de volta!'); if (location.hash === '#inicio') render(); else location.hash = 'inicio'; return; }
@@ -2302,6 +2364,7 @@ Content-Type: application/json</pre>
     window.scrollTo(0, 0);
   });
   document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && document.getElementById('install-sheet')) { closeInstall(); return; }
     if (e.key === 'Escape') {
       if (location.hash === '#apresentacao') ACTIONS.exitTV();
       const d = $('.drawer'); if (d && d.classList.contains('open')) ACTIONS.closeDrawer();
