@@ -347,9 +347,9 @@
     { items: [
       { r: 'inicio', t: 'Início', i: 'grid' },
       { r: 'time', t: 'Time e ranking', i: 'trophy' },
-      { r: 'lancamentos', t: 'Lançamentos', i: 'wallet', g: 1 },
+      { r: 'lancamentos', t: 'Lançamentos', i: 'wallet', g: 1, a: 1 },
       { r: 'gestao-visual', t: 'Gestão Visual', i: 'signal' },
-      { r: 'fechamento', t: 'Fechamento do mês', i: 'clipboard', g: 1 },
+      { r: 'fechamento', t: 'Fechamento do mês', i: 'clipboard', g: 1, a: 1 },
     ] },
     { group: 'GP · Gestão de pessoas', items: [
       { r: 'performance', t: 'Minha performance', i: 'chart' },
@@ -367,7 +367,7 @@
       { r: 'configuracoes', t: 'Configurações', i: 'gear' },
       { r: 'assinatura', t: 'Assinatura', i: 'card', cloud: 1 },
       { r: 'admin', t: 'Painel do SaaS', i: 'gauge', admin: 1 },
-      { r: 'organograma', t: 'Organograma', i: 'org', soon: 1 },
+      { r: 'organograma', t: 'Organograma', i: 'org' },
       { r: 'cockpit', t: 'Cockpit do gestor', i: 'gauge', soon: 1 },
     ] },
     { group: 'Conta', items: [
@@ -381,15 +381,15 @@
     premios: 'Prêmios ligados às metas, para motivar o time.',
     sonhos: 'Cada barbeiro registra um sonho e acompanha quanto falta para realizá-lo.',
     checklist: 'Checklist do procedimento padrão (POP), que alimenta o indicador Checklist POP.',
-    organograma: 'Estrutura da equipe e responsabilidades.',
     cockpit: 'Visão rápida do gestor com os principais números do negócio.',
   };
 
   function drawer(user, route) {
     const g = isGestor(user);
     const groups = NAV.filter(gr => !gr.g || g).map(gr => {
-      const items = gr.items.filter(it => (!it.g || g) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
-        <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}</a>`).join('');
+      const am = isAreaMgr(user), hg = hasGrants(user);
+      const items = gr.items.filter(it => (!it.g || g || (it.a && am)) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
+        <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && (g || hg) ? 'Performance da equipe' : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}</a>`).join('');
       return (gr.group ? `<div class="nav-group">${esc(gr.group)}</div>` : '') + items;
     }).join('');
     const periods = Object.entries(PERIOD_NAMES).map(([k, v]) =>
@@ -492,7 +492,7 @@
               <hr class="pd-line">
               ${place === 1 ? middle : ''}
               <div class="pd-pts">${score(row.overall)}<small>pts</small></div>
-              <div class="pd-money"><span class="pd-coin">$</span>${money0(row.sums.fat)}</div>
+              ${seeNum(b.id) ? `<div class="pd-money"><span class="pd-coin">$</span>${money0(row.sums.fat)}</div>` : ''}
               ${t ? '' : `<div class="pd-leads" title="1º lugar em ${row.leads.length} de ${R.N} indicadores">${barsSvg}<span>${leadsTxt}</span></div>`}
             </div></div>
             <div class="pd-badge"><span>${ord(place)}<small>LUGAR</small></span></div>
@@ -549,7 +549,7 @@
       return `<li><a class="rank-row ${zone}" data-id="${esc(r.barber.id)}" data-pos="${r.pos}" href="#perfil-${esc(r.barber.id)}">
         <span class="rank-pos num">${ord(r.pos)}</span>
         ${avatar(r.barber, 46)}
-        <span class="rank-who"><b><span class="rank-name">${esc(r.barber.name)}</span><span class="rank-money num">${money0(r.sums.fat)}</span></b>${sub.replace('</small>', nowChip + '</small>')}</span>
+        <span class="rank-who"><b><span class="rank-name">${esc(r.barber.name)}</span>${seeNum(r.barber.id) ? `<span class="rank-money num">${money0(r.sums.fat)}</span>` : ''}</b>${sub.replace('</small>', nowChip + '</small>')}</span>
         <span class="rank-score num">${score(r.overall)}</span>
         ${trend}
       </a></li>`;
@@ -566,7 +566,7 @@
       return `<div class="card card-glow hl">
         <div class="hl-head">${icon('trophy')}<span>Melhor em ${esc(ind.label)} · ${ind.weight} pts</span></div>
         <div class="hl-who"><span class="avatar-stack">${leaders.slice(0, 3).map(b => avatar(b, 44)).join('')}</span><span>${leaders.map(b => esc(b.name)).join(' + ')}</span></div>
-        <div class="hl-val num">${fmt(ind, row.values[ind.key])}</div>
+        ${leaders.some(b => seeNum(b.id)) ? `<div class="hl-val num">${fmt(ind, row.values[ind.key])}</div>` : ''}
         ${leaders.length > 1 ? '<span><span class="chip chip-tie">Empate na liderança</span></span>' : ''}
       </div>`;
     }).join('')}</div>`;
@@ -743,7 +743,7 @@
     return `<div class="card tm-month">
       <label class="field"><span class="tm-eyebrow">Mês dos dados</span>
         <select class="input" id="tm-month" data-change="teamMonth">${monthOptions(ym)}</select></label>
-      ${isGestor(user) ? `<span class="chip chip-ok tm-saved" id="tm-saved">${icon('check')} Salvo automaticamente</span>` : ''}
+      ${(isGestor(user) || isAreaMgr(user)) ? `<span class="chip chip-ok tm-saved" id="tm-saved">${icon('check')} Salvo automaticamente</span>` : ''}
     </div>`;
   }
 
@@ -759,7 +759,7 @@
         ${avatar(r.barber, 60)}
         <div class="cc-body">
           <b class="cc-name">${esc(r.barber.name)} ${titleChip(R, r.barber.id)}</b>
-          <span class="muted num">${r.leads.length} de ${R.N} em 1º · ${money0(r.sums.fat)}</span>
+          <span class="muted num">${r.leads.length} de ${R.N} em 1º${seeNum(r.barber.id) ? ' · ' + money0(r.sums.fat) : ''}</span>
           <div class="cc-meta"><span class="lv ${lv.cls}">${lv.name}</span>${delta}<span class="muted num">carreira ${nf1.format(c.value)}</span></div>
           <div class="cc-chips">${R.active.map(i => `<span class="rk-chip ${i.leaders.includes(r.barber.id) ? 'lead' : ''}">${esc(i.label)}: <b class="num">${ord(r.ranks[i.key])}</b></span>`).join('')}</div>
         </div>
@@ -800,9 +800,10 @@
   }
 
   function teamEditor(ym) {
-    const list = state.barbers.filter(b => b.active !== false);
+    const own = isGestor(currentUser());
+    const list = state.barbers.filter(b => b.active !== false && canEditB(b.id));
     if (!list.length) return emptyBarbers();
-    const sel = barberById(ui.teamBarber) && barberById(ui.teamBarber).active !== false ? barberById(ui.teamBarber) : list[0];
+    const sel = list.find(b => b.id === ui.teamBarber) || list[0];
     ui.teamBarber = sel.id;
     const R = monthR(ym);
     const row = R.rows.find(r => r.barber.id === sel.id);
@@ -813,16 +814,17 @@
     }).join('')}</div>
     <section class="section card tm-edit">
       <h2 class="section-title">Editar métricas de ${esc(sel.name)} · ${esc(ymLabel(ym).replace(' de ', '/'))}</h2>
-      <div class="tm-photo">${avatar(sel, 96)}<label class="btn btn-sm" style="cursor:pointer">${icon('camera')} Trocar foto<input type="file" accept="image/*" hidden data-change="barberPhoto" data-id="${esc(sel.id)}"></label></div>
+      ${own ? '' : `<p class="section-note">Você lança os números das pessoas da sua área.</p>`}
+      <div class="tm-photo">${avatar(sel, 96)}${own ? '' : '</div><!--'}<label class="btn btn-sm" style="cursor:pointer">${icon('camera')} Trocar foto<input type="file" accept="image/*" hidden data-change="barberPhoto" data-id="${esc(sel.id)}"></label>${own ? '</div>' : '-->'}
       <div class="tm-fixed"><small>Nome (fixo)</small><b>${esc(sel.name)}</b></div>
-      <div class="grid-2">
+      ${own ? `<div class="grid-2">
         <label class="field"><span class="tm-flabel">Instagram</span><input class="input input-edit" id="m-instagram" name="instagram" value="${esc(sel.instagram || '')}" placeholder="@usuario" data-auto="barber" data-id="${esc(sel.id)}"></label>
         <label class="field"><span class="tm-flabel">Cargo na empresa</span><select class="input input-edit" id="m-role" name="role" data-auto="barber" data-id="${esc(sel.id)}">${ROLES.map(r => `<option ${r === (sel.role || 'Barbeiro') ? 'selected' : ''}>${r}</option>`).join('')}</select></label>
-      </div>
+      </div>` : ''}
       <div class="grid-2" id="tm-fields">${editorFields(sel, ym)}</div>
-      <details class="tm-goals"><summary>Metas individuais de ${esc(sel.name.split(' ')[0])} <span class="muted">(em branco = meta da equipe)</span></summary>
+      ${own ? `<details class="tm-goals"><summary>Metas individuais de ${esc(sel.name.split(' ')[0])} <span class="muted">(em branco = meta da equipe)</span></summary>
         <div class="grid-2">${GB.visibleInds(state).map(i => `<label class="field"><span class="tm-flabel">${esc(i.label)}</span><input class="input input-edit num" id="g-${i.key}" name="${i.key}" type="number" min="0" step="any" value="${isNum(goals[i.key]) ? goals[i.key] : ''}" placeholder="Equipe: ${esc(fmtGoal(i, GB.goalFor(state, '', i.key)))}" data-auto="goal" data-id="${esc(sel.id)}"></label>`).join('')}</div>
-      </details>
+      </details>` : ''}
       <p class="section-note" id="tm-pos">${row ? `Posição atual: ${ord(row.pos)} · pontuação ${score(row.overall)} / 100.` : ''} Tudo é salvo automaticamente no mês selecionado.</p>
     </section>`;
   }
@@ -889,11 +891,11 @@
       ${strengths(row, prevRow, R, b.id)}`;
   }
 
-  function teamRadars(ym) {
+  function teamRadars(ym, monthOnly) {
     const R = monthR(ym);
     if (!R.rows.length) return '';
     let sel = (ui.radarSel || []).filter(id => R.rows.some(r => r.barber.id === id));
-    if (!sel.length) sel = R.rows.slice(0, 2).map(r => r.barber.id);
+    if (!sel.length) sel = R.rows.slice(0, monthOnly ? 3 : 2).map(r => r.barber.id);
     ui.radarSel = sel;
     const color = id => RADAR_COLORS[sel.indexOf(id) % RADAR_COLORS.length];
     const chips = R.rows.map(r => {
@@ -907,6 +909,15 @@
       return [{ name: name + ' (antes)', color: color(id), dashed: true, values: careerByInd(id, prevYm) }, { name, color: color(id), values: careerByInd(id, ym) }];
     });
     const legend = sel.map(id => `<span><i style="background:${color(id)}"></i>${esc(barberById(id).name)}</span>`).join('');
+    if (monthOnly) {
+      return `<section class="section card">
+        <h2 class="section-title">Radar do mês · ${esc(ymLabel(ym).replace(' de ', '/'))} (100 = líder)</h2>
+        <p class="section-note">Escolha até 4 profissionais para comparar.</p>
+        <div class="rd-chips">${chips}</div>
+        <div class="rd-box rd-single">${radarSvg(R.active, monthSeries)}<div class="ch-legend">${legend}</div></div>
+        <p class="section-note" style="text-align:center">Mesma régua do ranking e do pódio: 100 = líder do indicador. Cada pessoa mostra o percentual do que fez em relação ao líder.</p>
+      </section>`;
+    }
     return `<section class="section card">
       <h2 class="section-title">Radares de competência</h2>
       <p class="section-note">Escolha até 4 barbeiros para comparar. Escala de 0 a 100, a mesma do ranking: 100 é o líder do indicador.</p>
@@ -921,7 +932,7 @@
 
   function pageTime(user) {
     const ym = ui.teamMonth || curYm();
-    if (!isGestor(user) && user.barberId) ui.teamBarber = user.barberId;
+    if (!isGestor(user) && user.barberId && !seeNum(ui.teamBarber)) ui.teamBarber = user.barberId;
     if (!barberById(ui.teamBarber)) ui.teamBarber = monthR(ym).rows[0]?.barber.id;
     return `${monthPicker(ym, user)}
       <div id="tm-top" class="tm-block">${teamTop(ym)}</div>
@@ -989,6 +1000,7 @@
   }
 
   function perfFor(barberId, user) {
+    if (!seeNum(barberId)) return `<div class="card empty">${icon('lock')}<h2>Números reservados</h2><p>Você vê o ranking e a pontuação de todos, e os números detalhados só seus.</p><a class="btn" href="#performance">Ver minha performance</a></div>`;
     const b = barberById(barberId);
     if (!b) return `<div class="card empty">${icon('users')}<h2>Barbeiro não encontrado</h2><p>Ele pode ter sido removido da equipe.</p></div>`;
     const R = computeRanking(state, range());
@@ -1049,11 +1061,57 @@
       <section class="section"><h2 class="section-title">Indicadores</h2><div class="ind-grid">${cards}</div></section>`;
   }
 
+  // Visão da barbearia inteira (gestor): totais do mês, detalhe por profissional e radar.
+  function pagePerfCasa(scope) {
+    const ym = ui.teamMonth || curYm();
+    const R = monthR(ym);
+    const vis = k => GB.visibleInds(state).some(i => i.key === k);
+    const rows = [...R.rows].filter(r => !scope || scope.has(r.barber.id)).sort((a, b) => b.sums.fat - a.sums.fat);
+    const has = rows.some(r => Object.keys(r.sums.n).length);
+    const sum = k => rows.reduce((a, r) => a + (r.sums[k] || 0), 0);
+    const ids = new Set(rows.map(r => r.barber.id));
+    const agend = (state.monthly || []).filter(m => m.month === ym && ids.has(m.barberId) && isNum(m.agend)).reduce((a, m) => a + Number(m.agend), 0);
+    const fat = sum('fat'), cli = sum('cli');
+    const ocups = rows.map(r => r.values.ocup).filter(v => v != null);
+    const stat = (label, value) => `<div class="pc-stat"><span>${label}</span><b class="num">${value}</b></div>`;
+    const cols = [
+      ['Faturamento', r => money0(r.sums.fat), true],
+      ['Clientes', r => nf0.format(r.sums.cli), true],
+      ['Serviços', r => nf0.format(r.sums.serv), true],
+      ['Ticket médio', r => r.sums.cli > 0 ? money0(r.sums.fat / r.sums.cli) : '—', vis('ticket')],
+      ['Ocupação', r => r.values.ocup != null ? nf1.format(r.values.ocup) + '%' : '—', vis('ocup')],
+      ['Produtos', r => money0(r.sums.prod), vis('prod')],
+      ['Planos', r => nf0.format(r.sums.planos), vis('planos')],
+    ].filter(c => c[2]);
+    return `
+      <div class="card tm-month"><label class="field"><span class="tm-eyebrow">Mês</span>
+        <select class="input" id="pc-month" data-change="teamMonth">${monthOptions(ym)}</select></label></div>
+      ${has ? '' : `<div class="pc-empty">Nenhum dado lançado ainda. Assim que você cadastrar profissionais e lançar as métricas do mês, os totais e o comparativo aparecem aqui automaticamente.</div>`}
+      <section class="section card pc-totals">
+        ${stat('Faturamento total', money0(fat))}
+        ${stat('Agendamentos', nf0.format(agend))}
+        ${stat('Clientes atendidos', nf0.format(cli))}
+        ${stat('Serviços realizados', nf0.format(sum('serv')))}
+        ${vis('prod') ? stat('Venda de produtos', money0(sum('prod'))) : ''}
+        ${vis('planos') ? stat('Planos mensais', nf0.format(sum('planos'))) : ''}
+        ${stat('Ticket médio da casa', cli > 0 ? money0(fat / cli) : '—')}
+        ${vis('ocup') ? stat('Ocupação média', ocups.length ? nf1.format(ocups.reduce((a, v) => a + v, 0) / ocups.length) + '%' : '—') : ''}
+        ${stat('Profissionais', nf0.format(rows.length))}
+      </section>
+      ${rows.length ? `<section class="section card">
+        <h2 class="section-title">Detalhado por profissional</h2>
+        <p class="section-note">Toque num profissional para ver a performance completa dele.</p>
+        <div class="table-wrap"><table class="pc-table"><thead><tr><th>Profissional</th>${cols.map(c => `<th>${c[0]}</th>`).join('')}<th>Pontos</th></tr></thead><tbody>
+          ${rows.map(r => `<tr data-href="#perfil-${esc(r.barber.id)}" tabindex="0"><td><a class="td-who" href="#perfil-${esc(r.barber.id)}">${avatar(r.barber, 36)}<span>${esc(r.barber.name)}</span></a></td>
+            ${cols.map(c => `<td>${c[1](r)}</td>`).join('')}<td class="td-score">${score(r.overall)}</td></tr>`).join('')}
+        </tbody></table></div>
+      </section>` : emptyBarbers()}
+      <div id="tm-radar" class="tm-block" data-only="1">${has ? teamRadars(ym, true) : ''}</div>`;
+  }
+
   function pagePerformance(user) {
-    if (isGestor(user)) {
-      const id = ui.perfBarber && barberById(ui.perfBarber) ? ui.perfBarber : state.barbers[0]?.id;
-      return id ? perfFor(id, user) : emptyBarbers();
-    }
+    if (isGestor(user)) return pagePerfCasa();
+    if (hasGrants(user)) return pagePerfCasa(new Set([...areaIds(user, ['gestor', 'membro']), user.barberId].filter(Boolean)));
     return user.barberId ? perfFor(user.barberId, user) : `<div class="card muted">Seu cadastro ainda não está ligado a um barbeiro. Fale com o gestor.</div>`;
   }
 
@@ -1245,13 +1303,15 @@ Content-Type: application/json</pre>
 
   // ---------- Fechamento do mês (apresentação para a equipe) ----------
   function pageFechamento() {
+    const amNote = isGestor(currentUser()) ? '' : '<p class="section-note">O fechamento mostra só as pessoas da sua área.</p>';
     const ym = ui.fxMonth || addMonths(curYm(), new Date().getDate() <= 10 ? -1 : 0);
     ui.fxMonth = ym;
-    const R = monthR(ym);
+    const R = scopedR(ym);
     const top = R.rows.slice(0, 3);
     const total = R.rows.reduce((a, r) => a + r.sums.fat, 0);
     const t = R.title.type ? R.rows.find(r => r.barber.id === R.title.barberId) : null;
     return `<section class="card fc-head">
+        ${amNote}
         <div class="fc-brand">${logo('fc-logo')}<div><h2>Fechamento do mês</h2><p>Cada atendimento conta.</p></div></div>
         <div class="fc-controls">
           <label class="field"><span>Mês do fechamento</span><select class="input" id="fc-month" data-change="fxMonth">${monthOptions(ym)}</select></label>
@@ -1277,7 +1337,7 @@ Content-Type: application/json</pre>
     return `<div class="fx-photo"><span>${b.photo ? `<img src="${esc(b.photo)}" alt="">` : esc(ini)}</span></div>`;
   }
   function fxSlides(ym) {
-    const R = monthR(ym);
+    const R = scopedR(ym);
     const rows = R.rows, s = [{ k: 'intro' }];
     for (let i = rows.length - 1; i >= 3; i--) s.push({ k: 'card', row: rows[i] });
     s.push({ k: 'podium' });
@@ -1623,6 +1683,226 @@ Content-Type: application/json</pre>
       </section>`;
   }
 
+  // ---------- Organograma: estrutura, níveis e quem vê o quê ----------
+  const ORG_ROOT = 'root';
+  // Garante a estrutura e encaixa sozinho quem ainda não tem lugar (embaixo do dono).
+  function org() {
+    if (!state.org || typeof state.org !== 'object') state.org = {};
+    const o = state.org;
+    if (!Array.isArray(o.nodes)) o.nodes = [];
+    if (!Array.isArray(o.grants)) o.grants = [];
+    if (!Array.isArray(o.levels) || !o.levels.length) o.levels = [{ id: 'l1', name: 'Nível 1' }, { id: 'l2', name: 'Nível 2' }, { id: 'l3', name: 'Nível 3' }];
+    let root = o.nodes.find(n => n.id === ORG_ROOT);
+    if (!root) { root = { id: ORG_ROOT, name: '', parentId: null, people: [] }; o.nodes.unshift(root); }
+    root.parentId = null;
+    const bids = new Set(state.barbers.map(b => b.id));
+    const ids = new Set(o.nodes.map(n => n.id));
+    const placed = new Set();
+    for (const n of o.nodes) {
+      n.people = (n.people || []).filter(p => p.startsWith('b:') && bids.has(p.slice(2)) && !placed.has(p));
+      n.people.forEach(p => placed.add(p));
+      if (n.id !== ORG_ROOT && (!n.parentId || !ids.has(n.parentId) || n.parentId === n.id)) n.parentId = ORG_ROOT;
+    }
+    // quebra ciclos (alguém abaixo de si mesmo)
+    for (const n of o.nodes) { const seen = new Set([n.id]); let p = n.parentId; while (p) { if (seen.has(p)) { n.parentId = ORG_ROOT; break; } seen.add(p); p = (o.nodes.find(x => x.id === p) || {}).parentId; } }
+    o.nodes = o.nodes.filter(n => !(n.auto && !n.people.length));
+    for (const b of state.barbers) {
+      if (b.active === false || placed.has('b:' + b.id)) continue;
+      o.nodes.push({ id: 'n_' + b.id, name: b.name, parentId: ORG_ROOT, people: ['b:' + b.id], auto: true });
+    }
+    const uids = new Set(state.users.map(u => u.id));
+    o.grants = o.grants.filter(g => uids.has(g.userId) && (g.nodeId === null || o.nodes.some(n => n.id === g.nodeId)));
+    return o;
+  }
+  const orgNode = id => org().nodes.find(n => n.id === id);
+  const orgKids = id => org().nodes.filter(n => n.parentId === id);
+  function orgDepth(n) { let d = 0, p = n.parentId; while (p && d < 50) { d++; p = (orgNode(p) || {}).parentId; } return d; }
+  const orgLevel = d => (org().levels[d] && org().levels[d].name) || `Nível ${d + 1}`;
+  const personName = ref => (barberById(ref.slice(2)) || {}).name || '?';
+  function orgName(n) {
+    if (n.id === ORG_ROOT) return `Dono · ${state.company.name || 'Barbearia'}`;
+    if (n.auto && n.people[0]) return personName(n.people[0]);
+    return n.name || 'Sem nome';
+  }
+  function orgSub(id) { const out = [id]; for (let i = 0; i < out.length; i++) orgKids(out[i]).forEach(k => out.push(k.id)); return out; }
+  function orgBarbers(id) {
+    const s = new Set();
+    for (const nid of orgSub(id)) for (const p of (orgNode(nid) || { people: [] }).people) { const b = barberById(p.slice(2)); if (b && b.active !== false) s.add(b.id); }
+    return s;
+  }
+  const userOfBarber = bid => state.users.find(u => u.barberId === bid && u.status === 'ativo');
+  function orgRole(n) {
+    if (n.id === ORG_ROOT) return 'Dono';
+    const us = n.people.map(p => userOfBarber(p.slice(2))).filter(Boolean).map(u => u.id);
+    return org().grants.some(g => us.includes(g.userId) && g.role === 'gestor') ? 'Gestor' : 'Membro';
+  }
+  // Barbeiros cujos números a pessoa vê (roles: gestor e/ou membro).
+  function areaIds(u, roles) {
+    const s = new Set();
+    if (!u) return s;
+    for (const g of org().grants) {
+      if (g.userId !== u.id || !roles.includes(g.role)) continue;
+      const ids = g.nodeId ? orgBarbers(g.nodeId) : new Set(state.barbers.map(b => b.id));
+      ids.forEach(i => s.add(i));
+    }
+    return s;
+  }
+  const hasGrants = u => !!u && !isGestor(u) && org().grants.some(g => g.userId === u.id);
+  const isAreaMgr = u => !!u && !isGestor(u) && org().grants.some(g => g.userId === u.id && g.role === 'gestor');
+  // Quem pode ver os números (faturamento, clientes...) de um barbeiro.
+  function seeNum(bid) {
+    const u = currentUser();
+    if (!u || isGestor(u) || u.barberId === bid) return true;
+    return areaIds(u, ['gestor', 'membro']).has(bid);
+  }
+  // Quem pode lançar os números do mês de um barbeiro.
+  function canEditB(bid) { const u = currentUser(); return !!u && (isGestor(u) || areaIds(u, ['gestor']).has(bid)); }
+  // Ranking só com os barbeiros da área (fechamento do gestor de área).
+  function scopedR(ym) {
+    const u = currentUser();
+    if (!u || isGestor(u)) return monthR(ym);
+    const ids = areaIds(u, ['gestor', 'membro']);
+    return computeRanking({ ...state, barbers: state.barbers.filter(b => ids.has(b.id)) }, monthRange(ym));
+  }
+
+  function orgTabs() {
+    const t = ui.orgTab || 'ver';
+    const b = (k, ic, l) => `<button type="button" class="${t === k ? 'on' : ''}" data-action="orgTab" data-t="${k}" aria-pressed="${t === k}">${icon(ic)}<span>${l}</span></button>`;
+    return `<div class="org-tabs" role="toolbar">${b('ver', 'eye', 'Visualizar')}${b('montar', 'org', 'Montar cadeia')}${b('avancado', 'edit', 'Avançado')}</div>`;
+  }
+
+  function orgVer() {
+    const cur = ui.orgNode && orgNode(ui.orgNode) ? orgNode(ui.orgNode) : null;
+    const path = []; let p = cur; while (p) { path.unshift(p); p = p.parentId ? orgNode(p.parentId) : null; }
+    const crumbs = `<nav class="org-crumbs" aria-label="Caminho">
+      <button class="${cur ? '' : 'on'}" data-action="orgGo" data-id="">${icon('building')} Início</button>
+      ${path.map((n, i) => `<span aria-hidden="true">›</span><button class="${i === path.length - 1 ? 'on' : ''}" data-action="orgGo" data-id="${esc(n.id)}">${esc(orgName(n))}</button>`).join('')}
+    </nav>`;
+    const card = n => {
+      const total = orgBarbers(n.id).size;
+      return `<button class="org-card" data-action="orgGo" data-id="${esc(n.id)}">
+        <span class="org-lv">${esc(orgLevel(orgDepth(n)))}</span>
+        <b>${esc(orgName(n))}</b>
+        <span class="muted">${total} ${total === 1 ? 'pessoa' : 'pessoas'}${orgKids(n.id).length ? '' : ' · sem ninguém abaixo'}</span>
+        ${icon('right')}
+      </button>`;
+    };
+    if (!cur) return `${crumbs}<div class="org-list">${card(orgNode(ORG_ROOT))}</div>`;
+    const here = cur.id === ORG_ROOT ? state.users.filter(u => u.role === 'gestor').map(u => u.name) : cur.people.map(personName);
+    const kids = orgKids(cur.id);
+    return `${crumbs}
+      <div class="org-here card"><b>${esc(orgName(cur))}</b><span>Pessoas aqui: ${here.length ? here.map(esc).join(', ') : 'ninguém'}</span>
+        <button class="btn btn-sm" data-action="orgEdit" data-id="${esc(cur.id)}">${icon('edit')} Editar</button></div>
+      <div class="org-list">${kids.length ? kids.map(card).join('') : '<p class="section-note">Ninguém abaixo deste ponto. Use Montar cadeia para adicionar.</p>'}</div>`;
+  }
+
+  function orgMontar() {
+    const o = org();
+    const rows = [];
+    const walk = (ids, d) => { if (!ids.length || d > 30) return; rows[d] = (rows[d] || []).concat(ids); walk(ids.flatMap(id => orgKids(id).map(k => k.id)), d + 1); };
+    walk([ORG_ROOT], 0);
+    const card = id => {
+      const n = orgNode(id), below = orgBarbers(id).size - (n.people.length);
+      return `<div class="org-chain-item">
+        <div class="org-chain-row">
+          <button class="org-node" data-action="orgEdit" data-id="${esc(id)}">${icon(id === ORG_ROOT ? 'crown' : 'users')}<span><b>${esc(orgName(n))}</b><small>${orgRole(n)} · ${Math.max(0, below)} abaixo</small></span></button>
+          ${id === ORG_ROOT ? '' : `<button class="org-plus" data-action="orgAdd" data-parent="${esc(n.parentId)}" aria-label="Adicionar ao lado de ${esc(orgName(n))}">${icon('plus')}</button>`}
+        </div>
+        <button class="org-below" data-action="orgAdd" data-parent="${esc(id)}">${icon('plus')} abaixo</button>
+      </div>`;
+    };
+    return `<p class="section-note">Toque num cartão para editar. <b>+</b> cria alguém no mesmo nível; <b>+ abaixo</b> cria alguém que responde a ele.</p>
+      ${rows.map((ids, d) => `<section class="org-chain"><span class="org-lv">${esc(orgLevel(d))}</span><div class="org-chain-line">${ids.map(card).join('')}</div></section>`).join('')}`;
+  }
+
+  function orgOptions(sel, excludeSub) {
+    const ex = excludeSub ? new Set(orgSub(excludeSub)) : new Set();
+    const out = [];
+    const walk = (id, d) => { const n = orgNode(id); if (!ex.has(id)) out.push(`<option value="${esc(id)}" ${id === sel ? 'selected' : ''}>${'— '.repeat(d)}${esc(orgName(n))}</option>`); orgKids(id).forEach(k => walk(k.id, d + 1)); };
+    walk(ORG_ROOT, 0);
+    return out.join('');
+  }
+  const grantArea = g => g.nodeId ? orgName(orgNode(g.nodeId)) : 'Empresa inteira';
+
+  function orgAvancado() {
+    const o = org();
+    const tree = (id, d) => {
+      const n = orgNode(id);
+      return `<li style="--d:${d}"><span class="org-lvchip">${esc(orgLevel(d))}</span><b>${esc(orgName(n))}</b>
+        <button class="link-btn" data-action="orgEdit" data-id="${esc(id)}">editar</button>
+        ${id === ORG_ROOT ? '' : `<button class="icon-btn org-del ${ui.confirm === 'node' + id ? 'is-confirm' : ''}" data-action="orgDel" data-id="${esc(id)}" aria-label="${ui.confirm === 'node' + id ? 'Confirmar exclusão' : 'Excluir'} ${esc(orgName(n))}">${ui.confirm === 'node' + id ? 'Confirmar' : icon('trash')}</button>`}
+      </li>${orgKids(id).map(k => tree(k.id, d + 1)).join('')}`;
+    };
+    const people = state.users.filter(u => u.status === 'ativo' && u.role !== 'gestor');
+    return `
+      <section class="section card">
+        <h2 class="section-title">1. Níveis da empresa</h2>
+        <p class="section-note">Ex.: Regional → Unidade → Time. A ordem define quem fica abaixo de quem.</p>
+        <ol class="org-levels">${o.levels.map((l, i) => `<li><input class="input" id="lv-${esc(l.id)}" value="${esc(l.name)}" data-change="orgLevelName" data-id="${esc(l.id)}" aria-label="Nome do nível ${i + 1}">
+          <button class="icon-btn" data-action="orgLevelDel" data-id="${esc(l.id)}" aria-label="Excluir nível ${esc(l.name)}">${icon('trash')}</button></li>`).join('')}</ol>
+        <form class="org-inline" data-form="orgLevel" novalidate><input class="input" id="lv-new" name="name" placeholder="Nome do nível"><button class="btn btn-primary" type="submit">${icon('plus')} Adicionar</button></form>
+      </section>
+      <section class="section card">
+        <h2 class="section-title">2. Estrutura</h2>
+        <ul class="org-tree">${tree(ORG_ROOT, 0)}</ul>
+        <form class="form" data-form="orgCreate" novalidate>
+          <label class="field"><span>Nome</span><input class="input" id="oc-name" name="name" placeholder="Ex.: Regional Sul, Unidade Centro"></label>
+          <label class="field"><span>Fica abaixo de</span><select class="input" id="oc-parent" name="parentId">${orgOptions(ORG_ROOT)}</select></label>
+          <p class="form-msg" data-msg></p>
+          <div><button class="btn btn-primary" type="submit">${icon('plus')} Criar</button></div>
+        </form>
+      </section>
+      <section class="section card">
+        <h2 class="section-title">3. Quem vê o quê</h2>
+        <p class="section-note">Quem não tiver acesso definido vê o ranking da equipe e apenas os próprios números. <b>Gestor</b> vê e lança os resultados de quem está na área; <b>Membro</b> só vê. Uma pessoa pode ter mais de uma área.</p>
+        <ul class="list">${o.grants.map(g => { const u = state.users.find(x => x.id === g.userId); return `<li class="list-row"><div class="grow"><b>${esc(u ? u.name : '?')}</b> <span class="muted">· ${g.role === 'gestor' ? 'Gestor' : 'Membro'} · ${esc(grantArea(g))}</span></div>
+          <button class="icon-btn" data-action="orgGrantDel" data-id="${esc(g.id)}" aria-label="Remover acesso">${icon('trash')}</button></li>`; }).join('') || '<li class="muted">Ninguém com acesso extra ainda.</li>'}</ul>
+        ${people.length ? `<form class="form" data-form="orgGrant" novalidate>
+          <div class="grid-2">
+            <label class="field"><span>Pessoa</span><select class="input" id="og-user" name="userId"><option value="">Escolha a pessoa</option>${people.map(u => `<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('')}</select></label>
+            <label class="field"><span>Papel</span><select class="input" id="og-role" name="role"><option value="gestor">Gestor</option><option value="membro">Membro</option></select></label>
+          </div>
+          <label class="field"><span>Área</span><select class="input" id="og-node" name="nodeId"><option value="">Empresa inteira</option>${orgOptions(null)}</select></label>
+          <label class="check"><input type="checkbox" id="og-extra" name="extra"><span><b>Acesso extra</b><small>Soma esta área às que a pessoa já tem. Desmarcado, substitui as anteriores.</small></span></label>
+          <p class="form-msg" data-msg></p>
+          <div><button class="btn btn-primary" type="submit">${icon('plus')} Dar acesso</button></div>
+        </form>` : '<p class="section-note">Os acessos aparecem aqui depois que os barbeiros entram pelo convite e são aprovados.</p>'}
+      </section>`;
+  }
+
+  function orgSheet() {
+    const sh = ui.orgSheet;
+    if (!sh) return '';
+    const n = sh.id ? orgNode(sh.id) : null;
+    if (sh.id && !n) { ui.orgSheet = null; return ''; }
+    const isRoot = n && n.id === ORG_ROOT;
+    const mine = new Set(n ? n.people : []);
+    const where = bid => { const m = org().nodes.find(x => x.people.includes('b:' + bid)); return m && (!n || m.id !== n.id) ? ` <small class="muted">(hoje em ${esc(orgName(m))})</small>` : ''; };
+    const barbers = state.barbers.filter(b => b.active !== false);
+    return `<div class="org-sheet-wrap"><div class="inst-scrim" data-action="orgSheetClose"></div>
+      <section class="inst-sheet org-sheet" role="dialog" aria-modal="true" aria-labelledby="os-t">
+        <h2 id="os-t">${n ? 'Editar ' + esc(orgName(n)) : 'Novo lugar na estrutura'}</h2>
+        <form class="form" data-form="orgNode" novalidate>
+          ${isRoot ? `<p class="section-note">O topo é sempre o dono da barbearia.</p>` : `
+          <label class="field"><span>Nome</span><input class="input" id="os-name" name="name" value="${esc(n ? orgName(n) : '')}" placeholder="Nome da pessoa ou da área"></label>
+          <label class="field"><span>Fica abaixo de</span><select class="input" id="os-parent" name="parentId">${orgOptions(n ? n.parentId : sh.parent, n ? n.id : null)}</select></label>
+          <fieldset class="org-people"><legend>Pessoas neste lugar</legend>
+            ${barbers.map(b => `<label class="check"><input type="checkbox" name="p" value="${esc(b.id)}" ${mine.has('b:' + b.id) ? 'checked' : ''}><span><b>${esc(b.name)}</b>${where(b.id)}</span></label>`).join('') || '<p class="muted">Cadastre barbeiros em Barbeiros.</p>'}
+          </fieldset>`}
+          <p class="form-msg" data-msg></p>
+          <div class="btn-row">${isRoot ? '' : `<button class="btn btn-primary" type="submit">${icon('check')} Salvar</button>`}
+            <button class="btn" type="button" data-action="orgSheetClose">${isRoot ? 'Fechar' : 'Cancelar'}</button>
+            ${n && !isRoot ? `<button class="btn btn-danger" type="button" data-action="orgDel" data-id="${esc(n.id)}">${ui.confirm === 'node' + n.id ? 'Confirmar exclusão' : 'Excluir'}</button>` : ''}</div>
+        </form>
+      </section></div>`;
+  }
+
+  function pageOrganograma() {
+    org();
+    const t = ui.orgTab || 'ver';
+    return `${orgTabs()}<div class="org-body">${t === 'montar' ? orgMontar() : t === 'avancado' ? orgAvancado() : orgVer()}</div>${orgSheet()}`;
+  }
+
   function pageSoon(route) {
     const item = NAV.flatMap(g => g.items).find(i => i.r === route);
     return `<div class="card empty">${icon(item?.i || 'clock')}<h2>${esc(item?.t || 'Em breve')}</h2>
@@ -1633,10 +1913,11 @@ Content-Type: application/json</pre>
   const PAGES = {
     inicio: { t: 'Início', r: pageInicio },
     'gestao-visual': { t: 'Gestão Visual', r: pageGestaoVisual },
-    fechamento: { t: 'Fechamento do mês', r: pageFechamento, g: 1 },
+    fechamento: { t: 'Fechamento do mês', r: pageFechamento, g: 1, a: 1 },
+    organograma: { t: 'Organograma', r: pageOrganograma, g: 1 },
     time: { t: 'Time e ranking', r: pageTime },
     performance: { t: 'Minha performance', r: pagePerformance },
-    lancamentos: { t: 'Lançamentos', r: pageLancamentos, g: 1 },
+    lancamentos: { t: 'Lançamentos', r: pageLancamentos, g: 1, a: 1 },
     barbeiros: { t: 'Barbeiros', r: pageBarbeiros, g: 1 },
     configuracoes: { t: 'Configurações', r: pageConfig, g: 1 },
     assinatura: { t: 'Assinatura', r: pageAssinatura, g: 1 },
@@ -1836,7 +2117,7 @@ Content-Type: application/json</pre>
         <span class="gd-label">${esc(ind.label)}</span>
         <div class="gd-photos"><span class="gd-crown">${crownSvg('tier-gold')}</span>${leaders.slice(0, 3).map(b => `<span class="gd-photo">${pdPhoto(b).replace('pd-photo', 'gd-ring')}</span>`).join('')}</div>
         <b class="gd-name">${names}</b>
-        <span class="gd-val num">${fmt(ind, row.values[ind.key])}${ind.key === 'check' ? ' pts' : ''}</span>
+        ${leaders.some(b => seeNum(b.id)) ? `<span class="gd-val num">${fmt(ind, row.values[ind.key])}${ind.key === 'check' ? ' pts' : ''}</span>` : ''}
         ${leaders.length > 1 ? '<span class="chip chip-destaque">Empate na liderança</span>' : ''}
       </div>`;
     }).join('');
@@ -1848,6 +2129,7 @@ Content-Type: application/json</pre>
   function tvAlerts(R) {
     const n = R.rows.length;
     const cards = R.rows.map((r, i) => {
+      if (!seeNum(r.barber.id)) return '';
       const zone = r.pos === 1 ? 'leader' : r.pos <= 3 ? 'chase' : (r.pos > Math.ceil(n / 2) + 1 ? 'low' : 'middle');
       const [line, sub] = pickLine(zone, r.barber.id);
       let gap;
@@ -1935,11 +2217,11 @@ Content-Type: application/json</pre>
       const id = route.slice(7);
       page = { r: () => perfFor(id, user) }; title = 'Perfil';
     } else if (PAGES[route]) {
-      page = PAGES[route]; title = page.t;
+      page = PAGES[route]; title = route === 'performance' && (isGestor(user) || hasGrants(user)) ? 'Performance' : page.t;
     } else if (SOON_TEXT[route]) {
       page = { r: () => pageSoon(route) }; title = NAV.flatMap(g => g.items).find(i => i.r === route).t;
     } else { route = 'inicio'; page = PAGES.inicio; title = page.t; }
-    if (page.g && !isGestor(user)) { route = 'inicio'; page = PAGES.inicio; title = page.t; }
+    if (page.g && !isGestor(user) && !(page.a && isAreaMgr(user))) { route = 'inicio'; page = PAGES.inicio; title = page.t; }
 
     const pending = isGestor(user) ? state.users.filter(u => u.status === 'pendente').length : 0;
     const who = isGestor(user) ? { name: state.company.name, photo: state.company.logo } : (barberById(user.barberId) || { name: user.name });
@@ -2035,6 +2317,26 @@ Content-Type: application/json</pre>
       u.pass = passHash(u.email, pass); save();
       ui.lastReset = { name: u.name, pass }; render();
     },
+    orgTab(el) { ui.orgTab = el.dataset.t; ui.orgSheet = null; ui.confirm = null; render(); },
+    orgGo(el) { ui.orgNode = el.dataset.id || null; render(); },
+    orgEdit(el) { ui.orgSheet = { id: el.dataset.id }; ui.confirm = null; render(); setTimeout(() => $('#os-name')?.focus(), 30); },
+    orgAdd(el) { ui.orgSheet = { parent: el.dataset.parent || ORG_ROOT }; ui.confirm = null; render(); setTimeout(() => $('#os-name')?.focus(), 30); },
+    orgSheetClose() { ui.orgSheet = null; ui.confirm = null; render(); },
+    orgDel(el) {
+      const id = el.dataset.id; if (id === ORG_ROOT) return;
+      if (ui.confirm !== 'node' + id) { ui.confirm = 'node' + id; render(); return; }
+      const o = org(), n = orgNode(id);
+      o.nodes.forEach(k => { if (k.parentId === id) k.parentId = n.parentId; });
+      o.nodes = o.nodes.filter(k => k.id !== id);
+      o.grants = o.grants.filter(g => g.nodeId !== id);
+      ui.confirm = null; ui.orgSheet = null; if (ui.orgNode === id) ui.orgNode = n.parentId;
+      save(); toast(`${orgName(n)} saiu da estrutura. Quem estava abaixo subiu um nível.`); render();
+    },
+    orgLevelDel(el) {
+      const o = org(); if (o.levels.length <= 1) { toast('Mantenha pelo menos um nível.'); return; }
+      o.levels = o.levels.filter(l => l.id !== el.dataset.id); save(); render();
+    },
+    orgGrantDel(el) { const o = org(); o.grants = o.grants.filter(g => g.id !== el.dataset.id); save(); toast('Acesso removido.'); render(); },
     installApp() { ACTIONS.closeDrawer(); openInstall(); },
     async recheckAccess(el, ev, silent) {
       const ok = await loadCloud();
@@ -2080,7 +2382,8 @@ Content-Type: application/json</pre>
     teamPick(el) {
       ui.teamBarber = el.dataset.id;
       const u = currentUser();
-      if (!isGestor(u)) { refreshTeam(); $('#tm-insights')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+      if (!isGestor(u) && !seeNum(el.dataset.id)) { ui.teamBarber = u.barberId; toast('Você vê o ranking de todos e os números só seus.'); return; }
+      if (!isGestor(u) && !$('#tm-editor')) { refreshTeam(); $('#tm-insights')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
       const ed = $('#tm-editor');
       if (ed) { ed.innerHTML = teamEditor(ui.teamMonth || curYm()); refreshTeam(); ed.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
       else render();
@@ -2089,7 +2392,7 @@ Content-Type: application/json</pre>
       const id = el.dataset.id; let sel = ui.radarSel || [];
       if (sel.includes(id)) { if (sel.length > 1) sel = sel.filter(x => x !== id); }
       else { sel = [...sel, id]; if (sel.length > 4) sel = sel.slice(1); }
-      ui.radarSel = sel; const rd = $('#tm-radar'); if (rd) rd.innerHTML = teamRadars(ui.teamMonth || curYm());
+      ui.radarSel = sel; const rd = $('#tm-radar'); if (rd) rd.innerHTML = teamRadars(ui.teamMonth || curYm(), rd.dataset.only === '1');
     },
     defaultGoals() { state.goals = { ...(state.goals || {}), team: { ...GB.DEFAULT_GOALS } }; save(); toast('Metas padrão restauradas.'); render(); },
     defaultWeights() { state.weights = Object.fromEntries(INDICATORS.map(i => [i.key, i.weight])); save(); toast('Pesos padrão restaurados.'); render(); },
@@ -2100,7 +2403,7 @@ Content-Type: application/json</pre>
     clearData() {
       if (ui.confirm !== 'clear') { ui.confirm = 'clear'; render(); return; }
       const me = currentUser();
-      state.barbers = []; state.entries = []; state.monthly = []; state.invites = []; state.demo = false;
+      state.barbers = []; state.entries = []; state.monthly = []; state.invites = []; state.demo = false; state.org = null;
       if (!Cloud.enabled) state.users = state.users.filter(u => u.id === me.id);
       ui.confirm = null; save(); toast('Equipe e lançamentos apagados.'); render();
     },
@@ -2228,6 +2531,32 @@ Content-Type: application/json</pre>
       }
       setMsg(f, 'Pedido registrado. Avise o gestor para gerar sua nova senha.', true);
     },
+    orgLevel(f) {
+      const name = val(f, 'name'); if (!name) return setMsg(f, 'Digite o nome do nível.');
+      org().levels.push({ id: uid('l_'), name }); save(); render();
+    },
+    orgCreate(f) {
+      const name = val(f, 'name'); if (!name) return setMsg(f, 'Digite o nome.');
+      org().nodes.push({ id: uid('n_'), name, parentId: val(f, 'parentId') || ORG_ROOT, people: [] }); save(); toast(`${name} criado.`); render();
+    },
+    orgGrant(f) {
+      const userId = val(f, 'userId'); if (!userId) return setMsg(f, 'Escolha a pessoa.');
+      const o = org(), role = val(f, 'role'), nodeId = val(f, 'nodeId') || null;
+      if (!f.elements.extra.checked) o.grants = o.grants.filter(g => g.userId !== userId);
+      o.grants = o.grants.filter(g => !(g.userId === userId && g.nodeId === nodeId));
+      o.grants.push({ id: uid('g_'), userId, role, nodeId });
+      save(); toast('Acesso salvo.'); render();
+    },
+    orgNode(f) {
+      const o = org(), sh = ui.orgSheet || {};
+      const name = val(f, 'name'); if (!name) return setMsg(f, 'Digite o nome.');
+      const people = [...f.querySelectorAll('input[name="p"]:checked')].map(i => 'b:' + i.value);
+      o.nodes.forEach(k => { k.people = k.people.filter(p => !people.includes(p)); });
+      let n = sh.id ? orgNode(sh.id) : null;
+      if (!n) { n = { id: uid('n_'), name, parentId: ORG_ROOT, people: [] }; o.nodes.push(n); }
+      n.name = name; n.auto = false; n.parentId = val(f, 'parentId') || ORG_ROOT; n.people = people;
+      ui.orgSheet = null; save(); toast('Estrutura salva.'); render();
+    },
     async newPass(f) {
       const pass = f.elements.pass.value, pass2 = f.elements.pass2.value;
       if (pass.length < 6) return setMsg(f, 'A senha precisa ter pelo menos 6 caracteres.');
@@ -2312,6 +2641,7 @@ Content-Type: application/json</pre>
     tvSoundKind(el) { Sound.kind = el.value; Sound.play(el.value, true); },
     perfBarber(el) { ui.perfBarber = el.value; render(); },
     teamMonth(el) { ui.teamMonth = el.value; render(); },
+    orgLevelName(el) { const l = org().levels.find(x => x.id === el.dataset.id); if (l && el.value.trim()) { l.name = el.value.trim(); save(); render(); } },
     fxMonth(el) { ui.fxMonth = el.value; render(); },
     async barberPhoto(el) {
       const b = barberById(el.dataset.id);
@@ -2328,6 +2658,8 @@ Content-Type: application/json</pre>
   };
 
   root.addEventListener('click', e => {
+    const tr = e.target.closest('tr[data-href]');
+    if (tr && !e.target.closest('a')) { location.hash = tr.dataset.href; return; }
     const el = e.target.closest('[data-action]');
     if (el && ACTIONS[el.dataset.action]) { ACTIONS[el.dataset.action](el, e); return; }
     const pop = $('.popover');
@@ -2344,6 +2676,7 @@ Content-Type: application/json</pre>
     if (el && el.tagName !== 'SELECT') autoSave(el);
   });
   root.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.matches('tr[data-href]')) { location.hash = e.target.dataset.href; return; }
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('article[data-action]')) { e.preventDefault(); ACTIONS[e.target.dataset.action](e.target, e); }
   });
   root.addEventListener('change', e => {
@@ -2365,6 +2698,7 @@ Content-Type: application/json</pre>
   });
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && document.getElementById('install-sheet')) { closeInstall(); return; }
+    if (e.key === 'Escape' && ui.orgSheet) { ui.orgSheet = null; render(); return; }
     if (e.key === 'Escape') {
       if (location.hash === '#apresentacao') ACTIONS.exitTV();
       const d = $('.drawer'); if (d && d.classList.contains('open')) ACTIONS.closeDrawer();

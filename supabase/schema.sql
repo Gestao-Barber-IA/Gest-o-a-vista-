@@ -103,6 +103,21 @@ language sql stable security definer set search_path = public as $$
   select barber_id from profiles where id = auth.uid() and status = 'ativo'
 $$;
 
+-- Gestor de área (Organograma): pode lançar os números de quem está abaixo dele.
+create or replace function public.can_edit_barber(p_barber text) returns boolean
+language sql stable security definer set search_path = public as $$
+  with recursive
+  o as (select coalesce(c.settings->'org', '{}'::jsonb) j from companies c where c.id = my_company()),
+  mine as (select g->>'nodeId' as nid from o, jsonb_array_elements(coalesce(o.j->'grants', '[]'::jsonb)) g
+           where g->>'userId' = auth.uid()::text and g->>'role' = 'gestor'),
+  nodes as (select n->>'id' as id, n->>'parentId' as pid, n->'people' as people from o, jsonb_array_elements(coalesce(o.j->'nodes', '[]'::jsonb)) n),
+  sub(id) as (select id from nodes where id in (select nid from mine where nid is not null)
+              union select n.id from nodes n join sub s on n.pid = s.id)
+  select is_gestor()
+      or exists (select 1 from mine where nid is null)
+      or exists (select 1 from nodes n join sub s on s.id = n.id where n.people ? ('b:' || p_barber))
+$$;
+
 -- ---------- Regras de acesso (RLS) ----------
 alter table public.companies enable row level security;
 alter table public.profiles enable row level security;
@@ -139,9 +154,9 @@ create policy invites_all on public.invites for all using (company_id = my_compa
 
 -- Resultados: membros leem; gestor edita.
 create policy entries_read on public.entries for select using (company_id = my_company());
-create policy entries_write on public.entries for all using (company_id = my_company() and is_gestor()) with check (company_id = my_company() and is_gestor());
+create policy entries_write on public.entries for all using (company_id = my_company() and can_edit_barber(barber_id)) with check (company_id = my_company() and can_edit_barber(barber_id));
 create policy monthly_read on public.monthly for select using (company_id = my_company());
-create policy monthly_write on public.monthly for all using (company_id = my_company() and is_gestor()) with check (company_id = my_company() and is_gestor());
+create policy monthly_write on public.monthly for all using (company_id = my_company() and can_edit_barber(barber_id)) with check (company_id = my_company() and can_edit_barber(barber_id));
 
 -- Chave da API: só o gestor.
 create policy api_keys_all on public.api_keys for all using (company_id = my_company() and is_gestor()) with check (company_id = my_company() and is_gestor());
