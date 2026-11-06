@@ -97,6 +97,9 @@ create index if not exists barbers_company on public.barbers (company_id);
 grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on public.companies, public.profiles, public.barbers, public.invites,
   public.entries, public.monthly, public.api_keys, public.pop_records to authenticated;
+-- As funções do servidor (API, Asaas, limpeza das fotos) usam o papel service_role.
+grant select, insert, update, delete on public.companies, public.profiles, public.barbers, public.invites,
+  public.entries, public.monthly, public.api_keys, public.pop_records to service_role;
 
 -- ---------- Funções de apoio às regras ----------
 create or replace function public.my_company() returns uuid
@@ -370,6 +373,7 @@ alter table public.plans enable row level security;
 
 grant select on public.plans to anon, authenticated;
 grant insert, update on public.plans to authenticated;
+grant select, insert, update, delete on public.plans, public.platform_admins to service_role;
 
 -- ---------- Regra de acesso ----------
 -- trial    : 7 dias desde o cadastro, só lançamento manual
