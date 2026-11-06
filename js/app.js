@@ -358,7 +358,7 @@
       { r: 'metas', t: 'Metas', i: 'target', soon: 1 },
       { r: 'premios', t: 'Prêmios e metas', i: 'gift', soon: 1 },
       { r: 'sonhos', t: 'Sonhos', i: 'rocket', soon: 1 },
-      { r: 'checklist', t: 'Checklist POP', i: 'checksq', soon: 1 },
+      { r: 'checklist', t: 'POP Agenda Cheia', i: 'checksq', soon: 1 },
     ] },
     { group: 'Gestor', g: 1, items: [
       { r: 'empresa', t: 'Minha empresa', i: 'building' },
@@ -380,7 +380,7 @@
     metas: 'Metas individuais e da equipe, com acompanhamento em tempo real.',
     premios: 'Prêmios ligados às metas, para motivar o time.',
     sonhos: 'Cada barbeiro registra um sonho e acompanha quanto falta para realizá-lo.',
-    checklist: 'Checklist do procedimento padrão (POP), que alimenta o indicador Checklist POP.',
+    checklist: 'Procedimento padrão POP Agenda Cheia, que alimenta o indicador Checklist POP do ranking.',
     cockpit: 'Visão rápida do gestor com os principais números do negócio.',
   };
 
