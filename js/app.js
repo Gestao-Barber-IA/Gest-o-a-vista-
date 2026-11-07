@@ -484,7 +484,7 @@
               <hr class="pd-line">
               ${place === 1 ? middle : ''}
               <div class="pd-pts">${score(row.overall)}<small>pts</small></div>
-              ${seeNum(b.id) ? `<div class="pd-money"><span class="pd-coin">$</span>${money0(row.sums.fat)}</div>` : ''}
+              <div class="pd-money"><span class="pd-coin">$</span>${money0(row.sums.fat)}</div>
               ${t ? '' : `<div class="pd-leads" title="1º lugar em ${row.leads.length} de ${R.N} indicadores">${barsSvg}<span>${leadsTxt}</span></div>`}
             </div></div>
             <div class="pd-badge"><span>${ord(place)}<small>LUGAR</small></span></div>
@@ -508,6 +508,7 @@
 
 
   function prevPositions() {
+    if (darkFor(range(ui.offset - 1))) return {};
     const P = computeRanking(state, range(ui.offset - 1));
     const hasData = P.active.length > 0;
     return hasData ? Object.fromEntries(P.rows.map(r => [r.barber.id, r.pos])) : {};
@@ -535,7 +536,7 @@
       return `<li><a class="rank-row ${zone}" data-id="${esc(r.barber.id)}" data-pos="${r.pos}" href="#perfil-${esc(r.barber.id)}">
         <span class="rank-pos num">${ord(r.pos)}</span>
         ${avatar(r.barber, 46)}
-        <span class="rank-who"><b><span class="rank-name">${esc(r.barber.name)}</span>${seeNum(r.barber.id) ? `<span class="rank-money num">${money0(r.sums.fat)}</span>` : ''}</b>${sub.replace('</small>', nowChip + '</small>')}</span>
+        <span class="rank-who"><b><span class="rank-name">${esc(r.barber.name)}</span><span class="rank-money num">${money0(r.sums.fat)}</span></b>${sub.replace('</small>', nowChip + '</small>')}</span>
         <span class="rank-score num">${score(r.overall)}</span>
         ${trend}
       </a></li>`;
@@ -552,7 +553,7 @@
       return `<div class="card card-glow hl">
         <div class="hl-head">${icon('trophy')}<span>Melhor em ${esc(ind.label)} · ${ind.weight} pts</span></div>
         <div class="hl-who"><span class="avatar-stack">${leaders.slice(0, 3).map(b => avatar(b, 44)).join('')}</span><span>${leaders.map(b => esc(b.name)).join(' + ')}</span></div>
-        ${leaders.some(b => seeNum(b.id)) ? `<div class="hl-val num">${fmt(ind, row.values[ind.key])}</div>` : ''}
+        <div class="hl-val num">${fmt(ind, row.values[ind.key])}</div>
         ${leaders.length > 1 ? '<span><span class="chip chip-tie">Empate na liderança</span></span>' : ''}
       </div>`;
     }).join('')}</div>`;
@@ -615,11 +616,146 @@
     return periodRange('mes', 0, fromIso(r.end > iso(new Date()) ? iso(new Date()) : r.end));
   }
 
+  // ---------- Pódio surpresa ----------
+  // Nos últimos dias do mês, a equipe não vê colocações nem pontuações. O gestor revela no Fechamento do mês.
+  function revealCfg() {
+    const r = state.reveal || {};
+    return { on: !!r.on, days: Math.min(5, Math.max(1, Number(r.days) || 2)), since: r.since || '', done: r.done || {} };
+  }
+  function suspenseWin(ym, days) {
+    const end = monthRange(ym).end, d = fromIso(end);
+    return { ym, start: iso(new Date(d.getFullYear(), d.getMonth(), d.getDate() - days + 1)), end };
+  }
+  // Meses em segredo agora: o atual (nos últimos dias) e o anterior, enquanto o gestor não revelar.
+  function suspenseWins() {
+    const c = revealCfg();
+    if (!c.on) return [];
+    const today = iso(new Date()), ym = today.slice(0, 7), prev = addMonths(ym, -1), out = [];
+    if (!c.done[prev] && c.since && prev >= c.since) out.push(suspenseWin(prev, c.days));
+    const w = suspenseWin(ym, c.days);
+    if (!c.done[ym] && today >= w.start) out.push(w);
+    return out;
+  }
+  const inSuspense = rg => (rg && suspenseWins().find(w => rg.start <= w.end && rg.end >= w.start)) || null;
+  // O gestor vê tudo, menos na Tela da loja (que fica à vista da equipe).
+  const darkFor = (rg, tv) => (tv || !isGestor(currentUser()) ? inSuspense(rg) : null);
+  function suspenseLeft(w) {
+    const ms = fromIso(w.end).getTime() + 86400000 - Date.now();
+    if (ms <= 0) return '';
+    const d = Math.floor(ms / 86400000), h = Math.floor((ms % 86400000) / 3600000), m = Math.floor((ms % 3600000) / 60000);
+    if (d > 0) return `${d} dia${d > 1 ? 's' : ''} e ${h} h`;
+    return h > 0 ? `${h} h e ${m} min` : `${Math.max(1, m)} min`;
+  }
+  function suspenseCard(w, tv) {
+    const left = suspenseLeft(w), month = esc(ymLabel(w.ym).replace(' de ', '/'));
+    return `<section class="card sus-card ${tv ? 'sus-tv' : ''}">
+      <div class="sus-podium" aria-hidden="true"><span class="s2">?</span><span class="s1">${icon('crown')}<b>?</b></span><span class="s3">?</span></div>
+      <p class="sus-kicker">Pódio surpresa · ${month}</p>
+      <h2>${left ? 'O pódio está guardado' : 'O pódio será revelado no fechamento'}</h2>
+      <p>${left ? 'Na reta final do mês, as colocações e as pontuações ficam em segredo. A revelação acontece no fechamento do mês, com toda a equipe.' : 'O mês acabou. As colocações aparecem quando o gestor fizer o fechamento com a equipe.'}</p>
+      ${left ? `<p class="sus-count"><b class="num" data-sus-end="${w.end}">${left}</b><small>para o fim do mês</small></p>` : ''}
+    </section>`;
+  }
+  // Os próprios números do barbeiro durante o segredo (sem posição nem pontuação).
+  function ownNumbers(R, bid, ym) {
+    const row = bid && R.rows.find(r => r.barber.id === bid);
+    if (!row) return '';
+    const cards = GB.visibleInds(state).map(ind => {
+      const v = row.values[ind.key];
+      const goal = ym ? GB.goalFor(state, bid, ind.key) : 0;
+      const pct = goal > 0 && v != null ? (v / goal) * 100 : null;
+      return `<div class="card ind ${pct != null && pct >= 100 ? 'card-glow' : ''}">
+        <div class="ind-top"><span>${esc(ind.label)}</span>${goal > 0 ? `<span class="chip chip-soft">Meta ${fmtGoal(ind, goal)}</span>` : ''}</div>
+        <div class="ind-val num">${fmt(ind, v)}${ind.key === 'check' && v != null ? ' pts' : ''}</div>
+        ${pct != null ? `<div class="bar"><i style="width:${Math.max(2, Math.min(100, pct))}%"></i></div><div class="ind-foot"><span class="num">${nf0.format(pct)}% da meta</span></div>` : ''}
+      </div>`;
+    }).join('');
+    return `<section class="section"><h2 class="section-title">Seus números ${ym ? 'no mês' : 'no período'}</h2>
+      <p class="section-note">Só você vê estes números agora. Ainda dá tempo de subir: cada atendimento conta.</p>
+      <div class="ind-grid">${cards}</div></section>`;
+  }
+  // Aviso para o gestor: a equipe não está vendo o pódio.
+  function suspenseNote() {
+    const ws = suspenseWins();
+    if (!ws.length) return '';
+    const w = ws[0], over = !suspenseLeft(w), month = esc(ymLabel(w.ym).replace(' de ', '/'));
+    return `<div class="card sus-note"><p>${icon('crown')}<span><b>Pódio surpresa ativo (${month}).</b> A equipe e a Tela da loja não mostram colocações nem pontuações. ${over ? 'O mês acabou: faça o fechamento para revelar.' : 'Você continua vendo tudo.'}</span></p>
+      ${over ? `<button class="btn btn-primary btn-sm" data-action="goFechamento" data-ym="${w.ym}">${icon('clipboard')} Ir ao fechamento</button>` : ''}</div>`;
+  }
+  function markRevealed(ym) {
+    const c = revealCfg();
+    const done = { ...c.done, [ym]: Date.now() };
+    const keep = Object.keys(done).sort().slice(-12);
+    state.reveal = { on: c.on, days: c.days, since: c.since, done: Object.fromEntries(keep.map(k => [k, done[k]])) };
+    save();
+  }
+  // ---------- Revelação no celular da equipe ----------
+  const seenKey = () => 'seenReveal:' + ((currentUser() || {}).id || '');
+  const seenReveal = () => readJSON(seenKey(), {});
+  function setSeen(ym) { const s = seenReveal(); s[ym] = Date.now(); DB.pref.set(seenKey(), JSON.stringify(s)); }
+  const revealBC = 'BroadcastChannel' in window ? new BroadcastChannel('gbia-reveal') : null;
+  function revealSend(m) {
+    if (!ui.fx) return;
+    const msg = { ...m, ym: ui.fx.ym };
+    if (Cloud.enabled) Cloud.sendReveal(msg);
+    else if (revealBC) revealBC.postMessage(msg);
+  }
+  function fxOpen(ym, mode) {
+    ui.fx = { ym, i: 0, mode };
+    try { Sound.ensure(); } catch (e) { /* o som pode precisar de um toque */ }
+    keepAwake();
+    fxRender();
+  }
+  // Ao vivo: cada passo do gestor aparece no celular de quem está com o app aberto.
+  // A colocação vem dos dados deste aparelho; a mensagem só marca o momento.
+  function onRevealMsg(m) {
+    const u = currentUser();
+    if (!u || isGestor(u) || !m || typeof m.ym !== 'string' || !/^\d{4}-\d{2}$/.test(m.ym) || location.hash === '#apresentacao') return;
+    let fx = ui.fx;
+    if (!(fx && fx.mode === 'live' && fx.ym === m.ym)) {
+      if (fx || m.t === 'close' || m.t === 'final') return;
+      if (!inSuspense(monthRange(m.ym)) || iso(new Date()) <= monthRange(m.ym).end) return;
+      fxOpen(m.ym, 'live'); fx = ui.fx;
+    }
+    if (m.t === 'close') { if (!seenReveal()[m.ym]) fxClose(); return; }
+    const { s } = fxSlides(m.ym);
+    const idx = m.t === 'podium' ? 0 : m.t === 'final' ? s.length - 1 : s.findIndex(x => x.place === Number(m.place));
+    if (idx < 0) return;
+    if (fx.i !== idx) { fx.i = idx; fxRender(); }
+    const slide = document.querySelector('#fx .fx-slide');
+    if (!slide || !slide.classList.contains('is-suspense')) return;
+    if (m.t === 'drum' && !slide.classList.contains('is-drum')) {
+      slide.classList.add('is-drum'); Sound.play('rufar');
+      clearTimeout(fx.timer); fx.timer = setTimeout(() => fxReveal(slide, Number(m.place)), 8000);
+    }
+    if (m.t === 'reveal') { clearTimeout(fx.timer); fxReveal(slide, Number(m.place)); }
+  }
+  if (revealBC) revealBC.onmessage = e => onRevealMsg(e.data);
+  Cloud.onReveal = onRevealMsg;
+  // Quem não viu ao vivo assiste à revelação uma vez, ao abrir o app.
+  function maybeAutoReveal() {
+    const u = currentUser();
+    if (!u || isGestor(u) || ui.fx || location.hash === '#apresentacao' || document.getElementById('fx')) return;
+    const done = revealCfg().done, seen = seenReveal();
+    const ym = Object.keys(done).filter(k => !seen[k] && Date.now() - done[k] < 20 * 86400000).sort().pop();
+    if (!ym) return;
+    setSeen(ym);
+    if (monthR(ym).rows.length && monthR(ym).active.length) fxOpen(ym, 'auto');
+  }
+
+  // Atualiza a contagem regressiva na tela.
+  setInterval(() => {
+    document.querySelectorAll('[data-sus-end]').forEach(el => { const t = suspenseLeft({ end: el.dataset.susEnd }); if (t) el.textContent = t; else render(); });
+  }, 30000);
+
   function pageInicio(user) {
     const R = computeRanking(state, range());
+    const w = darkFor(range());
+    if (w) return `${periodBar()}${suspenseCard(w)}${ownNumbers(R, user.barberId, ui.period === 'mes' ? range().start.slice(0, 7) : null)}${howLink()}`;
     liveDetect(R);
     return `
       ${periodBar()}
+      ${isGestor(user) ? suspenseNote() : ''}
       ${monthOnlyData(R) ? `<div class="card week-note"><p>${icon('help')}<span>Os resultados lançados à mão são <b>totais do mês</b>, por isso não aparecem na visão por semana. A Semana mostra só resultados diários (da integração ou do checklist).</span></p>
         <button class="btn btn-primary btn-sm" data-action="period" data-period="mes">Ver o mês</button></div>` : ''}
       <div class="home-cols">
@@ -658,6 +794,7 @@
     const months = [];
     let sum = 0, n = 0;
     for (const k of monthsUntil(ym)) {
+      if (darkFor(monthRange(k))) continue;
       const R = monthR(k);
       const row = R.rows.find(r => r.barber.id === barberId);
       if (!hasData(row) || !R.active.length) continue;
@@ -672,6 +809,7 @@
   function careerByInd(barberId, ym) {
     const acc = {};
     for (const k of monthsUntil(ym)) {
+      if (darkFor(monthRange(k))) continue;
       const R = monthR(k);
       const row = R.rows.find(r => r.barber.id === barberId);
       if (!hasData(row)) continue;
@@ -750,7 +888,7 @@
         ${avatar(r.barber, 60)}
         <div class="cc-body">
           <b class="cc-name">${esc(r.barber.name)} ${titleChip(R, r.barber.id)}</b>
-          <span class="muted num">${r.leads.length} de ${R.N} em 1º${seeNum(r.barber.id) ? ' · ' + money0(r.sums.fat) : ''}</span>
+          <span class="muted num">${r.leads.length} de ${R.N} em 1º${' · ' + money0(r.sums.fat)}</span>
           <div class="cc-meta"><span class="lv ${lv.cls}">${lv.name}</span>${delta}<span class="muted num">carreira ${nf1.format(c.value)}</span></div>
           <div class="cc-chips">${R.active.map(i => `<span class="rk-chip ${i.leaders.includes(r.barber.id) ? 'lead' : ''}">${esc(i.label)}: <b class="num">${ord(r.ranks[i.key])}</b></span>`).join('')}</div>
         </div>
@@ -766,6 +904,7 @@
         <p class="section-note">Toque num barbeiro para ver as métricas, a carreira e as metas dele.</p>${classCards(R, ym)}</section>`;
   }
 
+  const r2v = v => Math.round(v * 100) / 100;
   function editorFields(b, ym) {
     const rec = (state.monthly || []).find(m => m.barberId === b.id && m.month === ym) || {};
     const integ = monthFromIntegration(state, b.id, ym);
@@ -804,9 +943,27 @@
           <small class="adj-meta">${meta}</small>
           ${own ? `<button type="button" class="link-btn adj-undo" data-action="apiRevert" data-id="${esc(b.id)}" data-k="${f.key}">${icon('undo')} Voltar ao valor da integração</button>` : ''}</div>`;
       }
-      return `<label class="field"><span class="tm-flabel">${esc(f.label)}</span>
-        <input class="input input-edit num" id="m-${f.key}" name="${f.key}" type="number" inputmode="decimal" min="0" ${f.max ? `max="${f.max}"` : ''} step="${f.step}" value="${isNum(rec[f.key]) ? rec[f.key] : ''}" placeholder="—" data-auto="month" data-id="${esc(b.id)}"></label>`;
+      const isSum = GB.SUM_KEYS.includes(f.key);
+      const hasMan = isSum && GB.manualEntries(state, b.id, ym).some(e => isNum(e[f.key]));
+      const shownV = isNum(rec[f.key]) ? rec[f.key] : (hasMan ? GB.manualTotal(state, b.id, ym, f.key) : '');
+      return `<label class="field"><span class="tm-flabel">${esc(f.label)}${isSum ? '<span class="lock lock-sum">Total do mês</span>' : ''}</span>
+        <input class="input input-edit num" id="m-${f.key}" name="${f.key}" type="number" inputmode="decimal" min="0" ${f.max ? `max="${f.max}"` : ''} step="${f.step}" value="${shownV}" placeholder="—" data-auto="month" ${isSum ? 'data-sum="1"' : ''} data-id="${esc(b.id)}"></label>`;
     }).join('');
+  }
+
+  // Data em que entra a diferença do lançamento (dentro do mês escolhido).
+  function lanDate(ym) {
+    const r = monthRange(ym), t = iso(new Date());
+    if (ui.lanDate && ui.lanDate >= r.start && ui.lanDate <= r.end) return ui.lanDate;
+    return t >= r.start && t <= r.end ? t : r.end;
+  }
+  // Histórico do mês: o que entrou à mão em cada dia.
+  function lanHistory(b, ym) {
+    const L = { fat: v => money0(v), cli: v => nf0.format(v) + ' clientes', serv: v => nf0.format(v) + ' serviços', prod: v => 'produtos ' + money0(v), check: v => nf1.format(v) + ' pts checklist', planos: v => nf0.format(v) + ' planos' };
+    const days = GB.manualEntries(state, b.id, ym).filter(e => GB.SUM_KEYS.some(k => isNum(e[k]) && Number(e[k]) !== 0)).sort((a, c) => c.date.localeCompare(a.date));
+    if (!days.length) return '';
+    return `<details class="lan-hist" ${ui.lanHistOpen ? 'open' : ''}><summary>Lançamentos por dia em ${esc(ymLabel(ym).replace(' de ', '/'))} (${days.length})</summary>
+      <ul>${days.map(e => `<li><b class="num">${dateBR(e.date).slice(0, 5)}</b><span>${GB.SUM_KEYS.filter(k => isNum(e[k]) && Number(e[k]) !== 0).map(k => L[k](Number(e[k]))).join(' · ')}</span></li>`).join('')}</ul></details>`;
   }
 
   function teamEditor(ym) {
@@ -831,7 +988,11 @@
         <label class="field"><span class="tm-flabel">Instagram</span><input class="input input-edit" id="m-instagram" name="instagram" value="${esc(sel.instagram || '')}" placeholder="@usuario" data-auto="barber" data-id="${esc(sel.id)}"></label>
         <label class="field"><span class="tm-flabel">Cargo na empresa</span><select class="input input-edit" id="m-role" name="role" data-auto="barber" data-id="${esc(sel.id)}">${ROLES.map(r => `<option ${r === (sel.role || 'Barbeiro') ? 'selected' : ''}>${r}</option>`).join('')}</select></label>
       </div>` : ''}
+      <div class="lan-date"><label class="field"><span class="tm-flabel">Data do lançamento</span>
+        <input class="input" type="date" id="m-date" value="${lanDate(ym)}" min="${monthRange(ym).start}" max="${monthRange(ym).end}" data-change="lanDate"></label>
+        <p class="section-note">Os campos mostram o total do mês. Ao mudar um total, a diferença entra nesta data e já aparece na visão por semana.</p></div>
       <div class="grid-2" id="tm-fields">${editorFields(sel, ym)}</div>
+      <div id="tm-hist">${lanHistory(sel, ym)}</div>
       ${own ? `<details class="tm-goals"><summary>Metas individuais de ${esc(sel.name.split(' ')[0])} <span class="muted">(em branco = meta da equipe)</span></summary>
         <div class="grid-2">${GB.visibleInds(state).map(i => `<label class="field"><span class="tm-flabel">${esc(i.label)}</span><input class="input input-edit num" id="g-${i.key}" name="${i.key}" type="number" min="0" step="any" value="${isNum(goals[i.key]) ? goals[i.key] : ''}" placeholder="Equipe: ${esc(fmtGoal(i, GB.goalFor(state, '', i.key)))}" data-auto="goal" data-id="${esc(sel.id)}"></label>`).join('')}</div>
       </details>` : ''}
@@ -944,6 +1105,8 @@
     const ym = ui.teamMonth || curYm();
     if (!isGestor(user) && user.barberId && !seeNum(ui.teamBarber)) ui.teamBarber = user.barberId;
     if (!barberById(ui.teamBarber)) ui.teamBarber = monthR(ym).rows[0]?.barber.id;
+    const w = darkFor(monthRange(ym));
+    if (w) return `${monthPicker(ym, user)}${suspenseCard(w)}${ownNumbers(monthR(ym), user.barberId, ym)}`;
     return `${monthPicker(ym, user)}
       <div id="tm-top" class="tm-block">${teamTop(ym)}</div>
       <div id="tm-insights" class="tm-block">${ui.teamBarber ? teamInsights(ui.teamBarber, ym) : ''}</div>
@@ -974,6 +1137,7 @@
     const row = R.rows.find(r => r.barber.id === ui.teamBarber);
     const pos = $('#tm-pos'); if (pos && row) pos.textContent = `Posição atual: ${ord(row.pos)} · pontuação ${score(row.overall)} / 100. Tudo é salvo automaticamente no mês selecionado.`;
     const tk = $('#m-ticket'); if (tk && row) tk.value = row.sums.cli > 0 ? nf2.format(row.sums.fat / row.sums.cli) : '';
+    const hist = $('#tm-hist'), hb = barberById(ui.teamBarber); if (hist && hb) { const open = hist.querySelector('details')?.open; ui.lanHistOpen = !!open; hist.innerHTML = lanHistory(hb, ym); }
   }
 
   let autoTimer = null;
@@ -991,6 +1155,9 @@
       } else {
         const v = raw === '' ? null : Number(raw.replace(',', '.'));
         if (v !== null && (Number.isNaN(v) || v < 0 || (el.max && v > Number(el.max)))) ok = false;
+        else if (kind === 'month' && el.dataset.sum) {
+          GB.applyManualTotal(state, id, ym, key, v, lanDate(ym));
+        }
         else if (kind === 'month') {
           state.monthly = state.monthly || [];
           let rec = state.monthly.find(m => m.barberId === id && m.month === ym);
@@ -1015,10 +1182,12 @@
   }
 
   function perfFor(barberId, user) {
-    if (!seeNum(barberId)) return `<div class="card empty">${icon('lock')}<h2>Números reservados</h2><p>Você vê o ranking e a pontuação de todos, e os números detalhados só seus.</p><a class="btn" href="#performance">Ver minha performance</a></div>`;
+    if (!seeNum(barberId)) return `<div class="card empty">${icon('lock')}<h2>Números reservados</h2><p>Você vê o ranking com os números de todos, e a performance detalhada só a sua.</p><a class="btn" href="#performance">Ver minha performance</a></div>`;
     const b = barberById(barberId);
     if (!b) return `<div class="card empty">${icon('users')}<h2>Barbeiro não encontrado</h2><p>Ele pode ter sido removido da equipe.</p></div>`;
     const R = computeRanking(state, range());
+    const dk = isGestor(user) ? null : darkFor(range());
+    if (dk) return `${periodNav()}${suspenseCard(dk)}${ownNumbers(R, b.id, ui.period === 'mes' ? range().start.slice(0, 7) : null)}`;
     // Compara com o mesmo número de dias do período anterior, para não punir o período em andamento.
     const cur = range(), prevR = range(ui.offset - 1);
     if (ui.offset === 0) {
@@ -1080,6 +1249,9 @@
   function pagePerfCasa(scope) {
     const ym = ui.teamMonth || curYm();
     const R = monthR(ym);
+    const dk = darkFor(monthRange(ym));
+    if (dk) return `<div class="card tm-month"><label class="field"><span class="tm-eyebrow">Mês</span>
+        <select class="input" id="pc-month" data-change="teamMonth">${monthOptions(ym)}</select></label></div>${suspenseCard(dk)}${ownNumbers(R, (currentUser() || {}).barberId, ym)}`;
     const vis = k => GB.visibleInds(state).some(i => i.key === k);
     const rows = [...R.rows].filter(r => !scope || scope.has(r.barber.id)).sort((a, b) => b.sums.fat - a.sums.fat);
     const has = rows.some(r => Object.keys(r.sums.n).length);
@@ -1190,7 +1362,7 @@
   }
 
   function pageConfig(part) {
-    const w = state.weights;
+    const w = state.weights, rv = revealCfg();
     const hidden = state.hidden || [];
     const total = INDICATORS.filter(i => !hidden.includes(i.key)).reduce((a, i) => a + Number(w[i.key] ?? i.weight), 0);
     if (part === 'dados') return `
@@ -1223,6 +1395,17 @@
           <p class="form-msg" data-msg></p>
           <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar metas</button>
           <button class="btn" type="button" data-action="defaultGoals">Voltar às metas padrão</button></div>
+        </form>
+      </section>
+      <section class="section card">
+        <h2 class="section-title">Pódio surpresa</h2>
+        <p class="section-note">Nos últimos dias do mês, os barbeiros deixam de ver as colocações, as pontuações e os números dos colegas; cada um continua vendo os próprios números. A Tela da loja mostra uma contagem regressiva. Você revela o pódio no Fechamento do mês, do 3º ao 1º lugar.</p>
+        <form class="form" data-form="reveal" novalidate>
+          <label class="ind-on"><input type="checkbox" id="rv-on" name="rv-on" ${rv.on ? 'checked' : ''}> Ligar o pódio surpresa</label>
+          <label class="field"><span>Quantos dias antes do fim do mês</span><select class="input" id="rv-days" name="rv-days">
+            ${[1, 2, 3, 4, 5].map(d => `<option value="${d}" ${rv.days === d ? 'selected' : ''}>${d} dia${d > 1 ? 's' : ''}</option>`).join('')}</select></label>
+          <p class="form-msg" data-msg></p>
+          <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar pódio surpresa</button></div>
         </form>
       </section>`;
   }
@@ -1329,11 +1512,21 @@ Content-Type: application/json</pre>
     const amNote = isGestor(currentUser()) ? '' : '<p class="section-note">O fechamento mostra só as pessoas da sua área.</p>';
     const ym = ui.teamMonth || curYm();
     const R = scopedR(ym);
+    const own = isGestor(currentUser());
+    const dk = own ? null : darkFor(monthRange(ym));
+    if (dk) return `<section class="card fc-head">${amNote}<div class="fc-controls">
+        <label class="field"><span>Mês do fechamento</span><select class="input" id="fc-month" data-change="teamMonth">${monthOptions(ym)}</select></label></div></section>${suspenseCard(dk)}`;
+    // Pódio surpresa: o resumo não entrega o resultado antes da revelação.
+    const secret = own ? inSuspense(monthRange(ym)) : null;
     const top = R.rows.slice(0, 3);
     const total = R.rows.reduce((a, r) => a + r.sums.fat, 0);
     const t = R.title.type ? R.rows.find(r => r.barber.id === R.title.barberId) : null;
+    const ended = iso(new Date()) > monthRange(ym).end;
+    const secretNote = secret ? `<div class="sus-note sus-in"><p>${icon('crown')}<span><b>Pódio surpresa.</b> A equipe ainda não viu as colocações de ${esc(ymLabel(ym).replace(' de ', '/'))}. ${ended ? 'Na apresentação, cada lugar do pódio só aparece quando você tocar em Revelar. Ao revelar o 1º lugar, o pódio é liberado no app de todos.' : 'O mês ainda não acabou: a apresentação agora é só uma prévia e não libera o pódio.'}</span></p>
+        <button class="btn btn-sm ${ui.confirm === 'reveal' ? 'btn-danger' : ''}" data-action="revealNow" data-ym="${ym}">${ui.confirm === 'reveal' ? 'Confirmar: liberar sem apresentação' : 'Liberar o pódio sem apresentação'}</button></div>` : '';
     return `<section class="card fc-head">
         ${amNote}
+        ${secretNote}
         <div class="fc-brand">${logo('fc-logo')}<div><h2>Fechamento do mês</h2><p>Cada atendimento conta.</p></div></div>
         <div class="fc-controls">
           <label class="field"><span>Mês do fechamento</span><select class="input" id="fc-month" data-change="teamMonth">${monthOptions(ym)}</select></label>
@@ -1347,10 +1540,10 @@ Content-Type: application/json</pre>
           <div class="stat"><span>Faturamento da equipe</span><b class="num">${money0(total)}</b></div>
           <div class="stat"><span>Barbeiros</span><b class="num">${R.rows.length}</b></div>
           <div class="stat"><span>Indicadores</span><b class="num">${R.N}</b></div>
-          <div class="stat"><span>Título</span><b>${t ? (R.title.type === 'mvp' ? 'MVP' : 'Destaque') + ' · ' + esc(first(t.barber.name)) : 'Nenhum'}</b></div>
+          <div class="stat"><span>Título</span><b>${secret ? 'Surpresa' : t ? (R.title.type === 'mvp' ? 'MVP' : 'Destaque') + ' · ' + esc(first(t.barber.name)) : 'Nenhum'}</b></div>
         </div>
-        <ol class="fc-top">${top.map(r => `<li>${avatar(r.barber, 40)}<span><b>${ord(r.pos)} ${esc(r.barber.name)}</b><small class="muted num">${score(r.overall)} pts · ${r.leads.length}/${R.N} lideradas</small></span></li>`).join('')}</ol>
-        <p class="section-note">A apresentação mostra cada barbeiro do último ao 4º colocado, depois revela o pódio com suspense. Use em tela cheia na TV da loja.</p>
+        ${secret ? '<p class="section-note">O pódio fica escondido aqui para não estragar a surpresa caso a tela esteja à vista da equipe.</p>' : `<ol class="fc-top">${top.map(r => `<li>${avatar(r.barber, 40)}<span><b>${ord(r.pos)} ${esc(r.barber.name)}</b><small class="muted num">${score(r.overall)} pts · ${r.leads.length}/${R.N} lideradas</small></span></li>`).join('')}</ol>`}
+        <p class="section-note">A apresentação mostra cada barbeiro do último ao 4º colocado. Depois vem o pódio: cada lugar, do 3º ao 1º, só aparece quando você tocar em Revelar. Use em tela cheia na TV da loja.</p>
       </section>` : ''}`;
   }
 
@@ -1359,9 +1552,11 @@ Content-Type: application/json</pre>
     return `<div class="fx-photo"><span>${b.photo ? `<img src="${esc(b.photo)}" alt="">` : esc(ini)}</span></div>`;
   }
   function fxSlides(ym) {
-    const R = scopedR(ym);
-    const rows = R.rows, s = [{ k: 'intro' }];
-    for (let i = rows.length - 1; i >= 3; i--) s.push({ k: 'card', row: rows[i] });
+    // No celular da equipe (ao vivo ou depois), a revelação mostra só o pódio.
+    const mode = ui.fx && ui.fx.mode;
+    const R = mode ? monthR(ym) : scopedR(ym);
+    const rows = R.rows, s = mode ? [] : [{ k: 'intro' }];
+    if (!mode) for (let i = rows.length - 1; i >= 3; i--) s.push({ k: 'card', row: rows[i] });
     s.push({ k: 'podium' });
     for (const p of [3, 2, 1]) if (rows[p - 1]) s.push({ k: 'card', row: rows[p - 1], place: p });
     s.push({ k: 'final' });
@@ -1428,7 +1623,8 @@ Content-Type: application/json</pre>
           <div class="fx-inds">${R.active.map((ind, k) => `<div class="fx-ind ${ind.leaders.includes(r.barber.id) ? 'lead' : ''}" style="--d:${0.5 + k * 0.09}s">
             <small>${esc(ind.label)}</small><b class="num">${fmt(ind, r.values[ind.key])}${ind.key === 'check' ? ' pts' : ''}</b><span class="num">${ord(r.ranks[ind.key])} de ${n}</span><div class="fx-bar"><i style="--w:${Math.max(3, r.scores[ind.key])}%"></i></div></div>`).join('')}</div>
         </div>
-        ${place ? `<div class="fx-suspense"><p>E o pódio é de…</p><span class="fx-drum"><i></i><i></i><i></i></span></div>` : ''}
+        ${place ? `<div class="fx-suspense"><span class="fx-q" aria-hidden="true">?</span><p>${place === 1 ? 'E o 1º lugar é de…' : `O ${place}º lugar é de…`}</p><span class="fx-drum"><i></i><i></i><i></i></span>
+          ${!ui.fx || !ui.fx.mode ? `<button class="fx-reveal-btn" data-fx="next">${icon('crown')} Revelar o ${place}º lugar</button>` : ui.fx.mode === 'live' ? '<small class="fx-wait">Aguardando o gestor revelar…</small>' : ''}</div>` : ''}
         ${place === 1 ? `<div class="fx-confetti">${fxConfetti(80)}</div>` : ''}
       </article></div>`;
   }
@@ -1465,34 +1661,60 @@ Content-Type: application/json</pre>
     const stage = ov.querySelector('.fx-stage');
     stage.innerHTML = fxSlideHtml(R, sl, fx.ym);
     ov.dataset.kind = sl.k + (sl.place ? '-' + sl.place : '');
-    ov.querySelector('.fx-ctrl').innerHTML = `
+    const pages = `<span class="fx-pages">${s.map((_, k) => `<i class="${k === fx.i ? 'on' : k < fx.i ? 'done' : ''}"></i>`).join('')}</span>`;
+    // No celular da equipe não há avançar/voltar: quem conduz é o gestor (ou a revelação segue sozinha).
+    ov.querySelector('.fx-ctrl').innerHTML = (fx.mode ? pages : `
       <button class="fx-btn" data-fx="prev" aria-label="Anterior" ${fx.i === 0 ? 'disabled' : ''}>${icon('left')}</button>
-      <span class="fx-pages">${s.map((_, k) => `<i class="${k === fx.i ? 'on' : k < fx.i ? 'done' : ''}"></i>`).join('')}</span>
-      <button class="fx-btn" data-fx="next" aria-label="Próximo" ${fx.i === s.length - 1 ? 'disabled' : ''}>${icon('right')}</button>
+      ${pages}
+      <button class="fx-btn" data-fx="next" aria-label="Próximo" ${fx.i === s.length - 1 ? 'disabled' : ''}>${icon('right')}</button>`) + `
       <button class="fx-btn sm" data-fx="full" aria-label="Tela cheia">${icon('expand')}</button>
       <button class="fx-btn sm" data-fx="close" aria-label="Fechar apresentação">${icon('x')}</button>`;
     clearTimeout(fx.timer);
     const slide = stage.firstElementChild;
     if (slide.classList.contains('is-suspense')) {
-      Sound.play('rufar');
-      fx.timer = setTimeout(() => fxReveal(slide, sl.place), 2800);
+      // Espera o gestor tocar em Revelar (ou, depois, segue sozinho no celular da equipe).
+      if (fx.mode === 'auto') fx.timer = setTimeout(() => fxDrum(slide), 1400);
     } else {
       fxCount(slide);
       if (sl.k === 'podium') Sound.play('sino');
       if (sl.k === 'final') Sound.play('aplausos');
+      if (fx.mode === 'auto' && sl.k !== 'final') fx.timer = setTimeout(() => fxStep(1), 3400);
     }
+    if (fx.live && (sl.k === 'podium' || sl.k === 'final' || sl.place)) revealSend({ t: sl.place ? 'card' : sl.k, place: sl.place || 0 });
   }
   function fxReveal(slide, place) {
     if (!slide || !slide.classList.contains('is-suspense')) return;
-    slide.classList.remove('is-suspense'); slide.classList.add('is-revealed');
+    slide.classList.remove('is-suspense', 'is-drum'); slide.classList.add('is-revealed');
     Sound.play(place === 1 ? 'fanfarra' : 'moeda');
     if (place === 1) setTimeout(() => Sound.play('aplausos'), 900);
     fxCount(slide);
+    const fx = ui.fx;
+    if (fx && fx.live) revealSend({ t: 'reveal', place });
+    if (fx && fx.mode && place === 1) setSeen(fx.ym);
+    if (fx && fx.mode === 'auto') fx.timer = setTimeout(() => fxStep(1), place === 1 ? 5200 : 4200);
+    // Revelou o 1º lugar de um mês encerrado: libera o pódio no app de todos.
+    if (place === 1 && fx && isGestor(currentUser()) && inSuspense(monthRange(fx.ym)) && iso(new Date()) > monthRange(fx.ym).end) {
+      markRevealed(fx.ym);
+      setTimeout(() => toast('Pódio liberado: a equipe já vê as colocações no app.'), 1500);
+    }
+  }
+  // 1º toque: rufar de tambores. Depois de alguns segundos (ou no 2º toque), revela.
+  function fxDrum(slide) {
+    const fx = ui.fx;
+    if (slide.classList.contains('is-drum')) { clearTimeout(fx.timer); fxReveal(slide, Number(slide.dataset.place)); return; }
+    slide.classList.add('is-drum');
+    Sound.play('rufar');
+    if (fx.live) revealSend({ t: 'drum', place: Number(slide.dataset.place) });
+    fx.timer = setTimeout(() => fxReveal(slide, Number(slide.dataset.place)), 2600);
   }
   function fxGo(d) {
-    const fx = ui.fx; if (!fx) return;
+    const fx = ui.fx; if (!fx || fx.mode) return; // no celular da equipe, quem conduz é o gestor
     const slide = document.querySelector('#fx .fx-slide');
-    if (d > 0 && slide && slide.classList.contains('is-suspense')) { clearTimeout(fx.timer); fxReveal(slide, Number(slide.dataset.place)); return; }
+    if (d > 0 && slide && slide.classList.contains('is-suspense')) { fxDrum(slide); return; }
+    fxStep(d);
+  }
+  function fxStep(d) {
+    const fx = ui.fx; if (!fx) return;
     const ni = fx.i + d;
     if (ni < 0 || ni >= fx.total) return;
     fx.i = ni; fx.dir = d; fxRender();
@@ -1500,6 +1722,7 @@ Content-Type: application/json</pre>
   function fxClose() {
     const ov = document.getElementById('fx');
     if (ui.fx) clearTimeout(ui.fx.timer);
+    if (ui.fx && ui.fx.live) revealSend({ t: 'close' });
     ui.fx = null;
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     if (ov) { ov.classList.add('fx-out'); setTimeout(() => ov.remove(), 350); }
@@ -1876,7 +2099,7 @@ Content-Type: application/json</pre>
       </section>
       <section class="section card">
         <h2 class="section-title">3. Quem vê o quê</h2>
-        <p class="section-note">Quem não tiver acesso definido vê o ranking da equipe e apenas os próprios números. <b>Gestor</b> vê e lança os resultados de quem está na área; <b>Membro</b> só vê. Uma pessoa pode ter mais de uma área.</p>
+        <p class="section-note">No ranking, todos veem os números de todos. Quem não tiver acesso definido vê a performance detalhada só dos próprios números. <b>Gestor</b> vê e lança os resultados de quem está na área; <b>Membro</b> só vê. Uma pessoa pode ter mais de uma área.</p>
         <ul class="list">${o.grants.map(g => { const u = state.users.find(x => x.id === g.userId); return `<li class="list-row"><div class="grow"><b>${esc(u ? u.name : '?')}</b> <span class="muted">· ${g.role === 'gestor' ? 'Gestor' : 'Membro'} · ${esc(grantArea(g))}</span></div>
           <button class="icon-btn" data-action="orgGrantDel" data-id="${esc(g.id)}" aria-label="Remover acesso">${icon('trash')}</button></li>`; }).join('') || '<li class="muted">Ninguém com acesso extra ainda.</li>'}</ul>
         ${people.length ? `<form class="form" data-form="orgGrant" novalidate>
@@ -2452,7 +2675,7 @@ Content-Type: application/json</pre>
         <span class="gd-label">${esc(ind.label)}</span>
         <div class="gd-photos"><span class="gd-crown">${crownSvg('tier-gold')}</span>${leaders.slice(0, 3).map(b => `<span class="gd-photo">${pdPhoto(b).replace('pd-photo', 'gd-ring')}</span>`).join('')}</div>
         <b class="gd-name">${names}</b>
-        ${leaders.some(b => seeNum(b.id)) ? `<span class="gd-val num">${fmt(ind, row.values[ind.key])}${ind.key === 'check' ? ' pts' : ''}</span>` : ''}
+        <span class="gd-val num">${fmt(ind, row.values[ind.key])}${ind.key === 'check' ? ' pts' : ''}</span>
         ${leaders.length > 1 ? '<span class="chip chip-destaque">Empate na liderança</span>' : ''}
       </div>`;
     }).join('');
@@ -2464,7 +2687,6 @@ Content-Type: application/json</pre>
   function tvAlerts(R) {
     const n = R.rows.length;
     const cards = R.rows.map((r, i) => {
-      if (!seeNum(r.barber.id)) return '';
       const zone = r.pos === 1 ? 'leader' : r.pos <= 3 ? 'chase' : (r.pos > Math.ceil(n / 2) + 1 ? 'low' : 'middle');
       const [line, sub] = pickLine(zone, r.barber.id);
       let gap;
@@ -2507,8 +2729,9 @@ Content-Type: application/json</pre>
     if (!Cloud.enabled) state = DB.load();
     const tr = tvRange();
     const R = computeRanking(state, tr);
-    liveDetect(R);
-    const slides = [tvRanking, tvGuardians, tvAlerts];
+    const dk = darkFor(tr, true);
+    if (!dk) liveDetect(R);
+    const slides = dk ? [() => suspenseCard(dk, true)] : [tvRanking, tvGuardians, tvAlerts];
     const i = ((ui.tvIndex % slides.length) + slides.length) % slides.length;
     const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
     root.innerHTML = `<div class="tv">
@@ -2582,6 +2805,7 @@ Content-Type: application/json</pre>
     maybeOfferInstall();
     maybeRemindPop(user);
     hydrateProofs();
+    setTimeout(maybeAutoReveal, 700);
   }
 
   // Lembrete do checklist: uma vez por dia, enquanto a meta do dia não foi batida.
@@ -2785,7 +3009,9 @@ Content-Type: application/json</pre>
       await adminDo(el.dataset.id, { sub_status: 'blocked' }, 'Barbearia bloqueada.');
     },
     fxStart() {
-      ui.fx = { ym: ui.teamMonth || curYm(), i: 0 };
+      const ym = ui.teamMonth || curYm();
+      // Revelação de verdade (mês encerrado e em segredo): os celulares da equipe acompanham ao vivo.
+      ui.fx = { ym, i: 0, live: isGestor(currentUser()) && !!inSuspense(monthRange(ym)) && iso(new Date()) > monthRange(ym).end };
       Sound.ensure(); keepAwake();
       const d = document.documentElement;
       if (d.requestFullscreen) d.requestFullscreen().catch(() => {});
@@ -2815,7 +3041,7 @@ Content-Type: application/json</pre>
     teamPick(el) {
       ui.teamBarber = el.dataset.id;
       const u = currentUser();
-      if (!isGestor(u) && !seeNum(el.dataset.id)) { ui.teamBarber = u.barberId; toast('Você vê o ranking de todos e os números só seus.'); return; }
+      if (!isGestor(u) && !seeNum(el.dataset.id)) { ui.teamBarber = u.barberId; toast('No ranking você vê todos. A performance detalhada é só a sua.'); return; }
       if (!$('#tm-editor')) { refreshTeam(); $('#tm-insights')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
       const ed = $('#tm-editor');
       if (ed) { ed.innerHTML = teamEditor(ui.teamMonth || curYm()); refreshTeam(); ed.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
@@ -2826,6 +3052,12 @@ Content-Type: application/json</pre>
       if (sel.includes(id)) { if (sel.length > 1) sel = sel.filter(x => x !== id); }
       else { sel = [...sel, id]; if (sel.length > 4) sel = sel.slice(1); }
       ui.radarSel = sel; const rd = $('#tm-radar'); if (rd) rd.innerHTML = teamRadars(ui.teamMonth || curYm(), rd.dataset.only === '1');
+    },
+    goFechamento(el) { ui.teamMonth = el.dataset.ym; location.hash = 'fechamento'; },
+    revealNow(el) {
+      if (!isGestor(currentUser())) return;
+      if (ui.confirm !== 'reveal') { ui.confirm = 'reveal'; render(); return; }
+      ui.confirm = null; markRevealed(el.dataset.ym); toast('Pódio liberado: a equipe já vê as colocações no app.'); render();
     },
     defaultGoals() { state.goals = { ...(state.goals || {}), team: { ...GB.DEFAULT_GOALS } }; save(); toast('Metas padrão restauradas.'); render(); },
     defaultWeights() { state.weights = Object.fromEntries(INDICATORS.map(i => [i.key, i.weight])); save(); toast('Pesos padrão restaurados.'); render(); },
@@ -3032,6 +3264,13 @@ Content-Type: application/json</pre>
       if (INDICATORS.length - hidden.length < 2) return setMsg(f, 'Deixe pelo menos 2 indicadores ativos.');
       state.weights = w; state.hidden = hidden; save(); toast('Indicadores salvos.'); render();
     },
+    reveal(f) {
+      const c = revealCfg();
+      const on = f.elements['rv-on'].checked, days = Math.min(5, Math.max(1, Number(val(f, 'rv-days')) || 2));
+      // Ao ligar, só vale dali para a frente (não esconde o mês passado).
+      state.reveal = { on, days, since: on ? (c.on && c.since ? c.since : curYm()) : '', done: c.done };
+      save(); toast(on ? `Pódio surpresa ligado: ${days} dia${days > 1 ? 's' : ''} antes do fim do mês.` : 'Pódio surpresa desligado.'); render();
+    },
     goals(f) {
       const g = { ...(state.goals?.team || {}) };
       for (const i of GB.visibleInds(state)) {
@@ -3082,6 +3321,7 @@ Content-Type: application/json</pre>
     tvSoundKind(el) { Sound.kind = el.value; Sound.play(el.value, true); },
     perfBarber(el) { ui.perfBarber = el.value; render(); },
     teamMonth(el) { ui.teamMonth = el.value; render(); },
+    lanDate(el) { ui.lanDate = el.value; },
     popMonth(el) { ui.teamMonth = ui.popMonth = el.value; ui.popDraft = null; render(); },
     async popPhoto(el) {
       const f = el.files && el.files[0]; if (!f || !ui.popDraft) return;
@@ -3214,6 +3454,7 @@ Content-Type: application/json</pre>
     Cloud.onRemote = next => {
       const apply = () => {
         state = next; rkCache = {};
+        setTimeout(maybeAutoReveal, 600);
         if (ui.fx) return;
         if (location.hash === '#apresentacao') renderTV();
         else if (['#time', '#lancamentos'].includes(location.hash)) refreshTeam();
