@@ -689,6 +689,60 @@
     state.reveal = { on: c.on, days: c.days, since: c.since, done: Object.fromEntries(keep.map(k => [k, done[k]])) };
     save();
   }
+  // ---------- Revelação no celular da equipe ----------
+  const seenKey = () => 'seenReveal:' + ((currentUser() || {}).id || '');
+  const seenReveal = () => readJSON(seenKey(), {});
+  function setSeen(ym) { const s = seenReveal(); s[ym] = Date.now(); DB.pref.set(seenKey(), JSON.stringify(s)); }
+  const revealBC = 'BroadcastChannel' in window ? new BroadcastChannel('gbia-reveal') : null;
+  function revealSend(m) {
+    if (!ui.fx) return;
+    const msg = { ...m, ym: ui.fx.ym };
+    if (Cloud.enabled) Cloud.sendReveal(msg);
+    else if (revealBC) revealBC.postMessage(msg);
+  }
+  function fxOpen(ym, mode) {
+    ui.fx = { ym, i: 0, mode };
+    try { Sound.ensure(); } catch (e) { /* o som pode precisar de um toque */ }
+    keepAwake();
+    fxRender();
+  }
+  // Ao vivo: cada passo do gestor aparece no celular de quem está com o app aberto.
+  // A colocação vem dos dados deste aparelho; a mensagem só marca o momento.
+  function onRevealMsg(m) {
+    const u = currentUser();
+    if (!u || isGestor(u) || !m || typeof m.ym !== 'string' || !/^\d{4}-\d{2}$/.test(m.ym) || location.hash === '#apresentacao') return;
+    let fx = ui.fx;
+    if (!(fx && fx.mode === 'live' && fx.ym === m.ym)) {
+      if (fx || m.t === 'close' || m.t === 'final') return;
+      if (!inSuspense(monthRange(m.ym)) || iso(new Date()) <= monthRange(m.ym).end) return;
+      fxOpen(m.ym, 'live'); fx = ui.fx;
+    }
+    if (m.t === 'close') { if (!seenReveal()[m.ym]) fxClose(); return; }
+    const { s } = fxSlides(m.ym);
+    const idx = m.t === 'podium' ? 0 : m.t === 'final' ? s.length - 1 : s.findIndex(x => x.place === Number(m.place));
+    if (idx < 0) return;
+    if (fx.i !== idx) { fx.i = idx; fxRender(); }
+    const slide = document.querySelector('#fx .fx-slide');
+    if (!slide || !slide.classList.contains('is-suspense')) return;
+    if (m.t === 'drum' && !slide.classList.contains('is-drum')) {
+      slide.classList.add('is-drum'); Sound.play('rufar');
+      clearTimeout(fx.timer); fx.timer = setTimeout(() => fxReveal(slide, Number(m.place)), 8000);
+    }
+    if (m.t === 'reveal') { clearTimeout(fx.timer); fxReveal(slide, Number(m.place)); }
+  }
+  if (revealBC) revealBC.onmessage = e => onRevealMsg(e.data);
+  Cloud.onReveal = onRevealMsg;
+  // Quem não viu ao vivo assiste à revelação uma vez, ao abrir o app.
+  function maybeAutoReveal() {
+    const u = currentUser();
+    if (!u || isGestor(u) || ui.fx || location.hash === '#apresentacao' || document.getElementById('fx')) return;
+    const done = revealCfg().done, seen = seenReveal();
+    const ym = Object.keys(done).filter(k => !seen[k] && Date.now() - done[k] < 20 * 86400000).sort().pop();
+    if (!ym) return;
+    setSeen(ym);
+    if (monthR(ym).rows.length && monthR(ym).active.length) fxOpen(ym, 'auto');
+  }
+
   // Atualiza a contagem regressiva na tela.
   setInterval(() => {
     document.querySelectorAll('[data-sus-end]').forEach(el => { const t = suspenseLeft({ end: el.dataset.susEnd }); if (t) el.textContent = t; else render(); });
@@ -1498,9 +1552,11 @@ Content-Type: application/json</pre>
     return `<div class="fx-photo"><span>${b.photo ? `<img src="${esc(b.photo)}" alt="">` : esc(ini)}</span></div>`;
   }
   function fxSlides(ym) {
-    const R = scopedR(ym);
-    const rows = R.rows, s = [{ k: 'intro' }];
-    for (let i = rows.length - 1; i >= 3; i--) s.push({ k: 'card', row: rows[i] });
+    // No celular da equipe (ao vivo ou depois), a revelação mostra só o pódio.
+    const mode = ui.fx && ui.fx.mode;
+    const R = mode ? monthR(ym) : scopedR(ym);
+    const rows = R.rows, s = mode ? [] : [{ k: 'intro' }];
+    if (!mode) for (let i = rows.length - 1; i >= 3; i--) s.push({ k: 'card', row: rows[i] });
     s.push({ k: 'podium' });
     for (const p of [3, 2, 1]) if (rows[p - 1]) s.push({ k: 'card', row: rows[p - 1], place: p });
     s.push({ k: 'final' });
@@ -1568,7 +1624,7 @@ Content-Type: application/json</pre>
             <small>${esc(ind.label)}</small><b class="num">${fmt(ind, r.values[ind.key])}${ind.key === 'check' ? ' pts' : ''}</b><span class="num">${ord(r.ranks[ind.key])} de ${n}</span><div class="fx-bar"><i style="--w:${Math.max(3, r.scores[ind.key])}%"></i></div></div>`).join('')}</div>
         </div>
         ${place ? `<div class="fx-suspense"><span class="fx-q" aria-hidden="true">?</span><p>${place === 1 ? 'E o 1º lugar é de…' : `O ${place}º lugar é de…`}</p><span class="fx-drum"><i></i><i></i><i></i></span>
-          <button class="fx-reveal-btn" data-fx="next">${icon('crown')} Revelar o ${place}º lugar</button></div>` : ''}
+          ${!ui.fx || !ui.fx.mode ? `<button class="fx-reveal-btn" data-fx="next">${icon('crown')} Revelar o ${place}º lugar</button>` : ui.fx.mode === 'live' ? '<small class="fx-wait">Aguardando o gestor revelar…</small>' : ''}</div>` : ''}
         ${place === 1 ? `<div class="fx-confetti">${fxConfetti(80)}</div>` : ''}
       </article></div>`;
   }
@@ -1605,21 +1661,26 @@ Content-Type: application/json</pre>
     const stage = ov.querySelector('.fx-stage');
     stage.innerHTML = fxSlideHtml(R, sl, fx.ym);
     ov.dataset.kind = sl.k + (sl.place ? '-' + sl.place : '');
-    ov.querySelector('.fx-ctrl').innerHTML = `
+    const pages = `<span class="fx-pages">${s.map((_, k) => `<i class="${k === fx.i ? 'on' : k < fx.i ? 'done' : ''}"></i>`).join('')}</span>`;
+    // No celular da equipe não há avançar/voltar: quem conduz é o gestor (ou a revelação segue sozinha).
+    ov.querySelector('.fx-ctrl').innerHTML = (fx.mode ? pages : `
       <button class="fx-btn" data-fx="prev" aria-label="Anterior" ${fx.i === 0 ? 'disabled' : ''}>${icon('left')}</button>
-      <span class="fx-pages">${s.map((_, k) => `<i class="${k === fx.i ? 'on' : k < fx.i ? 'done' : ''}"></i>`).join('')}</span>
-      <button class="fx-btn" data-fx="next" aria-label="Próximo" ${fx.i === s.length - 1 ? 'disabled' : ''}>${icon('right')}</button>
+      ${pages}
+      <button class="fx-btn" data-fx="next" aria-label="Próximo" ${fx.i === s.length - 1 ? 'disabled' : ''}>${icon('right')}</button>`) + `
       <button class="fx-btn sm" data-fx="full" aria-label="Tela cheia">${icon('expand')}</button>
       <button class="fx-btn sm" data-fx="close" aria-label="Fechar apresentação">${icon('x')}</button>`;
     clearTimeout(fx.timer);
     const slide = stage.firstElementChild;
     if (slide.classList.contains('is-suspense')) {
-      // Espera o gestor tocar em Revelar.
+      // Espera o gestor tocar em Revelar (ou, depois, segue sozinho no celular da equipe).
+      if (fx.mode === 'auto') fx.timer = setTimeout(() => fxDrum(slide), 1400);
     } else {
       fxCount(slide);
       if (sl.k === 'podium') Sound.play('sino');
       if (sl.k === 'final') Sound.play('aplausos');
+      if (fx.mode === 'auto' && sl.k !== 'final') fx.timer = setTimeout(() => fxStep(1), 3400);
     }
+    if (fx.live && (sl.k === 'podium' || sl.k === 'final' || sl.place)) revealSend({ t: sl.place ? 'card' : sl.k, place: sl.place || 0 });
   }
   function fxReveal(slide, place) {
     if (!slide || !slide.classList.contains('is-suspense')) return;
@@ -1627,8 +1688,11 @@ Content-Type: application/json</pre>
     Sound.play(place === 1 ? 'fanfarra' : 'moeda');
     if (place === 1) setTimeout(() => Sound.play('aplausos'), 900);
     fxCount(slide);
-    // Revelou o 1º lugar de um mês encerrado: libera o pódio no app de todos.
     const fx = ui.fx;
+    if (fx && fx.live) revealSend({ t: 'reveal', place });
+    if (fx && fx.mode && place === 1) setSeen(fx.ym);
+    if (fx && fx.mode === 'auto') fx.timer = setTimeout(() => fxStep(1), place === 1 ? 5200 : 4200);
+    // Revelou o 1º lugar de um mês encerrado: libera o pódio no app de todos.
     if (place === 1 && fx && isGestor(currentUser()) && inSuspense(monthRange(fx.ym)) && iso(new Date()) > monthRange(fx.ym).end) {
       markRevealed(fx.ym);
       setTimeout(() => toast('Pódio liberado: a equipe já vê as colocações no app.'), 1500);
@@ -1640,12 +1704,17 @@ Content-Type: application/json</pre>
     if (slide.classList.contains('is-drum')) { clearTimeout(fx.timer); fxReveal(slide, Number(slide.dataset.place)); return; }
     slide.classList.add('is-drum');
     Sound.play('rufar');
+    if (fx.live) revealSend({ t: 'drum', place: Number(slide.dataset.place) });
     fx.timer = setTimeout(() => fxReveal(slide, Number(slide.dataset.place)), 2600);
   }
   function fxGo(d) {
-    const fx = ui.fx; if (!fx) return;
+    const fx = ui.fx; if (!fx || fx.mode) return; // no celular da equipe, quem conduz é o gestor
     const slide = document.querySelector('#fx .fx-slide');
     if (d > 0 && slide && slide.classList.contains('is-suspense')) { fxDrum(slide); return; }
+    fxStep(d);
+  }
+  function fxStep(d) {
+    const fx = ui.fx; if (!fx) return;
     const ni = fx.i + d;
     if (ni < 0 || ni >= fx.total) return;
     fx.i = ni; fx.dir = d; fxRender();
@@ -1653,6 +1722,7 @@ Content-Type: application/json</pre>
   function fxClose() {
     const ov = document.getElementById('fx');
     if (ui.fx) clearTimeout(ui.fx.timer);
+    if (ui.fx && ui.fx.live) revealSend({ t: 'close' });
     ui.fx = null;
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     if (ov) { ov.classList.add('fx-out'); setTimeout(() => ov.remove(), 350); }
@@ -2735,6 +2805,7 @@ Content-Type: application/json</pre>
     maybeOfferInstall();
     maybeRemindPop(user);
     hydrateProofs();
+    setTimeout(maybeAutoReveal, 700);
   }
 
   // Lembrete do checklist: uma vez por dia, enquanto a meta do dia não foi batida.
@@ -2938,7 +3009,9 @@ Content-Type: application/json</pre>
       await adminDo(el.dataset.id, { sub_status: 'blocked' }, 'Barbearia bloqueada.');
     },
     fxStart() {
-      ui.fx = { ym: ui.teamMonth || curYm(), i: 0 };
+      const ym = ui.teamMonth || curYm();
+      // Revelação de verdade (mês encerrado e em segredo): os celulares da equipe acompanham ao vivo.
+      ui.fx = { ym, i: 0, live: isGestor(currentUser()) && !!inSuspense(monthRange(ym)) && iso(new Date()) > monthRange(ym).end };
       Sound.ensure(); keepAwake();
       const d = document.documentElement;
       if (d.requestFullscreen) d.requestFullscreen().catch(() => {});
@@ -3380,11 +3453,8 @@ Content-Type: application/json</pre>
     }, 600000);
     Cloud.onRemote = next => {
       const apply = () => {
-        const was = new Set(suspenseWins().map(w => w.ym));
         state = next; rkCache = {};
-        const now = new Set(suspenseWins().map(w => w.ym));
-        const opened = [...was].find(ym => !now.has(ym) && revealCfg().done[ym]);
-        if (opened && !isGestor(currentUser())) setTimeout(() => toast(`O pódio de ${ymLabel(opened).replace(' de ', '/')} foi revelado!`), 300);
+        setTimeout(maybeAutoReveal, 600);
         if (ui.fx) return;
         if (location.hash === '#apresentacao') renderTV();
         else if (['#time', '#lancamentos'].includes(location.hash)) refreshTeam();

@@ -274,8 +274,11 @@
     channel = c.channel('company-' + cid);
     for (const t of ['entries', 'monthly', 'barbers', 'profiles', 'pop_records']) channel.on('postgres_changes', { event: '*', schema: 'public', table: t, filter: 'company_id=eq.' + cid }, remote);
     channel.on('postgres_changes', { event: '*', schema: 'public', table: 'companies', filter: 'id=eq.' + cid }, remote);
+    // Revelação do pódio ao vivo: o gestor avisa cada passo e os celulares da equipe acompanham.
+    channel.on('broadcast', { event: 'reveal' }, ({ payload }) => { if (Cloud.onReveal) Cloud.onReveal(payload); });
     channel.subscribe();
   };
+  Cloud.sendReveal = payload => { if (channel) channel.send({ type: 'broadcast', event: 'reveal', payload }).catch(() => {}); };
   Cloud.unsubscribe = () => { if (channel) { c.removeChannel(channel); channel = null; } };
   function remote() {
     clearTimeout(rtTimer);

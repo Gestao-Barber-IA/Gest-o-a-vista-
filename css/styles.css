@@ -858,6 +858,8 @@ textarea.input.pop-ta { min-height: 72px; font-family: var(--font-body); font-si
   box-shadow: 0 0 26px var(--glow); animation: fx-qpulse 2.4s ease-in-out infinite; }
 .fx-reveal-btn .ico { width: 20px; height: 20px; }
 .is-drum .fx-reveal-btn, .is-revealed .fx-reveal-btn { visibility: hidden; }
+.fx-wait { color: rgba(255, 255, 255, 0.7); font-size: 0.95rem; letter-spacing: 0.06em; animation: fx-qpulse 2.4s ease-in-out infinite; }
+.is-drum .fx-wait, .is-revealed .fx-wait { visibility: hidden; }
 @media (prefers-reduced-motion: reduce) { .fx-q, .fx-reveal-btn { animation: none; } }
 @keyframes fx-shake { 25% { transform: translateX(-1.5px) rotate(-0.2deg); } 75% { transform: translateX(1.5px) rotate(0.2deg); } }
 .is-revealed .fx-suspense { animation: fx-unveil 0.9s ease forwards; }
