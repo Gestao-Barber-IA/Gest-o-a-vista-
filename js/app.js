@@ -64,7 +64,7 @@
     leaders: ['Destaques por indicador', 'Quem está em 1º em cada indicador. O número ao lado do nome do indicador é o peso dele na pontuação. Empates aparecem juntos.'],
     career: ['Classificação e níveis', 'A carreira é a média das pontuações de todos os meses com dados. Níveis: Bronze até 69, Prata a partir de 70, Ouro a partir de 85 e Diamante a partir de 95.'],
     weights: ['Pesos', 'O peso define quanto cada indicador vale na pontuação geral. Indicador desativado some do app inteiro e os dados dele ficam guardados para quando for reativado.'],
-    goals: ['Metas mensais', 'Referência de cada indicador para a equipe. No mês em andamento, metas de soma (faturamento, serviços, clientes…) ficam proporcionais aos dias já passados. Metas individuais são ajustadas em Time e ranking.'],
+    goals: ['Metas mensais', 'Referência de cada indicador para a equipe. No mês em andamento, metas de soma (faturamento, serviços, clientes…) ficam proporcionais aos dias já passados. Metas individuais são ajustadas em Lançamentos.'],
     reveal: ['Pódio surpresa', 'Nos últimos dias do mês, os barbeiros não veem colocações, pontuações nem números dos colegas; cada um vê os próprios números. A Tela da loja mostra uma contagem regressiva. O gestor revela o pódio no Fechamento do mês, do 3º ao 1º lugar, e a revelação aparece no celular da equipe.'],
     lanDate: ['Data do lançamento', 'Os campos mostram o total do mês. Ao mudar um total, a diferença é gravada nesta data e já aparece na visão por semana. Diminuir tira do dia escolhido e, se precisar, dos anteriores.'],
     access: ['Quem vê o quê', 'No ranking, todos veem os números de todos. A performance detalhada é só a própria, a não ser que a pessoa tenha acesso a uma área: Gestor vê e lança os resultados da área; Membro só vê.'],
@@ -378,7 +378,7 @@
   const NAV = [
     { items: [
       { r: 'inicio', t: 'Início', i: 'grid' },
-      { r: 'time', t: 'Time e ranking', i: 'trophy' },
+      { r: 'time', t: 'Performance da equipe', i: 'trophy' },
       { r: 'performance', t: 'Minha performance', i: 'chart' },
       { r: 'lancamentos', t: 'Lançamentos', i: 'wallet', g: 1, a: 1 },
     ] },
@@ -419,7 +419,7 @@
     const groups = NAV.filter(gr => !gr.g || g).map(gr => {
       const am = isAreaMgr(user), hg = hasGrants(user);
       const items = gr.items.filter(it => (!it.g || g || (it.a && am)) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
-        <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && (g || hg) ? (g ? 'Performance da empresa' : 'Performance da equipe') : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}</a>`).join('');
+        <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && (g || hg) ? (g ? 'Performance da empresa' : 'Performance da área') : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}</a>`).join('');
       return (gr.group ? `<div class="nav-group">${esc(gr.group)}</div>` : '') + items;
     }).join('');
     const periods = Object.entries(PERIOD_NAMES).map(([k, v]) =>
@@ -798,7 +798,7 @@
       ${howLink()}`;
   }
 
-  // ---------- Time e ranking (por mês) ----------
+  // ---------- Performance da equipe (antigo Time e ranking, por mês) ----------
   const curYm = () => iso(new Date()).slice(0, 7);
   const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
   const ymLabel = ym => cap(monthRange(ym).label);
@@ -1133,6 +1133,33 @@
     </section>`;
   }
 
+
+  // Tabela "Detalhado por profissional" (Performance da equipe). Cada um vê quem pode ver.
+  function profTable(ym) {
+    const R = monthR(ym);
+    const vis = k => GB.visibleInds(state).some(i => i.key === k);
+    const rows = R.rows.filter(r => seeNum(r.barber.id)).sort((a, b) => b.sums.fat - a.sums.fat);
+    if (!rows.length) return '';
+    const cols = [
+      ['Faturamento', r => money0(r.sums.fat), true],
+      ['Clientes', r => nf0.format(r.sums.cli), true],
+      ['Serviços', r => nf0.format(r.sums.serv), true],
+      ['Ticket médio', r => r.sums.cli > 0 ? money0(r.sums.fat / r.sums.cli) : '—', vis('ticket')],
+      ['Ocupação', r => r.values.ocup != null ? nf1.format(r.values.ocup) + '%' : '—', vis('ocup')],
+      ['Produtos', r => money0(r.sums.prod), vis('prod')],
+      ['Planos', r => nf0.format(r.sums.planos), vis('planos')],
+    ].filter(c => c[2]);
+    const all = rows.length === R.rows.length;
+    return `<section class="section card">
+        <h2 class="section-title">Detalhado por profissional</h2>
+        <p class="section-note">Toque num profissional para ver a performance completa dele.${all ? '' : ' Aparecem só os profissionais cujos números detalhados você pode ver.'}</p>
+        <div class="table-wrap"><table class="pc-table"><thead><tr><th>Profissional</th>${cols.map(c => `<th>${c[0]}${tip({ Faturamento: 'fat', Clientes: 'cli', Serviços: 'serv', 'Ticket médio': 'ticket', Ocupação: 'ocup', Produtos: 'prod', Planos: 'planos' }[c[0]])}</th>`).join('')}<th>Pontos${tip('score')}</th></tr></thead><tbody>
+          ${rows.map(r => `<tr data-href="#perfil-${esc(r.barber.id)}" tabindex="0"><td><a class="td-who" href="#perfil-${esc(r.barber.id)}">${avatar(r.barber, 36)}<span>${esc(r.barber.name)}</span></a></td>
+            ${cols.map(c => `<td>${c[1](r)}</td>`).join('')}<td class="td-score">${score(r.overall)}</td></tr>`).join('')}
+        </tbody></table></div>
+      </section>`;
+  }
+
   function pageTime(user) {
     const ym = ui.teamMonth || curYm();
     if (!isGestor(user) && user.barberId && !seeNum(ui.teamBarber)) ui.teamBarber = user.barberId;
@@ -1141,6 +1168,7 @@
     if (w) return `${monthPicker(ym, user)}${suspenseCard(w)}${ownNumbers(monthR(ym), user.barberId, ym)}`;
     return `${monthPicker(ym, user)}
       <div id="tm-top" class="tm-block">${teamTop(ym)}</div>
+      <div id="tm-prof" class="tm-block">${profTable(ym)}</div>
       <div id="tm-insights" class="tm-block">${ui.teamBarber ? teamInsights(ui.teamBarber, ym) : ''}</div>
       <div id="tm-radar" class="tm-block">${teamRadars(ym)}</div>`;
   }
@@ -1162,6 +1190,7 @@
   function refreshTeam() {
     const ym = ui.teamMonth || curYm();
     const top = $('#tm-top'); if (top) top.innerHTML = teamTop(ym);
+    const pf = $('#tm-prof'); if (pf) pf.innerHTML = profTable(ym);
     const ins = $('#tm-insights'); if (ins && ui.teamBarber) ins.innerHTML = teamInsights(ui.teamBarber, ym);
     const rd = $('#tm-radar'); if (rd) rd.innerHTML = teamRadars(ym);
     const R = monthR(ym);
@@ -1293,15 +1322,6 @@
     const fat = sum('fat'), cli = sum('cli');
     const ocups = rows.map(r => r.values.ocup).filter(v => v != null);
     const stat = (label, value) => `<div class="pc-stat"><span>${label}</span><b class="num">${value}</b></div>`;
-    const cols = [
-      ['Faturamento', r => money0(r.sums.fat), true],
-      ['Clientes', r => nf0.format(r.sums.cli), true],
-      ['Serviços', r => nf0.format(r.sums.serv), true],
-      ['Ticket médio', r => r.sums.cli > 0 ? money0(r.sums.fat / r.sums.cli) : '—', vis('ticket')],
-      ['Ocupação', r => r.values.ocup != null ? nf1.format(r.values.ocup) + '%' : '—', vis('ocup')],
-      ['Produtos', r => money0(r.sums.prod), vis('prod')],
-      ['Planos', r => nf0.format(r.sums.planos), vis('planos')],
-    ].filter(c => c[2]);
     return `
       <div class="card tm-month"><label class="field"><span class="tm-eyebrow">Mês</span>
         <select class="input" id="pc-month" data-change="teamMonth">${monthOptions(ym)}</select></label></div>
@@ -1317,15 +1337,8 @@
         ${vis('ocup') ? stat('Ocupação média', ocups.length ? nf1.format(ocups.reduce((a, v) => a + v, 0) / ocups.length) + '%' : '—') : ''}
         ${stat('Profissionais', nf0.format(rows.length))}
       </section>
-      ${rows.length ? `<section class="section card">
-        <h2 class="section-title">Detalhado por profissional</h2>
-        <p class="section-note">Toque num profissional para ver a performance completa dele.</p>
-        <div class="table-wrap"><table class="pc-table"><thead><tr><th>Profissional</th>${cols.map(c => `<th>${c[0]}${tip({ Faturamento: 'fat', Clientes: 'cli', Serviços: 'serv', 'Ticket médio': 'ticket', Ocupação: 'ocup', Produtos: 'prod', Planos: 'planos' }[c[0]])}</th>`).join('')}<th>Pontos${tip('score')}</th></tr></thead><tbody>
-          ${rows.map(r => `<tr data-href="#perfil-${esc(r.barber.id)}" tabindex="0"><td><a class="td-who" href="#perfil-${esc(r.barber.id)}">${avatar(r.barber, 36)}<span>${esc(r.barber.name)}</span></a></td>
-            ${cols.map(c => `<td>${c[1](r)}</td>`).join('')}<td class="td-score">${score(r.overall)}</td></tr>`).join('')}
-        </tbody></table></div>
-      </section>` : emptyBarbers()}
-      <p class="section-note">Para comparar competências no radar, veja Time e ranking.</p>`;
+${rows.length ? '' : emptyBarbers()}
+      <p class="section-note">O detalhado por profissional, o ranking e o radar estão em Performance da equipe.</p>`;
   }
 
   function pagePerformance(user) {
@@ -1421,7 +1434,7 @@
       </section>
       <section class="section card">
         <h2 class="section-title">Metas mensais da equipe ${tip('goals')}</h2>
-        <p class="section-note">Valem para todos os barbeiros. Para ajustar a meta de alguém, abra o barbeiro em Time e ranking, em "Metas individuais". Percentuais em %, valores em R$.</p>
+        <p class="section-note">Valem para todos os barbeiros. Para ajustar a meta de alguém, abra o barbeiro em Lançamentos, em "Metas individuais". Percentuais em %, valores em R$.</p>
         <form class="form" data-form="goals" novalidate>
           <div class="grid-2">${GB.visibleInds(state).map(i => `<label class="field"><span>${esc(i.label)} ${tip(i.key)}</span><input class="input num" id="gt-${i.key}" name="${i.key}" type="number" min="0" step="any" value="${GB.goalFor(state, '', i.key)}"></label>`).join('')}</div>
           <p class="form-msg" data-msg></p>
@@ -2572,7 +2585,7 @@ Content-Type: application/json</pre>
     fechamento: { t: 'Fechamento do mês', r: pageFechamento, g: 1, a: 1 },
     organograma: { t: 'Organograma', r: pageOrganograma, g: 1 },
     checklist: { t: 'Checklist Agenda Cheia', r: pageChecklist },
-    time: { t: 'Time e ranking', r: pageTime },
+    time: { t: 'Performance da equipe', r: pageTime },
     performance: { t: 'Minha performance', r: pagePerformance },
     lancamentos: { t: 'Lançamentos', r: pageLancamentos, g: 1, a: 1 },
     barbeiros: { t: 'Barbeiros', r: pageBarbeiros, g: 1 },
@@ -2878,7 +2891,7 @@ Content-Type: application/json</pre>
       const id = route.slice(7);
       page = { r: () => perfFor(id, user) }; title = 'Perfil';
     } else if (PAGES[route]) {
-      page = PAGES[route]; title = route === 'performance' && (isGestor(user) || hasGrants(user)) ? (isGestor(user) ? 'Performance da empresa' : 'Performance da equipe') : page.t;
+      page = PAGES[route]; title = route === 'performance' && (isGestor(user) || hasGrants(user)) ? (isGestor(user) ? 'Performance da empresa' : 'Performance da área') : page.t;
     } else if (SOON_TEXT[route]) {
       page = { r: () => pageSoon(route) }; title = NAV.flatMap(g => g.items).find(i => i.r === route).t;
     } else { route = 'inicio'; page = PAGES.inicio; title = page.t; }
