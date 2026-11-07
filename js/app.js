@@ -484,7 +484,7 @@
               <hr class="pd-line">
               ${place === 1 ? middle : ''}
               <div class="pd-pts">${score(row.overall)}<small>pts</small></div>
-              ${seeNum(b.id) ? `<div class="pd-money"><span class="pd-coin">$</span>${money0(row.sums.fat)}</div>` : ''}
+              <div class="pd-money"><span class="pd-coin">$</span>${money0(row.sums.fat)}</div>
               ${t ? '' : `<div class="pd-leads" title="1º lugar em ${row.leads.length} de ${R.N} indicadores">${barsSvg}<span>${leadsTxt}</span></div>`}
             </div></div>
             <div class="pd-badge"><span>${ord(place)}<small>LUGAR</small></span></div>
@@ -508,6 +508,7 @@
 
 
   function prevPositions() {
+    if (darkFor(range(ui.offset - 1))) return {};
     const P = computeRanking(state, range(ui.offset - 1));
     const hasData = P.active.length > 0;
     return hasData ? Object.fromEntries(P.rows.map(r => [r.barber.id, r.pos])) : {};
@@ -535,7 +536,7 @@
       return `<li><a class="rank-row ${zone}" data-id="${esc(r.barber.id)}" data-pos="${r.pos}" href="#perfil-${esc(r.barber.id)}">
         <span class="rank-pos num">${ord(r.pos)}</span>
         ${avatar(r.barber, 46)}
-        <span class="rank-who"><b><span class="rank-name">${esc(r.barber.name)}</span>${seeNum(r.barber.id) ? `<span class="rank-money num">${money0(r.sums.fat)}</span>` : ''}</b>${sub.replace('</small>', nowChip + '</small>')}</span>
+        <span class="rank-who"><b><span class="rank-name">${esc(r.barber.name)}</span><span class="rank-money num">${money0(r.sums.fat)}</span></b>${sub.replace('</small>', nowChip + '</small>')}</span>
         <span class="rank-score num">${score(r.overall)}</span>
         ${trend}
       </a></li>`;
@@ -552,7 +553,7 @@
       return `<div class="card card-glow hl">
         <div class="hl-head">${icon('trophy')}<span>Melhor em ${esc(ind.label)} · ${ind.weight} pts</span></div>
         <div class="hl-who"><span class="avatar-stack">${leaders.slice(0, 3).map(b => avatar(b, 44)).join('')}</span><span>${leaders.map(b => esc(b.name)).join(' + ')}</span></div>
-        ${leaders.some(b => seeNum(b.id)) ? `<div class="hl-val num">${fmt(ind, row.values[ind.key])}</div>` : ''}
+        <div class="hl-val num">${fmt(ind, row.values[ind.key])}</div>
         ${leaders.length > 1 ? '<span><span class="chip chip-tie">Empate na liderança</span></span>' : ''}
       </div>`;
     }).join('')}</div>`;
@@ -615,11 +616,92 @@
     return periodRange('mes', 0, fromIso(r.end > iso(new Date()) ? iso(new Date()) : r.end));
   }
 
+  // ---------- Pódio surpresa ----------
+  // Nos últimos dias do mês, a equipe não vê colocações nem pontuações. O gestor revela no Fechamento do mês.
+  function revealCfg() {
+    const r = state.reveal || {};
+    return { on: !!r.on, days: Math.min(5, Math.max(1, Number(r.days) || 2)), since: r.since || '', done: r.done || {} };
+  }
+  function suspenseWin(ym, days) {
+    const end = monthRange(ym).end, d = fromIso(end);
+    return { ym, start: iso(new Date(d.getFullYear(), d.getMonth(), d.getDate() - days + 1)), end };
+  }
+  // Meses em segredo agora: o atual (nos últimos dias) e o anterior, enquanto o gestor não revelar.
+  function suspenseWins() {
+    const c = revealCfg();
+    if (!c.on) return [];
+    const today = iso(new Date()), ym = today.slice(0, 7), prev = addMonths(ym, -1), out = [];
+    if (!c.done[prev] && c.since && prev >= c.since) out.push(suspenseWin(prev, c.days));
+    const w = suspenseWin(ym, c.days);
+    if (!c.done[ym] && today >= w.start) out.push(w);
+    return out;
+  }
+  const inSuspense = rg => (rg && suspenseWins().find(w => rg.start <= w.end && rg.end >= w.start)) || null;
+  // O gestor vê tudo, menos na Tela da loja (que fica à vista da equipe).
+  const darkFor = (rg, tv) => (tv || !isGestor(currentUser()) ? inSuspense(rg) : null);
+  function suspenseLeft(w) {
+    const ms = fromIso(w.end).getTime() + 86400000 - Date.now();
+    if (ms <= 0) return '';
+    const d = Math.floor(ms / 86400000), h = Math.floor((ms % 86400000) / 3600000), m = Math.floor((ms % 3600000) / 60000);
+    if (d > 0) return `${d} dia${d > 1 ? 's' : ''} e ${h} h`;
+    return h > 0 ? `${h} h e ${m} min` : `${Math.max(1, m)} min`;
+  }
+  function suspenseCard(w, tv) {
+    const left = suspenseLeft(w), month = esc(ymLabel(w.ym).replace(' de ', '/'));
+    return `<section class="card sus-card ${tv ? 'sus-tv' : ''}">
+      <div class="sus-podium" aria-hidden="true"><span class="s2">?</span><span class="s1">${icon('crown')}<b>?</b></span><span class="s3">?</span></div>
+      <p class="sus-kicker">Pódio surpresa · ${month}</p>
+      <h2>${left ? 'O pódio está guardado' : 'O pódio será revelado no fechamento'}</h2>
+      <p>${left ? 'Na reta final do mês, as colocações e as pontuações ficam em segredo. A revelação acontece no fechamento do mês, com toda a equipe.' : 'O mês acabou. As colocações aparecem quando o gestor fizer o fechamento com a equipe.'}</p>
+      ${left ? `<p class="sus-count"><b class="num" data-sus-end="${w.end}">${left}</b><small>para o fim do mês</small></p>` : ''}
+    </section>`;
+  }
+  // Os próprios números do barbeiro durante o segredo (sem posição nem pontuação).
+  function ownNumbers(R, bid, ym) {
+    const row = bid && R.rows.find(r => r.barber.id === bid);
+    if (!row) return '';
+    const cards = GB.visibleInds(state).map(ind => {
+      const v = row.values[ind.key];
+      const goal = ym ? GB.goalFor(state, bid, ind.key) : 0;
+      const pct = goal > 0 && v != null ? (v / goal) * 100 : null;
+      return `<div class="card ind ${pct != null && pct >= 100 ? 'card-glow' : ''}">
+        <div class="ind-top"><span>${esc(ind.label)}</span>${goal > 0 ? `<span class="chip chip-soft">Meta ${fmtGoal(ind, goal)}</span>` : ''}</div>
+        <div class="ind-val num">${fmt(ind, v)}${ind.key === 'check' && v != null ? ' pts' : ''}</div>
+        ${pct != null ? `<div class="bar"><i style="width:${Math.max(2, Math.min(100, pct))}%"></i></div><div class="ind-foot"><span class="num">${nf0.format(pct)}% da meta</span></div>` : ''}
+      </div>`;
+    }).join('');
+    return `<section class="section"><h2 class="section-title">Seus números ${ym ? 'no mês' : 'no período'}</h2>
+      <p class="section-note">Só você vê estes números agora. Ainda dá tempo de subir: cada atendimento conta.</p>
+      <div class="ind-grid">${cards}</div></section>`;
+  }
+  // Aviso para o gestor: a equipe não está vendo o pódio.
+  function suspenseNote() {
+    const ws = suspenseWins();
+    if (!ws.length) return '';
+    const w = ws[0], over = !suspenseLeft(w), month = esc(ymLabel(w.ym).replace(' de ', '/'));
+    return `<div class="card sus-note"><p>${icon('crown')}<span><b>Pódio surpresa ativo (${month}).</b> A equipe e a Tela da loja não mostram colocações nem pontuações. ${over ? 'O mês acabou: faça o fechamento para revelar.' : 'Você continua vendo tudo.'}</span></p>
+      ${over ? `<button class="btn btn-primary btn-sm" data-action="goFechamento" data-ym="${w.ym}">${icon('clipboard')} Ir ao fechamento</button>` : ''}</div>`;
+  }
+  function markRevealed(ym) {
+    const c = revealCfg();
+    const done = { ...c.done, [ym]: Date.now() };
+    const keep = Object.keys(done).sort().slice(-12);
+    state.reveal = { on: c.on, days: c.days, since: c.since, done: Object.fromEntries(keep.map(k => [k, done[k]])) };
+    save();
+  }
+  // Atualiza a contagem regressiva na tela.
+  setInterval(() => {
+    document.querySelectorAll('[data-sus-end]').forEach(el => { const t = suspenseLeft({ end: el.dataset.susEnd }); if (t) el.textContent = t; else render(); });
+  }, 30000);
+
   function pageInicio(user) {
     const R = computeRanking(state, range());
+    const w = darkFor(range());
+    if (w) return `${periodBar()}${suspenseCard(w)}${ownNumbers(R, user.barberId, ui.period === 'mes' ? range().start.slice(0, 7) : null)}${howLink()}`;
     liveDetect(R);
     return `
       ${periodBar()}
+      ${isGestor(user) ? suspenseNote() : ''}
       ${monthOnlyData(R) ? `<div class="card week-note"><p>${icon('help')}<span>Os resultados lançados à mão são <b>totais do mês</b>, por isso não aparecem na visão por semana. A Semana mostra só resultados diários (da integração ou do checklist).</span></p>
         <button class="btn btn-primary btn-sm" data-action="period" data-period="mes">Ver o mês</button></div>` : ''}
       <div class="home-cols">
@@ -658,6 +740,7 @@
     const months = [];
     let sum = 0, n = 0;
     for (const k of monthsUntil(ym)) {
+      if (darkFor(monthRange(k))) continue;
       const R = monthR(k);
       const row = R.rows.find(r => r.barber.id === barberId);
       if (!hasData(row) || !R.active.length) continue;
@@ -672,6 +755,7 @@
   function careerByInd(barberId, ym) {
     const acc = {};
     for (const k of monthsUntil(ym)) {
+      if (darkFor(monthRange(k))) continue;
       const R = monthR(k);
       const row = R.rows.find(r => r.barber.id === barberId);
       if (!hasData(row)) continue;
@@ -750,7 +834,7 @@
         ${avatar(r.barber, 60)}
         <div class="cc-body">
           <b class="cc-name">${esc(r.barber.name)} ${titleChip(R, r.barber.id)}</b>
-          <span class="muted num">${r.leads.length} de ${R.N} em 1º${seeNum(r.barber.id) ? ' · ' + money0(r.sums.fat) : ''}</span>
+          <span class="muted num">${r.leads.length} de ${R.N} em 1º${' · ' + money0(r.sums.fat)}</span>
           <div class="cc-meta"><span class="lv ${lv.cls}">${lv.name}</span>${delta}<span class="muted num">carreira ${nf1.format(c.value)}</span></div>
           <div class="cc-chips">${R.active.map(i => `<span class="rk-chip ${i.leaders.includes(r.barber.id) ? 'lead' : ''}">${esc(i.label)}: <b class="num">${ord(r.ranks[i.key])}</b></span>`).join('')}</div>
         </div>
@@ -967,6 +1051,8 @@
     const ym = ui.teamMonth || curYm();
     if (!isGestor(user) && user.barberId && !seeNum(ui.teamBarber)) ui.teamBarber = user.barberId;
     if (!barberById(ui.teamBarber)) ui.teamBarber = monthR(ym).rows[0]?.barber.id;
+    const w = darkFor(monthRange(ym));
+    if (w) return `${monthPicker(ym, user)}${suspenseCard(w)}${ownNumbers(monthR(ym), user.barberId, ym)}`;
     return `${monthPicker(ym, user)}
       <div id="tm-top" class="tm-block">${teamTop(ym)}</div>
       <div id="tm-insights" class="tm-block">${ui.teamBarber ? teamInsights(ui.teamBarber, ym) : ''}</div>
@@ -1042,10 +1128,12 @@
   }
 
   function perfFor(barberId, user) {
-    if (!seeNum(barberId)) return `<div class="card empty">${icon('lock')}<h2>Números reservados</h2><p>Você vê o ranking e a pontuação de todos, e os números detalhados só seus.</p><a class="btn" href="#performance">Ver minha performance</a></div>`;
+    if (!seeNum(barberId)) return `<div class="card empty">${icon('lock')}<h2>Números reservados</h2><p>Você vê o ranking com os números de todos, e a performance detalhada só a sua.</p><a class="btn" href="#performance">Ver minha performance</a></div>`;
     const b = barberById(barberId);
     if (!b) return `<div class="card empty">${icon('users')}<h2>Barbeiro não encontrado</h2><p>Ele pode ter sido removido da equipe.</p></div>`;
     const R = computeRanking(state, range());
+    const dk = isGestor(user) ? null : darkFor(range());
+    if (dk) return `${periodNav()}${suspenseCard(dk)}${ownNumbers(R, b.id, ui.period === 'mes' ? range().start.slice(0, 7) : null)}`;
     // Compara com o mesmo número de dias do período anterior, para não punir o período em andamento.
     const cur = range(), prevR = range(ui.offset - 1);
     if (ui.offset === 0) {
@@ -1107,6 +1195,9 @@
   function pagePerfCasa(scope) {
     const ym = ui.teamMonth || curYm();
     const R = monthR(ym);
+    const dk = darkFor(monthRange(ym));
+    if (dk) return `<div class="card tm-month"><label class="field"><span class="tm-eyebrow">Mês</span>
+        <select class="input" id="pc-month" data-change="teamMonth">${monthOptions(ym)}</select></label></div>${suspenseCard(dk)}${ownNumbers(R, (currentUser() || {}).barberId, ym)}`;
     const vis = k => GB.visibleInds(state).some(i => i.key === k);
     const rows = [...R.rows].filter(r => !scope || scope.has(r.barber.id)).sort((a, b) => b.sums.fat - a.sums.fat);
     const has = rows.some(r => Object.keys(r.sums.n).length);
@@ -1217,7 +1308,7 @@
   }
 
   function pageConfig(part) {
-    const w = state.weights;
+    const w = state.weights, rv = revealCfg();
     const hidden = state.hidden || [];
     const total = INDICATORS.filter(i => !hidden.includes(i.key)).reduce((a, i) => a + Number(w[i.key] ?? i.weight), 0);
     if (part === 'dados') return `
@@ -1250,6 +1341,17 @@
           <p class="form-msg" data-msg></p>
           <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar metas</button>
           <button class="btn" type="button" data-action="defaultGoals">Voltar às metas padrão</button></div>
+        </form>
+      </section>
+      <section class="section card">
+        <h2 class="section-title">Pódio surpresa</h2>
+        <p class="section-note">Nos últimos dias do mês, os barbeiros deixam de ver as colocações, as pontuações e os números dos colegas; cada um continua vendo os próprios números. A Tela da loja mostra uma contagem regressiva. Você revela o pódio no Fechamento do mês, do 3º ao 1º lugar.</p>
+        <form class="form" data-form="reveal" novalidate>
+          <label class="ind-on"><input type="checkbox" id="rv-on" name="rv-on" ${rv.on ? 'checked' : ''}> Ligar o pódio surpresa</label>
+          <label class="field"><span>Quantos dias antes do fim do mês</span><select class="input" id="rv-days" name="rv-days">
+            ${[1, 2, 3, 4, 5].map(d => `<option value="${d}" ${rv.days === d ? 'selected' : ''}>${d} dia${d > 1 ? 's' : ''}</option>`).join('')}</select></label>
+          <p class="form-msg" data-msg></p>
+          <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar pódio surpresa</button></div>
         </form>
       </section>`;
   }
@@ -1356,11 +1458,21 @@ Content-Type: application/json</pre>
     const amNote = isGestor(currentUser()) ? '' : '<p class="section-note">O fechamento mostra só as pessoas da sua área.</p>';
     const ym = ui.teamMonth || curYm();
     const R = scopedR(ym);
+    const own = isGestor(currentUser());
+    const dk = own ? null : darkFor(monthRange(ym));
+    if (dk) return `<section class="card fc-head">${amNote}<div class="fc-controls">
+        <label class="field"><span>Mês do fechamento</span><select class="input" id="fc-month" data-change="teamMonth">${monthOptions(ym)}</select></label></div></section>${suspenseCard(dk)}`;
+    // Pódio surpresa: o resumo não entrega o resultado antes da revelação.
+    const secret = own ? inSuspense(monthRange(ym)) : null;
     const top = R.rows.slice(0, 3);
     const total = R.rows.reduce((a, r) => a + r.sums.fat, 0);
     const t = R.title.type ? R.rows.find(r => r.barber.id === R.title.barberId) : null;
+    const ended = iso(new Date()) > monthRange(ym).end;
+    const secretNote = secret ? `<div class="sus-note sus-in"><p>${icon('crown')}<span><b>Pódio surpresa.</b> A equipe ainda não viu as colocações de ${esc(ymLabel(ym).replace(' de ', '/'))}. ${ended ? 'Na apresentação, cada lugar do pódio só aparece quando você tocar em Revelar. Ao revelar o 1º lugar, o pódio é liberado no app de todos.' : 'O mês ainda não acabou: a apresentação agora é só uma prévia e não libera o pódio.'}</span></p>
+        <button class="btn btn-sm ${ui.confirm === 'reveal' ? 'btn-danger' : ''}" data-action="revealNow" data-ym="${ym}">${ui.confirm === 'reveal' ? 'Confirmar: liberar sem apresentação' : 'Liberar o pódio sem apresentação'}</button></div>` : '';
     return `<section class="card fc-head">
         ${amNote}
+        ${secretNote}
         <div class="fc-brand">${logo('fc-logo')}<div><h2>Fechamento do mês</h2><p>Cada atendimento conta.</p></div></div>
         <div class="fc-controls">
           <label class="field"><span>Mês do fechamento</span><select class="input" id="fc-month" data-change="teamMonth">${monthOptions(ym)}</select></label>
@@ -1374,10 +1486,10 @@ Content-Type: application/json</pre>
           <div class="stat"><span>Faturamento da equipe</span><b class="num">${money0(total)}</b></div>
           <div class="stat"><span>Barbeiros</span><b class="num">${R.rows.length}</b></div>
           <div class="stat"><span>Indicadores</span><b class="num">${R.N}</b></div>
-          <div class="stat"><span>Título</span><b>${t ? (R.title.type === 'mvp' ? 'MVP' : 'Destaque') + ' · ' + esc(first(t.barber.name)) : 'Nenhum'}</b></div>
+          <div class="stat"><span>Título</span><b>${secret ? 'Surpresa' : t ? (R.title.type === 'mvp' ? 'MVP' : 'Destaque') + ' · ' + esc(first(t.barber.name)) : 'Nenhum'}</b></div>
         </div>
-        <ol class="fc-top">${top.map(r => `<li>${avatar(r.barber, 40)}<span><b>${ord(r.pos)} ${esc(r.barber.name)}</b><small class="muted num">${score(r.overall)} pts · ${r.leads.length}/${R.N} lideradas</small></span></li>`).join('')}</ol>
-        <p class="section-note">A apresentação mostra cada barbeiro do último ao 4º colocado, depois revela o pódio com suspense. Use em tela cheia na TV da loja.</p>
+        ${secret ? '<p class="section-note">O pódio fica escondido aqui para não estragar a surpresa caso a tela esteja à vista da equipe.</p>' : `<ol class="fc-top">${top.map(r => `<li>${avatar(r.barber, 40)}<span><b>${ord(r.pos)} ${esc(r.barber.name)}</b><small class="muted num">${score(r.overall)} pts · ${r.leads.length}/${R.N} lideradas</small></span></li>`).join('')}</ol>`}
+        <p class="section-note">A apresentação mostra cada barbeiro do último ao 4º colocado. Depois vem o pódio: cada lugar, do 3º ao 1º, só aparece quando você tocar em Revelar. Use em tela cheia na TV da loja.</p>
       </section>` : ''}`;
   }
 
@@ -1455,7 +1567,8 @@ Content-Type: application/json</pre>
           <div class="fx-inds">${R.active.map((ind, k) => `<div class="fx-ind ${ind.leaders.includes(r.barber.id) ? 'lead' : ''}" style="--d:${0.5 + k * 0.09}s">
             <small>${esc(ind.label)}</small><b class="num">${fmt(ind, r.values[ind.key])}${ind.key === 'check' ? ' pts' : ''}</b><span class="num">${ord(r.ranks[ind.key])} de ${n}</span><div class="fx-bar"><i style="--w:${Math.max(3, r.scores[ind.key])}%"></i></div></div>`).join('')}</div>
         </div>
-        ${place ? `<div class="fx-suspense"><p>E o pódio é de…</p><span class="fx-drum"><i></i><i></i><i></i></span></div>` : ''}
+        ${place ? `<div class="fx-suspense"><span class="fx-q" aria-hidden="true">?</span><p>${place === 1 ? 'E o 1º lugar é de…' : `O ${place}º lugar é de…`}</p><span class="fx-drum"><i></i><i></i><i></i></span>
+          <button class="fx-reveal-btn" data-fx="next">${icon('crown')} Revelar o ${place}º lugar</button></div>` : ''}
         ${place === 1 ? `<div class="fx-confetti">${fxConfetti(80)}</div>` : ''}
       </article></div>`;
   }
@@ -1501,8 +1614,7 @@ Content-Type: application/json</pre>
     clearTimeout(fx.timer);
     const slide = stage.firstElementChild;
     if (slide.classList.contains('is-suspense')) {
-      Sound.play('rufar');
-      fx.timer = setTimeout(() => fxReveal(slide, sl.place), 2800);
+      // Espera o gestor tocar em Revelar.
     } else {
       fxCount(slide);
       if (sl.k === 'podium') Sound.play('sino');
@@ -1511,15 +1623,29 @@ Content-Type: application/json</pre>
   }
   function fxReveal(slide, place) {
     if (!slide || !slide.classList.contains('is-suspense')) return;
-    slide.classList.remove('is-suspense'); slide.classList.add('is-revealed');
+    slide.classList.remove('is-suspense', 'is-drum'); slide.classList.add('is-revealed');
     Sound.play(place === 1 ? 'fanfarra' : 'moeda');
     if (place === 1) setTimeout(() => Sound.play('aplausos'), 900);
     fxCount(slide);
+    // Revelou o 1º lugar de um mês encerrado: libera o pódio no app de todos.
+    const fx = ui.fx;
+    if (place === 1 && fx && isGestor(currentUser()) && inSuspense(monthRange(fx.ym)) && iso(new Date()) > monthRange(fx.ym).end) {
+      markRevealed(fx.ym);
+      setTimeout(() => toast('Pódio liberado: a equipe já vê as colocações no app.'), 1500);
+    }
+  }
+  // 1º toque: rufar de tambores. Depois de alguns segundos (ou no 2º toque), revela.
+  function fxDrum(slide) {
+    const fx = ui.fx;
+    if (slide.classList.contains('is-drum')) { clearTimeout(fx.timer); fxReveal(slide, Number(slide.dataset.place)); return; }
+    slide.classList.add('is-drum');
+    Sound.play('rufar');
+    fx.timer = setTimeout(() => fxReveal(slide, Number(slide.dataset.place)), 2600);
   }
   function fxGo(d) {
     const fx = ui.fx; if (!fx) return;
     const slide = document.querySelector('#fx .fx-slide');
-    if (d > 0 && slide && slide.classList.contains('is-suspense')) { clearTimeout(fx.timer); fxReveal(slide, Number(slide.dataset.place)); return; }
+    if (d > 0 && slide && slide.classList.contains('is-suspense')) { fxDrum(slide); return; }
     const ni = fx.i + d;
     if (ni < 0 || ni >= fx.total) return;
     fx.i = ni; fx.dir = d; fxRender();
@@ -1903,7 +2029,7 @@ Content-Type: application/json</pre>
       </section>
       <section class="section card">
         <h2 class="section-title">3. Quem vê o quê</h2>
-        <p class="section-note">Quem não tiver acesso definido vê o ranking da equipe e apenas os próprios números. <b>Gestor</b> vê e lança os resultados de quem está na área; <b>Membro</b> só vê. Uma pessoa pode ter mais de uma área.</p>
+        <p class="section-note">No ranking, todos veem os números de todos. Quem não tiver acesso definido vê a performance detalhada só dos próprios números. <b>Gestor</b> vê e lança os resultados de quem está na área; <b>Membro</b> só vê. Uma pessoa pode ter mais de uma área.</p>
         <ul class="list">${o.grants.map(g => { const u = state.users.find(x => x.id === g.userId); return `<li class="list-row"><div class="grow"><b>${esc(u ? u.name : '?')}</b> <span class="muted">· ${g.role === 'gestor' ? 'Gestor' : 'Membro'} · ${esc(grantArea(g))}</span></div>
           <button class="icon-btn" data-action="orgGrantDel" data-id="${esc(g.id)}" aria-label="Remover acesso">${icon('trash')}</button></li>`; }).join('') || '<li class="muted">Ninguém com acesso extra ainda.</li>'}</ul>
         ${people.length ? `<form class="form" data-form="orgGrant" novalidate>
@@ -2479,7 +2605,7 @@ Content-Type: application/json</pre>
         <span class="gd-label">${esc(ind.label)}</span>
         <div class="gd-photos"><span class="gd-crown">${crownSvg('tier-gold')}</span>${leaders.slice(0, 3).map(b => `<span class="gd-photo">${pdPhoto(b).replace('pd-photo', 'gd-ring')}</span>`).join('')}</div>
         <b class="gd-name">${names}</b>
-        ${leaders.some(b => seeNum(b.id)) ? `<span class="gd-val num">${fmt(ind, row.values[ind.key])}${ind.key === 'check' ? ' pts' : ''}</span>` : ''}
+        <span class="gd-val num">${fmt(ind, row.values[ind.key])}${ind.key === 'check' ? ' pts' : ''}</span>
         ${leaders.length > 1 ? '<span class="chip chip-destaque">Empate na liderança</span>' : ''}
       </div>`;
     }).join('');
@@ -2491,7 +2617,6 @@ Content-Type: application/json</pre>
   function tvAlerts(R) {
     const n = R.rows.length;
     const cards = R.rows.map((r, i) => {
-      if (!seeNum(r.barber.id)) return '';
       const zone = r.pos === 1 ? 'leader' : r.pos <= 3 ? 'chase' : (r.pos > Math.ceil(n / 2) + 1 ? 'low' : 'middle');
       const [line, sub] = pickLine(zone, r.barber.id);
       let gap;
@@ -2534,8 +2659,9 @@ Content-Type: application/json</pre>
     if (!Cloud.enabled) state = DB.load();
     const tr = tvRange();
     const R = computeRanking(state, tr);
-    liveDetect(R);
-    const slides = [tvRanking, tvGuardians, tvAlerts];
+    const dk = darkFor(tr, true);
+    if (!dk) liveDetect(R);
+    const slides = dk ? [() => suspenseCard(dk, true)] : [tvRanking, tvGuardians, tvAlerts];
     const i = ((ui.tvIndex % slides.length) + slides.length) % slides.length;
     const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
     root.innerHTML = `<div class="tv">
@@ -2842,7 +2968,7 @@ Content-Type: application/json</pre>
     teamPick(el) {
       ui.teamBarber = el.dataset.id;
       const u = currentUser();
-      if (!isGestor(u) && !seeNum(el.dataset.id)) { ui.teamBarber = u.barberId; toast('Você vê o ranking de todos e os números só seus.'); return; }
+      if (!isGestor(u) && !seeNum(el.dataset.id)) { ui.teamBarber = u.barberId; toast('No ranking você vê todos. A performance detalhada é só a sua.'); return; }
       if (!$('#tm-editor')) { refreshTeam(); $('#tm-insights')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
       const ed = $('#tm-editor');
       if (ed) { ed.innerHTML = teamEditor(ui.teamMonth || curYm()); refreshTeam(); ed.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
@@ -2853,6 +2979,12 @@ Content-Type: application/json</pre>
       if (sel.includes(id)) { if (sel.length > 1) sel = sel.filter(x => x !== id); }
       else { sel = [...sel, id]; if (sel.length > 4) sel = sel.slice(1); }
       ui.radarSel = sel; const rd = $('#tm-radar'); if (rd) rd.innerHTML = teamRadars(ui.teamMonth || curYm(), rd.dataset.only === '1');
+    },
+    goFechamento(el) { ui.teamMonth = el.dataset.ym; location.hash = 'fechamento'; },
+    revealNow(el) {
+      if (!isGestor(currentUser())) return;
+      if (ui.confirm !== 'reveal') { ui.confirm = 'reveal'; render(); return; }
+      ui.confirm = null; markRevealed(el.dataset.ym); toast('Pódio liberado: a equipe já vê as colocações no app.'); render();
     },
     defaultGoals() { state.goals = { ...(state.goals || {}), team: { ...GB.DEFAULT_GOALS } }; save(); toast('Metas padrão restauradas.'); render(); },
     defaultWeights() { state.weights = Object.fromEntries(INDICATORS.map(i => [i.key, i.weight])); save(); toast('Pesos padrão restaurados.'); render(); },
@@ -3059,6 +3191,13 @@ Content-Type: application/json</pre>
       if (INDICATORS.length - hidden.length < 2) return setMsg(f, 'Deixe pelo menos 2 indicadores ativos.');
       state.weights = w; state.hidden = hidden; save(); toast('Indicadores salvos.'); render();
     },
+    reveal(f) {
+      const c = revealCfg();
+      const on = f.elements['rv-on'].checked, days = Math.min(5, Math.max(1, Number(val(f, 'rv-days')) || 2));
+      // Ao ligar, só vale dali para a frente (não esconde o mês passado).
+      state.reveal = { on, days, since: on ? (c.on && c.since ? c.since : curYm()) : '', done: c.done };
+      save(); toast(on ? `Pódio surpresa ligado: ${days} dia${days > 1 ? 's' : ''} antes do fim do mês.` : 'Pódio surpresa desligado.'); render();
+    },
     goals(f) {
       const g = { ...(state.goals?.team || {}) };
       for (const i of GB.visibleInds(state)) {
@@ -3241,7 +3380,11 @@ Content-Type: application/json</pre>
     }, 600000);
     Cloud.onRemote = next => {
       const apply = () => {
+        const was = new Set(suspenseWins().map(w => w.ym));
         state = next; rkCache = {};
+        const now = new Set(suspenseWins().map(w => w.ym));
+        const opened = [...was].find(ym => !now.has(ym) && revealCfg().done[ym]);
+        if (opened && !isGestor(currentUser())) setTimeout(() => toast(`O pódio de ${ymLabel(opened).replace(' de ', '/')} foi revelado!`), 300);
         if (ui.fx) return;
         if (location.hash === '#apresentacao') renderTV();
         else if (['#time', '#lancamentos'].includes(location.hash)) refreshTeam();
