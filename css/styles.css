@@ -683,7 +683,7 @@ textarea.input.pop-ta { min-height: 72px; font-family: var(--font-body); font-si
 .org-people { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; display: grid; gap: 8px; margin: 0; }
 .org-people legend { padding: 0 6px; font-weight: 600; }
 
-/* ---------- Performance da equipe ---------- */
+/* ---------- Performance da empresa ---------- */
 .pc-empty { padding: 16px 18px; border: 1.5px dashed var(--line); border-radius: var(--radius); color: #d8d3c8; }
 .pc-totals { grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); }
 .pc-stat { display: grid; gap: 4px; padding: 14px 18px; border-radius: 18px; background: var(--surface-2); }
