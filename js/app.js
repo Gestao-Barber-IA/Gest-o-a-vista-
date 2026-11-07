@@ -43,6 +43,37 @@
     }
   }
   const score = v => nf1.format(v);
+
+  // ---------- Ajuda "?": explicação de regras e indicadores (mouse no computador, toque no celular) ----------
+  const ocupTipText = () => { const c = GB.ocupCfgOf(state), h = GB.hoursPerDay(c); return `Horas em comandas finalizadas ÷ horas da agenda no período. Hoje, 100% = ${nf1.format(h)} h por dia (${c.open} às ${c.close}, menos ${c.lunch} min de almoço) × ${c.days} dias = ${nf0.format(h * c.days)} h no mês. As ausências do barbeiro (férias, atestado) descontam da capacidade. Atendimentos antes da abertura, depois do fechamento ou no almoço compensam horários vagos; quem passa da capacidade fica acima de 100%. No mês em andamento, a capacidade cresce dia a dia.`; };
+  const TIPS = {
+    fat: ['Faturamento', 'Soma do valor dos atendimentos do barbeiro no período. Quanto maior, melhor.'],
+    check: ['Checklist Agenda Cheia', 'Pontos das ações do checklist (stories, posts, abordagens, convites…). Cada ação só pontua depois que a prova (foto ou print) é aprovada pela gestão. As fotos são apagadas em 7 dias; os pontos continuam.'],
+    ocup: ['Taxa de ocupação', ocupTipText],
+    ticket: ['Ticket médio', 'Faturamento ÷ clientes atendidos. Mostra quanto cada cliente gasta, em média, com o barbeiro.'],
+    serv: ['Serviços realizados', 'Quantidade de serviços feitos no período (corte, barba, sobrancelha…). Um cliente pode fazer mais de um serviço.'],
+    cli: ['Clientes atendidos', 'Quantidade de clientes atendidos pelo barbeiro no período.'],
+    planos: ['Planos mensais', 'Quantidade de planos mensais (assinaturas) vendidos pelo barbeiro no período.'],
+    fid: ['Taxa de fidelização', 'Clientes que voltaram ÷ clientes atendidos no período.'],
+    prod: ['Venda de produtos', 'Valor vendido em produtos (pomadas, shampoos, óleos…) pelo barbeiro no período.'],
+    agend: ['Agendamentos', 'Quantidade de agendamentos do barbeiro no mês. Aparece nos totais da Performance; não entra na pontuação.'],
+    aus: ['Dias de ausência', 'Dias em que o barbeiro não trabalhou por férias, atestado ou folga extra. Cada dia desconta um dia da capacidade da taxa de ocupação.'],
+    score: ['Como a pontuação funciona', 'Em cada indicador, o 1º do período recebe nota 100, o último 0 e os outros ficam no meio, proporcional ao resultado. A pontuação geral é a média dessas notas, ponderada pelos pesos. Quem tem título (MVP ou Destaque) fica em 1º; os demais seguem pela pontuação.'],
+    title: ['MVP e Destaque', 'Destaque: 1º lugar em pelo menos metade dos indicadores com dados (arredonda para cima; com 8, são 4). MVP: um a mais que a metade (5 de 8). Nunca há os dois ao mesmo tempo. Empate no 1º lugar conta para todos os empatados.'],
+    live: ['Ranking em tempo real', 'Atualiza assim que entram lançamentos ou dados da integração. As setas mostram quantas posições cada um subiu ou desceu em relação ao período anterior.'],
+    leaders: ['Destaques por indicador', 'Quem está em 1º em cada indicador. O número ao lado do nome do indicador é o peso dele na pontuação. Empates aparecem juntos.'],
+    career: ['Classificação e níveis', 'A carreira é a média das pontuações de todos os meses com dados. Níveis: Bronze até 69, Prata a partir de 70, Ouro a partir de 85 e Diamante a partir de 95.'],
+    weights: ['Pesos', 'O peso define quanto cada indicador vale na pontuação geral. Indicador desativado some do app inteiro e os dados dele ficam guardados para quando for reativado.'],
+    goals: ['Metas mensais', 'Referência de cada indicador para a equipe. No mês em andamento, metas de soma (faturamento, serviços, clientes…) ficam proporcionais aos dias já passados. Metas individuais são ajustadas em Time e ranking.'],
+    reveal: ['Pódio surpresa', 'Nos últimos dias do mês, os barbeiros não veem colocações, pontuações nem números dos colegas; cada um vê os próprios números. A Tela da loja mostra uma contagem regressiva. O gestor revela o pódio no Fechamento do mês, do 3º ao 1º lugar, e a revelação aparece no celular da equipe.'],
+    lanDate: ['Data do lançamento', 'Os campos mostram o total do mês. Ao mudar um total, a diferença é gravada nesta data e já aparece na visão por semana. Diminuir tira do dia escolhido e, se precisar, dos anteriores.'],
+    access: ['Quem vê o quê', 'No ranking, todos veem os números de todos. A performance detalhada é só a própria, a não ser que a pessoa tenha acesso a uma área: Gestor vê e lança os resultados da área; Membro só vê.'],
+    api: ['Integração por API', 'Outro sistema envia os resultados de cada barbeiro por dia. Os campos vindos da API ficam com cadeado em Lançamentos; só o dono destrava para um ajuste manual.'],
+    proof: ['Provas do checklist', 'Cada ação precisa de uma foto ou print como prova. A gestão confere e aprova ou recusa; só ação aprovada pontua. Ninguém confere a própria prova.'],
+    fechamento: ['Fechamento do mês', 'Apresentação para a equipe: mostra do último colocado ao 4º e depois o pódio, do 3º ao 1º. Cada lugar do pódio só aparece quando o gestor toca em Revelar. O resumo esconde o resultado para não estragar a surpresa se a tela estiver na TV.'],
+  };
+  const tip = key => TIPS[key] ? `<button type="button" class="tip" data-tip="${key}" aria-label="Explicação: ${esc(TIPS[key][0])}">?</button>` : '';
+  const FIELD_TIP = { fat: 'fat', cli: 'cli', serv: 'serv', ticket: 'ticket', ocupPct: 'ocup', fidPct: 'fid', prod: 'prod', check: 'check', planos: 'planos', agend: 'agend', aus: 'aus' };
   const ord = n => n + 'º';
   const dateBR = s => { const d = fromIso(s); return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }); };
 
@@ -552,7 +583,7 @@
       if (!leaders.length) return '';
       const row = R.rows.find(r => r.barber.id === leaders[0].id);
       return `<div class="card card-glow hl">
-        <div class="hl-head">${icon('trophy')}<span>Melhor em ${esc(ind.label)} · ${ind.weight} pts</span></div>
+        <div class="hl-head">${icon('trophy')}<span>Melhor em ${esc(ind.label)} · ${ind.weight} pts</span>${tip(ind.key)}</div>
         <div class="hl-who"><span class="avatar-stack">${leaders.slice(0, 3).map(b => avatar(b, 44)).join('')}</span><span>${leaders.map(b => esc(b.name)).join(' + ')}</span></div>
         <div class="hl-val num">${fmt(ind, row.values[ind.key])}</div>
         ${leaders.length > 1 ? '<span><span class="chip chip-tie">Empate na liderança</span></span>' : ''}
@@ -563,7 +594,7 @@
   function titleCard(R) {
     if (!R.title.type) {
       return `<div class="card title-card is-none">
-        <div class="eyebrow">${icon('trophy')} Título do período</div>
+        <div class="eyebrow">${icon('trophy')} Título do período ${tip('title')}</div>
         <h3>Ninguém conquistou título ainda</h3>
         <p class="muted">${R.N >= 2 ? `Destaque: 1º lugar em pelo menos ${R.half} indicadores. MVP: em ${R.mvpNeed}.` : 'Ainda não há indicadores suficientes com dados.'}</p></div>`;
     }
@@ -571,7 +602,7 @@
     const names = row.leads.map(k => INDICATORS.find(i => i.key === k).label).join(' · ');
     const mvp = R.title.type === 'mvp';
     return `<div class="card title-card ${mvp ? 'is-mvp' : ''}">
-      <div class="eyebrow">${icon(mvp ? 'diamond' : 'bolt')} ${mvp ? 'MVP do período' : 'Destaque do período'}</div>
+      <div class="eyebrow">${icon(mvp ? 'diamond' : 'bolt')} ${mvp ? 'MVP do período' : 'Destaque do período'} ${tip('title')}</div>
       <h3>${esc(row.barber.name)}</h3>
       <p><b>${row.leads.length} de ${R.N} indicadores em 1º lugar</b></p>
       <p class="muted">${esc(names)}</p>
@@ -606,7 +637,7 @@
   function monthOnlyData(R) {
     if (ui.period !== 'semana' || R.active.length) return false;
     const r = range(), months = new Set([r.start.slice(0, 7), r.end.slice(0, 7)]);
-    return (state.monthly || []).some(m => months.has(m.month) && Object.keys(m).some(k => !['barberId', 'month', '_adj'].includes(k) && isNum(m[k])));
+    return (state.monthly || []).some(m => months.has(m.month) && Object.keys(m).some(k => !['barberId', 'month', '_adj', 'aus'].includes(k) && isNum(m[k])));
   }
   // Semana sem dados diários, mas com lançamentos do mês: usa o mês (Tela da loja).
   function tvRange() {
@@ -666,7 +697,7 @@
       const goal = ym ? GB.goalFor(state, bid, ind.key) : 0;
       const pct = goal > 0 && v != null ? (v / goal) * 100 : null;
       return `<div class="card ind ${pct != null && pct >= 100 ? 'card-glow' : ''}">
-        <div class="ind-top"><span>${esc(ind.label)}</span>${goal > 0 ? `<span class="chip chip-soft">Meta ${fmtGoal(ind, goal)}</span>` : ''}</div>
+        <div class="ind-top"><span>${esc(ind.label)} ${tip(ind.key)}</span>${goal > 0 ? `<span class="chip chip-soft">Meta ${fmtGoal(ind, goal)}</span>` : ''}</div>
         <div class="ind-val num">${fmt(ind, v)}${ind.key === 'check' && v != null ? ' pts' : ''}</div>
         ${pct != null ? `<div class="bar"><i style="width:${Math.max(2, Math.min(100, pct))}%"></i></div><div class="ind-foot"><span class="num">${nf0.format(pct)}% da meta</span></div>` : ''}
       </div>`;
@@ -760,8 +791,8 @@
       ${monthOnlyData(R) ? `<div class="card week-note"><p>${icon('help')}<span>Os resultados lançados à mão são <b>totais do mês</b>, por isso não aparecem na visão por semana. A Semana mostra só resultados diários (da integração ou do checklist).</span></p>
         <button class="btn btn-primary btn-sm" data-action="period" data-period="mes">Ver o mês</button></div>` : ''}
       <div class="home-cols">
-        <section class="section"><h2 class="section-title">Pódio do período</h2>${podium(R)}</section>
-        <section class="section"><h2 class="section-title">Ranking em tempo real</h2>${rankingList(R)}${R.N ? '' : '<p class="section-note">Ainda não há resultados lançados neste período.</p>'}</section>
+        <section class="section"><h2 class="section-title">Pódio do período ${tip('score')}</h2>${podium(R)}</section>
+        <section class="section"><h2 class="section-title">Ranking em tempo real ${tip('live')}</h2>${rankingList(R)}${R.N ? '' : '<p class="section-note">Ainda não há resultados lançados neste período.</p>'}</section>
       </div>
       ${R.rows.length ? titleCard(R) : ''}
       ${howLink()}`;
@@ -900,8 +931,8 @@
 
   function teamTop(ym) {
     const R = monthR(ym);
-    return `<section class="section"><h2 class="section-title">Destaques por indicador</h2>${highlights(R)}${titleCard(R)}${inactiveNote(R)}</section>
-      <section class="section"><h2 class="section-title">Classificação geral</h2>
+    return `<section class="section"><h2 class="section-title">Destaques por indicador ${tip('leaders')}</h2>${highlights(R)}${titleCard(R)}${inactiveNote(R)}</section>
+      <section class="section"><h2 class="section-title">Classificação geral ${tip('career')}</h2>
         <p class="section-note">Toque num barbeiro para ver as métricas, a carreira e as metas dele.</p>${classCards(R, ym)}</section>`;
   }
 
@@ -915,12 +946,12 @@
     return GB.MONTH_FIELDS.filter(f => !hidden.includes(GB.FIELD_IND[f.key] || f.key)).map(f => {
       if (f.calc) {
         const t = row && row.sums.cli > 0 ? row.sums.fat / row.sums.cli : null;
-        return `<div class="field"><span class="tm-flabel">${esc(f.label)}<span class="lock">${icon('chart')} Calculado</span></span>
+        return `<div class="field"><span class="tm-flabel"><span class="tm-ft">${esc(f.label)}${tip(FIELD_TIP[f.key])}</span><span class="lock">${icon('chart')} Calculado</span></span>
           <input class="input num" id="m-${f.key}" value="${t == null ? '' : nf2.format(t)}" readonly tabindex="-1" placeholder="Faturamento ÷ clientes"></div>`;
       }
       const fmtV = v => f.key.endsWith('Pct') ? nf2.format(v) + '%' : (f.step === '0.01' ? money2(v) : nf0.format(v));
       if (f.key === 'check' && integ._pop) {
-        return `<div class="field"><span class="tm-flabel">${esc(f.label)}<span class="lock">${icon('lock')} Vindo do checklist</span></span>
+        return `<div class="field"><span class="tm-flabel"><span class="tm-ft">${esc(f.label)}${tip(FIELD_TIP[f.key])}</span><span class="lock">${icon('lock')} Vindo do checklist</span></span>
           <input class="input num" id="m-${f.key}" value="${nf1.format(integ[f.key])}" readonly tabindex="-1"></div>`;
       }
       const fromApi = f.daily && isNum(integ[f.key]);
@@ -928,7 +959,7 @@
       if (fromApi && !isNum(rec[f.key])) {
         // Valor da integração: travado. Só o dono destrava para um ajuste manual.
         const ask = ui.confirm === 'unlock' + b.id + f.key;
-        return `<div class="field"><span class="tm-flabel">${esc(f.label)}${own
+        return `<div class="field"><span class="tm-flabel"><span class="tm-ft">${esc(f.label)}${tip(FIELD_TIP[f.key])}</span>${own
             ? `<button type="button" class="lock lock-btn" data-action="apiUnlock" data-id="${esc(b.id)}" data-k="${f.key}" aria-label="Destravar ${esc(f.label)} para ajuste manual">${icon('lock')} Vindo da integração</button>`
             : `<span class="lock">${icon('lock')} Vindo da integração</span>`}</span>
           <input class="input num" id="m-${f.key}" value="${fmtV(integ[f.key])}" readonly tabindex="-1">
@@ -939,7 +970,7 @@
       if (fromApi && isNum(rec[f.key])) {
         const adj = rec._adj && rec._adj[f.key];
         const meta = `API: ${fmtV(integ[f.key])}${adj ? ` · ajustado por ${esc(adj.by || 'gestão')} em ${new Date(adj.at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}`;
-        return `<div class="field"><label for="m-${f.key}" class="tm-flabel">${esc(f.label)}<span class="lock lock-adj">${icon('edit')} Ajuste manual</span></label>
+        return `<div class="field"><label for="m-${f.key}" class="tm-flabel"><span class="tm-ft">${esc(f.label)}${tip(FIELD_TIP[f.key])}</span><span class="lock lock-adj">${icon('edit')} Ajuste manual</span></label>
           <input class="input ${own ? 'input-edit' : ''} num" id="m-${f.key}" name="${f.key}" type="number" inputmode="decimal" min="0" ${f.max ? `max="${f.max}"` : ''} step="${f.step}" value="${rec[f.key]}" ${own ? `data-auto="month" data-id="${esc(b.id)}"` : 'readonly tabindex="-1"'}>
           <small class="adj-meta">${meta}</small>
           ${own ? `<button type="button" class="link-btn adj-undo" data-action="apiRevert" data-id="${esc(b.id)}" data-k="${f.key}">${icon('undo')} Voltar ao valor da integração</button>` : ''}</div>`;
@@ -947,7 +978,7 @@
       const isSum = GB.SUM_KEYS.includes(f.key);
       const hasMan = isSum && GB.manualEntries(state, b.id, ym).some(e => isNum(e[f.key]));
       const shownV = isNum(rec[f.key]) ? rec[f.key] : (hasMan ? GB.manualTotal(state, b.id, ym, f.key) : '');
-      return `<label class="field"><span class="tm-flabel">${esc(f.label)}${isSum ? '<span class="lock lock-sum">Total do mês</span>' : ''}</span>
+      return `<label class="field"><span class="tm-flabel"><span class="tm-ft">${esc(f.label)}${tip(FIELD_TIP[f.key])}</span>${isSum ? '<span class="lock lock-sum">Total do mês</span>' : ''}</span>
         <input class="input input-edit num" id="m-${f.key}" name="${f.key}" type="number" inputmode="decimal" min="0" ${f.max ? `max="${f.max}"` : ''} step="${f.step}" value="${shownV}" placeholder="—" data-auto="month" ${isSum ? 'data-sum="1"' : ''} data-id="${esc(b.id)}"></label>`;
     }).join('');
   }
@@ -989,7 +1020,7 @@
         <label class="field"><span class="tm-flabel">Instagram</span><input class="input input-edit" id="m-instagram" name="instagram" value="${esc(sel.instagram || '')}" placeholder="@usuario" data-auto="barber" data-id="${esc(sel.id)}"></label>
         <label class="field"><span class="tm-flabel">Cargo na empresa</span><select class="input input-edit" id="m-role" name="role" data-auto="barber" data-id="${esc(sel.id)}">${ROLES.map(r => `<option ${r === (sel.role || 'Barbeiro') ? 'selected' : ''}>${r}</option>`).join('')}</select></label>
       </div>` : ''}
-      <div class="lan-date"><label class="field"><span class="tm-flabel">Data do lançamento</span>
+      <div class="lan-date"><label class="field"><span class="tm-flabel">Data do lançamento${tip('lanDate')}</span>
         <input class="input" type="date" id="m-date" value="${lanDate(ym)}" min="${monthRange(ym).start}" max="${monthRange(ym).end}" data-change="lanDate"></label>
         <p class="section-note">Os campos mostram o total do mês. Ao mudar um total, a diferença entra nesta data e já aparece na visão por semana.</p></div>
       <div class="grid-2" id="tm-fields">${editorFields(sel, ym)}</div>
@@ -1216,7 +1247,7 @@
 
     const cards = GB.visibleInds(state).map(ind => {
       const act = R.active.find(a => a.key === ind.key);
-      if (!act) return `<div class="card ind" style="opacity:.55"><div class="ind-top"><span>${esc(ind.label)}</span><span class="chip chip-soft">sem dados</span></div><div class="ind-val">—</div></div>`;
+      if (!act) return `<div class="card ind" style="opacity:.55"><div class="ind-top"><span>${esc(ind.label)} ${tip(ind.key)}</span><span class="chip chip-soft">sem dados</span></div><div class="ind-val">—</div></div>`;
       const v = row.values[ind.key];
       const pv = prow ? prow.values[ind.key] : null;
       let delta = '';
@@ -1226,7 +1257,7 @@
       }
       const lead = act.leaders.includes(b.id);
       return `<div class="card ind ${lead ? 'card-glow' : ''}">
-        <div class="ind-top"><span>${esc(ind.label)}</span>${lead ? '<span class="chip chip-destaque">1º lugar</span>' : `<span class="chip chip-soft">${act.weight} pts</span>`}</div>
+        <div class="ind-top"><span>${esc(ind.label)} ${tip(ind.key)}</span>${lead ? '<span class="chip chip-destaque">1º lugar</span>' : `<span class="chip chip-soft">${act.weight} pts</span>`}</div>
         <div class="ind-val num">${fmt(ind, v)}</div>
         <div class="bar" title="Nota ${score(row.scores[ind.key])}"><i style="width:${Math.max(2, row.scores[ind.key])}%"></i></div>
         <div class="ind-foot"><span class="num">${ord(row.ranks[ind.key])} de ${R.rows.length} · nota ${score(row.scores[ind.key])}</span>${delta}</div>
@@ -1243,7 +1274,7 @@
           <div class="stat"><span>Faturamento</span><b class="num">${money0(row.sums.fat)}</b></div>
         </div>
       </div>
-      <section class="section"><h2 class="section-title">Indicadores</h2><div class="ind-grid">${cards}</div></section>`;
+      <section class="section"><h2 class="section-title">Indicadores ${tip('score')}</h2><div class="ind-grid">${cards}</div></section>`;
   }
 
   // Visão da barbearia inteira (gestor): totais do mês, detalhe por profissional e radar.
@@ -1289,7 +1320,7 @@
       ${rows.length ? `<section class="section card">
         <h2 class="section-title">Detalhado por profissional</h2>
         <p class="section-note">Toque num profissional para ver a performance completa dele.</p>
-        <div class="table-wrap"><table class="pc-table"><thead><tr><th>Profissional</th>${cols.map(c => `<th>${c[0]}</th>`).join('')}<th>Pontos</th></tr></thead><tbody>
+        <div class="table-wrap"><table class="pc-table"><thead><tr><th>Profissional</th>${cols.map(c => `<th>${c[0]}${tip({ Faturamento: 'fat', Clientes: 'cli', Serviços: 'serv', 'Ticket médio': 'ticket', Ocupação: 'ocup', Produtos: 'prod', Planos: 'planos' }[c[0]])}</th>`).join('')}<th>Pontos${tip('score')}</th></tr></thead><tbody>
           ${rows.map(r => `<tr data-href="#perfil-${esc(r.barber.id)}" tabindex="0"><td><a class="td-who" href="#perfil-${esc(r.barber.id)}">${avatar(r.barber, 36)}<span>${esc(r.barber.name)}</span></a></td>
             ${cols.map(c => `<td>${c[1](r)}</td>`).join('')}<td class="td-score">${score(r.overall)}</td></tr>`).join('')}
         </tbody></table></div>
@@ -1363,7 +1394,7 @@
   }
 
   function pageConfig(part) {
-    const w = state.weights, rv = revealCfg();
+    const w = state.weights, rv = revealCfg(), oc = GB.ocupCfgOf(state), oh = GB.hoursPerDay(oc);
     const hidden = state.hidden || [];
     const total = INDICATORS.filter(i => !hidden.includes(i.key)).reduce((a, i) => a + Number(w[i.key] ?? i.weight), 0);
     if (part === 'dados') return `
@@ -1377,10 +1408,10 @@
       </section>`;
     return `
       <section class="section card">
-        <h2 class="section-title">Indicadores e pesos</h2>
+        <h2 class="section-title">Indicadores e pesos ${tip('weights')}</h2>
         <p class="section-note">O peso define quanto cada indicador vale na pontuação geral. Desmarque "Ativo" para ocultar um indicador do app inteiro; os dados dele ficam guardados para quando você reativar. Soma dos ativos: <b class="num">${total} pts</b>.</p>
         <form class="form" data-form="weights" novalidate>
-          <div class="grid-2">${INDICATORS.map(i => { const off = hidden.includes(i.key); return `<div class="field ind-cfg ${off ? 'is-off' : ''}"><label for="w-${i.key}">${esc(i.label)}${off ? ' <span class="chip chip-soft">oculto</span>' : ''}</label>
+          <div class="grid-2">${INDICATORS.map(i => { const off = hidden.includes(i.key); return `<div class="field ind-cfg ${off ? 'is-off' : ''}"><label for="w-${i.key}">${esc(i.label)} ${tip(i.key)}${off ? ' <span class="chip chip-soft">oculto</span>' : ''}</label>
             <div class="ind-row"><input class="input num" id="w-${i.key}" name="${i.key}" type="number" min="0" max="100" step="1" value="${w[i.key] ?? i.weight}">
             <label class="ind-on"><input type="checkbox" id="on-${i.key}" name="on-${i.key}" ${off ? '' : 'checked'}> Ativo</label></div></div>`; }).join('')}</div>
           <p class="form-msg" data-msg></p>
@@ -1389,17 +1420,32 @@
         </form>
       </section>
       <section class="section card">
-        <h2 class="section-title">Metas mensais da equipe</h2>
+        <h2 class="section-title">Metas mensais da equipe ${tip('goals')}</h2>
         <p class="section-note">Valem para todos os barbeiros. Para ajustar a meta de alguém, abra o barbeiro em Time e ranking, em "Metas individuais". Percentuais em %, valores em R$.</p>
         <form class="form" data-form="goals" novalidate>
-          <div class="grid-2">${GB.visibleInds(state).map(i => `<label class="field"><span>${esc(i.label)}</span><input class="input num" id="gt-${i.key}" name="${i.key}" type="number" min="0" step="any" value="${GB.goalFor(state, '', i.key)}"></label>`).join('')}</div>
+          <div class="grid-2">${GB.visibleInds(state).map(i => `<label class="field"><span>${esc(i.label)} ${tip(i.key)}</span><input class="input num" id="gt-${i.key}" name="${i.key}" type="number" min="0" step="any" value="${GB.goalFor(state, '', i.key)}"></label>`).join('')}</div>
           <p class="form-msg" data-msg></p>
           <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar metas</button>
           <button class="btn" type="button" data-action="defaultGoals">Voltar às metas padrão</button></div>
         </form>
       </section>
       <section class="section card">
-        <h2 class="section-title">Pódio surpresa</h2>
+        <h2 class="section-title">Regra da taxa de ocupação ${tip('ocup')}</h2>
+        <p class="section-note">Ocupação = horas em comandas finalizadas ÷ horas da agenda no mês. Hoje, 100% = <b class="num">${nf1.format(oh)} h por dia × ${oc.days} dias = ${nf0.format(oh * oc.days)} h no mês</b>. Atendimentos antes da abertura, depois do fechamento ou no almoço compensam horários vagos; quem passa da capacidade fica acima de 100%. No mês em andamento a capacidade cresce dia a dia, e as ausências de cada barbeiro (férias, atestado) são lançadas em Lançamentos.</p>
+        <form class="form" data-form="ocup" novalidate>
+          <div class="grid-2">
+            <label class="field"><span>Abertura da agenda</span><input class="input" type="time" id="oc-open" name="open" value="${esc(oc.open)}"></label>
+            <label class="field"><span>Fechamento da agenda</span><input class="input" type="time" id="oc-close" name="close" value="${esc(oc.close)}"></label>
+            <label class="field"><span>Almoço (minutos)</span><input class="input num" type="number" id="oc-lunch" name="lunch" min="0" max="240" step="5" value="${oc.lunch}"></label>
+            <label class="field"><span>Dias trabalhados no mês</span><input class="input num" type="number" id="oc-days" name="days" min="1" max="31" step="1" value="${oc.days}"></label>
+          </div>
+          <p class="form-msg" data-msg></p>
+          <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar regra</button>
+          <button class="btn" type="button" data-action="defaultOcup">Voltar ao padrão (9h às 20h, 1 h de almoço, 22 dias)</button></div>
+        </form>
+      </section>
+      <section class="section card">
+        <h2 class="section-title">Pódio surpresa ${tip('reveal')}</h2>
         <p class="section-note">Nos últimos dias do mês, os barbeiros deixam de ver as colocações, as pontuações e os números dos colegas; cada um continua vendo os próprios números. A Tela da loja mostra uma contagem regressiva. Você revela o pódio no Fechamento do mês, do 3º ao 1º lugar.</p>
         <form class="form" data-form="reveal" novalidate>
           <label class="ind-on"><input type="checkbox" id="rv-on" name="rv-on" ${rv.on ? 'checked' : ''}> Ligar o pódio surpresa</label>
@@ -1429,7 +1475,7 @@
     ], null, 2);
     return `
       <section class="section card">
-        <h2 class="section-title">Como funciona</h2>
+        <h2 class="section-title">Como funciona ${tip('api')}</h2>
         <p class="section-note">Outro sistema (agenda, caixa, ERP) envia os resultados de cada barbeiro por dia. Os números entram no ranking na hora, junto com os lançados à mão.</p>
         <div class="field"><span>Chave da API</span><div class="invite-link" id="api-key">${esc(state.apiKey)}</div></div>
         <div class="btn-row"><button class="btn btn-sm" data-action="copyKey">${icon('copy')} Copiar chave</button>
@@ -1437,7 +1483,8 @@
         <pre class="code">POST ${esc(Cloud.enabled ? Cloud.apiUrl : '/api/v1/lancamentos')}
 Authorization: Bearer ${esc(state.apiKey)}
 Content-Type: application/json</pre>
-        <p class="section-note">Campos aceitos: <code>data</code> (AAAA-MM-DD), <code>barbeiro</code> (nome) ou <code>barbeiro_id</code>, ${FIELDS.map(f => `<code>${f.api}</code>`).join(', ')}. Campos ausentes ficam em branco. Enviar a mesma data e barbeiro de novo substitui os números.</p>
+        <p class="section-note">Campos aceitos: <code>data</code> (AAAA-MM-DD), <code>barbeiro</code> (nome) ou <code>barbeiro_id</code>, ${FIELDS.filter(f => !f.legacy).map(f => `<code>${f.api}</code>`).join(', ')}. Campos ausentes ficam em branco. Enviar a mesma data e barbeiro de novo substitui os números.</p>
+        <p class="section-note"><code>horas_ocupadas</code>: soma das horas das comandas finalizadas do barbeiro no dia, inclusive fora do horário da agenda. A taxa de ocupação é calculada pela regra em Configurações → Indicadores e metas.</p>
         <p class="section-note">${Cloud.enabled ? 'O endereço acima funciona depois que a função <code>lancamentos</code> for publicada no Supabase (veja o guia em <code>supabase/LEIAME.md</code>). Abaixo dá para importar os dados colando o JSON.' : '<b>Atenção:</b> o endereço acima passa a receber dados quando o app for publicado com servidor. Até lá, teste o formato colando os dados abaixo.'}</p>
       </section>
       <section class="section card">
@@ -1538,7 +1585,7 @@ Content-Type: application/json</pre>
         ${R.rows.length && R.active.length ? '' : '<p class="section-note">Este mês ainda não tem resultados lançados.</p>'}
       </section>
       ${R.rows.length && R.active.length ? `<section class="section card">
-        <h2 class="section-title">Resumo de ${esc(ymLabel(ym).replace(' de ', '/'))}</h2>
+        <h2 class="section-title">Resumo de ${esc(ymLabel(ym).replace(' de ', '/'))} ${tip('fechamento')}</h2>
         <div class="perf-stats">
           <div class="stat"><span>Faturamento da equipe</span><b class="num">${money0(total)}</b></div>
           <div class="stat"><span>Barbeiros</span><b class="num">${R.rows.length}</b></div>
@@ -1756,6 +1803,51 @@ Content-Type: application/json</pre>
       x0 = null;
     }, { passive: true });
   }
+  // ---------- balão de explicação (?) ----------
+  let tipBox = null, tipBtn = null, tipPinned = false;
+  function tipShow(btn, pinned) {
+    const t = TIPS[btn.dataset.tip]; if (!t) return;
+    if (!tipBox) {
+      tipBox = document.createElement('div'); tipBox.id = 'tipbox'; tipBox.className = 'tipbox'; tipBox.setAttribute('role', 'tooltip');
+      document.body.appendChild(tipBox);
+    }
+    const body = typeof t[1] === 'function' ? t[1]() : t[1];
+    tipBox.innerHTML = `<b>${esc(t[0])}</b><p>${esc(body)}</p>`;
+    tipBox.hidden = false; tipBox.classList.add('on');
+    tipBtn = btn; tipPinned = !!pinned;
+    btn.setAttribute('aria-expanded', 'true'); btn.setAttribute('aria-describedby', 'tipbox');
+    const r = btn.getBoundingClientRect(), w = Math.min(320, window.innerWidth - 24);
+    tipBox.style.width = w + 'px';
+    const h = tipBox.offsetHeight;
+    let left = r.left + r.width / 2 - w / 2;
+    left = Math.max(12, Math.min(left, window.innerWidth - w - 12));
+    const below = r.bottom + 10 + h <= window.innerHeight - 8 || r.top - 10 - h < 8;
+    tipBox.style.left = left + 'px';
+    tipBox.style.top = (below ? r.bottom + 10 : r.top - 10 - h) + 'px';
+    tipBox.style.setProperty('--ax', (r.left + r.width / 2 - left) + 'px');
+    tipBox.dataset.side = below ? 'below' : 'above';
+  }
+  function tipHide() {
+    if (tipBox) { tipBox.classList.remove('on'); tipBox.hidden = true; }
+    if (tipBtn) { tipBtn.setAttribute('aria-expanded', 'false'); tipBtn.removeAttribute('aria-describedby'); }
+    tipBtn = null; tipPinned = false;
+  }
+  // Toque ou clique: abre e fixa; toca de novo ou fora para fechar. Não aciona o que estiver por trás.
+  document.addEventListener('click', e => {
+    const b = e.target.closest && e.target.closest('.tip');
+    if (b) { e.preventDefault(); e.stopPropagation(); if (tipBtn === b && tipPinned) tipHide(); else tipShow(b, true); return; }
+    if (tipBtn && !(e.target.closest && e.target.closest('#tipbox'))) tipHide();
+  }, true);
+  // Mouse: aparece ao passar por cima.
+  document.addEventListener('pointerover', e => { if (e.pointerType !== 'mouse') return; const b = e.target.closest && e.target.closest('.tip'); if (b && !tipPinned) tipShow(b, false); });
+  document.addEventListener('pointerout', e => { if (e.pointerType !== 'mouse' || tipPinned) return; const b = e.target.closest && e.target.closest('.tip'); if (b && b === tipBtn) tipHide(); });
+  document.addEventListener('focusin', e => { if (e.target.classList && e.target.classList.contains('tip') && !tipPinned) tipShow(e.target, false); });
+  document.addEventListener('focusout', e => { if (e.target === tipBtn && !tipPinned) tipHide(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && tipBtn) tipHide(); });
+  window.addEventListener('scroll', () => { if (tipBtn) tipHide(); }, true);
+  window.addEventListener('resize', () => { if (tipBtn) tipHide(); });
+  window.addEventListener('hashchange', tipHide);
+
   document.addEventListener('keydown', e => {
     if (!ui.fx) return;
     if (['ArrowRight', 'PageDown', ' ', 'Enter'].includes(e.key)) { e.preventDefault(); fxGo(1); }
@@ -2103,7 +2195,7 @@ Content-Type: application/json</pre>
         </form>
       </section>
       <section class="section card">
-        <h2 class="section-title">3. Quem vê o quê</h2>
+        <h2 class="section-title">3. Quem vê o quê ${tip('access')}</h2>
         <p class="section-note">No ranking, todos veem os números de todos. Quem não tiver acesso definido vê a performance detalhada só dos próprios números. <b>Gestor</b> vê e lança os resultados de quem está na área; <b>Membro</b> só vê. Uma pessoa pode ter mais de uma área.</p>
         <ul class="list">${o.grants.map(g => { const u = state.users.find(x => x.id === g.userId); return `<li class="list-row"><div class="grow"><b>${esc(u ? u.name : '?')}</b> <span class="muted">· ${g.role === 'gestor' ? 'Gestor' : 'Membro'} · ${esc(grantArea(g))}</span></div>
           <button class="icon-btn" data-action="orgGrantDel" data-id="${esc(g.id)}" aria-label="Remover acesso">${icon('trash')}</button></li>`; }).join('') || '<li class="muted">Ninguém com acesso extra ainda.</li>'}</ul>
@@ -2254,7 +2346,7 @@ Content-Type: application/json</pre>
     rows.sort((x, y) => x.r.day.localeCompare(y.r.day));
     const shown = rows.slice(0, ui.popRevAll ? 60 : 5);
     return `<section class="section card pop-review">
-      <div class="pop-dhead"><div><h2 class="pop-h2">${icon('checksq')} Conferência</h2><p class="muted">${rows.length} prova(s) aguardando. Os pontos entram no ranking quando você aprova.</p></div>
+      <div class="pop-dhead"><div><h2 class="pop-h2">${icon('checksq')} Conferência ${tip('proof')}</h2><p class="muted">${rows.length} prova(s) aguardando. Os pontos entram no ranking quando você aprova.</p></div>
 </div>
       <ul class="pop-rlist">${shown.map(x => `<li>
         <button class="pop-evimg" data-action="popView" data-bid="${esc(x.b.id)}" data-day="${esc(x.r.day)}" data-it="${esc(x.it.id)}" data-i="${x.i}" aria-label="Ver prova">${proofImg(x.e)}</button>
@@ -2376,7 +2468,7 @@ Content-Type: application/json</pre>
       </div>
       ${editing ? popEditor() : `<section class="section card pop-hero"><h2>${esc(cfg.title)}</h2><p>${esc(cfg.subtitle || '')}</p>${cfg.shop ? `<span class="muted">${esc(cfg.shop)}</span>` : ''}</section>`}
       <section class="section card pop-day">
-        <div class="pop-dhead"><div><h2 class="pop-h2">${icon('sparkle')} Registro do dia</h2><p class="muted">Preencha stories, posts, abordagens e convites. Salva sozinho.</p></div>
+        <div class="pop-dhead"><div><h2 class="pop-h2">${icon('sparkle')} Registro do dia ${tip('proof')}</h2><p class="muted">Preencha stories, posts, abordagens e convites. Salva sozinho.</p></div>
           <span class="pop-cloud" id="pop-saved" title="Salvo">${icon('cloud')}</span></div>
         <span class="tm-flabel">Dia do mês</span>
         <div class="pop-days" id="pop-days">${Array.from({ length: n }, (_, i) => { const d = `${ym}-${String(i + 1).padStart(2, '0')}`; const s2 = popStatus(bid, d); return `<button class="pop-dn ${i + 1 === ui.popDay ? 'on' : ''} st-${s2} ${d > today ? 'future' : ''}" data-action="popDay" data-d="${i + 1}" aria-label="Dia ${i + 1}">${i + 1}</button>`; }).join('')}</div>
@@ -3069,6 +3161,7 @@ Content-Type: application/json</pre>
       if (ui.confirm !== 'reveal') { ui.confirm = 'reveal'; render(); return; }
       ui.confirm = null; markRevealed(el.dataset.ym); toast('Pódio liberado: a equipe já vê as colocações no app.'); render();
     },
+    defaultOcup() { state.ocupCfg = null; save(); toast('Regra de ocupação padrão restaurada.'); render(); },
     defaultGoals() { state.goals = { ...(state.goals || {}), team: { ...GB.DEFAULT_GOALS } }; save(); toast('Metas padrão restauradas.'); render(); },
     defaultWeights() { state.weights = Object.fromEntries(INDICATORS.map(i => [i.key, i.weight])); save(); toast('Pesos padrão restaurados.'); render(); },
     resetDemo() {
@@ -3273,6 +3366,16 @@ Content-Type: application/json</pre>
       const hidden = INDICATORS.filter(i => !f.elements['on-' + i.key].checked).map(i => i.key);
       if (INDICATORS.length - hidden.length < 2) return setMsg(f, 'Deixe pelo menos 2 indicadores ativos.');
       state.weights = w; state.hidden = hidden; save(); toast('Indicadores salvos.'); render();
+    },
+    ocup(f) {
+      const open = val(f, 'open'), close = val(f, 'close');
+      const lunch = Number(val(f, 'lunch')), days = Number(val(f, 'days'));
+      if (!/^\d{2}:\d{2}$/.test(open) || !/^\d{2}:\d{2}$/.test(close)) return setMsg(f, 'Informe a abertura e o fechamento da agenda.');
+      if (!Number.isFinite(lunch) || lunch < 0 || lunch > 240) return setMsg(f, 'O almoço deve ficar entre 0 e 240 minutos.');
+      if (!Number.isInteger(days) || days < 1 || days > 31) return setMsg(f, 'Os dias trabalhados devem ficar entre 1 e 31.');
+      const cfg = { open, close, lunch, days };
+      if (GB.hoursPerDay(cfg) <= 0) return setMsg(f, 'O fechamento precisa ser depois da abertura, descontado o almoço.');
+      state.ocupCfg = cfg; save(); toast(`Regra salva: 100% = ${nf0.format(GB.hoursPerDay(cfg) * days)} h no mês.`); render();
     },
     reveal(f) {
       const c = revealCfg();

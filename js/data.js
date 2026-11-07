@@ -66,8 +66,9 @@
     { key: 'serv', label: 'Serviços realizados', api: 'servicos', step: '1' },
     { key: 'cli', label: 'Clientes atendidos', api: 'clientes', step: '1' },
     { key: 'check', label: 'Checklist Agenda Cheia (pontos)', api: 'checklist_pop', step: '1' },
-    { key: 'hDisp', label: 'Horas disponíveis', api: 'horas_disponiveis', step: '0.5' },
-    { key: 'hOcup', label: 'Horas ocupadas', api: 'horas_ocupadas', step: '0.5' },
+    // Antigo: a capacidade agora vem da regra de ocupação (Configurações). Aceito, mas não usado.
+    { key: 'hDisp', label: 'Horas disponíveis', api: 'horas_disponiveis', step: '0.5', legacy: true },
+    { key: 'hOcup', label: 'Horas em comandas finalizadas', api: 'horas_ocupadas', step: '0.5' },
     { key: 'planos', label: 'Planos mensais vendidos', api: 'planos_mensais', step: '1' },
     { key: 'ret', label: 'Clientes que voltaram', api: 'clientes_retorno', step: '1' },
     { key: 'prod', label: 'Venda de produtos (R$)', api: 'venda_produtos', step: '0.01' },
@@ -106,7 +107,8 @@
     { key: 'cli', label: 'Clientes atendidos', step: '1', daily: 'cli' },
     { key: 'serv', label: 'Serviços realizados', step: '1', daily: 'serv' },
     { key: 'ticket', label: 'Ticket médio (R$)', calc: true },
-    { key: 'ocupPct', label: 'Taxa de ocupação (%)', step: '0.1', daily: 'hDisp', max: 100 },
+    { key: 'ocupPct', label: 'Taxa de ocupação (%)', step: '0.1', daily: 'hOcup' },
+    { key: 'aus', label: 'Dias de ausência (férias, atestado)', step: '1', max: 31 },
     { key: 'fidPct', label: 'Taxa de fidelização (%)', step: '0.1', daily: 'ret', max: 100 },
     { key: 'prod', label: 'Venda de produtos (R$)', step: '0.01', daily: 'prod' },
     { key: 'check', label: 'Pontos Checklist Agenda Cheia', step: '1', daily: 'check' },
@@ -114,6 +116,37 @@
   ];
 
   const monthKey = d => d.slice(0, 7);
+
+  // ---------- regra da taxa de ocupação ----------
+  // Ocupação = horas em comandas finalizadas ÷ capacidade do mês.
+  // Capacidade: horas da agenda (abertura a fechamento, menos o almoço) × dias trabalhados no mês
+  // (padrão 22, menos as ausências do barbeiro), proporcional aos dias que já passaram.
+  // Atendimentos fora do horário compensam o tempo ocioso; acima da capacidade passa de 100%.
+  const OCUP_DEFAULT = { open: '09:00', close: '20:00', lunch: 60, days: 22 };
+  const ocupCfgOf = state => ({ ...OCUP_DEFAULT, ...((state && state.ocupCfg) || {}) });
+  const toMin = t => { const [h, m] = String(t || '0:0').split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+  const hoursPerDay = cfg => Math.max(0, (toMin(cfg.close) - toMin(cfg.open) - Number(cfg.lunch || 0)) / 60);
+  function ausOf(state, barberId, ym) {
+    const rec = (state.monthly || []).find(m => m.barberId === barberId && m.month === ym);
+    return rec && isNum(rec.aus) ? Math.max(0, Number(rec.aus)) : 0;
+  }
+  // Horas de capacidade do barbeiro entre start e end (só dias até hoje).
+  function ocupCapacity(state, barberId, start, end, today = iso(new Date())) {
+    const cfg = ocupCfgOf(state), hpd = hoursPerDay(cfg), days = Number(cfg.days) || 0;
+    const last = end < today ? end : today;
+    let total = 0, ym = monthKey(start);
+    while (start <= last && ym <= monthKey(last)) {
+      const r = monthRange(ym);
+      const a = start > r.start ? start : r.start, b = last < r.end ? last : r.end;
+      if (a <= b) {
+        const n = Math.round((fromIso(b) - fromIso(a)) / 86400000) + 1;
+        const dim = Number(r.end.slice(8, 10));
+        total += hpd * Math.max(0, days - ausOf(state, barberId, ym)) * n / dim;
+      }
+      ym = addMonths(ym, 1);
+    }
+    return total;
+  }
   function monthRange(ym) {
     const [y, m] = ym.split('-').map(Number);
     const start = new Date(y, m - 1, 1), end = new Date(y, m, 0);
@@ -155,6 +188,7 @@
           if (isNum(rec[mk])) continue; // o total do mês substitui os dias
         }
         if (f.key === 'check' && popDays(state, barberId).some(r => r.day.slice(0, 7) === monthKey(e.date))) continue;
+        if (f.key === 'hDisp') continue; // a capacidade vem da regra de ocupação
         add(f.key, e[f.key]);
       }
     }
@@ -170,10 +204,26 @@
       const rec = recs[ym];
       if (!rec) continue;
       for (const k of ['fat', 'cli', 'serv', 'prod', 'check', 'planos']) if (isNum(rec[k]) && !(k === 'check' && popMonths.has(ym))) add(k, rec[k]);
-      if (isNum(rec.ocupPct)) { add('hDisp', 100); s.hOcup += Number(rec.ocupPct); s.n.hOcup = (s.n.hOcup || 0) + 1; }
       if (isNum(rec.fidPct)) {
         const cli = isNum(rec.cli) ? Number(rec.cli) : (dailyCli[ym] || 0);
         if (cli > 0) add('ret', (Number(rec.fidPct) / 100) * cli);
+      }
+    }
+    // Ocupação: capacidade de cada mês do período. Conta nos meses em que alguém da equipe tem
+    // horas de comandas (quem não atendeu fica com 0%) ou em que há taxa lançada à mão.
+    const ocupData = new Set();
+    for (const e of state.entries) if (isNum(e.hOcup) && e.date >= range.start && e.date <= range.end) ocupData.add(monthKey(e.date));
+    for (let ym = monthKey(range.start); ym <= monthKey(range.end); ym = addMonths(ym, 1)) {
+      const r = monthRange(ym);
+      const a = range.start > r.start ? range.start : r.start, b = range.end < r.end ? range.end : r.end;
+      const rec = recs[ym];
+      if (rec && isNum(rec.ocupPct)) {
+        const cap = ocupCapacity(state, barberId, a, b) || 1;
+        s.hDisp += cap; s.hOcup += (Number(rec.ocupPct) / 100) * cap;
+        s.n.hDisp = (s.n.hDisp || 0) + 1; s.n.hOcup = (s.n.hOcup || 0) + 1;
+      } else if (ocupData.has(ym)) {
+        const cap = ocupCapacity(state, barberId, a, b);
+        if (cap > 0) { s.hDisp += cap; s.n.hDisp = (s.n.hDisp || 0) + 1; }
       }
     }
     return s;
@@ -182,15 +232,15 @@
   // O que a integração já trouxe para o barbeiro no mês (campos travados no formulário).
   function monthFromIntegration(state, barberId, ym) {
     const r = monthRange(ym);
-    const out = {}; let hD = 0, hO = 0, cli = 0, ret = 0;
+    const out = {}; let hO = 0, hasO = false, cli = 0, ret = 0;
     for (const e of state.entries) {
       if (e.source === 'manual' || e.barberId !== barberId || e.date < r.start || e.date > r.end) continue;
       for (const k of ['fat', 'cli', 'serv', 'prod', 'check', 'planos']) if (isNum(e[k])) out[k] = (out[k] || 0) + Number(e[k]);
-      if (isNum(e.hDisp)) { hD += Number(e.hDisp); hO += Number(e.hOcup || 0); }
+      if (isNum(e.hOcup)) { hO += Number(e.hOcup); hasO = true; }
       if (isNum(e.cli)) cli += Number(e.cli);
       if (isNum(e.ret)) ret += Number(e.ret);
     }
-    if (hD > 0) out.ocupPct = (hO / hD) * 100;
+    if (hasO) { const cap = ocupCapacity(state, barberId, r.start, r.end); if (cap > 0) out.ocupPct = (hO / cap) * 100; }
     const pd = popDays(state, barberId).filter(x => x.day.slice(0, 7) === ym);
     if (pd.length) { const cfg = popCfgOf(state); out.check = Math.round(pd.reduce((a, x) => a + popDayPts(cfg, x), 0) * 10) / 10; out._pop = true; }
     if (ret > 0 && cli > 0) out.fidPct = (ret / cli) * 100;
@@ -401,7 +451,7 @@
         return ch;
       });
     }
-    if (has('ocup') && v.ocup != null) search('ocup', 0, Math.max(0.1, 100 - v.ocup), 0.1, d => ({ ocup: v.ocup + d }));
+    if (has('ocup') && v.ocup != null) search('ocup', 0, 100, 0.1, d => ({ ocup: v.ocup + d }));
     for (const k of ['check', 'planos', 'serv']) {
       if (!has(k)) continue;
       for (let d = 1; d <= 60; d++) { if (passes({ [k]: (v[k] ?? 0) + d })) { out.push({ kind: k, delta: d }); break; } }
@@ -579,7 +629,7 @@
 
   // Indicadores ligados (o gestor pode ocultar um indicador em Configurações).
   const visibleInds = state => INDICATORS.filter(i => !(state.hidden || []).includes(i.key));
-  const FIELD_IND = { fidPct: 'fid', ocupPct: 'ocup' };
+  const FIELD_IND = { fidPct: 'fid', ocupPct: 'ocup', aus: 'ocup' };
 
-  window.GB = Object.assign(window.GB || {}, { SUM_KEYS, manualEntries, manualTotal, applyManualTotal, evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
+  window.GB = Object.assign(window.GB || {}, { OCUP_DEFAULT, ocupCfgOf, hoursPerDay, ocupCapacity, SUM_KEYS, manualEntries, manualTotal, applyManualTotal, evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
 })();

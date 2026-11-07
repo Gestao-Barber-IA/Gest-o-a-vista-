@@ -194,7 +194,7 @@ begin
   if nullif(new.data->'_adj', 'null'::jsonb) is distinct from (case when tg_op = 'UPDATE' then nullif(old.data->'_adj', 'null'::jsonb) end) then
     raise exception 'Só o dono pode ajustar valores da integração.';
   end if;
-  for r in select * from (values ('fat', 'fat'), ('cli', 'cli'), ('serv', 'serv'), ('prod', 'prod'), ('planos', 'planos'), ('ocupPct', 'hDisp'), ('fidPct', 'ret')) v(k, ek) loop
+  for r in select * from (values ('fat', 'fat'), ('cli', 'cli'), ('serv', 'serv'), ('prod', 'prod'), ('planos', 'planos'), ('ocupPct', 'hDisp'), ('ocupPct', 'hOcup'), ('fidPct', 'ret')) v(k, ek) loop
     if nullif(new.data->r.k, 'null'::jsonb) is distinct from (case when tg_op = 'UPDATE' then nullif(old.data->r.k, 'null'::jsonb) end)
        and exists (select 1 from entries e where e.barber_id = new.barber_id and e.source <> 'manual' and to_char(e.date, 'YYYY-MM') = new.month and e.data ? r.ek) then
       raise exception 'Este campo vem da integração. Só o dono pode ajustar.';
