@@ -1171,3 +1171,26 @@ textarea.input.pop-ta { min-height: 72px; font-family: var(--font-body); font-si
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ---------- Computador e notebook: menu lateral fixo e conteúdo mais largo ---------- */
+@media (min-width: 1100px) {
+  :root { --side: 264px; }
+  body.has-nav { padding-left: var(--side); }
+  body.has-nav .drawer { width: var(--side); transform: none; transition: none; z-index: 25; padding: 20px 14px 24px; gap: 2px; box-shadow: none; }
+  body.has-nav .drawer .brand { margin-bottom: 10px; }
+  body.has-nav .drawer .nav-item { padding: 9px 12px; font-size: 0.97rem; gap: 12px; border-radius: 12px; }
+  body.has-nav .drawer .nav-item .ico { width: 20px; height: 20px; }
+  body.has-nav .drawer .nav-group { margin: 12px 0 2px 10px; font-size: 0.7rem; }
+  body.has-nav .scrim, body.has-nav .fab, body.has-nav .topbar > [data-action="openDrawer"] { display: none !important; }
+  body.has-nav .main { padding-bottom: 48px; max-width: 1240px; }
+  /* Lançamentos: foto e nome lado a lado */
+  body.has-nav .tm-photo { grid-auto-flow: column; justify-content: start; align-items: center; }
+  body.has-nav .tm-photo .avatar { --s: 72px !important; }
+}
+@media (min-width: 1600px) {
+  body.has-nav .main { max-width: 1480px; }
+}
+/* Notebook (tela baixa): pódio mais compacto para caber sem rolar */
+@media (min-width: 1100px) and (max-height: 900px) {
+  body.has-nav .home-cols > section:first-child .podium, body.has-nav .home-cols > section:first-child > :not(.section-title) { max-width: 430px; margin-inline: auto; }
+}
