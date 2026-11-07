@@ -166,6 +166,7 @@
   }
 
   function renderAuth(mode, code) {
+    document.body.classList.remove('has-nav');
     let inner = '';
     if (mode === 'convite' && Cloud.enabled && (!ui.inviteInfo || ui.inviteInfo.code !== code)) {
       root.innerHTML = authShell(`<div class="empty" style="padding:10px 0">${icon('clock')}<h2>Abrindo convite…</h2></div>`);
@@ -2726,6 +2727,7 @@ Content-Type: application/json</pre>
   }
 
   function renderTV() {
+    document.body.classList.remove('has-nav');
     if (!Cloud.enabled) state = DB.load();
     const tr = tvRange();
     const R = computeRanking(state, tr);
@@ -2801,6 +2803,7 @@ Content-Type: application/json</pre>
       <button class="fab" data-action="openDrawer" aria-label="Abrir menu">${icon('menu')}</button>
       ${drawer(user, route)}
       ${popover(user)}`;
+    document.body.classList.add('has-nav');
     applyLive();
     maybeOfferInstall();
     maybeRemindPop(user);
