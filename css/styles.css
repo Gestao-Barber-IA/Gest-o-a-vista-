@@ -1194,3 +1194,5 @@ textarea.input.pop-ta { min-height: 72px; font-family: var(--font-body); font-si
 @media (min-width: 1100px) and (max-height: 900px) {
   body.has-nav .home-cols > section:first-child .podium, body.has-nav .home-cols > section:first-child > :not(.section-title) { max-width: 430px; margin-inline: auto; }
 }
+.fc-peek { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
+.fc-peek .section-note { margin: 0; flex: 1 1 260px; }
