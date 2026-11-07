@@ -606,7 +606,7 @@
   function monthOnlyData(R) {
     if (ui.period !== 'semana' || R.active.length) return false;
     const r = range(), months = new Set([r.start.slice(0, 7), r.end.slice(0, 7)]);
-    return (state.monthly || []).some(m => months.has(m.month) && Object.keys(m).some(k => !['barberId', 'month', '_adj'].includes(k) && isNum(m[k])));
+    return (state.monthly || []).some(m => months.has(m.month) && Object.keys(m).some(k => !['barberId', 'month', '_adj', 'aus'].includes(k) && isNum(m[k])));
   }
   // Semana sem dados diários, mas com lançamentos do mês: usa o mês (Tela da loja).
   function tvRange() {
@@ -1363,7 +1363,7 @@
   }
 
   function pageConfig(part) {
-    const w = state.weights, rv = revealCfg();
+    const w = state.weights, rv = revealCfg(), oc = GB.ocupCfgOf(state), oh = GB.hoursPerDay(oc);
     const hidden = state.hidden || [];
     const total = INDICATORS.filter(i => !hidden.includes(i.key)).reduce((a, i) => a + Number(w[i.key] ?? i.weight), 0);
     if (part === 'dados') return `
@@ -1396,6 +1396,21 @@
           <p class="form-msg" data-msg></p>
           <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar metas</button>
           <button class="btn" type="button" data-action="defaultGoals">Voltar às metas padrão</button></div>
+        </form>
+      </section>
+      <section class="section card">
+        <h2 class="section-title">Regra da taxa de ocupação</h2>
+        <p class="section-note">Ocupação = horas em comandas finalizadas ÷ horas da agenda no mês. Hoje, 100% = <b class="num">${nf1.format(oh)} h por dia × ${oc.days} dias = ${nf0.format(oh * oc.days)} h no mês</b>. Atendimentos antes da abertura, depois do fechamento ou no almoço compensam horários vagos; quem passa da capacidade fica acima de 100%. No mês em andamento a capacidade cresce dia a dia, e as ausências de cada barbeiro (férias, atestado) são lançadas em Lançamentos.</p>
+        <form class="form" data-form="ocup" novalidate>
+          <div class="grid-2">
+            <label class="field"><span>Abertura da agenda</span><input class="input" type="time" id="oc-open" name="open" value="${esc(oc.open)}"></label>
+            <label class="field"><span>Fechamento da agenda</span><input class="input" type="time" id="oc-close" name="close" value="${esc(oc.close)}"></label>
+            <label class="field"><span>Almoço (minutos)</span><input class="input num" type="number" id="oc-lunch" name="lunch" min="0" max="240" step="5" value="${oc.lunch}"></label>
+            <label class="field"><span>Dias trabalhados no mês</span><input class="input num" type="number" id="oc-days" name="days" min="1" max="31" step="1" value="${oc.days}"></label>
+          </div>
+          <p class="form-msg" data-msg></p>
+          <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar regra</button>
+          <button class="btn" type="button" data-action="defaultOcup">Voltar ao padrão (9h às 20h, 1 h de almoço, 22 dias)</button></div>
         </form>
       </section>
       <section class="section card">
@@ -1437,7 +1452,8 @@
         <pre class="code">POST ${esc(Cloud.enabled ? Cloud.apiUrl : '/api/v1/lancamentos')}
 Authorization: Bearer ${esc(state.apiKey)}
 Content-Type: application/json</pre>
-        <p class="section-note">Campos aceitos: <code>data</code> (AAAA-MM-DD), <code>barbeiro</code> (nome) ou <code>barbeiro_id</code>, ${FIELDS.map(f => `<code>${f.api}</code>`).join(', ')}. Campos ausentes ficam em branco. Enviar a mesma data e barbeiro de novo substitui os números.</p>
+        <p class="section-note">Campos aceitos: <code>data</code> (AAAA-MM-DD), <code>barbeiro</code> (nome) ou <code>barbeiro_id</code>, ${FIELDS.filter(f => !f.legacy).map(f => `<code>${f.api}</code>`).join(', ')}. Campos ausentes ficam em branco. Enviar a mesma data e barbeiro de novo substitui os números.</p>
+        <p class="section-note"><code>horas_ocupadas</code>: soma das horas das comandas finalizadas do barbeiro no dia, inclusive fora do horário da agenda. A taxa de ocupação é calculada pela regra em Configurações → Indicadores e metas.</p>
         <p class="section-note">${Cloud.enabled ? 'O endereço acima funciona depois que a função <code>lancamentos</code> for publicada no Supabase (veja o guia em <code>supabase/LEIAME.md</code>). Abaixo dá para importar os dados colando o JSON.' : '<b>Atenção:</b> o endereço acima passa a receber dados quando o app for publicado com servidor. Até lá, teste o formato colando os dados abaixo.'}</p>
       </section>
       <section class="section card">
@@ -3069,6 +3085,7 @@ Content-Type: application/json</pre>
       if (ui.confirm !== 'reveal') { ui.confirm = 'reveal'; render(); return; }
       ui.confirm = null; markRevealed(el.dataset.ym); toast('Pódio liberado: a equipe já vê as colocações no app.'); render();
     },
+    defaultOcup() { state.ocupCfg = null; save(); toast('Regra de ocupação padrão restaurada.'); render(); },
     defaultGoals() { state.goals = { ...(state.goals || {}), team: { ...GB.DEFAULT_GOALS } }; save(); toast('Metas padrão restauradas.'); render(); },
     defaultWeights() { state.weights = Object.fromEntries(INDICATORS.map(i => [i.key, i.weight])); save(); toast('Pesos padrão restaurados.'); render(); },
     resetDemo() {
@@ -3273,6 +3290,16 @@ Content-Type: application/json</pre>
       const hidden = INDICATORS.filter(i => !f.elements['on-' + i.key].checked).map(i => i.key);
       if (INDICATORS.length - hidden.length < 2) return setMsg(f, 'Deixe pelo menos 2 indicadores ativos.');
       state.weights = w; state.hidden = hidden; save(); toast('Indicadores salvos.'); render();
+    },
+    ocup(f) {
+      const open = val(f, 'open'), close = val(f, 'close');
+      const lunch = Number(val(f, 'lunch')), days = Number(val(f, 'days'));
+      if (!/^\d{2}:\d{2}$/.test(open) || !/^\d{2}:\d{2}$/.test(close)) return setMsg(f, 'Informe a abertura e o fechamento da agenda.');
+      if (!Number.isFinite(lunch) || lunch < 0 || lunch > 240) return setMsg(f, 'O almoço deve ficar entre 0 e 240 minutos.');
+      if (!Number.isInteger(days) || days < 1 || days > 31) return setMsg(f, 'Os dias trabalhados devem ficar entre 1 e 31.');
+      const cfg = { open, close, lunch, days };
+      if (GB.hoursPerDay(cfg) <= 0) return setMsg(f, 'O fechamento precisa ser depois da abertura, descontado o almoço.');
+      state.ocupCfg = cfg; save(); toast(`Regra salva: 100% = ${nf0.format(GB.hoursPerDay(cfg) * days)} h no mês.`); render();
     },
     reveal(f) {
       const c = revealCfg();
