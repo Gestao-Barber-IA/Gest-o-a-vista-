@@ -1522,6 +1522,8 @@ Content-Type: application/json</pre>
     const top = R.rows.slice(0, 3);
     const total = R.rows.reduce((a, r) => a + r.sums.fat, 0);
     const t = R.title.type ? R.rows.find(r => r.barber.id === R.title.barberId) : null;
+    // A tela pode estar espelhada na TV: o título e o top 3 ficam escondidos até o gestor pedir para ver.
+    const hide = !ui.fcPeek;
     const ended = iso(new Date()) > monthRange(ym).end;
     const secretNote = secret ? `<div class="sus-note sus-in"><p>${icon('crown')}<span><b>Pódio surpresa.</b> A equipe ainda não viu as colocações de ${esc(ymLabel(ym).replace(' de ', '/'))}. ${ended ? 'Na apresentação, cada lugar do pódio só aparece quando você tocar em Revelar. Ao revelar o 1º lugar, o pódio é liberado no app de todos.' : 'O mês ainda não acabou: a apresentação agora é só uma prévia e não libera o pódio.'}</span></p>
         <button class="btn btn-sm ${ui.confirm === 'reveal' ? 'btn-danger' : ''}" data-action="revealNow" data-ym="${ym}">${ui.confirm === 'reveal' ? 'Confirmar: liberar sem apresentação' : 'Liberar o pódio sem apresentação'}</button></div>` : '';
@@ -1541,9 +1543,11 @@ Content-Type: application/json</pre>
           <div class="stat"><span>Faturamento da equipe</span><b class="num">${money0(total)}</b></div>
           <div class="stat"><span>Barbeiros</span><b class="num">${R.rows.length}</b></div>
           <div class="stat"><span>Indicadores</span><b class="num">${R.N}</b></div>
-          <div class="stat"><span>Título</span><b>${secret ? 'Surpresa' : t ? (R.title.type === 'mvp' ? 'MVP' : 'Destaque') + ' · ' + esc(first(t.barber.name)) : 'Nenhum'}</b></div>
+          <div class="stat"><span>Título</span><b>${hide ? 'Surpresa' : t ? (R.title.type === 'mvp' ? 'MVP' : 'Destaque') + ' · ' + esc(first(t.barber.name)) : 'Nenhum'}</b></div>
         </div>
-        ${secret ? '<p class="section-note">O pódio fica escondido aqui para não estragar a surpresa caso a tela esteja à vista da equipe.</p>' : `<ol class="fc-top">${top.map(r => `<li>${avatar(r.barber, 40)}<span><b>${ord(r.pos)} ${esc(r.barber.name)}</b><small class="muted num">${score(r.overall)} pts · ${r.leads.length}/${R.N} lideradas</small></span></li>`).join('')}</ol>`}
+        <div class="fc-peek"><p class="section-note">${hide ? 'O título e as colocações ficam escondidos aqui para não estragar a surpresa se a tela estiver espelhada na TV.' : 'Só você deveria estar vendo isto.'}</p>
+          <button class="btn btn-sm" data-action="fcPeek">${icon(hide ? 'eye' : 'lock')} ${hide ? 'Ver o resultado (só para mim)' : 'Esconder de novo'}</button></div>
+        ${hide ? '' : `<ol class="fc-top">${top.map(r => `<li>${avatar(r.barber, 40)}<span><b>${ord(r.pos)} ${esc(r.barber.name)}</b><small class="muted num">${score(r.overall)} pts · ${r.leads.length}/${R.N} lideradas</small></span></li>`).join('')}</ol>`}
         <p class="section-note">A apresentação mostra cada barbeiro do último ao 4º colocado. Depois vem o pódio: cada lugar, do 3º ao 1º, só aparece quando você tocar em Revelar. Use em tela cheia na TV da loja.</p>
       </section>` : ''}`;
   }
@@ -2772,6 +2776,7 @@ Content-Type: application/json</pre>
     if (!user) { renderAuth(ui.authMode); return; }
 
     let route = h || 'inicio';
+    if (route !== 'fechamento') ui.fcPeek = false;
     const alias = { empresa: 'empresa', integracao: 'integracao' };
     if (alias[route]) { ui.cfgTab = alias[route]; route = 'configuracoes'; }
     if (route === 'gestao-visual') route = 'inicio';
@@ -3013,6 +3018,7 @@ Content-Type: application/json</pre>
     },
     fxStart() {
       const ym = ui.teamMonth || curYm();
+      ui.fcPeek = false;
       // Revelação de verdade (mês encerrado e em segredo): os celulares da equipe acompanham ao vivo.
       ui.fx = { ym, i: 0, live: isGestor(currentUser()) && !!inSuspense(monthRange(ym)) && iso(new Date()) > monthRange(ym).end };
       Sound.ensure(); keepAwake();
@@ -3056,6 +3062,7 @@ Content-Type: application/json</pre>
       else { sel = [...sel, id]; if (sel.length > 4) sel = sel.slice(1); }
       ui.radarSel = sel; const rd = $('#tm-radar'); if (rd) rd.innerHTML = teamRadars(ui.teamMonth || curYm(), rd.dataset.only === '1');
     },
+    fcPeek() { ui.fcPeek = !ui.fcPeek; render(); },
     goFechamento(el) { ui.teamMonth = el.dataset.ym; location.hash = 'fechamento'; },
     revealNow(el) {
       if (!isGestor(currentUser())) return;
@@ -3323,7 +3330,7 @@ Content-Type: application/json</pre>
   const CHANGES = {
     tvSoundKind(el) { Sound.kind = el.value; Sound.play(el.value, true); },
     perfBarber(el) { ui.perfBarber = el.value; render(); },
-    teamMonth(el) { ui.teamMonth = el.value; render(); },
+    teamMonth(el) { ui.teamMonth = el.value; ui.fcPeek = false; render(); },
     lanDate(el) { ui.lanDate = el.value; },
     popMonth(el) { ui.teamMonth = ui.popMonth = el.value; ui.popDraft = null; render(); },
     async popPhoto(el) {
