@@ -1077,6 +1077,15 @@
     const lv = levelOf(c.value);
     const cm = c.months.slice(-6);
     return `
+      <section class="card pp-head">
+        ${avatar(b, 64)}
+        <div class="pp-who"><small class="tm-eyebrow">Profissional selecionado</small><h2>${esc(b.name)} ${titleChip(R, b.id)}</h2>
+          <p class="pp-chips"><span class="chip chip-soft num">${ord(row.pos)} de ${R.rows.length}</span><span class="chip chip-soft num">${score(row.overall)} pts</span><span class="chip lv-chip ${lv.cls}">${lv.name}</span></p></div>
+        <div class="pp-acts"><a class="btn btn-sm" href="#perfil-${esc(b.id)}">${icon('chart')} Performance completa</a>
+          <button class="icon-btn" data-action="profClose" aria-label="Fechar">${icon('x')}</button></div>
+      </section>
+      <div class="pp-grid">${strengths(row, prevRow, R, b.id)}</div>
+      <div class="pp-grid">
       <section class="section card"><h2 class="section-title">Faturamento de ${esc(b.name.split(' ')[0])} · últimos 6 meses</h2>
         ${lineSvg({ labels: last6.map(ymShort), series: [{ values: fatVals, color: '#d6b46a', fill: true }], yFmt: v => v >= 1000 ? 'R$' + nf0.format(v / 1000) + 'k' : 'R$' + nf0.format(v) })}</section>
       <section class="section card">
@@ -1091,7 +1100,7 @@
         ${cm.length ? lineSvg({ labels: cm.map(m => ymShort(m.ym)), series: [{ values: cm.map(m => m.score), color: '#5b9dff', dashed: true }, { values: cm.map(m => m.career), color: '#d6b46a' }], yMax: 100, yFmt: v => nf0.format(v) }) : ''}
         <div class="ch-legend"><span><i style="background:#d6b46a"></i>Média da carreira</span><span><i class="dash" style="border-color:#5b9dff"></i>Pontuação do mês</span></div>
       </section>
-      ${strengths(row, prevRow, R, b.id)}`;
+      </div>`;
   }
 
   function teamRadars(ym, monthOnly) {
@@ -1152,9 +1161,9 @@
     const all = rows.length === R.rows.length;
     return `<section class="section card">
         <h2 class="section-title">Detalhado por profissional</h2>
-        <p class="section-note">Toque num profissional para ver a performance completa dele.${all ? '' : ' Aparecem só os profissionais cujos números detalhados você pode ver.'}</p>
+        <p class="section-note">Toque num profissional para ver onde ele é forte e onde precisa melhorar.${all ? '' : ' Aparecem só os profissionais cujos números detalhados você pode ver.'}</p>
         <div class="table-wrap"><table class="pc-table"><thead><tr><th>Profissional</th>${cols.map(c => `<th>${c[0]}${tip({ Faturamento: 'fat', Clientes: 'cli', Serviços: 'serv', 'Ticket médio': 'ticket', Ocupação: 'ocup', Produtos: 'prod', Planos: 'planos' }[c[0]])}</th>`).join('')}<th>Pontos${tip('score')}</th></tr></thead><tbody>
-          ${rows.map(r => `<tr data-href="#perfil-${esc(r.barber.id)}" tabindex="0"><td><a class="td-who" href="#perfil-${esc(r.barber.id)}">${avatar(r.barber, 36)}<span>${esc(r.barber.name)}</span></a></td>
+          ${rows.map(r => `<tr class="${ui.profSel === r.barber.id ? 'on' : ''}" data-action="profPick" data-id="${esc(r.barber.id)}"><td><button type="button" class="td-who" data-action="profPick" data-id="${esc(r.barber.id)}" aria-expanded="${ui.profSel === r.barber.id}">${avatar(r.barber, 36)}<span>${esc(r.barber.name)}</span></button></td>
             ${cols.map(c => `<td>${c[1](r)}</td>`).join('')}<td class="td-score">${score(r.overall)}</td></tr>`).join('')}
         </tbody></table></div>
       </section>`;
@@ -1167,9 +1176,9 @@
     const w = darkFor(monthRange(ym));
     if (w) return `${monthPicker(ym, user)}${suspenseCard(w)}${ownNumbers(monthR(ym), user.barberId, ym)}`;
     return `${monthPicker(ym, user)}
-      <div id="tm-top" class="tm-block">${teamTop(ym)}</div>
       <div id="tm-prof" class="tm-block">${profTable(ym)}</div>
-      <div id="tm-insights" class="tm-block">${ui.teamBarber ? teamInsights(ui.teamBarber, ym) : ''}</div>
+      <div id="tm-insights" class="tm-block">${ui.profSel ? teamInsights(ui.profSel, ym) : ''}</div>
+      <div id="tm-top" class="tm-block">${teamTop(ym)}</div>
       <div id="tm-radar" class="tm-block">${teamRadars(ym)}</div>`;
   }
 
@@ -1191,7 +1200,7 @@
     const ym = ui.teamMonth || curYm();
     const top = $('#tm-top'); if (top) top.innerHTML = teamTop(ym);
     const pf = $('#tm-prof'); if (pf) pf.innerHTML = profTable(ym);
-    const ins = $('#tm-insights'); if (ins && ui.teamBarber) ins.innerHTML = teamInsights(ui.teamBarber, ym);
+    const ins = $('#tm-insights'); if (ins) ins.innerHTML = ui.profSel ? teamInsights(ui.profSel, ym) : '';
     const rd = $('#tm-radar'); if (rd) rd.innerHTML = teamRadars(ym);
     const R = monthR(ym);
     document.querySelectorAll('[data-pts]').forEach(el => { const r = R.rows.find(x => x.barber.id === el.dataset.pts); el.textContent = (r ? score(r.overall) : '—') + ' pts'; });
@@ -2882,6 +2891,7 @@ Content-Type: application/json</pre>
 
     let route = h || 'inicio';
     if (route !== 'fechamento') ui.fcPeek = false;
+    if (route !== 'time') ui.profSel = null;
     const alias = { empresa: 'empresa', integracao: 'integracao' };
     if (alias[route]) { ui.cfgTab = alias[route]; route = 'configuracoes'; }
     if (route === 'gestao-visual') route = 'inicio';
@@ -3152,11 +3162,18 @@ Content-Type: application/json</pre>
       rec[k] = null; if (rec._adj) delete rec._adj[k];
       save(); refreshEditorFields(); refreshTeam(); toast('Voltou para o valor da integração.');
     },
+    profPick(el) {
+      const id = el.dataset.id;
+      ui.profSel = ui.profSel === id ? null : id;
+      refreshTeam();
+      if (ui.profSel) $('#tm-insights')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+    profClose() { ui.profSel = null; refreshTeam(); $('#tm-prof')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
     teamPick(el) {
       ui.teamBarber = el.dataset.id;
       const u = currentUser();
       if (!isGestor(u) && !seeNum(el.dataset.id)) { ui.teamBarber = u.barberId; toast('No ranking você vê todos. A performance detalhada é só a sua.'); return; }
-      if (!$('#tm-editor')) { refreshTeam(); $('#tm-insights')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+      if (!$('#tm-editor')) { ui.profSel = el.dataset.id; refreshTeam(); $('#tm-insights')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
       const ed = $('#tm-editor');
       if (ed) { ed.innerHTML = teamEditor(ui.teamMonth || curYm()); refreshTeam(); ed.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
       else render();
