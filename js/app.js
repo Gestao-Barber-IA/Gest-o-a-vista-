@@ -419,7 +419,7 @@
     const groups = NAV.filter(gr => !gr.g || g).map(gr => {
       const am = isAreaMgr(user), hg = hasGrants(user);
       const items = gr.items.filter(it => (!it.g || g || (it.a && am)) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
-        <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && (g || hg) ? 'Performance da equipe' : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}</a>`).join('');
+        <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && (g || hg) ? (g ? 'Performance da empresa' : 'Performance da equipe') : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}</a>`).join('');
       return (gr.group ? `<div class="nav-group">${esc(gr.group)}</div>` : '') + items;
     }).join('');
     const periods = Object.entries(PERIOD_NAMES).map(([k, v]) =>
@@ -2878,7 +2878,7 @@ Content-Type: application/json</pre>
       const id = route.slice(7);
       page = { r: () => perfFor(id, user) }; title = 'Perfil';
     } else if (PAGES[route]) {
-      page = PAGES[route]; title = route === 'performance' && (isGestor(user) || hasGrants(user)) ? 'Performance' : page.t;
+      page = PAGES[route]; title = route === 'performance' && (isGestor(user) || hasGrants(user)) ? (isGestor(user) ? 'Performance da empresa' : 'Performance da equipe') : page.t;
     } else if (SOON_TEXT[route]) {
       page = { r: () => pageSoon(route) }; title = NAV.flatMap(g => g.items).find(i => i.r === route).t;
     } else { route = 'inicio'; page = PAGES.inicio; title = page.t; }
