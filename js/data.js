@@ -4,7 +4,9 @@
 (function () {
   'use strict';
 
-  const KEY = 'gbia.v1';
+  // Modo apresentação: dados fictícios separados (nunca mistura com os dados reais).
+  const DEMO = (() => { try { const v = window.sessionStorage.getItem('gbia.demo'); return v === 'salao' || v === 'barber' ? v : ''; } catch (e) { return ''; } })();
+  const KEY = DEMO ? 'gbia.demo.' + DEMO : 'gbia.v1';
   const memory = {};
 
   function safeGet(storage, k) {
@@ -275,8 +277,21 @@
       lose: ['Não cumprir jornada estabelecida', 'Atrasos sem justificativa', 'Mau atendimento ao cliente', 'Quebra das regras e padrões da empresa', 'Falta sem aviso prévio'],
     };
   }
-  let popDef = null;
-  const popCfgOf = state => (state.popCfg && Array.isArray(state.popCfg.items) ? state.popCfg : (popDef || (popDef = popDefault())));
+  const popDef = {};
+  // Modelo padrão do checklist; no salão, os textos falam de salão.
+  function popDefaultFor(brand) {
+    const d = popDefault();
+    if (brand !== 'salao') return d;
+    const sw = t => String(t || '').replace(/em frente à barbearia/g, 'em frente ao salão').replace(/da barbearia/g, 'do salão').replace(/barbearia/g, 'salão');
+    d.items.forEach(it => { it.title = sw(it.title); it.desc = sw(it.desc); });
+    d.rules = sw(d.rules); d.lose = (d.lose || []).map(sw);
+    return d;
+  }
+  const popCfgOf = state => {
+    if (state.popCfg && Array.isArray(state.popCfg.items)) return state.popCfg;
+    const b = state.brand === 'salao' ? 'salao' : 'barber';
+    return popDef[b] || (popDef[b] = popDefaultFor(b));
+  };
   const validPhone = p => String(p || '').replace(/\D/g, '').length >= 10;
   // Cada unidade do checklist é uma prova (foto/print). Só as aprovadas pela gestão contam pontos.
   const evOk = (it, e) => e && e.status === 'aprovado' && (it.type !== 'phones' || validPhone(e.phone));
@@ -469,14 +484,25 @@
     };
   }
 
-  function demoState() {
-    const r = rng(20261105);
-    const people = [
-      ['Rafael Lima', 1.25, 1.05, 0.9], ['Diego Moura', 1.0, 1.2, 0.95], ['Thiago Alves', 1.05, 0.95, 1.0],
-      ['Bruno Rocha', 0.85, 1.15, 0.7], ['Caio Ferreira', 0.95, 0.9, 0.8], ['Mateus Pinto', 0.8, 1.0, 0.75],
-      ['Júlia Ramos', 0.65, 1.1, 0.6],
+  // Imagem de exemplo para os POPs da demonstração (sem depender de arquivos).
+  function demoStepImg(n, title, line, c1, c2) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient></defs><rect width="800" height="600" fill="url(#g)"/><circle cx="110" cy="110" r="62" fill="rgba(255,255,255,.18)"/><text x="110" y="132" font-family="Arial" font-size="64" font-weight="700" fill="#fff" text-anchor="middle">${n}</text><text x="60" y="330" font-family="Arial" font-size="46" font-weight="700" fill="#fff">${title}</text><text x="60" y="400" font-family="Arial" font-size="30" fill="rgba(255,255,255,.85)">${line}</text><text x="60" y="540" font-family="Arial" font-size="22" fill="rgba(255,255,255,.7)">Foto de exemplo · modo apresentação</text></svg>`;
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  }
+  function demoState(brand = 'barber') {
+    const sal = brand === 'salao';
+    const r = rng(sal ? 20261108 : 20261105);
+    const people = sal ? [
+      ['Ana Beatriz', 1.25, 1.1, 0.9, 'Cabeleireira'], ['Camila Souza', 1.0, 1.2, 0.95, 'Manicure'], ['Juliana Prado', 1.05, 0.95, 1.0, 'Cabeleireira'],
+      ['Larissa Melo', 0.85, 1.15, 0.7, 'Esteticista'], ['Fernanda Dias', 0.95, 0.9, 0.8, 'Manicure'], ['Patrícia Gomes', 0.8, 1.0, 0.75, 'Maquiadora'],
+      ['Bianca Rocha', 0.65, 1.1, 0.6, 'Designer de sobrancelhas'],
+    ] : [
+      ['Rafael Lima', 1.25, 1.05, 0.9, 'Barbeiro líder'], ['Diego Moura', 1.0, 1.2, 0.95, 'Barbeiro'], ['Thiago Alves', 1.05, 0.95, 1.0, 'Barbeiro'],
+      ['Bruno Rocha', 0.85, 1.15, 0.7, 'Barbeiro'], ['Caio Ferreira', 0.95, 0.9, 0.8, 'Barbeiro'], ['Mateus Pinto', 0.8, 1.0, 0.75, 'Barbeiro'],
+      ['Júlia Ramos', 0.65, 1.1, 0.6, 'Aprendiz'],
     ];
-    const barbers = people.map(([name]) => ({ id: uid('b_'), name, photo: null, active: true, role: 'Barbeiro', instagram: '' }));
+    const barbers = people.map(([name, , , , role]) => ({ id: uid('b_'), name, photo: null, active: true, role, instagram: '' }));
+    const priceK = sal ? 1.45 : 1;
     const entries = [];
     const today = new Date();
     for (let d = 100; d >= 0; d--) {
@@ -486,7 +512,7 @@
         if (r() < 0.12) return; // folga
         const cli = Math.max(1, Math.round((3 + r() * 4) * vol));
         const serv = cli + Math.round(r() * 2 * vol);
-        const fat = Math.round(serv * (34 + r() * 18) * price * 100) / 100;
+        const fat = Math.round(serv * (34 + r() * 18) * price * priceK * 100) / 100;
         const hDisp = 8;
         const hOcup = Math.min(hDisp, Math.round(serv * (0.45 + r() * 0.2) * 2) / 2);
         entries.push({ id: uid('e_'), barberId: barbers[i].id, date: iso(day), fat, serv, cli, hDisp, hOcup });
@@ -509,7 +535,7 @@
     }
     // Checklist Agenda Cheia de exemplo no mês atual.
     const pop = [];
-    const pcfg = popDefault();
+    const pcfg = popDefaultFor(brand);
     for (let d = 1; d < today.getDate(); d++) {
       const day = `${curYm}-${pad(d)}`;
       if (new Date(today.getFullYear(), today.getMonth(), d).getDay() === 0) continue;
@@ -527,18 +553,36 @@
       });
     }
     const gestorId = uid('u_');
+    // POPs de exemplo com fotos ilustrativas e link de vídeo.
+    const [c1, c2] = sal ? ['#8a2a45', '#d98c8c'] : ['#1d2f6b', '#b08c42'];
+    const popsList = (sal ? [
+      ['Recepção da cliente', 'Do momento em que ela chega até a cadeira.', ['Receba pelo nome', 'Ofereça água, café ou chá', 'Confirme o serviço e o tempo']],
+      ['Esmaltação em gel', 'Passo a passo do preparo à finalização.', ['Higienize as mãos e o material', 'Prepare as unhas e aplique a base', 'Aplique a cor e finalize na cabine']],
+      ['Pós-atendimento', 'Como garantir a volta da cliente.', ['Mostre o resultado no espelho', 'Ofereça o próximo horário', 'Peça a avaliação no Google']],
+    ] : [
+      ['Recepção do cliente', 'Da porta até a cadeira.', ['Cumprimente pelo nome', 'Ofereça água ou café', 'Confirme o corte e o tempo']],
+      ['Corte degradê', 'Padrão da casa para o degradê.', ['Defina a altura do degradê', 'Trabalhe as transições', 'Finalize e mostre no espelho']],
+      ['Pós-atendimento', 'Como garantir a volta do cliente.', ['Ofereça o plano mensal', 'Agende o próximo horário', 'Peça a avaliação no Google']],
+    ]).map(([name, desc, steps], k) => ({ id: 'pop_demo' + k, name, desc, video: 'https://www.youtube.com/', at: Date.now(),
+      steps: steps.map((t, i) => ({ src: demoStepImg(i + 1, name, t, c1, c2), cap: t })) }));
     return {
       version: 2,
       demo: true,
+      presentation: !!DEMO,
+      brand,
+      pops: popsList,
+      // Níveis de acesso de exemplo: um líder com acessos extras e uma gestora/gestor.
+      org: { levels: [{ id: 'l1', name: 'Nível 1' }, { id: 'l2', name: 'Nível 2' }, { id: 'l3', name: 'Nível 3' }], nodes: [], grants: [],
+        access: { [barbers[0].id]: 'lider', [barbers[2].id]: 'gestor' }, extras: { [barbers[0].id]: { review: true, fields: ['planos', 'prod'] } } },
       monthly,
       pop,
       hidden: ['fid'],
       goals: { team: { ...DEFAULT_GOALS }, byBarber: {} },
-      company: { name: 'Barbearia Demonstração', cnpj: '00.000.000/0001-00', phone: '(11) 90000-0000', email: 'gestor@demo.com', logo: null },
+      company: { name: sal ? 'Studio Bella · Demonstração' : 'Barbearia Demonstração', cnpj: '00.000.000/0001-00', phone: '(11) 90000-0000', email: 'gestor@demo.com', logo: null },
       users: [
-        { id: gestorId, name: 'Gestor Demo', email: 'gestor@demo.com', pass: passHash('gestor@demo.com', 'demo123'), role: 'gestor', status: 'ativo', barberId: null },
-        { id: uid('u_'), name: 'Diego Moura', email: 'barbeiro@demo.com', pass: passHash('barbeiro@demo.com', 'demo123'), role: 'barbeiro', status: 'ativo', barberId: barbers[1].id },
-        { id: uid('u_'), name: 'Caio Ferreira', email: 'caio@demo.com', pass: passHash('caio@demo.com', 'demo123'), role: 'barbeiro', status: 'pendente', barberId: barbers[4].id },
+        { id: gestorId, name: sal ? 'Dona do Studio' : 'Gestor Demo', email: 'gestor@demo.com', pass: passHash('gestor@demo.com', 'demo123'), role: 'gestor', status: 'ativo', barberId: null },
+        { id: uid('u_'), name: barbers[1].name, email: 'barbeiro@demo.com', pass: passHash('barbeiro@demo.com', 'demo123'), role: 'barbeiro', status: 'ativo', barberId: barbers[1].id },
+        { id: uid('u_'), name: barbers[4].name, email: 'caio@demo.com', pass: passHash('caio@demo.com', 'demo123'), role: 'barbeiro', status: 'pendente', barberId: barbers[4].id },
       ],
       invites: [{ code: 'mt' + hash('mateus').slice(0, 6), barberId: barbers[5].id, createdAt: iso(today), used: false }],
       barbers,
@@ -565,7 +609,7 @@
         try {
           const st = JSON.parse(raw);
           if (st.version !== 2) {
-            if (st.demo) { const d = demoState(); DB.save(d); return d; }
+            if (st.demo) { const d = demoState(DEMO || 'barber'); DB.save(d); return d; }
             st.monthly = st.monthly || []; st.goals = st.goals || { team: { ...DEFAULT_GOALS }, byBarber: {} }; st.version = 2;
             st.barbers.forEach(b => { b.role = b.role || 'Barbeiro'; });
             DB.save(st);
@@ -574,12 +618,13 @@
           return st;
         } catch (e) { /* recria abaixo */ }
       }
-      const s = demoState();
+      const s = demoState(DEMO || 'barber');
       DB.save(s);
       return s;
     },
     save(s) { safeSet('localStorage', KEY, JSON.stringify(s)); },
-    reset() { const s = demoState(); DB.save(s); return s; },
+    reset() { const s = demoState(DEMO || 'barber'); DB.save(s); return s; },
+    demo: DEMO,
     replace(s) { DB.save(s); return s; },
     session: {
       get() { return safeGet('localStorage', KEY + '.session') || safeGet('sessionStorage', KEY + '.session'); },

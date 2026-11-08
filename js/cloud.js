@@ -4,7 +4,8 @@
   'use strict';
   const CFG = window.GB_CONFIG || {};
   const GB = window.GB;
-  const enabled = !!(CFG.supabaseUrl && CFG.supabaseAnonKey && window.supabase && window.supabase.createClient);
+  // No modo apresentação o app usa só dados fictícios deste navegador; a nuvem fica desligada.
+  const enabled = !GB.DB.demo && !!(CFG.supabaseUrl && CFG.supabaseAnonKey && window.supabase && window.supabase.createClient);
   const Cloud = { enabled, user: null, profile: null, companyId: null, recovery: false, last: null, onRemote: null, onError: null, onAuth: null };
   GB.Cloud = Cloud;
   if (!enabled) return;
