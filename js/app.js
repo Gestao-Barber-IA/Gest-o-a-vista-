@@ -73,8 +73,18 @@
     compare: ['Comparar profissionais', 'Mostra os números de dois profissionais lado a lado no mês. Verde com ▲ é quem está à frente em cada indicador; vermelho com ▼, quem está atrás; "=" é empate. No meio aparece a diferença. O barbeiro compara os próprios números com o líder de cada indicador; o dono e o gestor de área comparam quem podem ver.'],
     evo: ['Evolução', 'Compara o profissional com ele mesmo em outro período. Verde com ▲ é onde melhorou; vermelho com ▼, onde caiu. Com o mês em andamento, compara o mesmo número de dias (ex.: 1 a 7 deste mês × 1 a 7 do mês anterior), a não ser que você marque o mês anterior inteiro. Em períodos que não são o mês inteiro, entram os lançamentos por dia.'],
     access_lv: ['Nível de acesso', () => ACCESS_TIP()],
+    extras: ['Acessos extras do líder', 'Liberações opcionais que você dá a um líder: conferir e aprovar o checklist de toda a equipe e/ou lançar à mão os números de toda a equipe só nos indicadores marcados. Os outros campos ficam só para leitura para ele. Campos que vêm da integração continuam travados.'],
     fechamento: ['Fechamento do mês', 'Apresentação para a equipe: mostra do último colocado ao 4º e depois o pódio, do 3º ao 1º. Cada lugar do pódio só aparece quando o gestor toca em Revelar. O resumo esconde o resultado para não estragar a surpresa se a tela estiver na TV.'],
   };
+  function leaderExtrasBox(b) {
+    const x = extrasOf(b.id), n = (x.review ? 1 : 0) + x.fields.length;
+    return `<details class="lx" ${ui.lxOpen === b.id ? 'open' : ''} data-id="${esc(b.id)}">
+      <summary>${icon('plus')} Acessos extras do líder ${n ? `<span class="chip chip-ok">${n} liberado${n > 1 ? 's' : ''}</span>` : '<span class="chip chip-soft">nenhum</span>'}${tip('extras')}</summary>
+      <label class="check"><input type="checkbox" data-change="leaderExtra" data-id="${esc(b.id)}" data-k="review" ${x.review ? 'checked' : ''}><span><b>Conferir e aprovar o checklist de toda a equipe</b><small>Aprova ou recusa as provas dos colegas (nunca as próprias).</small></span></label>
+      <p class="lx-sub">Lançar à mão os números de toda a equipe, só nestes indicadores:</p>
+      <div class="lx-grid">${EXTRA_FIELDS().map(f => `<label class="check"><input type="checkbox" data-change="leaderExtra" data-id="${esc(b.id)}" data-k="f:${f.key}" ${x.fields.includes(f.key) ? 'checked' : ''}><span>${esc(f.label)}</span></label>`).join('')}</div>
+    </details>`;
+  }
   const ACCESS_TIP = () => ACCESS.map(([, l, d]) => `${l}: ${d}`).join(' ');
   const tip = key => TIPS[key] ? `<button type="button" class="tip" data-tip="${key}" aria-label="Explicação: ${esc(TIPS[key][0])}">?</button>` : '';
   const FIELD_TIP = { fat: 'fat', cli: 'cli', serv: 'serv', ticket: 'ticket', ocupPct: 'ocup', fidPct: 'fid', prod: 'prod', check: 'check', planos: 'planos', agend: 'agend', aus: 'aus' };
@@ -422,7 +432,8 @@
     const g = isGestor(user);
     const groups = NAV.filter(gr => !gr.g || g).map(gr => {
       const am = isAreaMgr(user), hg = hasGrants(user);
-      const items = gr.items.filter(it => (!it.g || g || (it.a && am)) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
+      const lf = myExtras().fields.length > 0;
+      const items = gr.items.filter(it => (!it.g || g || (it.a && am) || (it.r === 'lancamentos' && lf)) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
         <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && (g || hg) ? (g || accessOf(user.barberId) !== 'profissional' ? 'Performance da empresa' : 'Performance da área') : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}</a>`).join('');
       return (gr.group ? `<div class="nav-group">${esc(gr.group)}</div>` : '') + items;
     }).join('');
@@ -984,6 +995,10 @@
       const isSum = GB.SUM_KEYS.includes(f.key);
       const hasMan = isSum && GB.manualEntries(state, b.id, ym).some(e => isNum(e[f.key]));
       const shownV = isNum(rec[f.key]) ? rec[f.key] : (hasMan ? GB.manualTotal(state, b.id, ym, f.key) : '');
+      if (!fieldOk(b.id, f.key)) {
+        return `<div class="field"><span class="tm-flabel"><span class="tm-ft">${esc(f.label)}${tip(FIELD_TIP[f.key])}</span><span class="lock">${icon('eye')} Só leitura</span></span>
+          <input class="input num" id="m-${f.key}" value="${shownV === '' ? '' : fmtV(shownV)}" placeholder="—" readonly tabindex="-1"></div>`;
+      }
       return `<label class="field"><span class="tm-flabel"><span class="tm-ft">${esc(f.label)}${tip(FIELD_TIP[f.key])}</span>${isSum ? '<span class="lock lock-sum">Total do mês</span>' : ''}</span>
         <input class="input input-edit num" id="m-${f.key}" name="${f.key}" type="number" inputmode="decimal" min="0" ${f.max ? `max="${f.max}"` : ''} step="${f.step}" value="${shownV}" placeholder="—" data-auto="month" ${isSum ? 'data-sum="1"' : ''} data-id="${esc(b.id)}"></label>`;
     }).join('');
@@ -1006,7 +1021,7 @@
 
   function teamEditor(ym) {
     const own = isGestor(currentUser());
-    const list = state.barbers.filter(b => b.active !== false && canEditB(b.id));
+    const list = state.barbers.filter(b => b.active !== false && canLanB(b.id));
     if (!list.length) return emptyBarbers();
     const sel = list.find(b => b.id === ui.teamBarber) || list[0];
     ui.teamBarber = sel.id;
@@ -1019,7 +1034,7 @@
     }).join('')}</div>
     <section class="section card tm-edit">
       <h2 class="section-title">Editar métricas de ${esc(sel.name)} · ${esc(ymLabel(ym).replace(' de ', '/'))}</h2>
-      ${own ? '' : `<p class="section-note">Você lança os números das pessoas da sua área.</p>`}
+      ${own ? '' : canEditB(sel.id) ? `<p class="section-note">Você lança os números das pessoas da sua área.</p>` : `<p class="section-note">Liberado pelo dono para você lançar: <b>${EXTRA_FIELDS().filter(f => myExtras().fields.includes(f.key)).map(f => esc(f.label)).join(', ')}</b>. Os outros campos ficam só para leitura.</p>`}
       <div class="tm-photo">${avatar(sel, 96)}${own ? '' : '</div><!--'}<label class="btn btn-sm" style="cursor:pointer">${icon('camera')} Trocar foto<input type="file" accept="image/*" hidden data-change="barberPhoto" data-id="${esc(sel.id)}"></label>${own ? '</div>' : '-->'}
       <div class="tm-fixed"><small>Nome (fixo)</small><b>${esc(sel.name)}</b></div>
       ${own ? `<div class="grid-2">
@@ -1555,7 +1570,7 @@ ${rows.length ? '' : emptyBarbers()}
           <div class="acc-edit">
             <label class="field"><span>Função</span><input class="input" name="role" list="role-list" value="${esc(b.role || '')}" placeholder="Ex.: Barbeiro" maxlength="60" data-change="barberRole" data-id="${esc(b.id)}"></label>
             <label class="field"><span>Nível de acesso</span><select class="input" data-change="barberAccess" data-id="${esc(b.id)}">${ACCESS.map(([k, l]) => `<option value="${k}" ${accessOf(b.id) === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-          </div></div>
+          </div>${accessOf(b.id) === 'lider' ? leaderExtrasBox(b) : ''}</div>
         <div class="btn-row">
           ${!u ? `<button class="btn btn-sm btn-primary" data-action="invite" data-id="${esc(b.id)}">${icon('link')} ${inv ? 'Ver convite' : 'Convidar'}</button>` : ''}
           ${u && u.status === 'ativo' ? `<button class="btn btn-sm" data-action="resetPass" data-id="${esc(u.id)}">${icon('lock')} ${Cloud.enabled ? 'Enviar redefinição de senha' : 'Nova senha'}</button>` : ''}
@@ -2256,6 +2271,8 @@ Content-Type: application/json</pre>
     const uids = new Set(state.users.map(u => u.id));
     o.grants = o.grants.filter(g => uids.has(g.userId) && (g.nodeId === null || o.nodes.some(n => n.id === g.nodeId)));
     if (!o.access || typeof o.access !== 'object') o.access = {};
+    if (!o.extras || typeof o.extras !== 'object') o.extras = {};
+    for (const k of Object.keys(o.extras)) if (!bids.has(k)) delete o.extras[k];
     for (const k of Object.keys(o.access)) if (!bids.has(k) || !['lider', 'gestor'].includes(o.access[k])) delete o.access[k];
     return o;
   }
@@ -2289,6 +2306,14 @@ Content-Type: application/json</pre>
     ['gestor', 'Gestor', 'Também lança os resultados e confere o checklist de toda a equipe. Configurações, cadastro de profissionais e assinatura continuam só com o dono.'],
   ];
   const accessOf = bid => (bid && (org().access || {})[bid]) || 'profissional';
+  // Acessos extras que o dono pode dar a cada líder: conferir o checklist e lançar métricas específicas.
+  function extrasOf(bid) {
+    if (accessOf(bid) !== 'lider') return { review: false, fields: [] };
+    const e = (org().extras || {})[bid] || {};
+    return { review: !!e.review, fields: Array.isArray(e.fields) ? e.fields : [] };
+  }
+  const myExtras = () => { const u = currentUser(); return u && !isGestor(u) ? extrasOf(u.barberId) : { review: false, fields: [] }; };
+  const EXTRA_FIELDS = () => GB.MONTH_FIELDS.filter(f => !f.calc && !(state.hidden || []).includes(GB.FIELD_IND[f.key] || f.key));
   function areaIds(u, roles) {
     const s = new Set();
     if (!u) return s;
@@ -2311,6 +2336,9 @@ Content-Type: application/json</pre>
   }
   // Quem pode lançar os números do mês de um barbeiro.
   function canEditB(bid) { const u = currentUser(); return !!u && (isGestor(u) || areaIds(u, ['gestor']).has(bid)); }
+  // Lançamentos: quem lança tudo de alguém, ou o líder com métricas liberadas (só essas).
+  const canLanB = bid => canEditB(bid) || myExtras().fields.length > 0;
+  const fieldOk = (bid, key) => canEditB(bid) || myExtras().fields.includes(key);
   // Ranking só com os barbeiros da área (fechamento do gestor de área).
   function scopedR(ym) {
     const u = currentUser();
@@ -2490,9 +2518,9 @@ Content-Type: application/json</pre>
   }
   const popPendingOf = (bid, day) => { const rec = popRec(bid, day); return rec && rec.ev ? Object.values(rec.ev).reduce((a, l) => a + (Array.isArray(l) ? l.filter(e => e.status === 'pendente').length : 0), 0) : 0; };
   // Quem confere: o dono, ou o gestor de área para as pessoas dele (nunca a própria prova).
-  function canReview(bid) { const u = currentUser(); if (!u) return false; if (isGestor(u)) return true; return u.barberId !== bid && areaIds(u, ['gestor']).has(bid); }
+  function canReview(bid) { const u = currentUser(); if (!u) return false; if (isGestor(u)) return true; return u.barberId !== bid && (areaIds(u, ['gestor']).has(bid) || myExtras().review); }
   const popPendingCount = (bid, ym) => (state.pop || []).filter(r => r.barberId === bid && r.day.startsWith(ym) && r.day.length === 10).reduce((a, r) => a + popPendingOf(bid, r.day), 0);
-  const popPeople = () => state.barbers.filter(b => b.active !== false && (canEditB(b.id) || (currentUser() || {}).barberId === b.id));
+  const popPeople = () => state.barbers.filter(b => b.active !== false && (canEditB(b.id) || canReview(b.id) || (currentUser() || {}).barberId === b.id));
   const canPopEdit = bid => canEditB(bid) || (currentUser() || {}).barberId === bid;
 
   const EV_TXT = { pendente: 'Aguardando conferência', aprovado: 'Aprovada', recusado: 'Recusada' };
@@ -3095,7 +3123,7 @@ Content-Type: application/json</pre>
     } else if (SOON_TEXT[route]) {
       page = { r: () => pageSoon(route) }; title = NAV.flatMap(g => g.items).find(i => i.r === route).t;
     } else { route = 'inicio'; page = PAGES.inicio; title = page.t; }
-    if (page.g && !isGestor(user) && !(page.a && isAreaMgr(user))) { route = 'inicio'; page = PAGES.inicio; title = page.t; }
+    if (page.g && !isGestor(user) && !(page.a && isAreaMgr(user)) && !(route === 'lancamentos' && myExtras().fields.length)) { route = 'inicio'; page = PAGES.inicio; title = page.t; }
 
     const pending = isGestor(user) ? state.users.filter(u => u.status === 'pendente').length : 0;
     const who = isGestor(user) ? { name: state.company.name, photo: state.company.logo } : (barberById(user.barberId) || { name: user.name });
@@ -3665,6 +3693,14 @@ Content-Type: application/json</pre>
     teamMonth(el) { ui.teamMonth = el.value; ui.fcPeek = false; render(); },
     lanDate(el) { ui.lanDate = el.value; },
     barberRole(el) { const b = barberById(el.dataset.id); if (!b) return; b.role = el.value.trim().slice(0, 60) || 'Barbeiro'; save(); toast('Função salva.'); },
+    leaderExtra(el) {
+      if (!isGestor(currentUser())) return;
+      const o = org(), id = el.dataset.id, k = el.dataset.k;
+      const x = o.extras[id] = { review: false, fields: [], ...(o.extras[id] || {}) };
+      if (k === 'review') x.review = el.checked;
+      else { const f = k.slice(2); x.fields = el.checked ? [...new Set([...x.fields, f])] : x.fields.filter(v => v !== f); }
+      ui.lxOpen = id; save(); toast('Acesso do líder atualizado.'); render();
+    },
     barberAccess(el) {
       if (!isGestor(currentUser())) return;
       const o = org(), v = el.value, b = barberById(el.dataset.id);
