@@ -1238,3 +1238,40 @@ textarea.input.pop-ta { min-height: 72px; font-family: var(--font-body); font-si
 @media (min-width: 900px) { .pp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
 @media (prefers-reduced-motion: reduce) { #tm-insights:not(:empty) { animation: none; } }
 #tm-insights, #tm-prof, #tm-editor { scroll-margin-top: calc(84px + env(safe-area-inset-top, 0px)); }
+
+/* ---------- Comparativos ---------- */
+.cmp, .evo { display: grid; gap: 14px; }
+.cmp-pick { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 10px; }
+.cmp-vs { font: 800 1.3rem/1 var(--font-display); color: var(--accent); }
+.cmp-fixed { display: flex; align-items: center; color: var(--muted); }
+.cmp-sum { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.cmp-who { display: grid; justify-items: center; text-align: center; gap: 4px; padding: 14px 10px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface-2); min-width: 0; }
+.cmp-who.a { border-color: rgba(214, 180, 106, 0.45); }
+.cmp-who.b { border-color: rgba(91, 157, 255, 0.45); }
+.cmp-who b { font-family: var(--font-display); font-size: 1.02rem; overflow-wrap: anywhere; }
+.cmp-who small { color: var(--muted); }
+.cmp-crown { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: rgba(242, 193, 78, 0.15); color: var(--gold); }
+.cmp-crown .ico { width: 26px; height: 26px; }
+.cmp-wins { margin-top: 4px; padding: 3px 10px; border-radius: 999px; background: var(--surface-3); font-size: 0.8rem; font-weight: 700; }
+.cmp-list { display: grid; gap: 6px; }
+.cmp-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 1fr); align-items: center; gap: 8px; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); }
+.cmp-v { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
+.cmp-v.r { justify-content: flex-end; text-align: right; }
+.cmp-v b { font-size: 1.02rem; overflow-wrap: anywhere; }
+.cmp-v small { flex-basis: 100%; color: var(--muted); font-size: 0.74rem; }
+.cmp-ar { font-style: normal; font-size: 0.8rem; }
+.cmp-v.c-up b, .cmp-v.c-up .cmp-ar { color: var(--money); }
+.cmp-v.c-down b, .cmp-v.c-down .cmp-ar { color: var(--danger); }
+.cmp-v.c-eq b, .cmp-v.c-eq .cmp-ar { color: var(--muted); }
+.cmp-mid { display: grid; justify-items: center; text-align: center; gap: 2px; min-width: 0; }
+.cmp-mid span { font-weight: 700; font-size: 0.86rem; line-height: 1.2; }
+.cmp-mid small { color: var(--muted); font-size: 0.76rem; }
+.cmp .rd-box h3 { margin: 0; font-size: 0.9rem; }
+.pp-tabs { margin: 0; }
+.evo-seg { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); justify-self: stretch; }
+.evo-seg button { padding: 9px 10px; font-size: 0.88rem; }
+@media (min-width: 700px) { .evo-seg { grid-auto-flow: column; grid-template-columns: none; justify-self: start; } }
+.evo-dates { display: grid; gap: 10px; }
+.evo-dd { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.evo-full { justify-self: start; }
+@media (max-width: 420px) { .cmp-row { padding: 9px 8px; gap: 6px; } .cmp-v b { font-size: 0.92rem; } }
