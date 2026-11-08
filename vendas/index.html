@@ -39,6 +39,7 @@
   .btn-wa { background: #1faa59; border-color: #1faa59; color: #fff; }
   .btn svg { width: 20px; height: 20px; flex: none; }
   section { padding: 64px 0; }
+  section[id] { scroll-margin-top: 64px; }
   .lead { color: var(--soft); font-size: 1.12rem; max-width: 640px; }
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 22px; }
 
@@ -143,7 +144,11 @@
   .price { margin: 6px 0 0; display: flex; align-items: baseline; gap: 4px; }
   .price b { font: 800 2.8rem/1 var(--font-d); }
   .price small { color: var(--muted); font-weight: 700; }
-  .pl-annual { margin: 0; min-height: 1.4em; color: var(--good); font-size: 0.92rem; font-weight: 600; }
+  .pl-annual { margin: 0; color: var(--good); font-size: 0.95rem; font-weight: 700; }
+  .pl-lbl { margin: 4px 0 -4px; font: 800 0.74rem var(--font-d); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+  .pl-month { margin: 0; color: var(--muted); font-size: 0.95rem; padding-top: 8px; border-top: 1px dashed var(--line); }
+  .pl-month b { color: var(--soft); }
+  .pl-pill { justify-self: center; display: inline-flex; padding: 6px 14px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--accent); font-weight: 700; font-size: 0.9rem; }
   .pl ul { list-style: none; margin: 8px 0 12px; padding: 0; display: grid; gap: 8px; }
   .pl li { color: var(--soft); }
   .pl li::before { content: "✓"; color: var(--good); font-weight: 800; margin-right: 8px; }
@@ -292,31 +297,34 @@
     <span class="eyebrow">Planos</span>
     <h2>Escolha pelo tamanho da sua equipe</h2>
     <p class="lead" style="margin:0 auto">Comece com <b>7 dias grátis</b>. Depois, mensal sem fidelidade ou anual com desconto.</p>
-    <div class="switch per" role="group" aria-label="Forma de pagamento">
-      <button type="button" data-per="mes" aria-pressed="true">Mensal</button>
-      <button type="button" data-per="ano" aria-pressed="false">Anual <small>até 29% off</small></button>
-    </div>
+    <span class="pl-pill">💰 No plano anual você economiza até 29%</span>
   </div>
   <div class="plans">
     <article class="card pl reveal">
       <h3>Essencial</h3><p class="pl-for" data-t="p1">Até 4 barbeiros</p>
-      <p class="price"><small>R$</small><b data-m="99" data-a="80">99</b><small>/mês</small></p>
-      <p class="pl-annual" data-save="99,80"></p>
+      <p class="pl-lbl">Plano anual</p>
+      <p class="price"><small>R$</small><b>80</b><small>/mês</small></p>
+      <p class="pl-annual">economia de R$ 228 por ano</p>
+      <p class="pl-month">ou <b>R$ 99/mês</b> no plano mensal</p>
       <ul><li>Todas as funções do sistema</li><li>Ranking, pódio, metas e comparativos</li><li>Checklist Agenda Cheia e POPs</li><li>Tela da loja e Fechamento do mês</li><li>Líderes e gestores com acessos extras</li><li>Integração por API</li></ul>
       <a class="btn" data-plan="Essencial">Quero o Essencial</a>
     </article>
     <article class="card pl pl-top reveal">
       <span class="pl-tag">Mais escolhido</span>
       <h3>Profissional</h3><p class="pl-for" data-t="p2">Até 10 barbeiros</p>
-      <p class="price"><small>R$</small><b data-m="179" data-a="150">179</b><small>/mês</small></p>
-      <p class="pl-annual" data-save="179,150"></p>
+      <p class="pl-lbl">Plano anual</p>
+      <p class="price"><small>R$</small><b>150</b><small>/mês</small></p>
+      <p class="pl-annual">economia de R$ 348 por ano</p>
+      <p class="pl-month">ou <b>R$ 179/mês</b> no plano mensal</p>
       <ul><li>Todas as funções do sistema</li><li>Ranking, pódio, metas e comparativos</li><li>Checklist Agenda Cheia e POPs</li><li>Tela da loja e Fechamento do mês</li><li>Líderes e gestores com acessos extras</li><li>Integração por API</li></ul>
       <a class="btn btn-primary" data-plan="Profissional">Quero o Profissional</a>
     </article>
     <article class="card pl reveal">
       <h3>Premium</h3><p class="pl-for" data-t="p3">Barbeiros ilimitados</p>
-      <p class="price"><small>R$</small><b data-m="279" data-a="199">279</b><small>/mês</small></p>
-      <p class="pl-annual" data-save="279,199"></p>
+      <p class="pl-lbl">Plano anual</p>
+      <p class="price"><small>R$</small><b>199</b><small>/mês</small></p>
+      <p class="pl-annual">economia de R$ 960 por ano</p>
+      <p class="pl-month">ou <b>R$ 279/mês</b> no plano mensal</p>
       <ul><li>Todas as funções do sistema</li><li>Ranking, pódio, metas e comparativos</li><li>Checklist Agenda Cheia e POPs</li><li>Tela da loja e Fechamento do mês</li><li>Líderes e gestores com acessos extras</li><li>Integração por API</li><li><b>Suporte prioritário</b></li></ul>
       <a class="btn" data-plan="Premium">Quero o Premium</a>
     </article>
@@ -348,7 +356,7 @@
 </main>
 
 <footer><div class="wrap"><p><span data-t="name">Gestão Barber IA</span> · <a href="../termos.html">Termos de uso</a> · <a href="../privacidade.html">Privacidade</a></p></div></footer>
-<div class="float"><a class="btn btn-primary" data-link="demo" href="../?demo=barber">▶ Ver o sistema funcionando</a></div>
+<div class="float"><a class="btn btn-primary" href="#planos">💳 Contratar plano</a></div>
 
 <script>
 (function () {
@@ -441,35 +449,24 @@
     const msg = encodeURIComponent(`Olá! Tenho ${S.label === 'Barbearia' ? 'uma barbearia' : S.label === 'Salão de beleza' ? 'um salão de beleza' : S.label === 'Esmalteria' ? 'uma esmalteria' : 'uma clínica de estética'}, vi a página do ${t.name} e quero saber mais.`);
     qs('[data-wa]').forEach(a => { if (WHATSAPP) { a.hidden = false; a.href = `https://wa.me/${WHATSAPP}?text=${msg}`; a.target = '_blank'; a.rel = 'noopener'; } });
     qs('[data-plan]').forEach(a => {
-      const per = document.documentElement.dataset.per === 'ano' ? 'anual' : 'mensal';
-      const m = encodeURIComponent(`Olá! Quero o plano ${a.dataset.plan} (${per}) do ${t.name} para ${S.label === 'Barbearia' ? 'minha barbearia' : S.label === 'Salão de beleza' ? 'meu salão' : S.label === 'Esmalteria' ? 'minha esmalteria' : 'minha clínica de estética'}.`);
+      const m = encodeURIComponent(`Olá! Quero o plano ${a.dataset.plan} do ${t.name} para ${S.label === 'Barbearia' ? 'minha barbearia' : S.label === 'Salão de beleza' ? 'meu salão' : S.label === 'Esmalteria' ? 'minha esmalteria' : 'minha clínica de estética'}.`);
       a.href = WHATSAPP ? `https://wa.me/${WHATSAPP}?text=${m}` : `../?marca=${b}`;
       if (WHATSAPP) { a.target = '_blank'; a.rel = 'noopener'; }
     });
     try { history.replaceState(null, '', `?tipo=${seg}${location.hash}`); } catch (e) { /* opcional */ }
   }
   let cur = 'barber';
-  function setPer(per) {
-    document.documentElement.dataset.per = per;
-    qs('[data-per]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.per === per)));
-    qs('.price b').forEach(el => { el.textContent = per === 'ano' ? el.dataset.a : el.dataset.m; });
-    qs('.pl-annual').forEach(el => {
-      const [m, a] = el.dataset.save.split(',').map(Number);
-      el.textContent = per === 'ano' ? `no plano anual · economia de R$ ${((m - a) * 12).toLocaleString('pt-BR')} por ano` : `ou R$ ${a}/mês no plano anual`;
-    });
-    apply(cur);
-  }
+
   const sp = new URLSearchParams(location.search);
   const tipo = sp.get('tipo') || (sp.get('marca') === 'salao' ? 'salao' : sp.get('marca') === 'barber' ? 'barbearia' : '');
   const chooser = document.getElementById('chooser');
   function openChooser() { chooser.hidden = false; document.body.classList.add('locked'); chooser.querySelector('button').focus({ preventScroll: true }); }
   function pickSeg(k) { seg = SEG[k] ? k : 'barbearia'; chooser.hidden = true; document.body.classList.remove('locked'); apply(cur); window.scrollTo(0, 0); }
   if (SEG[tipo]) seg = tipo;
-  setPer('mes');
+  apply(cur);
   if (!SEG[tipo]) openChooser();
   qs('[data-seg]').forEach(x => x.addEventListener('click', () => pickSeg(x.dataset.seg)));
   qs('[data-choose]').forEach(x => x.addEventListener('click', openChooser));
-  qs('[data-per]').forEach(x => x.addEventListener('click', () => setPer(x.dataset.per)));
   // Entrada suave dos blocos ao rolar.
   const io = 'IntersectionObserver' in window ? new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { threshold: 0.12 }) : null;
   qs('.reveal').forEach(el => io ? io.observe(el) : el.classList.add('in'));
