@@ -1483,3 +1483,16 @@ html[data-theme="light"] .tv { background: var(--bg); }
   background: #fff; color: #1b1b1f; font-size: 0.86rem; font-weight: 600; line-height: 1.25; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); }
 .toast-ic span { min-width: 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .toast-ic .ico { flex: none; width: 20px; height: 20px; padding: 4px; border-radius: 50%; background: #1b1b1f; color: #fff; stroke-width: 3; }
+/* Telas bem estreitas (iPhone SE, Android compacto): níveis do checklist cabem sem vazar */
+.pop-lv > div { min-width: 0; }
+@media (max-width: 380px) {
+  .pop-lv { padding: 12px 14px; }
+  .pop-lv b { font-size: 1rem; }
+  .pop-lv strong { font-size: 1rem; }
+}
+.demo-bar { row-gap: 6px; }
+@media (max-width: 640px) {
+  .demo-bar { padding-top: 6px; padding-bottom: 6px; }
+  .demo-tag small { display: none; }
+  .demo-acts .btn-sm, .demo-seg button { padding: 5px 10px; font-size: 0.8rem; }
+}
