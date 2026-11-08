@@ -193,12 +193,14 @@
       <span class="brand-sub">Sistema de gestão</span></span>
     </span>`;
 
-  function toast(msg) {
+  function toast(msg, ms = 2800, ic = '') {
     document.querySelectorAll('.toast').forEach(t => t.remove());
     const t = document.createElement('div');
-    t.className = 'toast'; t.setAttribute('role', 'status'); t.textContent = L(msg);
+    t.className = 'toast' + (ic ? ' toast-ic' : ''); t.setAttribute('role', 'status');
+    if (ic) { t.innerHTML = icon(ic); const sp = document.createElement('span'); sp.textContent = L(msg); t.appendChild(sp); }
+    else t.textContent = L(msg);
     document.body.appendChild(t);
-    setTimeout(() => t.remove(), 2800);
+    setTimeout(() => t.remove(), ms);
   }
 
   function readImage(file, max = 256, q = 0.85) {
@@ -284,6 +286,67 @@
       <button type="button" role="tab" aria-selected="${active === 'entrar'}" data-action="authMode" data-mode="entrar">Entrar</button>
       <button type="button" role="tab" aria-selected="${active === 'criar'}" data-action="authMode" data-mode="criar">Criar cadastro</button>
     </div>`;
+  }
+
+  // ---------- Ultrapassagens no ranking: histórico do mês (mesmo para todos, calculado dos dados) ----------
+  // Refaz o ranking do mês dia a dia e registra quem passou quem. Mais recentes primeiro.
+  function overtakes(ym) {
+    const key = 'ovt' + ym;
+    if (rkCache[key]) return rkCache[key];
+    const mr = monthRange(ym), today = iso(new Date()), last = today < mr.end ? today : mr.end, ev = [];
+    let prev = null;
+    for (let d = fromIso(mr.start); iso(d) <= last; d.setDate(d.getDate() + 1)) {
+      const day = iso(d);
+      if (darkFor({ start: day, end: day })) break; // pódio surpresa: não entrega colocações
+      const R = computeRanking({ ...state, entries: state.entries.filter(e => e.date <= day), pop: (state.pop || []).filter(r => r.day.length !== 10 || r.day <= day) }, mr);
+      if (!R.active.length) { prev = null; continue; }
+      const pos = Object.fromEntries(R.rows.map(r => [r.barber.id, r.pos]));
+      if (prev) for (const r of R.rows) {
+        const o = prev[r.barber.id];
+        if (!o || o <= r.pos) continue;
+        const passed = R.rows.filter(x => prev[x.barber.id] && prev[x.barber.id] < o && x.pos > r.pos).map(x => x.barber);
+        if (passed.length) ev.push({ key: day + '|' + r.barber.id + '|' + r.pos, day, up: r.barber, pos: r.pos, passed });
+      }
+      prev = pos;
+    }
+    return (rkCache[key] = ev.reverse());
+  }
+  function overtakeFeed() {
+    const ym = curYm();
+    return [...overtakes(ym), ...overtakes(addMonths(ym, -1))].slice(0, 40);
+  }
+  const OVT_SEEN = 'ovtSeen';
+  function unseenOvertakes() {
+    const seen = DB.pref.get(OVT_SEEN, ''), f = overtakeFeed();
+    const i = f.findIndex(e => e.key === seen);
+    return i === -1 ? (seen ? Math.min(f.length, 9) : Math.min(f.length, 3)) : i;
+  }
+  const dayLabel = d => { const t = iso(new Date()), y = iso(new Date(Date.now() - 86400000)); return d === t ? 'Hoje' : d === y ? 'Ontem' : d.slice(8, 10) + '/' + d.slice(5, 7); };
+  const ovtText = (e, rich) => {
+    const nm = x => rich ? `<b>${esc(x.name)}</b>` : U(x.name);
+    return `${nm(e.up)} ultrapassou ${e.passed.map(nm).join(' e ')} e assumiu o ${e.pos}º lugar`;
+  };
+  function notifPanel(user, pending) {
+    if (!ui.notifOpen) return '';
+    const f = overtakeFeed(), seen = ui.notifSeenBefore || '';
+    const cut = f.findIndex(e => e.key === seen);
+    return `<div class="notif-panel" role="dialog" aria-label="Notificações">
+      <div class="notif-head"><b>Notificações</b><button class="icon-btn" data-action="notifOpen" aria-label="Fechar">${icon('x')}</button></div>
+      ${pending ? `<a class="notif-item notif-app" href="#barbeiros">${icon('users')}<span><b>${pending} aprovação${pending > 1 ? 'ões' : ''} pendente${pending > 1 ? 's' : ''}</b><small>Toque para aprovar em Adicionar profissional</small></span></a>` : ''}
+      <p class="notif-sub">${icon('trophy')} Ultrapassagens no ranking</p>
+      ${f.length ? `<ul class="notif-list">${f.map((e, i) => `<li class="notif-item ${cut === -1 ? (seen ? 'new' : (i < 3 ? 'new' : '')) : (i < cut ? 'new' : '')}">
+        ${avatar(e.up, 36)}<span><span>${ovtText(e, true)}</span><small>${dayLabel(e.day)}</small></span></li>`).join('')}</ul>`
+        : '<p class="muted notif-empty">Nenhuma ultrapassagem neste mês ainda.</p>'}
+    </div>`;
+  }
+  // Ao entrar: mostra embaixo a última ultrapassagem (uma vez por sessão).
+  function maybeOvertakeToast() {
+    const e = overtakeFeed()[0];
+    if (!e) return;
+    let shown = ''; try { shown = sessionStorage.getItem('gbia.ovtToast') || ''; } catch (x) { /* opcional */ }
+    if (shown === e.key) return;
+    try { sessionStorage.setItem('gbia.ovtToast', e.key); } catch (x) { /* opcional */ }
+    setTimeout(() => toast(`${U(e.up.name)} ultrapassou e assumiu o ${e.pos}º lugar!`, 6000, 'trophy'), 900);
   }
 
   // ---------- Modo apresentação (números e profissionais fictícios) ----------
@@ -3357,7 +3420,7 @@ Content-Type: application/json</pre>
         <a class="icon-btn" href="#apresentacao" aria-label="Tela da loja" title="Tela da loja">${icon('monitor')}</a>
         <button class="icon-btn" data-action="fontSize" aria-label="Tamanho da letra" title="Tamanho da letra">${icon('type')}</button>
         <button class="icon-btn theme-btn" data-action="toggleTheme" aria-label="${getTheme() === 'light' ? 'Ativar modo escuro' : 'Ativar modo claro'}" title="${getTheme() === 'light' ? 'Modo escuro' : 'Modo claro'}">${icon(getTheme() === 'light' ? 'moon' : 'sun')}</button>
-        ${isGestor(user) ? `<a class="icon-btn" href="#barbeiros" aria-label="Aprovações pendentes: ${pending}">${icon('bell')}${pending ? `<span class="badge-dot">${pending}</span>` : ''}</a>` : ''}
+        ${(() => { const n = pending + unseenOvertakes(); return `<button class="icon-btn" data-action="notifOpen" aria-expanded="${!!ui.notifOpen}" aria-label="Notificações${n ? ': ' + n + ' novas' : ''}">${icon('bell')}${n ? `<span class="badge-dot">${n > 9 ? '9+' : n}</span>` : ''}</button>`; })()}
         <button class="avatar-btn" data-action="togglePopover" aria-label="Perfil e conta">${avatar(who, 40)}</button>
       </header>
       ${demoBar(user)}
@@ -3365,11 +3428,13 @@ Content-Type: application/json</pre>
       <main class="main" id="main">${page.r(user)}</main>
       <button class="fab" data-action="openDrawer" aria-label="Abrir menu">${icon('menu')}</button>
       ${drawer(user, route)}
-      ${popover(user)}`;
+      ${popover(user)}
+      ${notifPanel(user, pending)}`;
     document.body.classList.add('has-nav');
     applyLive();
     maybeOfferInstall();
     maybeRemindPop(user);
+    maybeOvertakeToast();
     hydrateProofs();
     setTimeout(maybeAutoReveal, 700);
   }
@@ -3658,6 +3723,10 @@ Content-Type: application/json</pre>
       const p = popsById(el.dataset.id); ui.confirm = null;
       if (p && Cloud.enabled) (p.steps || []).forEach(st => st.path && Cloud.removeFile(POPS_BUCKET, st.path));
       state.pops = popsList().filter(x => x.id !== el.dataset.id); ui.popsOpen = null; save(); toast('POP apagado.'); render();
+    },
+    notifOpen() {
+      if (!ui.notifOpen) { ui.notifSeenBefore = DB.pref.get(OVT_SEEN, ''); const f = overtakeFeed(); if (f[0]) DB.pref.set(OVT_SEEN, f[0].key); }
+      ui.notifOpen = !ui.notifOpen; render();
     },
     toggleTheme() {
       const t = getTheme() === 'light' ? 'dark' : 'light';
@@ -4035,6 +4104,7 @@ Content-Type: application/json</pre>
     if (el && ACTIONS[el.dataset.action]) { ACTIONS[el.dataset.action](el, e); return; }
     const pop = $('.popover');
     if (pop && !pop.hidden && !e.target.closest('.popover')) pop.hidden = true;
+    if (ui.notifOpen && !e.target.closest('.notif-panel')) { ui.notifOpen = false; render(); }
   });
   root.addEventListener('submit', e => {
     const f = e.target.closest('form[data-form]');
@@ -4073,6 +4143,7 @@ Content-Type: application/json</pre>
     if (el && CHANGES[el.dataset.change]) CHANGES[el.dataset.change](el);
   });
   window.addEventListener('hashchange', () => {
+    ui.notifOpen = false;
     if (ui.fx) fxClose();
     ui.confirm = null; ui.invite = null; ui.lastReset = null;
     render();
