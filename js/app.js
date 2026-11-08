@@ -1086,7 +1086,6 @@
         <div class="pp-acts"><button class="btn btn-sm" data-action="cmpWith" data-id="${esc(b.id)}">${icon('users')} Comparar com…</button><a class="btn btn-sm" href="#perfil-${esc(b.id)}">${icon('chart')} Performance completa</a>
           <button class="icon-btn" data-action="profClose" aria-label="Fechar">${icon('x')}</button></div>
       </section>
-      ${evoBlock(b.id, ym)}
       <div class="pp-grid">
       <section class="section card"><h2 class="section-title">Faturamento de ${esc(b.name.split(' ')[0])} · últimos 6 meses</h2>
         ${lineSvg({ labels: last6.map(ymShort), series: [{ values: fatVals, color: '#d6b46a', fill: true }], yFmt: v => v >= 1000 ? 'R$' + nf0.format(v / 1000) + 'k' : 'R$' + nf0.format(v) })}</section>
@@ -1163,7 +1162,7 @@
     const all = rows.length === R.rows.length;
     return `<section class="section card">
         <h2 class="section-title">Detalhado por profissional</h2>
-        <p class="section-note">Toque num profissional para ver a evolução dele; os pontos fortes e a melhorar ficam na performance completa.${all ? '' : ' Aparecem só os profissionais cujos números detalhados você pode ver.'}</p>
+        <p class="section-note">Toque num profissional para ver o resumo dele; a evolução e os pontos fortes e a melhorar ficam na performance completa.${all ? '' : ' Aparecem só os profissionais cujos números detalhados você pode ver.'}</p>
         <div class="table-wrap"><table class="pc-table"><thead><tr><th>Profissional</th>${cols.map(c => `<th>${c[0]}${tip({ Faturamento: 'fat', Clientes: 'cli', Serviços: 'serv', 'Ticket médio': 'ticket', Ocupação: 'ocup', Produtos: 'prod', Planos: 'planos' }[c[0]])}</th>`).join('')}<th>Pontos${tip('score')}</th></tr></thead><tbody>
           ${rows.map(r => `<tr class="${ui.profSel === r.barber.id ? 'on' : ''}" data-action="profPick" data-id="${esc(r.barber.id)}"><td><button type="button" class="td-who" data-action="profPick" data-id="${esc(r.barber.id)}" aria-expanded="${ui.profSel === r.barber.id}">${avatar(r.barber, 36)}<span>${esc(r.barber.name)}</span></button></td>
             ${cols.map(c => `<td>${c[1](r)}</td>`).join('')}<td class="td-score">${score(r.overall)}</td></tr>`).join('')}
