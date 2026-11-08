@@ -23,7 +23,70 @@
 
   const root = document.getElementById('app');
   const $ = (s, r = document) => r.querySelector(s);
-  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // ---------- Marca: Gestão Barber IA ou Gestão Salão IA ----------
+  // O sistema é o mesmo; a marca da empresa troca logo, cores e as palavras da interface
+  // (barbeiro → profissional, barbearia → salão). Nomes de pessoas e da empresa nunca mudam.
+  const BRANDS = {
+    barber: { key: 'barber', name: 'Gestão Barber IA', word: 'Barber', logo: 'assets/logo.jpg', manifest: 'manifest.webmanifest', icon: 'assets/icon-192.png', apple: 'assets/apple-touch-icon.png', theme: '#0c0c0e',
+      tagline: 'Para barbearias', roles: ['Barbeiro', 'Barbeiro líder', 'Aprendiz', 'Recepcionista', 'Gerente'], role: 'Barbeiro' },
+    salao: { key: 'salao', name: 'Gestão Salão IA', word: 'Salão', logo: 'assets/logo-salao.jpg', manifest: 'manifest-salao.webmanifest', icon: 'assets/icon-salao-192.png', apple: 'assets/apple-touch-icon-salao.png', theme: '#1a0a10',
+      tagline: 'Para salões de beleza e esmalterias', roles: ['Cabeleireira', 'Cabeleireiro', 'Manicure', 'Esteticista', 'Maquiadora', 'Designer de sobrancelhas', 'Recepcionista', 'Gerente'], role: 'Profissional' },
+  };
+  let MARCA = 'barber';
+  const MK = '⁣'; // marca invisível em volta do que veio do usuário (não é traduzido)
+  const NB = '(?<![\\wÀ-ÿ@.])', NA = '(?![\\wÀ-ÿ@])';
+  const WORDS = [
+    [/Gestão Barber IA/g, 'Gestão Salão IA'],
+    [/@barbearia\.com/g, '@seusalao.com'],
+    [new RegExp(NB + '([DdNn])a (sua|minha|nossa) barbearia' + NA, 'g'), (m, l, x) => l + 'o ' + ({ sua: 'seu', minha: 'meu', nossa: 'nosso' })[x] + ' salão'],
+    [new RegExp(NB + '([Pp])ela (sua|minha|nossa) barbearia' + NA, 'g'), (m, l, x) => l + 'elo ' + ({ sua: 'seu', minha: 'meu', nossa: 'nosso' })[x] + ' salão'],
+    [new RegExp(NB + '([DdNn])a barbearia' + NA, 'g'), (m, l) => l + 'o salão'],
+    [new RegExp(NB + '([Pp])ela barbearia' + NA, 'g'), (m, l) => l + 'elo salão'],
+    [new RegExp(NB + 'à barbearia' + NA, 'g'), 'ao salão'],
+    [new RegExp(NB + '([SsMm])(ua|inha) barbearia' + NA, 'g'), (m, l, x) => l + (x === 'ua' ? 'eu' : 'eu') + ' salão'],
+    [new RegExp(NB + '([Nn])ossa barbearia' + NA, 'g'), (m, l) => l + 'osso salão'],
+    [new RegExp(NB + '([Ee])sta barbearia' + NA, 'g'), (m, l) => l + 'ste salão'],
+    [new RegExp(NB + '([Uu])ma barbearia' + NA, 'g'), (m, l) => l + 'm salão'],
+    [new RegExp(NB + '([Aa]) barbearia' + NA, 'g'), (m, l) => (l === 'A' ? 'O' : 'o') + ' salão'],
+    [new RegExp(NB + 'barbearias' + NA, 'g'), 'salões'], [new RegExp(NB + 'Barbearias' + NA, 'g'), 'Salões'],
+    [new RegExp(NB + 'barbearia' + NA, 'g'), 'salão'], [new RegExp(NB + 'Barbearia' + NA, 'g'), 'Salão'],
+    [new RegExp(NB + 'barbeiros' + NA, 'g'), 'profissionais'], [new RegExp(NB + 'Barbeiros' + NA, 'g'), 'Profissionais'],
+    [new RegExp(NB + 'barbeiro' + NA, 'g'), 'profissional'], [new RegExp(NB + 'Barbeiro' + NA, 'g'), 'Profissional'],
+  ];
+  // Texto do usuário em mensagens simples (toast): protege sem escapar.
+  const U = t => (MARCA === 'salao' ? MK + String(t ?? '') + MK : String(t ?? ''));
+  const swapWords = t => (/arbe|Barber/.test(t) ? WORDS.reduce((a, [re, to]) => a.replace(re, to), t) : t);
+  // Texto: troca as palavras fora das marcas (o que é do usuário fica igual) e tira as marcas.
+  const L = t => { if (MARCA !== 'salao') return String(t ?? '').split(MK).join(''); return String(t ?? '').split(MK).map((p, i) => (i % 2 ? p : swapWords(p))).join(''); };
+  // HTML: troca nos textos e nos atributos que a pessoa lê (placeholder, aria-label, title, alt).
+  function UI(html) {
+    let out = '', last = 0, m;
+    const re = /<[^>]*>/g;
+    while ((m = re.exec(html))) {
+      out += L(html.slice(last, m.index));
+      out += m[0].replace(/\s(placeholder|aria-label|title|alt)="([^"]*)"/g, (x, a, v) => ` ${a}="${L(v)}"`).split(MK).join('');
+      last = re.lastIndex;
+    }
+    return out + L(html.slice(last));
+  }
+  const ihDesc = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+  Object.defineProperty(Element.prototype, 'innerHTML', { configurable: true, get() { return ihDesc.get.call(this); }, set(v) { ihDesc.set.call(this, MARCA === 'salao' ? UI(String(v)) : v); } });
+  const esc = s => { const t = String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); return MARCA === 'salao' ? MK + t + MK : t; };
+  const B = () => BRANDS[MARCA];
+  // Aplica a marca na página: cores, logo, título, ícone e app instalável.
+  function applyBrand(key) {
+    const k = BRANDS[key] ? key : 'barber';
+    MARCA = k;
+    const b = BRANDS[k], html = document.documentElement;
+    if (html.dataset.brand !== k) {
+      html.dataset.brand = k;
+      window.GB.LOGO_SRC = b.logo;
+      document.title = b.name;
+      const set = (sel, attr, v) => { const el = document.querySelector(sel); if (el) el.setAttribute(attr, v); };
+      set('link[rel="manifest"]', 'href', b.manifest); set('link[rel="icon"]', 'href', b.icon); set('link[rel="apple-touch-icon"]', 'href', b.apple);
+      set('meta[name="theme-color"]', 'content', b.theme); set('meta[name="apple-mobile-web-app-title"]', 'content', b.name); set('meta[name="application-name"]', 'content', b.name);
+    }
+  }
   let rkCache = {};
   const save = () => { if (Cloud.enabled) Cloud.save(state); else DB.save(state); rkCache = {}; };
 
@@ -117,14 +180,14 @@
   const brand = (cls = '') => cls.includes('brand--lg')
     ? `<span class="brand ${cls}">${logo()}</span>`
     : `<span class="brand ${cls}">${logo()}
-      <span class="brand-text"><span class="brand-name">Gestão Barber <span class="brand-ia-word">IA</span></span>
+      <span class="brand-text"><span class="brand-name">Gestão ${B().word} <span class="brand-ia-word">IA</span></span>
       <span class="brand-sub">Sistema de gestão</span></span>
     </span>`;
 
   function toast(msg) {
     document.querySelectorAll('.toast').forEach(t => t.remove());
     const t = document.createElement('div');
-    t.className = 'toast'; t.setAttribute('role', 'status'); t.textContent = msg;
+    t.className = 'toast'; t.setAttribute('role', 'status'); t.textContent = L(msg);
     document.body.appendChild(t);
     setTimeout(() => t.remove(), 2800);
   }
@@ -201,7 +264,9 @@
   }
 
   function authShell(inner) {
+    const other = BRANDS[MARCA === 'salao' ? 'barber' : 'salao'];
     return `<div class="auth"><div class="auth-card">${brand('brand--lg')}${inner}
+      <button type="button" class="link-btn bc-switch" data-action="pickBrand" data-b="${other.key}">${esc((MARCA === 'salao' ? 'É barbearia?' : 'É salão de beleza ou esmalteria?') + ' Use o ' + other.name)}</button>
       <p class="auth-foot">Cada atendimento conta.</p></div></div>`;
   }
   function tabs(active) {
@@ -211,8 +276,20 @@
     </div>`;
   }
 
+  // Tela inicial: a empresa escolhe o sistema do negócio dela antes de entrar ou se cadastrar.
+  function brandChooser() {
+    const card = b => `<button type="button" class="bc-card bc-${b.key}" data-action="pickBrand" data-b="${b.key}">
+      <img src="${b.logo}" alt="" width="512" height="512"><b>${esc(b.name)}</b><span>${esc(b.tagline)}</span><em>${icon('right')} Continuar</em></button>`;
+    return `<div class="auth bc"><div class="bc-in">
+      <h1>Escolha o sistema do seu negócio</h1>
+      <p>Toque na marca para entrar ou criar o cadastro.</p>
+      <div class="bc-grid">${card(BRANDS.barber)}${card(BRANDS.salao)}</div>
+      <p class="auth-foot">Cada atendimento conta.</p></div></div>`;
+  }
   function renderAuth(mode, code) {
     document.body.classList.remove('has-nav');
+    applyBrand(DB.pref.get('brand', '') || 'barber');
+    if (!DB.pref.get('brand', '') && !['convite', 'novaSenha', 'recusado', 'semEmpresa', 'confirmar', 'enviado', 'pendente'].includes(mode)) { root.innerHTML = brandChooser(); return; }
     let inner = '';
     if (mode === 'convite' && Cloud.enabled && (!ui.inviteInfo || ui.inviteInfo.code !== code)) {
       root.innerHTML = authShell(`<div class="empty" style="padding:10px 0">${icon('clock')}<h2>Abrindo convite…</h2></div>`);
@@ -482,7 +559,25 @@
   }
 
   // Coroa do 1º lugar: azul com diamante (MVP), dourada (Destaque) ou prata.
+  // Salão: tiara no lugar da coroa (diamante rosa no MVP).
+  function tiaraSvg(tier) {
+    const id = 'tg-' + tier, mvp = tier === 'tier-mvp';
+    const gem = mvp
+      ? `<polygon points="52,-6 60,-20 68,-6 60,8" fill="url(#${id})" stroke="#fff" stroke-width="1.4"/><path d="M52 -6h16M56 -6l4 13 4-13" stroke="#fff" stroke-opacity=".8" stroke-width="1" fill="none"/>`
+      : `<path d="M60 -16c6 7 6 13 0 17c-6-4-6-10 0-17z" fill="url(#${id})" stroke="#fff" stroke-width="1.3"/>`;
+    return `<svg viewBox="0 -22 120 100" aria-hidden="true">
+      <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset=".45" style="stop-color:var(--tc)"/><stop offset="1" style="stop-color:var(--tc2)"/></linearGradient></defs>
+      <path d="M8 70 C30 48 90 48 112 70 L106 78 C86 62 34 62 14 78 Z" fill="url(#${id})" stroke="#fff" stroke-opacity=".7" stroke-width="1.4" stroke-linejoin="round"/>
+      <path d="M20 62 Q24 40 34 34 Q36 46 44 54 M44 54 Q50 26 60 12 Q70 26 76 54 M76 54 Q84 46 86 34 Q96 40 100 62" fill="none" stroke="url(#${id})" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="34" cy="32" r="4.2" fill="#fff"/><circle cx="86" cy="32" r="4.2" fill="#fff"/>
+      <circle cx="30" cy="66" r="2.4" fill="#fff" opacity=".85"/><circle cx="45" cy="60" r="2.4" fill="#fff" opacity=".85"/><circle cx="75" cy="60" r="2.4" fill="#fff" opacity=".85"/><circle cx="90" cy="66" r="2.4" fill="#fff" opacity=".85"/>
+      <circle cx="60" cy="58" r="3.4" fill="url(#${id})" stroke="#fff" stroke-width="1"/>
+      ${gem}
+      <g class="twinkle"><path d="M60 -22v8M56 -18h8" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></g>
+    </svg>`;
+  }
   function crownSvg(tier) {
+    if (MARCA === 'salao') return tiaraSvg(tier);
     const id = 'cg-' + tier;
     const gem = tier === 'tier-mvp'
       ? `<polygon points="49,-4 60,-18 71,-4 60,10" fill="url(#${id})" stroke="#e8f6ff" stroke-width="1.5"/><path d="M49 -4h22M55 -4l5 14 5-14" stroke="#e8f6ff" stroke-width="1" fill="none"/>`
@@ -548,7 +643,7 @@
 
   function podiumLegend(R) {
     return `<div class="pd-legend">
-      <div class="lg-mvp">${icon('diamond')}<span><b>MVP</b>Lidera ${R.mvpNeed} ou mais indicadores.<em>Contorno azul (diamante).</em></span></div>
+      <div class="lg-mvp">${icon('diamond')}<span><b>MVP</b>Lidera ${R.mvpNeed} ou mais indicadores.<em>${MARCA === 'salao' ? 'Contorno rosa (diamante rosa).' : 'Contorno azul (diamante).'}</em></span></div>
       <div class="lg-gold">${icon('crown')}<span><b>Destaque</b>Lidera no mínimo ${R.half} indicadores.<em>Contorno dourado.</em></span></div>
       <div class="lg-pts">${icon('trophy')}<span><b>Classificação por pontos</b>Sem título no período: contorno prata e bronze.</span></div>
     </div>`;
@@ -823,7 +918,7 @@
   const monthR = ym => rkCache[ym] || (rkCache[ym] = computeRanking(state, monthRange(ym)));
   const ROLES = ['Barbeiro', 'Barbeiro líder', 'Aprendiz', 'Recepcionista', 'Gerente'];
   // Sugestões para o campo Função (o dono pode escrever qualquer outra).
-  const roleList = () => `<datalist id="role-list">${[...new Set([...ROLES, ...state.barbers.map(b => b.role).filter(Boolean)])].map(r => `<option value="${esc(r)}">`).join('')}</datalist>`;
+  const roleList = () => `<datalist id="role-list">${[...new Set([...B().roles, ...state.barbers.map(b => b.role).filter(Boolean)])].map(r => `<option value="${esc(r)}">`).join('')}</datalist>`;
   const RADAR_COLORS = ['#d6b46a', '#5b9dff', '#ff5fa8', '#52d37e'];
   const fmtGoal = (ind, v) => fmt(ind, v);
 
@@ -1626,7 +1721,7 @@ ${rows.length ? '' : emptyBarbers()}
     return user.barberId ? perfFor(user.barberId, user) : `<div class="card muted">Seu cadastro ainda não está ligado a um barbeiro. Fale com o gestor.</div>`;
   }
 
-  function inviteLink(code) { return location.href.split('#')[0] + '#convite-' + code; }
+  function inviteLink(code) { return location.origin + location.pathname + '?marca=' + MARCA + '#convite-' + code; }
 
   function pageBarbeiros() {
     const pending = state.users.filter(u => u.role === 'barbeiro' && u.status === 'pendente');
@@ -1809,6 +1904,8 @@ Content-Type: application/json</pre>
           <label class="field"><span>Telefone</span><input class="input" id="co-phone" name="phone" type="tel" value="${esc(c.phone)}"></label>
         </div>
         <label class="field"><span>E-mail</span><input class="input" id="co-email" name="email" type="email" value="${esc(c.email)}"></label>
+        <label class="field"><span>Tipo de negócio (muda o logo, as cores e os nomes do sistema)</span><select class="input" id="co-brand" name="brand">
+          ${Object.values(BRANDS).map(x => `<option value="${x.key}" ${MARCA === x.key ? 'selected' : ''}>${esc(x.name + ' · ' + x.tagline.replace('Para ', ''))}</option>`).join('')}</select></label>
         <p class="form-msg" data-msg></p>
         <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
       </form></section>`;
@@ -1915,7 +2012,7 @@ Content-Type: application/json</pre>
     return { R, s };
   }
   const fxDots = n => Array.from({ length: n }, (_, i) => `<i class="fx-dot" style="left:${(i * 37.7) % 100}%;top:${(i * 61.3) % 100}%;--d:${(i % 7) * 0.9}s;--s:${2 + (i % 4)}px"></i>`).join('');
-  const fxConfetti = n => Array.from({ length: n }, (_, i) => `<i class="fx-cf" style="left:${(i * 47.3) % 100}%;--d:${((i * 0.37) % 2.6).toFixed(2)}s;--r:${(i * 53) % 360}deg;--c:${['#d6b46a', '#6cc8ff', '#ffffff', '#f4a95c', '#9b8cff'][i % 5]};--x:${((i % 9) - 4) * 14}px"></i>`).join('');
+  const fxConfetti = n => Array.from({ length: n }, (_, i) => `<i class="fx-cf" style="left:${(i * 47.3) % 100}%;--d:${((i * 0.37) % 2.6).toFixed(2)}s;--r:${(i * 53) % 360}deg;--c:${(MARCA === 'salao' ? ['#eab35a', '#eaa59f', '#fff6ee', '#ff8fc8', '#f3d9c4'] : ['#d6b46a', '#6cc8ff', '#ffffff', '#f4a95c', '#9b8cff'])[i % 5]};--x:${((i % 9) - 4) * 14}px"></i>`).join('');
 
   function fxTier(R, row, place) {
     if (place === 3) return { cls: 'fx-bronze', label: 'Bronze' };
@@ -2112,7 +2209,7 @@ Content-Type: application/json</pre>
       document.body.appendChild(tipBox);
     }
     const body = typeof t[1] === 'function' ? t[1]() : t[1];
-    tipBox.innerHTML = `<b>${esc(t[0])}</b><p>${esc(body)}</p>`;
+    tipBox.innerHTML = `<b>${esc(L(t[0]))}</b><p>${esc(L(body))}</p>`;
     tipBox.hidden = false; tipBox.classList.add('on');
     tipBtn = btn; tipPinned = !!pinned;
     btn.setAttribute('aria-expanded', 'true'); btn.setAttribute('aria-describedby', 'tipbox');
@@ -3154,6 +3251,7 @@ Content-Type: application/json</pre>
   function renderTV() {
     document.body.classList.remove('has-nav');
     if (!Cloud.enabled) state = DB.load();
+    applyBrand(state.brand || 'barber');
     const tr = tvRange();
     const R = computeRanking(state, tr);
     const dk = darkFor(tr, true);
@@ -3195,6 +3293,9 @@ Content-Type: application/json</pre>
     if (h.startsWith('convite-')) { renderAuth('convite', h.slice(8)); return; }
     const user = currentUser();
     if (!user) { renderAuth(ui.authMode); return; }
+    // Logado: vale a marca da empresa (e fica lembrada para a tela de login).
+    applyBrand(state.brand || 'barber');
+    if (DB.pref.get('brand', '') !== MARCA) DB.pref.set('brand', MARCA);
 
     let route = h || 'inicio';
     if (route !== 'fechamento') ui.fcPeek = false;
@@ -3253,7 +3354,7 @@ Content-Type: application/json</pre>
   // ---------- ações ----------
   function setMsg(form, text, ok) {
     const m = form.querySelector('[data-msg]');
-    if (m) { m.textContent = text; m.classList.toggle('ok', !!ok); }
+    if (m) { m.textContent = L(text); m.classList.toggle('ok', !!ok); }
   }
   const val = (form, name) => (form.elements[name]?.value ?? '').trim();
   const validEmail = e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
@@ -3295,7 +3396,7 @@ Content-Type: application/json</pre>
     tvFull() { const d = document.documentElement; if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); else if (d.requestFullscreen) d.requestFullscreen().catch(() => toast('Este aparelho não permite tela cheia.')); else toast('Este aparelho não permite tela cheia.'); },
     tvGo(el) { ui.tvIndex = Number(el.dataset.i); renderTV(); },
     exitTV() { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); location.hash = 'inicio'; },
-    approve(el) { const u = state.users.find(x => x.id === el.dataset.id); if (u) { u.status = 'ativo'; save(); toast(`${u.name} agora tem acesso.`); render(); } },
+    approve(el) { const u = state.users.find(x => x.id === el.dataset.id); if (u) { u.status = 'ativo'; save(); toast(`${U(u.name)} agora tem acesso.`); render(); } },
     reject(el) { const u = state.users.find(x => x.id === el.dataset.id); if (u) { u.status = 'recusado'; save(); toast('Cadastro recusado.'); render(); } },
     invite(el) {
       const id = el.dataset.id;
@@ -3396,7 +3497,7 @@ Content-Type: application/json</pre>
       o.nodes = o.nodes.filter(k => k.id !== id);
       o.grants = o.grants.filter(g => g.nodeId !== id);
       ui.confirm = null; ui.orgSheet = null; if (ui.orgNode === id) ui.orgNode = n.parentId;
-      save(); toast(`${orgName(n)} saiu da estrutura. Quem estava abaixo subiu um nível.`); render();
+      save(); toast(`${U(orgName(n))} saiu da estrutura. Quem estava abaixo subiu um nível.`); render();
     },
     orgLevelDel(el) {
       const o = org(); if (o.levels.length <= 1) { toast('Mantenha pelo menos um nível.'); return; }
@@ -3523,6 +3624,7 @@ Content-Type: application/json</pre>
       if (p && Cloud.enabled) (p.steps || []).forEach(st => st.path && Cloud.removeFile(POPS_BUCKET, st.path));
       state.pops = popsList().filter(x => x.id !== el.dataset.id); ui.popsOpen = null; save(); toast('POP apagado.'); render();
     },
+    pickBrand(el) { const b = el.dataset.b; if (!BRANDS[b]) return; DB.pref.set('brand', b); applyBrand(b); renderAuth(ui.authMode || 'entrar'); },
     goFechamento(el) { ui.teamMonth = el.dataset.ym; location.hash = 'fechamento'; },
     revealNow(el) {
       if (!isGestor(currentUser())) return;
@@ -3629,14 +3731,14 @@ Content-Type: application/json</pre>
       if (Cloud.enabled) {
         if (!f.elements.terms.checked) return setMsg(f, 'Para criar a conta, aceite os Termos de uso e a Política de privacidade.');
         setMsg(f, 'Criando conta…', true);
-        const { data, error } = await Cloud.signUp(email, pass, { company, name, phone: val(f, 'phone'), terms_accepted_at: new Date().toISOString() });
+        const { data, error } = await Cloud.signUp(email, pass, { company, name, phone: val(f, 'phone'), brand: MARCA, terms_accepted_at: new Date().toISOString() });
         if (error) return setMsg(f, Cloud.message(error));
         if (data.session) { if (await loadCloud()) { toast('Conta criada. Agora cadastre sua equipe.'); location.hash = 'barbeiros'; } render(); return; }
         ui.authEmail = email; ui.authInvite = false; ui.authMode = 'confirmar'; renderAuth('confirmar'); return;
       }
       if (!state.demo && state.users.some(u => u.email.toLowerCase() === email)) return setMsg(f, 'Este e-mail já tem conta. Use Entrar.');
       const gestor = { id: uid('u_'), name, email, pass: passHash(email, pass), role: 'gestor', status: 'ativo', barberId: null };
-      state = DB.replace(emptyState({ name: company, cnpj: '', phone: '', email, logo: null }, gestor));
+      state = DB.replace({ ...emptyState({ name: company, cnpj: '', phone: '', email, logo: null }, gestor), brand: MARCA });
       DB.session.set(gestor.id, true);
       toast('Conta criada. Agora cadastre sua equipe.');
       location.hash = 'barbeiros'; render();
@@ -3650,7 +3752,7 @@ Content-Type: application/json</pre>
       if (pass !== f.elements.pass2.value) return setMsg(f, 'As senhas não são iguais. Digite a mesma senha nos dois campos.');
       if (Cloud.enabled) {
         setMsg(f, 'Enviando cadastro…', true);
-        const { data, error } = await Cloud.signUp(email, pass, { invite_code: code, name, phone: val(f, 'phone') });
+        const { data, error } = await Cloud.signUp(email, pass, { invite_code: code, name, phone: val(f, 'phone'), brand: MARCA });
         if (error) return setMsg(f, Cloud.message(error, 'invite'));
         history.replaceState(null, '', location.pathname);
         if (data.session) { await loadCloud(); render(); return; }
@@ -3681,7 +3783,7 @@ Content-Type: application/json</pre>
     },
     orgCreate(f) {
       const name = val(f, 'name'); if (!name) return setMsg(f, 'Digite o nome.');
-      org().nodes.push({ id: uid('n_'), name, parentId: val(f, 'parentId') || ORG_ROOT, people: [] }); save(); toast(`${name} criado.`); render();
+      org().nodes.push({ id: uid('n_'), name, parentId: val(f, 'parentId') || ORG_ROOT, people: [] }); save(); toast(`${U(name)} criado.`); render();
     },
     orgGrant(f) {
       const userId = val(f, 'userId'); if (!userId) return setMsg(f, 'Escolha a pessoa.');
@@ -3722,10 +3824,10 @@ Content-Type: application/json</pre>
       if (lim && activeBarbers() >= lim) return setMsg(f, `Seu plano permite até ${lim} barbeiros ativos. Troque de plano em Assinatura para cadastrar mais.`);
       if (file) { try { photo = await readImage(file); } catch (e) { return setMsg(f, e.message); } }
       const id = uid('b_'), access = val(f, 'access');
-      state.barbers.push({ id, name, photo, active: true, role: val(f, 'role') || 'Barbeiro', instagram: '' });
+      state.barbers.push({ id, name, photo, active: true, role: val(f, 'role') || B().role, instagram: '' });
       if (access === 'lider' || access === 'gestor') { const o = org(); o.access[id] = access; }
       save();
-      toast(`${name} adicionado. Agora envie o convite.`); render();
+      toast(`${U(name)} adicionado. Agora envie o convite.`); render();
     },
     weights(f) {
       const w = {};
@@ -3800,7 +3902,9 @@ Content-Type: application/json</pre>
       const name = val(f, 'name');
       if (!name) return setMsg(f, 'O nome da barbearia é obrigatório.');
       Object.assign(state.company, { name, cnpj: val(f, 'cnpj'), phone: val(f, 'phone'), email: val(f, 'email') });
-      save(); toast('Dados da barbearia salvos.'); render();
+      const nb = val(f, 'brand');
+      if (BRANDS[nb] && nb !== (state.brand || 'barber')) { state.brand = nb; DB.pref.set('brand', nb); }
+      save(); applyBrand(state.brand); toast('Dados da barbearia salvos.'); render();
     },
     async profile(f) {
       const u = currentUser();
@@ -3831,7 +3935,7 @@ Content-Type: application/json</pre>
     teamMonth(el) { ui.teamMonth = el.value; ui.fcPeek = false; render(); },
     lanDate(el) { ui.lanDate = el.value; },
     popsCap(el) { if (!isGestor(currentUser())) return; const p = popsById(el.dataset.id); if (!p || !p.steps[Number(el.dataset.i)]) return; p.steps[Number(el.dataset.i)].cap = el.value.trim().slice(0, 140); p.at = Date.now(); save(); toast('Legenda salva.'); },
-    barberRole(el) { const b = barberById(el.dataset.id); if (!b) return; b.role = el.value.trim().slice(0, 60) || 'Barbeiro'; save(); toast('Função salva.'); },
+    barberRole(el) { const b = barberById(el.dataset.id); if (!b) return; b.role = el.value.trim().slice(0, 60) || B().role; save(); toast('Função salva.'); },
     leaderExtra(el) {
       if (!isGestor(currentUser())) return;
       const o = org(), id = el.dataset.id, k = el.dataset.k;
@@ -4017,6 +4121,11 @@ Content-Type: application/json</pre>
     if (Cloud.user && (Cloud.recovery || params.has('redefinir'))) { ui.authMode = 'novaSenha'; return; }
     if (params.has('redefinir')) history.replaceState(null, '', location.pathname + location.hash);
     if (Cloud.user) await loadCloud();
+  }
+  {
+    const pm = new URLSearchParams(location.search).get('marca');
+    if (BRANDS[pm]) DB.pref.set('brand', pm);
+    applyBrand(DB.pref.get('brand', '') || 'barber');
   }
   if (Cloud.enabled) {
     const wait = new Promise(r => setTimeout(r, 1900));
