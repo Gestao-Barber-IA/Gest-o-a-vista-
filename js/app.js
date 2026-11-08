@@ -3632,7 +3632,7 @@ Content-Type: application/json</pre>
 
   const CHANGES = {
     tvSoundKind(el) { Sound.kind = el.value; Sound.play(el.value, true); },
-    perfBarber(el) { ui.perfBarber = el.value; render(); },
+    perfBarber(el) { ui.perfBarber = el.value; location.hash = 'perfil-' + el.value; },
     teamMonth(el) { ui.teamMonth = el.value; ui.fcPeek = false; render(); },
     lanDate(el) { ui.lanDate = el.value; },
     cmpA(el) { ui.cmpA = el.value; if (ui.cmpB === ui.cmpA) ui.cmpB = null; refreshTeam(); },
