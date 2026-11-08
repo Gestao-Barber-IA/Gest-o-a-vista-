@@ -393,7 +393,6 @@
   const NAV = [
     { items: [
       { r: 'inicio', t: 'Início', i: 'grid' },
-      { r: 'time', t: 'Performance da equipe', i: 'trophy' },
       { r: 'performance', t: 'Minha performance', i: 'chart' },
       { r: 'lancamentos', t: 'Lançamentos', i: 'wallet', g: 1, a: 1 },
     ] },
@@ -402,7 +401,7 @@
       { r: 'fechamento', t: 'Fechamento do mês', i: 'clipboard', g: 1, a: 1 },
     ] },
     { group: 'GP · Gestão de pessoas', items: [
-      { r: 'barbeiros', t: 'Adicionar profissional', i: 'users', g: 1 },
+      { r: 'time', t: 'Performance da equipe', i: 'trophy' },
       { r: 'organograma', t: 'Organograma', i: 'org', g: 1 },
       { r: 'checklist', t: 'Checklist Agenda Cheia', i: 'checksq' },
       { r: 'pops', t: 'POPs · Guia do Sucesso', i: 'book' },
@@ -412,6 +411,7 @@
       { r: 'sonhos', t: 'Sonhos', i: 'rocket', soon: 1 },
     ] },
     { group: 'Gestor', g: 1, items: [
+      { r: 'barbeiros', t: 'Adicionar profissional', i: 'users', g: 1 },
       { r: 'configuracoes', t: 'Configurações', i: 'gear' },
       { r: 'assinatura', t: 'Assinatura', i: 'card', cloud: 1 },
       { r: 'admin', t: 'Painel do SaaS', i: 'gauge', admin: 1 },
