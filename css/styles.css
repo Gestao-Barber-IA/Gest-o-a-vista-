@@ -1275,3 +1275,8 @@ textarea.input.pop-ta { min-height: 72px; font-family: var(--font-body); font-si
 .evo-dd { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .evo-full { justify-self: start; }
 @media (max-width: 420px) { .cmp-row { padding: 9px 8px; gap: 6px; } .cmp-v b { font-size: 0.92rem; } }
+.fat-hist { display: grid; gap: 14px; }
+.fat-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.fat-head .section-title { margin: 0; }
+.fat-head .seg button { padding: 7px 12px; font-size: 0.88rem; }
+.fat-stats .stat b { font-size: 1.05rem; }
