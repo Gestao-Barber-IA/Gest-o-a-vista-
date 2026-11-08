@@ -1034,9 +1034,9 @@
     </section>`;
   }
 
-  function strengths(row, prevRow, R, barberId) {
+  function strengths(row, prevRow, R, barberId, ymArg) {
     // No mês em andamento, metas de soma ficam proporcionais aos dias já passados.
-    const ym = ui.teamMonth || curYm();
+    const ym = ymArg || ui.teamMonth || curYm();
     const today = new Date();
     const frac = ym === curYm() ? today.getDate() / new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate() : 1;
     const SUMS = ['fat', 'check', 'serv', 'cli', 'planos', 'prod'];
@@ -1086,8 +1086,7 @@
         <div class="pp-acts"><button class="btn btn-sm" data-action="cmpWith" data-id="${esc(b.id)}">${icon('users')} Comparar com…</button><a class="btn btn-sm" href="#perfil-${esc(b.id)}">${icon('chart')} Performance completa</a>
           <button class="icon-btn" data-action="profClose" aria-label="Fechar">${icon('x')}</button></div>
       </section>
-      <div class="org-tabs pp-tabs" role="toolbar">${[['forte', 'award', 'Pontos fortes e a melhorar'], ['evo', 'chart', 'Evolução']].map(([k, ic, l]) => `<button type="button" class="${(ui.ppTab || 'forte') === k ? 'on' : ''}" aria-pressed="${(ui.ppTab || 'forte') === k}" data-action="ppTab" data-t="${k}">${icon(ic)}<span>${l}</span></button>`).join('')}</div>
-      ${(ui.ppTab || 'forte') === 'evo' ? evoBlock(b.id, ym) : `<div class="pp-grid">${strengths(row, prevRow, R, b.id)}</div>`}
+      ${evoBlock(b.id, ym)}
       <div class="pp-grid">
       <section class="section card"><h2 class="section-title">Faturamento de ${esc(b.name.split(' ')[0])} · últimos 6 meses</h2>
         ${lineSvg({ labels: last6.map(ymShort), series: [{ values: fatVals, color: '#d6b46a', fill: true }], yFmt: v => v >= 1000 ? 'R$' + nf0.format(v / 1000) + 'k' : 'R$' + nf0.format(v) })}</section>
@@ -1164,7 +1163,7 @@
     const all = rows.length === R.rows.length;
     return `<section class="section card">
         <h2 class="section-title">Detalhado por profissional</h2>
-        <p class="section-note">Toque num profissional para ver onde ele é forte e onde precisa melhorar.${all ? '' : ' Aparecem só os profissionais cujos números detalhados você pode ver.'}</p>
+        <p class="section-note">Toque num profissional para ver a evolução dele; os pontos fortes e a melhorar ficam na performance completa.${all ? '' : ' Aparecem só os profissionais cujos números detalhados você pode ver.'}</p>
         <div class="table-wrap"><table class="pc-table"><thead><tr><th>Profissional</th>${cols.map(c => `<th>${c[0]}${tip({ Faturamento: 'fat', Clientes: 'cli', Serviços: 'serv', 'Ticket médio': 'ticket', Ocupação: 'ocup', Produtos: 'prod', Planos: 'planos' }[c[0]])}</th>`).join('')}<th>Pontos${tip('score')}</th></tr></thead><tbody>
           ${rows.map(r => `<tr class="${ui.profSel === r.barber.id ? 'on' : ''}" data-action="profPick" data-id="${esc(r.barber.id)}"><td><button type="button" class="td-who" data-action="profPick" data-id="${esc(r.barber.id)}" aria-expanded="${ui.profSel === r.barber.id}">${avatar(r.barber, 36)}<span>${esc(r.barber.name)}</span></button></td>
             ${cols.map(c => `<td>${c[1](r)}</td>`).join('')}<td class="td-score">${score(r.overall)}</td></tr>`).join('')}
@@ -1468,7 +1467,17 @@
         </div>
       </div>
       <section class="section"><h2 class="section-title">Indicadores ${tip('score')}</h2><div class="ind-grid">${cards}</div></section>
+      ${perfStrengths(b.id)}
       ${evoBlock(b.id, ui.period === 'mes' ? range().start.slice(0, 7) : curYm())}`;
+  }
+
+  // Onde é forte / Onde precisa melhorar: só na performance completa do profissional (metas do mês).
+  function perfStrengths(bid) {
+    const ym = ui.period === 'mes' ? range().start.slice(0, 7) : curYm();
+    const R = monthR(ym), row = R.rows.find(r => r.barber.id === bid);
+    if (!row || !R.active.length) return '';
+    const prevRow = monthR(addMonths(ym, -1)).rows.find(r => r.barber.id === bid);
+    return `<div class="pp-grid">${strengths(row, prevRow, R, bid, ym)}</div>`;
   }
 
   // Visão da barbearia inteira (gestor): totais do mês, detalhe por profissional e radar.
@@ -3322,7 +3331,6 @@ Content-Type: application/json</pre>
       ui.cmpA = el.dataset.id; if (ui.cmpB === ui.cmpA) ui.cmpB = null;
       refreshTeam(); $('#tm-cmp')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     },
-    ppTab(el) { ui.ppTab = el.dataset.t; refreshTeam(); },
     evoMode(el) { ui.evo = { ...(ui.evo || {}), mode: el.dataset.m }; evoRefresh(); },
     profPick(el) {
       const id = el.dataset.id;
