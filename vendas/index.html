@@ -51,6 +51,21 @@
   .switch button { border: 0; background: none; color: var(--muted); padding: 7px 12px; border-radius: 10px; font: 700 0.86rem var(--font-b); cursor: pointer; }
   .switch button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 
+  .seg-btn { border: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 9px 14px; border-radius: 12px; font: 700 0.9rem var(--font-b); cursor: pointer; white-space: nowrap; }
+  .chooser { position: fixed; inset: 0; z-index: 50; overflow-y: auto; display: grid; place-items: center; padding: 28px 16px; background: radial-gradient(70% 50% at 20% 0%, rgba(214,180,106,.18), transparent 70%), radial-gradient(60% 50% at 90% 100%, rgba(234,165,159,.18), transparent 70%), #0d0b0d; color: #f6f2e8; }
+  .ch-in { width: min(100%, 720px); text-align: center; display: grid; gap: 14px; justify-items: center; }
+  .ch-logos { display: inline-block; width: 74px; height: 74px; border-radius: 50%; margin: 0 6px; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
+  .ch-logo-row { display: flex; justify-content: center; }
+  .ch-in h1 { font-size: clamp(1.8rem, 6vw, 2.6rem); font-weight: 800; }
+  .ch-in > p { margin: 0; color: #c9c2b6; }
+  .ch-grid { width: 100%; display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 8px; }
+  .ch-grid button { display: grid; gap: 4px; justify-items: center; padding: 22px 12px; border-radius: 20px; border: 1px solid #2f2a2d; background: #171416; color: #f6f2e8; cursor: pointer; font: inherit; transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
+  .ch-grid button:hover, .ch-grid button:focus-visible { transform: translateY(-2px); border-color: #d6b46a; box-shadow: 0 0 30px rgba(214,180,106,.2); outline: none; }
+  .ch-grid button[data-seg]:not([data-seg="barbearia"]):hover, .ch-grid button[data-seg]:not([data-seg="barbearia"]):focus-visible { border-color: #eaa59f; box-shadow: 0 0 30px rgba(234,165,159,.22); }
+  .ch-ic { font-size: 2.2rem; line-height: 1; }
+  .ch-grid b { font-family: var(--font-d); font-size: 1.08rem; }
+  .ch-grid small { color: #a8a094; font-size: 0.82rem; }
+  body.locked { overflow: hidden; }
   /* herói */
   .hero { padding: 40px 0 56px; }
   .hero .wrap { display: grid; gap: 34px; align-items: center; }
@@ -155,12 +170,22 @@
 </style>
 </head>
 <body>
+<div class="chooser" id="chooser" role="dialog" aria-modal="true" aria-labelledby="ch-h" hidden>
+  <div class="ch-in">
+    <div class="ch-logo-row"><img class="ch-logos" src="../assets/logo.jpg" alt="Gestão Barber IA"><img class="ch-logos" src="../assets/logo-salao.jpg" alt="Gestão Salão IA"></div>
+    <h1 id="ch-h">Qual é o seu negócio?</h1>
+    <p>Escolha para ver como o sistema funciona no seu dia a dia.</p>
+    <div class="ch-grid">
+      <button type="button" data-seg="barbearia"><span class="ch-ic">💈</span><b>Barbearia</b><small>Gestão Barber IA</small></button>
+      <button type="button" data-seg="salao"><span class="ch-ic">💇‍♀️</span><b>Salão de beleza</b><small>Gestão Salão IA</small></button>
+      <button type="button" data-seg="esmalteria"><span class="ch-ic">💅</span><b>Esmalteria</b><small>Gestão Salão IA</small></button>
+      <button type="button" data-seg="estetica"><span class="ch-ic">✨</span><b>Clínica de estética</b><small>Gestão Salão IA</small></button>
+    </div>
+  </div>
+</div>
 <header class="top"><div class="wrap">
   <a class="brand" href="#"><img data-logo alt=""><span data-t="name">Gestão Barber IA</span></a>
-  <div class="switch" role="group" aria-label="Tipo de negócio">
-    <button type="button" data-b="barber" aria-pressed="true">Barbearia</button>
-    <button type="button" data-b="salao" aria-pressed="false">Salão</button>
-  </div>
+  <button type="button" class="seg-btn" data-choose aria-label="Trocar o tipo de negócio"><span data-segname>Barbearia</span> ▾</button>
 </div></header>
 
 <main>
@@ -381,9 +406,21 @@
       logo: '../assets/logo-salao.jpg', icon: '../assets/icon-salao-192.png', theme: '#14080d', title: 'Gestão Salão IA · Performance da equipe',
     },
   };
+  // Tipo de negócio: barbearia usa o Gestão Barber IA; salão, esmalteria e clínica de estética, o Gestão Salão IA.
+  const SEG = {
+    barbearia: { brand: 'barber', label: 'Barbearia' },
+    salao: { brand: 'salao', label: 'Salão de beleza' },
+    esmalteria: { brand: 'salao', label: 'Esmalteria', eyebrow: 'Para esmalterias', place: 'da sua esmalteria', tvH: 'O placar na TV da esmalteria', st1: 'Cadastre a esmalteria e as profissionais. Leva poucos minutos.', boss: ['Dona presa na esmalteria', 'Para tudo andar, você precisa estar lá olhando.'], pops: 'da cutilagem à esmaltação em gel' },
+    estetica: { brand: 'salao', label: 'Clínica de estética', eyebrow: 'Para clínicas de estética', place: 'da sua clínica', tvH: 'O placar na TV da clínica', st1: 'Cadastre a clínica e as profissionais. Leva poucos minutos.', boss: ['Dona presa na clínica', 'Para tudo andar, você precisa estar lá olhando.'], pops: 'da avaliação ao pós-procedimento', room: true },
+  };
+  let seg = 'barbearia';
   const qs = s => document.querySelectorAll(s);
   function apply(b) {
-    const t = T[b];
+    const S = SEG[seg] || SEG.barbearia;
+    b = S.brand;
+    const t = { ...T[b] };
+    if (S.eyebrow) { t.eyebrow = S.eyebrow; t.gh = `10 gargalos que seguram o faturamento ${S.place} — e como o sistema resolve cada um`; t.tvH = S.tvH; t.st1 = S.st1; }
+    qs('[data-segname]').forEach(el => { el.textContent = S.label; });
     document.documentElement.dataset.brand = b;
     document.title = t.title;
     document.querySelector('meta[name="theme-color"]').setAttribute('content', t.theme);
@@ -393,17 +430,23 @@
     qs('[data-shot]').forEach(i => { i.src = `../assets/vendas/${b}-${i.dataset.shot}.jpg`; });
     qs('[data-link="demo"]').forEach(a => { a.href = `../?demo=${b}`; });
     qs('[data-link="app"]').forEach(a => { a.href = `../?marca=${b}`; });
-    qs('.switch button[data-b]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.b === b)));
-    document.getElementById('g-list').innerHTML = G[b].map(([h, pain, fix], i) => `<article class="card g reveal in"><span class="n">GARGALO ${String(i + 1).padStart(2, '0')}</span><h3>${h}</h3><p class="pain">${pain}</p><p class="fix"><b>Como resolve:</b> ${fix}</p></article>`).join('');
-    const msg = encodeURIComponent(`Olá! Vi a página do ${t.name} e quero saber mais.`);
+    const gl = G[b].map((g, i) => {
+      let [h, pain, fix] = g;
+      if (S.boss && i === 8) [h, pain] = S.boss;
+      if (S.pops && i === 7) fix = fix.replace('da escova à esmaltação', S.pops);
+      if (S.room) { pain = pain.replace('de cadeira para cadeira', 'de sala para sala'); }
+      return [h, pain, fix];
+    });
+    document.getElementById('g-list').innerHTML = gl.map(([h, pain, fix], i) => `<article class="card g reveal in"><span class="n">GARGALO ${String(i + 1).padStart(2, '0')}</span><h3>${h}</h3><p class="pain">${pain}</p><p class="fix"><b>Como resolve:</b> ${fix}</p></article>`).join('');
+    const msg = encodeURIComponent(`Olá! Tenho ${S.label === 'Barbearia' ? 'uma barbearia' : S.label === 'Salão de beleza' ? 'um salão de beleza' : S.label === 'Esmalteria' ? 'uma esmalteria' : 'uma clínica de estética'}, vi a página do ${t.name} e quero saber mais.`);
     qs('[data-wa]').forEach(a => { if (WHATSAPP) { a.hidden = false; a.href = `https://wa.me/${WHATSAPP}?text=${msg}`; a.target = '_blank'; a.rel = 'noopener'; } });
     qs('[data-plan]').forEach(a => {
       const per = document.documentElement.dataset.per === 'ano' ? 'anual' : 'mensal';
-      const m = encodeURIComponent(`Olá! Quero o plano ${a.dataset.plan} (${per}) do ${t.name}.`);
+      const m = encodeURIComponent(`Olá! Quero o plano ${a.dataset.plan} (${per}) do ${t.name} para ${S.label === 'Barbearia' ? 'minha barbearia' : S.label === 'Salão de beleza' ? 'meu salão' : S.label === 'Esmalteria' ? 'minha esmalteria' : 'minha clínica de estética'}.`);
       a.href = WHATSAPP ? `https://wa.me/${WHATSAPP}?text=${m}` : `../?marca=${b}`;
       if (WHATSAPP) { a.target = '_blank'; a.rel = 'noopener'; }
     });
-    try { history.replaceState(null, '', `?marca=${b}${location.hash}`); } catch (e) { /* opcional */ }
+    try { history.replaceState(null, '', `?tipo=${seg}${location.hash}`); } catch (e) { /* opcional */ }
   }
   let cur = 'barber';
   function setPer(per) {
@@ -416,9 +459,16 @@
     });
     apply(cur);
   }
-  const start = new URLSearchParams(location.search).get('marca') === 'salao' ? 'salao' : 'barber';
-  cur = start; setPer('mes');
-  qs('.switch button[data-b]').forEach(x => x.addEventListener('click', () => { cur = x.dataset.b; apply(cur); }));
+  const sp = new URLSearchParams(location.search);
+  const tipo = sp.get('tipo') || (sp.get('marca') === 'salao' ? 'salao' : sp.get('marca') === 'barber' ? 'barbearia' : '');
+  const chooser = document.getElementById('chooser');
+  function openChooser() { chooser.hidden = false; document.body.classList.add('locked'); chooser.querySelector('button').focus({ preventScroll: true }); }
+  function pickSeg(k) { seg = SEG[k] ? k : 'barbearia'; chooser.hidden = true; document.body.classList.remove('locked'); apply(cur); window.scrollTo(0, 0); }
+  if (SEG[tipo]) seg = tipo;
+  setPer('mes');
+  if (!SEG[tipo]) openChooser();
+  qs('[data-seg]').forEach(x => x.addEventListener('click', () => pickSeg(x.dataset.seg)));
+  qs('[data-choose]').forEach(x => x.addEventListener('click', openChooser));
   qs('[data-per]').forEach(x => x.addEventListener('click', () => setPer(x.dataset.per)));
   // Entrada suave dos blocos ao rolar.
   const io = 'IntersectionObserver' in window ? new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { threshold: 0.12 }) : null;
