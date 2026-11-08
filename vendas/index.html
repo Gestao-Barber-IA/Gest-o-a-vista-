@@ -117,6 +117,24 @@
   .plan ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; text-align: left; }
   .plan li::before { content: "✓"; color: var(--good); font-weight: 800; margin-right: 8px; }
 
+  /* planos */
+  .per { justify-self: center; margin-top: 6px; }
+  .per small { font-weight: 700; color: var(--good); margin-left: 4px; }
+  .per button[aria-pressed="true"] small { color: var(--accent-ink); }
+  .plans { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); align-items: stretch; margin-bottom: 18px; }
+  .pl { position: relative; display: grid; gap: 10px; align-content: start; padding: 26px 22px; }
+  .pl h3 { font-size: 1.4rem; }
+  .pl-for { margin: 0; color: var(--muted); font-weight: 600; }
+  .price { margin: 6px 0 0; display: flex; align-items: baseline; gap: 4px; }
+  .price b { font: 800 2.8rem/1 var(--font-d); }
+  .price small { color: var(--muted); font-weight: 700; }
+  .pl-annual { margin: 0; min-height: 1.4em; color: var(--good); font-size: 0.92rem; font-weight: 600; }
+  .pl ul { list-style: none; margin: 8px 0 12px; padding: 0; display: grid; gap: 8px; }
+  .pl li { color: var(--soft); }
+  .pl li::before { content: "✓"; color: var(--good); font-weight: 800; margin-right: 8px; }
+  .pl .btn { margin-top: auto; }
+  .pl-top { border-color: var(--accent); box-shadow: 0 0 50px var(--glow); }
+  .pl-tag { position: absolute; top: -13px; left: 50%; transform: translateX(-50%); padding: 4px 14px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font: 800 0.75rem var(--font-d); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
   /* faq */
   details { border-bottom: 1px solid var(--line); padding: 16px 0; }
   summary { cursor: pointer; font-weight: 700; font-size: 1.05rem; list-style: none; display: flex; justify-content: space-between; gap: 10px; }
@@ -244,19 +262,44 @@
   </div>
 </div></section>
 
-<section><div class="wrap">
-  <div class="card plan reveal">
-    <span class="eyebrow">Teste grátis</span>
-    <h2>7 dias para ver a sua equipe no ranking</h2>
-    <ul>
-      <li>Todas as funções liberadas no teste</li>
-      <li>Planos de acordo com o tamanho da equipe</li>
-      <li>Sem fidelidade</li>
-    </ul>
-    <div class="cta" style="justify-content:center">
-      <a class="btn btn-primary" data-link="app" href="../?marca=barber">Começar o teste grátis</a>
-      <a class="btn" data-link="demo" href="../?demo=barber">Ver a demonstração</a>
+<section id="planos"><div class="wrap">
+  <div class="head reveal" style="justify-items:center;text-align:center">
+    <span class="eyebrow">Planos</span>
+    <h2>Escolha pelo tamanho da sua equipe</h2>
+    <p class="lead" style="margin:0 auto">Comece com <b>7 dias grátis</b>. Depois, mensal sem fidelidade ou anual com desconto.</p>
+    <div class="switch per" role="group" aria-label="Forma de pagamento">
+      <button type="button" data-per="mes" aria-pressed="true">Mensal</button>
+      <button type="button" data-per="ano" aria-pressed="false">Anual <small>até 29% off</small></button>
     </div>
+  </div>
+  <div class="plans">
+    <article class="card pl reveal">
+      <h3>Essencial</h3><p class="pl-for" data-t="p1">Até 4 barbeiros</p>
+      <p class="price"><small>R$</small><b data-m="99" data-a="80">99</b><small>/mês</small></p>
+      <p class="pl-annual" data-save="99,80"></p>
+      <ul><li>Todas as funções do sistema</li><li>Ranking, pódio, metas e comparativos</li><li>Checklist Agenda Cheia e POPs</li><li>Tela da loja e Fechamento do mês</li><li>Líderes e gestores com acessos extras</li><li>Integração por API</li></ul>
+      <a class="btn" data-plan="Essencial">Quero o Essencial</a>
+    </article>
+    <article class="card pl pl-top reveal">
+      <span class="pl-tag">Mais escolhido</span>
+      <h3>Profissional</h3><p class="pl-for" data-t="p2">Até 10 barbeiros</p>
+      <p class="price"><small>R$</small><b data-m="179" data-a="150">179</b><small>/mês</small></p>
+      <p class="pl-annual" data-save="179,150"></p>
+      <ul><li>Todas as funções do sistema</li><li>Ranking, pódio, metas e comparativos</li><li>Checklist Agenda Cheia e POPs</li><li>Tela da loja e Fechamento do mês</li><li>Líderes e gestores com acessos extras</li><li>Integração por API</li></ul>
+      <a class="btn btn-primary" data-plan="Profissional">Quero o Profissional</a>
+    </article>
+    <article class="card pl reveal">
+      <h3>Premium</h3><p class="pl-for" data-t="p3">Barbeiros ilimitados</p>
+      <p class="price"><small>R$</small><b data-m="279" data-a="199">279</b><small>/mês</small></p>
+      <p class="pl-annual" data-save="279,199"></p>
+      <ul><li>Todas as funções do sistema</li><li>Ranking, pódio, metas e comparativos</li><li>Checklist Agenda Cheia e POPs</li><li>Tela da loja e Fechamento do mês</li><li>Líderes e gestores com acessos extras</li><li>Integração por API</li></ul>
+      <a class="btn" data-plan="Premium">Quero o Premium</a>
+    </article>
+  </div>
+  <p class="note" style="text-align:center">Teste grátis de 7 dias com lançamento manual dos números. A integração por API é liberada nos planos pagos.</p>
+  <div class="cta" style="justify-content:center">
+    <a class="btn btn-primary" data-link="app" href="../?marca=barber">Começar o teste grátis</a>
+    <a class="btn" data-link="demo" href="../?demo=barber">Ver a demonstração</a>
   </div>
 </div></section>
 
@@ -267,7 +310,7 @@
   <details><summary>Tenho que lançar os números todo dia?</summary><p>Você pode lançar o total do mês à mão em segundos, ou ligar a integração por API com o seu sistema de agenda para os números entrarem sozinhos.</p></details>
   <details><summary>Serve para salão de beleza e esmalteria?</summary><p>Sim. O Gestão Salão IA tem o mesmo sistema, com visual, nomes e funções pensados para salões e esmalterias.</p></details>
   <details><summary>Meus dados ficam seguros?</summary><p>Ficam em um banco de dados na nuvem, com login de cada pessoa e regras de acesso por barbearia. Ninguém de fora vê os seus números.</p></details>
-  <details><summary>Como funciona o pagamento?</summary><p>Depois do teste grátis você escolhe o plano pelo número de profissionais da equipe. Sem fidelidade.</p></details>
+  <details><summary>Como funciona o pagamento?</summary><p>Depois dos 7 dias grátis você escolhe o plano pelo tamanho da equipe. No mensal não há fidelidade. No anual o valor por mês cai: Essencial de R$ 99 para R$ 80, Profissional de R$ 179 para R$ 150 e Premium de R$ 279 para R$ 199.</p></details>
 </div></section>
 
 <section class="final"><div class="wrap">
@@ -285,7 +328,7 @@
 <script>
 (function () {
   // WhatsApp de vendas: coloque o número com DDI e DDD, só números (ex.: '5511999999999').
-  const WHATSAPP = '';
+  const WHATSAPP = '5519999945363';
   const G = {
     barber: [
       ['O barbeiro não sabe o próprio número', 'Ele só descobre se foi bem quando o mês acaba, e aí não dá mais para reagir.', 'Ranking em tempo real e Minha performance no celular de cada um, atualizados a cada lançamento.'],
@@ -322,7 +365,7 @@
       b1: 'O barbeiro só descobre o resultado no fim do mês',
       s1: 'Faturamento, pontos e quantos indicadores cada um lidera. Quando alguém ultrapassa, a equipe toda fica sabendo.',
       tvH: 'O placar na TV da barbearia', st1: 'Cadastre a barbearia e os barbeiros. Leva poucos minutos.',
-      f2q: 'Os barbeiros veem os números uns dos outros?', finalH: 'Coloque a sua equipe no placar ainda este mês',
+      f2q: 'Os barbeiros veem os números uns dos outros?', p1: 'Até 4 barbeiros', p2: 'Até 10 barbeiros', p3: 'Barbeiros ilimitados', finalH: 'Coloque a sua equipe no placar ainda este mês',
       logo: '../assets/logo.jpg', icon: '../assets/icon-192.png', theme: '#0c0c0e', title: 'Gestão Barber IA · Performance da equipe',
     },
     salao: {
@@ -334,7 +377,7 @@
       b1: 'A profissional só descobre o resultado no fim do mês',
       s1: 'Faturamento, pontos e quantos indicadores cada uma lidera. Quando alguém ultrapassa, a equipe toda fica sabendo.',
       tvH: 'O placar na TV do salão', st1: 'Cadastre o salão e as profissionais. Leva poucos minutos.',
-      f2q: 'As profissionais veem os números umas das outras?', finalH: 'Coloque a sua equipe no placar ainda este mês',
+      f2q: 'As profissionais veem os números umas das outras?', p1: 'Até 4 profissionais', p2: 'Até 10 profissionais', p3: 'Profissionais ilimitadas', finalH: 'Coloque a sua equipe no placar ainda este mês',
       logo: '../assets/logo-salao.jpg', icon: '../assets/icon-salao-192.png', theme: '#14080d', title: 'Gestão Salão IA · Performance da equipe',
     },
   };
@@ -350,15 +393,33 @@
     qs('[data-shot]').forEach(i => { i.src = `../assets/vendas/${b}-${i.dataset.shot}.jpg`; });
     qs('[data-link="demo"]').forEach(a => { a.href = `../?demo=${b}`; });
     qs('[data-link="app"]').forEach(a => { a.href = `../?marca=${b}`; });
-    qs('.switch button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.b === b)));
+    qs('.switch button[data-b]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.b === b)));
     document.getElementById('g-list').innerHTML = G[b].map(([h, pain, fix], i) => `<article class="card g reveal in"><span class="n">GARGALO ${String(i + 1).padStart(2, '0')}</span><h3>${h}</h3><p class="pain">${pain}</p><p class="fix"><b>Como resolve:</b> ${fix}</p></article>`).join('');
     const msg = encodeURIComponent(`Olá! Vi a página do ${t.name} e quero saber mais.`);
     qs('[data-wa]').forEach(a => { if (WHATSAPP) { a.hidden = false; a.href = `https://wa.me/${WHATSAPP}?text=${msg}`; a.target = '_blank'; a.rel = 'noopener'; } });
+    qs('[data-plan]').forEach(a => {
+      const per = document.documentElement.dataset.per === 'ano' ? 'anual' : 'mensal';
+      const m = encodeURIComponent(`Olá! Quero o plano ${a.dataset.plan} (${per}) do ${t.name}.`);
+      a.href = WHATSAPP ? `https://wa.me/${WHATSAPP}?text=${m}` : `../?marca=${b}`;
+      if (WHATSAPP) { a.target = '_blank'; a.rel = 'noopener'; }
+    });
     try { history.replaceState(null, '', `?marca=${b}${location.hash}`); } catch (e) { /* opcional */ }
   }
+  let cur = 'barber';
+  function setPer(per) {
+    document.documentElement.dataset.per = per;
+    qs('[data-per]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.per === per)));
+    qs('.price b').forEach(el => { el.textContent = per === 'ano' ? el.dataset.a : el.dataset.m; });
+    qs('.pl-annual').forEach(el => {
+      const [m, a] = el.dataset.save.split(',').map(Number);
+      el.textContent = per === 'ano' ? `no plano anual · economia de R$ ${((m - a) * 12).toLocaleString('pt-BR')} por ano` : `ou R$ ${a}/mês no plano anual`;
+    });
+    apply(cur);
+  }
   const start = new URLSearchParams(location.search).get('marca') === 'salao' ? 'salao' : 'barber';
-  apply(start);
-  qs('.switch button').forEach(x => x.addEventListener('click', () => apply(x.dataset.b)));
+  cur = start; setPer('mes');
+  qs('.switch button[data-b]').forEach(x => x.addEventListener('click', () => { cur = x.dataset.b; apply(cur); }));
+  qs('[data-per]').forEach(x => x.addEventListener('click', () => setPer(x.dataset.per)));
   // Entrada suave dos blocos ao rolar.
   const io = 'IntersectionObserver' in window ? new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { threshold: 0.12 }) : null;
   qs('.reveal').forEach(el => io ? io.observe(el) : el.classList.add('in'));
