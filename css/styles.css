@@ -1285,3 +1285,37 @@ textarea.input.pop-ta { min-height: 72px; font-family: var(--font-body); font-si
 .acc-edit { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 10px; }
 .acc-edit .field span { font-size: 0.78rem; }
 .acc-edit .input { padding: 8px 12px; min-height: 0; font-size: 0.95rem; }
+
+/* ---------- POPs · Guia do Sucesso ---------- */
+.pops-head { display: grid; gap: 14px; border-color: var(--line-accent); background: radial-gradient(90% 120% at 0% 0%, rgba(214, 180, 106, 0.14), transparent 60%), var(--surface); }
+.pops-hero { display: flex; gap: 14px; align-items: flex-start; }
+.pops-hero > .ico { width: 40px; height: 40px; flex: none; color: var(--accent); }
+.pops-hero h2 { margin: 0 0 4px; font-family: var(--font-display); font-size: 1.3rem; }
+.pops-hero p { margin: 0; color: var(--muted); }
+.pops-new summary { cursor: pointer; font-weight: 700; display: flex; align-items: center; gap: 8px; color: var(--accent); }
+.pops-new[open] summary { margin-bottom: 14px; }
+.pops-list { display: grid; gap: 12px; }
+.pops-card { display: grid; gap: 12px; }
+.pops-card.on { border-color: var(--line-accent); }
+.pops-top { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start; }
+.pops-n { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 12px; background: rgba(214, 180, 106, 0.15); color: var(--accent); font: 800 1rem/1 var(--font-display); }
+.pops-who h3 { margin: 4px 0 4px; font-family: var(--font-display); font-size: 1.1rem; }
+.pops-who p { margin: 0 0 6px; color: var(--muted); }
+.pops-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 !important; }
+.pops-chips .ico { width: 14px; height: 14px; }
+.pops-thumb { width: 72px; height: 72px; padding: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--surface-2); cursor: zoom-in; }
+.pops-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pops-steps { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); }
+.pops-step { margin: 0; display: grid; gap: 8px; padding: 10px; border-radius: 16px; background: var(--surface-2); border: 1px solid var(--line); }
+.pops-img { padding: 0; border: 0; border-radius: 12px; overflow: hidden; background: var(--bg); cursor: zoom-in; aspect-ratio: 4 / 3; }
+.pops-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pops-step figcaption { display: grid; gap: 4px; }
+.pops-step figcaption span { color: var(--muted); font-size: 0.92rem; }
+.pops-step .input { padding: 8px 10px; font-size: 0.92rem; }
+.pops-stepbtns { display: flex; gap: 4px; justify-content: flex-end; }
+.pops-stepbtns .icon-btn { width: 36px; height: 36px; border: 1px solid var(--line); }
+.pops-stepbtns .icon-btn:disabled { opacity: 0.35; }
+.pops-edit { grid-column: 1 / -1; padding: 14px; border-radius: 16px; border: 1px dashed var(--line-accent); }
+.pops-edit h4 { margin: 0; font-family: var(--font-display); }
+.pops-vnav { justify-content: center; }
+.pop-viewer img.full { max-height: 72vh; }

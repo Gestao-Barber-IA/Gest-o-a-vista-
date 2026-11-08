@@ -98,6 +98,22 @@
     return data.signedUrl;
   };
   Cloud.removeProof = async path => { try { await c.storage.from(PROOFS).remove([path]); } catch (e) { /* segue */ } };
+  // Arquivos de outras pastas (ex.: fotos dos POPs).
+  Cloud.uploadFile = async (bucket, path, dataUrl) => {
+    const blob = await (await fetch(dataUrl)).blob();
+    const { error } = await c.storage.from(bucket).upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+    if (error) throw error;
+    return path;
+  };
+  Cloud.fileUrl = async (bucket, path) => {
+    const key = bucket + '|' + path, hit = urlCache[key];
+    if (hit && hit.exp > Date.now()) return hit.url;
+    const { data, error } = await c.storage.from(bucket).createSignedUrl(path, 3600);
+    if (error) throw error;
+    urlCache[key] = { url: data.signedUrl, exp: Date.now() + 3500 * 1000 };
+    return data.signedUrl;
+  };
+  Cloud.removeFile = async (bucket, path) => { try { await c.storage.from(bucket).remove([path]); } catch (e) { /* segue */ } };
   Cloud.rotateKey = async () => { const { data, error } = await c.rpc('rotate_api_key'); if (error) throw error; return data; };
 
   // ---------- conversão entre o app e as tabelas ----------
@@ -125,7 +141,7 @@
       out.tables[t] = map;
     }
     const co = s.company;
-    out.company = JSON.stringify({ name: co.name, cnpj: co.cnpj || '', phone: co.phone || '', email: co.email || '', logo: co.logo || null, settings: { weights: s.weights, goals: s.goals, hidden: s.hidden, org: s.org || null, pop: s.popCfg || null, reveal: s.reveal || null, ocup: s.ocupCfg || null } });
+    out.company = JSON.stringify({ name: co.name, cnpj: co.cnpj || '', phone: co.phone || '', email: co.email || '', logo: co.logo || null, settings: { weights: s.weights, goals: s.goals, hidden: s.hidden, org: s.org || null, pop: s.popCfg || null, reveal: s.reveal || null, ocup: s.ocupCfg || null, pops: s.pops || null } });
     for (const u of s.users) out.users[u.id] = JSON.stringify({ name: u.name, phone: u.phone || '', status: u.status });
     return out;
   }
@@ -195,6 +211,7 @@
       hidden: Array.isArray(st.hidden) ? st.hidden : ['fid'],
       org: st.org || null,
       popCfg: st.pop || null,
+      pops: Array.isArray(st.pops) ? st.pops : [],
       reveal: st.reveal || null,
       ocupCfg: st.ocup || null,
       pop: pop.map(r => ({ barberId: r.barber_id, day: r.day, ...(r.data || {}) })),

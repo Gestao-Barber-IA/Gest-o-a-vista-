@@ -297,6 +297,19 @@ do $$ begin
     create policy provas_delete on storage.objects for delete to authenticated
       using (bucket_id = 'provas' and (storage.foldername(name))[1] = my_company()::text
         and (can_edit_barber((storage.foldername(name))[2]) or (storage.foldername(name))[2] = my_barber()));
+    -- POPs · Guia do Sucesso: fotos do passo a passo (pasta: barbearia/pop/arquivo.jpg). Equipe vê; só o dono envia e apaga.
+    insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+    values ('pops', 'pops', false, 3145728, array['image/jpeg', 'image/png', 'image/webp'])
+    on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+    drop policy if exists pops_read on storage.objects;
+    drop policy if exists pops_insert on storage.objects;
+    drop policy if exists pops_delete on storage.objects;
+    create policy pops_read on storage.objects for select to authenticated
+      using (bucket_id = 'pops' and (storage.foldername(name))[1] = my_company()::text);
+    create policy pops_insert on storage.objects for insert to authenticated
+      with check (bucket_id = 'pops' and (storage.foldername(name))[1] = my_company()::text and is_gestor());
+    create policy pops_delete on storage.objects for delete to authenticated
+      using (bucket_id = 'pops' and (storage.foldername(name))[1] = my_company()::text and is_gestor());
   end if;
 end $$;
 

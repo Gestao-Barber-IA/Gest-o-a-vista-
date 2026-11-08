@@ -73,6 +73,7 @@
     compare: ['Comparar profissionais', 'Mostra os números de dois profissionais lado a lado no mês. Verde com ▲ é quem está à frente em cada indicador; vermelho com ▼, quem está atrás; "=" é empate. No meio aparece a diferença. O barbeiro compara os próprios números com o líder de cada indicador; o dono e o gestor de área comparam quem podem ver.'],
     evo: ['Evolução', 'Compara o profissional com ele mesmo em outro período. Verde com ▲ é onde melhorou; vermelho com ▼, onde caiu. Com o mês em andamento, compara o mesmo número de dias (ex.: 1 a 7 deste mês × 1 a 7 do mês anterior), a não ser que você marque o mês anterior inteiro. Em períodos que não são o mês inteiro, entram os lançamentos por dia.'],
     access_lv: ['Nível de acesso', () => ACCESS_TIP()],
+    pops: ['POPs · Guia do Sucesso', 'POP é o Procedimento Operacional Padrão: o jeito certo de fazer cada processo da barbearia. Cada POP tem o passo a passo em fotos (toque para ampliar) e, se houver, o link do vídeo. Só o dono cadastra e edita; toda a equipe consulta.'],
     extras: ['Acessos extras do líder', 'Liberações opcionais que você dá a um líder: conferir e aprovar o checklist de toda a equipe e/ou lançar à mão os números de toda a equipe só nos indicadores marcados. Os outros campos ficam só para leitura para ele. Campos que vêm da integração continuam travados.'],
     fechamento: ['Fechamento do mês', 'Apresentação para a equipe: mostra do último colocado ao 4º e depois o pódio, do 3º ao 1º. Cada lugar do pódio só aparece quando o gestor toca em Revelar. O resumo esconde o resultado para não estragar a surpresa se a tela estiver na TV.'],
   };
@@ -404,6 +405,7 @@
       { r: 'barbeiros', t: 'Adicionar profissional', i: 'users', g: 1 },
       { r: 'organograma', t: 'Organograma', i: 'org', g: 1 },
       { r: 'checklist', t: 'Checklist Agenda Cheia', i: 'checksq' },
+      { r: 'pops', t: 'POPs · Guia do Sucesso', i: 'book' },
       { r: 'tarefas', t: 'Tarefas', i: 'clipboard', soon: 1 },
       { r: 'metas', t: 'Metas', i: 'target', soon: 1 },
       { r: 'premios', t: 'Prêmios e metas', i: 'gift', soon: 1 },
@@ -1319,6 +1321,88 @@
       </div>
       ${L.html}
     </section>`;
+  }
+
+
+  // ---------- POPs · Guia do Sucesso (processos operacionais com fotos do passo a passo e vídeo) ----------
+  const POPS_BUCKET = 'pops';
+  const popsList = () => (Array.isArray(state.pops) ? state.pops : (state.pops = []));
+  const popsById = id => popsList().find(x => x.id === id);
+  const validUrl = u => /^https?:\/\/[^\s]+\.[^\s]+$/i.test(u);
+  const stepImg = (st, cls) => st.path ? `<img class="${cls || ''}" data-file="${POPS_BUCKET}|${esc(st.path)}" alt="${esc(st.cap || 'Passo do POP')}" loading="lazy">` : `<img class="${cls || ''}" src="${esc(st.src || '')}" alt="${esc(st.cap || 'Passo do POP')}" loading="lazy">`;
+  async function popsPhotos(files, popId) {
+    const out = [];
+    for (const file of [...(files || [])].slice(0, 12)) {
+      const data = await readImage(file, Cloud.enabled ? 1600 : 1000, 0.82);
+      if (Cloud.enabled) out.push({ path: await Cloud.uploadFile(POPS_BUCKET, `${Cloud.companyId}/${popId}/${uid('s_')}.jpg`, data), cap: '' });
+      else out.push({ src: data, cap: '' });
+    }
+    return out;
+  }
+  function pagePops(user) {
+    const own = isGestor(user), list = popsList();
+    const card = (p, n) => {
+      const open = ui.popsOpen === p.id, steps = p.steps || [];
+      const ask = ui.confirm === 'popsDel' + p.id;
+      return `<article class="card pops-card ${open ? 'on' : ''}" data-name="${esc((p.name + ' ' + (p.desc || '')).toLowerCase())}">
+        <div class="pops-top">
+          <span class="pops-n num">${n}</span>
+          <div class="pops-who"><h3>${esc(p.name)}</h3>${p.desc ? `<p>${esc(p.desc)}</p>` : ''}
+            <p class="pops-chips"><span class="chip chip-soft">${steps.length} passo${steps.length === 1 ? '' : 's'}</span>${p.video ? `<span class="chip chip-ok">${icon('play')} Vídeo</span>` : ''}</p></div>
+          ${steps[0] ? `<button class="pops-thumb" data-action="popsView" data-id="${esc(p.id)}" data-i="0" aria-label="Ver o passo 1">${stepImg(steps[0])}</button>` : ''}
+        </div>
+        <div class="btn-row">
+          ${steps.length || own ? `<button class="btn btn-sm ${open ? '' : 'btn-primary'}" data-action="popsOpen" data-id="${esc(p.id)}" aria-expanded="${open}">${icon(open ? 'up' : 'down')} ${open ? 'Fechar' : steps.length ? 'Ver passo a passo' : 'Adicionar fotos'}</button>` : ''}
+          ${p.video ? `<a class="btn btn-sm" href="${esc(p.video)}" target="_blank" rel="noopener noreferrer">${icon('play')} Assistir vídeo</a>` : ''}
+        </div>
+        ${open ? `<div class="pops-steps">
+          ${steps.length ? steps.map((st, i) => `<figure class="pops-step">
+            <button class="pops-img" data-action="popsView" data-id="${esc(p.id)}" data-i="${i}" aria-label="Ampliar o passo ${i + 1}">${stepImg(st)}</button>
+            <figcaption><b>Passo ${i + 1}</b>${own ? `<input class="input" value="${esc(st.cap || '')}" placeholder="Legenda (opcional)" maxlength="140" data-change="popsCap" data-id="${esc(p.id)}" data-i="${i}">` : st.cap ? `<span>${esc(st.cap)}</span>` : ''}</figcaption>
+            ${own ? `<div class="pops-stepbtns">
+              <button class="icon-btn" data-action="popsMove" data-id="${esc(p.id)}" data-i="${i}" data-d="-1" aria-label="Subir" ${i === 0 ? 'disabled' : ''}>${icon('up')}</button>
+              <button class="icon-btn" data-action="popsMove" data-id="${esc(p.id)}" data-i="${i}" data-d="1" aria-label="Descer" ${i === steps.length - 1 ? 'disabled' : ''}>${icon('down')}</button>
+              <button class="icon-btn" data-action="popsDelStep" data-id="${esc(p.id)}" data-i="${i}" aria-label="Remover foto">${icon('x')}</button></div>` : ''}
+          </figure>`).join('') : '<p class="muted">Ainda não há fotos do passo a passo.</p>'}
+          ${own ? `<form class="form pops-edit" data-form="popsEdit" data-id="${esc(p.id)}" novalidate>
+            <h4>Editar POP</h4>
+            <div class="grid-2"><label class="field"><span>Nome do processo *</span><input class="input" name="name" value="${esc(p.name)}" maxlength="80" required></label>
+            <label class="field"><span>Link do vídeo (opcional)</span><input class="input" name="video" type="url" inputmode="url" value="${esc(p.video || '')}" placeholder="https://..."></label></div>
+            <label class="field"><span>Descrição (opcional)</span><textarea class="input" name="desc" rows="2" maxlength="400">${esc(p.desc || '')}</textarea></label>
+            <label class="field"><span>Adicionar fotos do passo a passo</span><input class="input" name="photos" type="file" accept="image/*" multiple></label>
+            <p class="form-msg" data-msg></p>
+            <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button>
+            <button type="button" class="btn ${ask ? 'btn-danger' : ''}" data-action="popsDel" data-id="${esc(p.id)}">${ask ? 'Confirmar: apagar este POP' : 'Apagar POP'}</button></div>
+          </form>` : ''}
+        </div>` : ''}
+      </article>`;
+    };
+    return `<section class="card pops-head">
+        <div class="pops-hero">${icon('book')}<div><h2>POPs · Guia do Sucesso ${tip('pops')}</h2><p>Os processos operacionais da ${esc(state.company.name || 'barbearia')}: o passo a passo em fotos e, quando houver, o vídeo explicando.</p></div></div>
+        ${list.length > 3 ? `<input class="input" id="pops-q" type="search" placeholder="Buscar processo…" aria-label="Buscar processo">` : ''}
+      </section>
+      ${own ? `<details class="card pops-new" ${list.length ? '' : 'open'}><summary>${icon('plus')} Novo POP</summary>
+        <form class="form" data-form="popsNew" novalidate>
+          <div class="grid-2"><label class="field"><span>Nome do processo *</span><input class="input" id="pops-name" name="name" maxlength="80" placeholder="Ex.: Recepção do cliente" required></label>
+          <label class="field"><span>Link do vídeo (opcional)</span><input class="input" name="video" type="url" inputmode="url" placeholder="https://youtube.com/..."></label></div>
+          <label class="field"><span>Descrição (opcional)</span><textarea class="input" name="desc" rows="2" maxlength="400" placeholder="Para que serve e quando usar"></textarea></label>
+          <label class="field"><span>Fotos do passo a passo (pode escolher várias, na ordem)</span><input class="input" name="photos" type="file" accept="image/*" multiple></label>
+          <p class="form-msg" data-msg></p>
+          <div><button class="btn btn-primary" type="submit">${icon('plus')} Adicionar POP</button></div>
+        </form></details>` : ''}
+      ${list.length ? `<div class="pops-list">${list.map((p, i) => card(p, i + 1)).join('')}</div><p class="muted pops-none" hidden>Nenhum processo encontrado.</p>`
+        : `<div class="card empty">${icon('book')}<h2>Nenhum POP cadastrado</h2><p>${own ? 'Adicione o primeiro processo acima.' : 'O dono ainda não cadastrou os processos.'}</p></div>`}
+      ${popsViewer()}`;
+  }
+  function popsViewer() {
+    const v = ui.popsView; if (!v) return '';
+    const p = popsById(v.id), steps = (p && p.steps) || [], st = steps[v.i];
+    if (!st) { ui.popsView = null; return ''; }
+    return `<div class="pop-viewer" role="dialog" aria-modal="true" aria-label="Passo do POP"><div class="inst-scrim" data-action="popsViewClose"></div>
+      <figure>${stepImg(st, 'full')}<figcaption><b>${esc(p.name)} · Passo ${v.i + 1} de ${steps.length}</b>${st.cap ? `<span>${esc(st.cap)}</span>` : ''}</figcaption>
+      <div class="btn-row pops-vnav"><button class="btn" data-action="popsViewGo" data-d="-1" ${v.i === 0 ? 'disabled' : ''}>${icon('left')} Anterior</button>
+      <button class="btn" data-action="popsViewGo" data-d="1" ${v.i === steps.length - 1 ? 'disabled' : ''}>Próximo ${icon('right')}</button>
+      <button class="btn" data-action="popsViewClose">${icon('x')} Fechar</button></div></figure></div>`;
   }
 
   function pageTime(user) {
@@ -2609,6 +2693,10 @@ Content-Type: application/json</pre>
   // Busca as fotos guardadas na nuvem (links temporários).
   function hydrateProofs() {
     if (!Cloud.enabled) return;
+    document.querySelectorAll('img[data-file]').forEach(img => {
+      const [bucket, ...rest] = img.dataset.file.split('|');
+      Cloud.fileUrl(bucket, rest.join('|')).then(u => { img.src = u; img.removeAttribute('data-file'); }).catch(() => { img.alt = 'Foto indisponível'; });
+    });
     document.querySelectorAll('img[data-proof]').forEach(img => {
       Cloud.proofUrl(img.dataset.proof).then(u => { img.src = u; img.removeAttribute('data-proof'); }).catch(() => { img.alt = 'Prova indisponível'; });
     });
@@ -2812,6 +2900,7 @@ Content-Type: application/json</pre>
     fechamento: { t: 'Fechamento do mês', r: pageFechamento, g: 1, a: 1 },
     organograma: { t: 'Organograma', r: pageOrganograma, g: 1 },
     checklist: { t: 'Checklist Agenda Cheia', r: pageChecklist },
+    pops: { t: 'POPs · Guia do Sucesso', r: pagePops },
     time: { t: 'Performance da equipe', r: pageTime },
     performance: { t: 'Minha performance', r: pagePerformance },
     lancamentos: { t: 'Lançamentos', r: pageLancamentos, g: 1, a: 1 },
@@ -3409,6 +3498,31 @@ Content-Type: application/json</pre>
       ui.radarSel = sel; const rd = $('#tm-radar'); if (rd) rd.innerHTML = teamRadars(ui.teamMonth || curYm(), rd.dataset.only === '1');
     },
     fcPeek() { ui.fcPeek = !ui.fcPeek; render(); },
+    popsOpen(el) { ui.popsOpen = ui.popsOpen === el.dataset.id ? null : el.dataset.id; ui.confirm = null; render(); },
+    popsView(el) { ui.popsView = { id: el.dataset.id, i: Number(el.dataset.i) }; render(); },
+    popsViewGo(el) { if (ui.popsView) { ui.popsView.i += Number(el.dataset.d); render(); } },
+    popsViewClose() { ui.popsView = null; render(); },
+    popsMove(el) {
+      if (!isGestor(currentUser())) return;
+      const p = popsById(el.dataset.id); if (!p) return;
+      const i = Number(el.dataset.i), j = i + Number(el.dataset.d);
+      if (j < 0 || j >= p.steps.length) return;
+      [p.steps[i], p.steps[j]] = [p.steps[j], p.steps[i]]; p.at = Date.now(); save(); render();
+    },
+    popsDelStep(el) {
+      if (!isGestor(currentUser())) return;
+      const p = popsById(el.dataset.id); if (!p) return;
+      const [st] = p.steps.splice(Number(el.dataset.i), 1);
+      if (st && st.path && Cloud.enabled) Cloud.removeFile(POPS_BUCKET, st.path);
+      p.at = Date.now(); save(); toast('Foto removida.'); render();
+    },
+    popsDel(el) {
+      if (!isGestor(currentUser())) return;
+      if (ui.confirm !== 'popsDel' + el.dataset.id) { ui.confirm = 'popsDel' + el.dataset.id; render(); return; }
+      const p = popsById(el.dataset.id); ui.confirm = null;
+      if (p && Cloud.enabled) (p.steps || []).forEach(st => st.path && Cloud.removeFile(POPS_BUCKET, st.path));
+      state.pops = popsList().filter(x => x.id !== el.dataset.id); ui.popsOpen = null; save(); toast('POP apagado.'); render();
+    },
     goFechamento(el) { ui.teamMonth = el.dataset.ym; location.hash = 'fechamento'; },
     revealNow(el) {
       if (!isGestor(currentUser())) return;
@@ -3634,6 +3748,30 @@ Content-Type: application/json</pre>
       if (GB.hoursPerDay(cfg) <= 0) return setMsg(f, 'O fechamento precisa ser depois da abertura, descontado o almoço.');
       state.ocupCfg = cfg; save(); toast(`Regra salva: 100% = ${nf0.format(GB.hoursPerDay(cfg) * days)} h no mês.`); render();
     },
+    async popsNew(f) {
+      if (!isGestor(currentUser())) return;
+      const name = val(f, 'name'), video = val(f, 'video'), desc = val(f, 'desc');
+      if (!name) return setMsg(f, 'Digite o nome do processo.');
+      if (video && !validUrl(video)) return setMsg(f, 'O link do vídeo precisa começar com https:// (ex.: https://youtube.com/...).');
+      const id = uid('pop_');
+      setMsg(f, f.elements.photos.files.length ? 'Enviando as fotos…' : '', true);
+      let steps;
+      try { steps = await popsPhotos(f.elements.photos.files, id); } catch (e) { return setMsg(f, Cloud.enabled ? Cloud.message(e) : e.message); }
+      popsList().push({ id, name: name.slice(0, 80), desc: desc.slice(0, 400), video, steps, at: Date.now() });
+      ui.popsOpen = id; save(); toast('POP adicionado.'); render();
+    },
+    async popsEdit(f) {
+      if (!isGestor(currentUser())) return;
+      const p = popsById(f.dataset.id); if (!p) return;
+      const name = val(f, 'name'), video = val(f, 'video'), desc = val(f, 'desc');
+      if (!name) return setMsg(f, 'Digite o nome do processo.');
+      if (video && !validUrl(video)) return setMsg(f, 'O link do vídeo precisa começar com https:// (ex.: https://youtube.com/...).');
+      setMsg(f, f.elements.photos.files.length ? 'Enviando as fotos…' : '', true);
+      let more;
+      try { more = await popsPhotos(f.elements.photos.files, p.id); } catch (e) { return setMsg(f, Cloud.enabled ? Cloud.message(e) : e.message); }
+      Object.assign(p, { name: name.slice(0, 80), desc: desc.slice(0, 400), video, steps: [...(p.steps || []), ...more], at: Date.now() });
+      save(); toast('POP salvo.'); render();
+    },
     reveal(f) {
       const c = revealCfg();
       const on = f.elements['rv-on'].checked, days = Math.min(5, Math.max(1, Number(val(f, 'rv-days')) || 2));
@@ -3692,6 +3830,7 @@ Content-Type: application/json</pre>
     perfBarber(el) { ui.perfBarber = el.value; location.hash = 'perfil-' + el.value; },
     teamMonth(el) { ui.teamMonth = el.value; ui.fcPeek = false; render(); },
     lanDate(el) { ui.lanDate = el.value; },
+    popsCap(el) { if (!isGestor(currentUser())) return; const p = popsById(el.dataset.id); if (!p || !p.steps[Number(el.dataset.i)]) return; p.steps[Number(el.dataset.i)].cap = el.value.trim().slice(0, 140); p.at = Date.now(); save(); toast('Legenda salva.'); },
     barberRole(el) { const b = barberById(el.dataset.id); if (!b) return; b.role = el.value.trim().slice(0, 60) || 'Barbeiro'; save(); toast('Função salva.'); },
     leaderExtra(el) {
       if (!isGestor(currentUser())) return;
@@ -3752,6 +3891,12 @@ Content-Type: application/json</pre>
     FORMS[f.dataset.form]?.(f);
   });
   root.addEventListener('input', e => {
+    if (e.target.id === 'pops-q') {
+      const q = e.target.value.trim().toLowerCase(); let n = 0;
+      document.querySelectorAll('.pops-card').forEach(c => { const ok = !q || c.dataset.name.includes(q); c.hidden = !ok; if (ok) n++; });
+      const none = $('.pops-none'); if (none) none.hidden = n > 0;
+      return;
+    }
     const pp = e.target.closest('[data-pop]');
     if (pp) { popInput(pp); return; }
     const el = e.target.closest('[data-auto]');
