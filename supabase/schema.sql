@@ -119,7 +119,7 @@ language sql stable security definer set search_path = public as $$
   select barber_id from profiles where id = auth.uid() and status = 'ativo'
 $$;
 
--- Gestor de área (Organograma): pode lançar os números de quem está abaixo dele.
+-- Gestor de área (Organograma) ou nível de acesso Gestor: pode lançar os números de quem está abaixo dele.
 create or replace function public.can_edit_barber(p_barber text) returns boolean
 language sql stable security definer set search_path = public as $$
   with recursive
@@ -131,6 +131,8 @@ language sql stable security definer set search_path = public as $$
               union select n.id from nodes n join sub s on n.pid = s.id)
   select is_gestor()
       or exists (select 1 from mine where nid is null)
+      -- Nível de acesso "Gestor" (Adicionar profissional): lança e confere de toda a equipe.
+      or exists (select 1 from o where my_barber() is not null and o.j->'access'->>my_barber() = 'gestor')
       or exists (select 1 from nodes n join sub s on s.id = n.id where n.people ? ('b:' || p_barber))
 $$;
 

@@ -72,8 +72,10 @@
     proof: ['Provas do checklist', 'Cada ação precisa de uma foto ou print como prova. A gestão confere e aprova ou recusa; só ação aprovada pontua. Ninguém confere a própria prova.'],
     compare: ['Comparar profissionais', 'Mostra os números de dois profissionais lado a lado no mês. Verde com ▲ é quem está à frente em cada indicador; vermelho com ▼, quem está atrás; "=" é empate. No meio aparece a diferença. O barbeiro compara os próprios números com o líder de cada indicador; o dono e o gestor de área comparam quem podem ver.'],
     evo: ['Evolução', 'Compara o profissional com ele mesmo em outro período. Verde com ▲ é onde melhorou; vermelho com ▼, onde caiu. Com o mês em andamento, compara o mesmo número de dias (ex.: 1 a 7 deste mês × 1 a 7 do mês anterior), a não ser que você marque o mês anterior inteiro. Em períodos que não são o mês inteiro, entram os lançamentos por dia.'],
+    access_lv: ['Nível de acesso', () => ACCESS_TIP()],
     fechamento: ['Fechamento do mês', 'Apresentação para a equipe: mostra do último colocado ao 4º e depois o pódio, do 3º ao 1º. Cada lugar do pódio só aparece quando o gestor toca em Revelar. O resumo esconde o resultado para não estragar a surpresa se a tela estiver na TV.'],
   };
+  const ACCESS_TIP = () => ACCESS.map(([, l, d]) => `${l}: ${d}`).join(' ');
   const tip = key => TIPS[key] ? `<button type="button" class="tip" data-tip="${key}" aria-label="Explicação: ${esc(TIPS[key][0])}">?</button>` : '';
   const FIELD_TIP = { fat: 'fat', cli: 'cli', serv: 'serv', ticket: 'ticket', ocupPct: 'ocup', fidPct: 'fid', prod: 'prod', check: 'check', planos: 'planos', agend: 'agend', aus: 'aus' };
   const ord = n => n + 'º';
@@ -389,7 +391,7 @@
       { r: 'fechamento', t: 'Fechamento do mês', i: 'clipboard', g: 1, a: 1 },
     ] },
     { group: 'GP · Gestão de pessoas', items: [
-      { r: 'barbeiros', t: 'Barbeiros', i: 'users', g: 1 },
+      { r: 'barbeiros', t: 'Adicionar profissional', i: 'users', g: 1 },
       { r: 'organograma', t: 'Organograma', i: 'org', g: 1 },
       { r: 'checklist', t: 'Checklist Agenda Cheia', i: 'checksq' },
       { r: 'tarefas', t: 'Tarefas', i: 'clipboard', soon: 1 },
@@ -421,7 +423,7 @@
     const groups = NAV.filter(gr => !gr.g || g).map(gr => {
       const am = isAreaMgr(user), hg = hasGrants(user);
       const items = gr.items.filter(it => (!it.g || g || (it.a && am)) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
-        <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && (g || hg) ? (g ? 'Performance da empresa' : 'Performance da área') : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}</a>`).join('');
+        <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && (g || hg) ? (g || accessOf(user.barberId) !== 'profissional' ? 'Performance da empresa' : 'Performance da área') : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}</a>`).join('');
       return (gr.group ? `<div class="nav-group">${esc(gr.group)}</div>` : '') + items;
     }).join('');
     const periods = Object.entries(PERIOD_NAMES).map(([k, v]) =>
@@ -624,7 +626,7 @@
     const u = currentUser();
     return `<div class="card empty">${icon('users')}<h2>Nenhum barbeiro cadastrado</h2>
       <p>${isGestor(u) ? 'Cadastre a equipe e envie os convites para começar o ranking.' : 'O gestor ainda não cadastrou a equipe.'}</p>
-      ${isGestor(u) ? `<a class="btn btn-primary" href="#barbeiros">${icon('plus')} Cadastrar barbeiros</a>` : ''}</div>`;
+      ${isGestor(u) ? `<a class="btn btn-primary" href="#barbeiros">${icon('plus')} Adicionar profissional</a>` : ''}</div>`;
   }
 
   // ---------- páginas ----------
@@ -807,6 +809,8 @@
   const ymShort = ym => { const l = monthRange(ym).label; return cap(l.slice(0, 3)) + '/' + ym.slice(2, 4); };
   const monthR = ym => rkCache[ym] || (rkCache[ym] = computeRanking(state, monthRange(ym)));
   const ROLES = ['Barbeiro', 'Barbeiro líder', 'Aprendiz', 'Recepcionista', 'Gerente'];
+  // Sugestões para o campo Função (o dono pode escrever qualquer outra).
+  const roleList = () => `<datalist id="role-list">${[...new Set([...ROLES, ...state.barbers.map(b => b.role).filter(Boolean)])].map(r => `<option value="${esc(r)}">`).join('')}</datalist>`;
   const RADAR_COLORS = ['#d6b46a', '#5b9dff', '#ff5fa8', '#52d37e'];
   const fmtGoal = (ind, v) => fmt(ind, v);
 
@@ -1020,7 +1024,7 @@
       <div class="tm-fixed"><small>Nome (fixo)</small><b>${esc(sel.name)}</b></div>
       ${own ? `<div class="grid-2">
         <label class="field"><span class="tm-flabel">Instagram</span><input class="input input-edit" id="m-instagram" name="instagram" value="${esc(sel.instagram || '')}" placeholder="@usuario" data-auto="barber" data-id="${esc(sel.id)}"></label>
-        <label class="field"><span class="tm-flabel">Cargo na empresa</span><select class="input input-edit" id="m-role" name="role" data-auto="barber" data-id="${esc(sel.id)}">${ROLES.map(r => `<option ${r === (sel.role || 'Barbeiro') ? 'selected' : ''}>${r}</option>`).join('')}</select></label>
+        <label class="field"><span class="tm-flabel">Função</span><input class="input input-edit" id="m-role" name="role" list="role-list" value="${esc(sel.role || '')}" placeholder="Ex.: Barbeiro" maxlength="60" data-auto="barber" data-id="${esc(sel.id)}">${roleList()}</label>
       </div>` : ''}
       <div class="lan-date"><label class="field"><span class="tm-flabel">Data do lançamento${tip('lanDate')}</span>
         <input class="input" type="date" id="m-date" value="${lanDate(ym)}" min="${monthRange(ym).start}" max="${monthRange(ym).end}" data-change="lanDate"></label>
@@ -1547,7 +1551,11 @@ ${rows.length ? '' : emptyBarbers()}
       const msg = `Olá, ${b.name}! Você foi convidado para a equipe da ${state.company.name} no Gestão Barber IA. Faça seu cadastro por este link: ${link}`;
       return `<li class="list-row" style="${b.active === false ? 'opacity:.6' : ''}">
         ${avatar(b, 48)}
-        <div class="grow"><b>${esc(b.name)}</b>${status} ${b.active === false ? '<span class="chip chip-soft">inativo</span>' : ''}${u ? `<div class="muted" style="font-size:.88rem">${esc(u.email)}</div>` : ''}</div>
+        <div class="grow"><b>${esc(b.name)}</b>${status} ${b.active === false ? '<span class="chip chip-soft">inativo</span>' : ''}${u ? `<div class="muted" style="font-size:.88rem">${esc(u.email)}</div>` : ''}
+          <div class="acc-edit">
+            <label class="field"><span>Função</span><input class="input" name="role" list="role-list" value="${esc(b.role || '')}" placeholder="Ex.: Barbeiro" maxlength="60" data-change="barberRole" data-id="${esc(b.id)}"></label>
+            <label class="field"><span>Nível de acesso</span><select class="input" data-change="barberAccess" data-id="${esc(b.id)}">${ACCESS.map(([k, l]) => `<option value="${k}" ${accessOf(b.id) === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+          </div></div>
         <div class="btn-row">
           ${!u ? `<button class="btn btn-sm btn-primary" data-action="invite" data-id="${esc(b.id)}">${icon('link')} ${inv ? 'Ver convite' : 'Convidar'}</button>` : ''}
           ${u && u.status === 'ativo' ? `<button class="btn btn-sm" data-action="resetPass" data-id="${esc(u.id)}">${icon('lock')} ${Cloud.enabled ? 'Enviar redefinição de senha' : 'Nova senha'}</button>` : ''}
@@ -1568,11 +1576,15 @@ ${rows.length ? '' : emptyBarbers()}
 
     return `${pendingHtml}
       <section class="section card">
-        <h2 class="section-title">Adicionar barbeiro</h2>
+        <h2 class="section-title">Adicionar profissional ${tip('access_lv')}</h2>
         ${billing() && billing().max_barbers ? `<p class="section-note">Seu plano: <b class="num">${activeBarbers()} de ${billing().max_barbers}</b> barbeiros ativos. <a href="#assinatura">Trocar de plano</a></p>` : ''}
         <form class="form" data-form="addBarber" novalidate>
           <div class="grid-2"><label class="field"><span>Nome *</span><input class="input" id="nb-name" name="name" required></label>
-          <label class="field"><span>Foto</span><input class="input" id="nb-photo" name="photo" type="file" accept="image/*"></label></div>
+          <label class="field"><span>Foto</span><input class="input" id="nb-photo" name="photo" type="file" accept="image/*"></label>
+          <label class="field"><span>Função</span><input class="input" id="nb-role" name="role" list="role-list" placeholder="Ex.: Barbeiro, Barbeiro líder, Recepcionista" maxlength="60"></label>
+          <label class="field"><span>Nível de acesso</span><select class="input" id="nb-access" name="access">${ACCESS.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label></div>
+          <ul class="acc-help">${ACCESS.map(([, l, d]) => `<li><b>${l}:</b> ${d}</li>`).join('')}</ul>
+          ${roleList()}
           <p class="form-msg" data-msg></p>
           <div><button class="btn btn-primary" type="submit">${icon('plus')} Adicionar</button></div>
         </form>
@@ -2243,6 +2255,8 @@ Content-Type: application/json</pre>
     }
     const uids = new Set(state.users.map(u => u.id));
     o.grants = o.grants.filter(g => uids.has(g.userId) && (g.nodeId === null || o.nodes.some(n => n.id === g.nodeId)));
+    if (!o.access || typeof o.access !== 'object') o.access = {};
+    for (const k of Object.keys(o.access)) if (!bids.has(k) || !['lider', 'gestor'].includes(o.access[k])) delete o.access[k];
     return o;
   }
   const orgNode = id => org().nodes.find(n => n.id === id);
@@ -2268,9 +2282,18 @@ Content-Type: application/json</pre>
     return org().grants.some(g => us.includes(g.userId) && g.role === 'gestor') ? 'Gestor' : 'Membro';
   }
   // Barbeiros cujos números a pessoa vê (roles: gestor e/ou membro).
+  // Nível de acesso do profissional (Adicionar profissional): líder vê toda a equipe; gestor também lança e confere.
+  const ACCESS = [
+    ['profissional', 'Profissional', 'Vê o ranking e a própria performance, e preenche o próprio checklist.'],
+    ['lider', 'Líder', 'Também vê a performance detalhada de toda a equipe (detalhado, comparativos e perfis).'],
+    ['gestor', 'Gestor', 'Também lança os resultados e confere o checklist de toda a equipe. Configurações, cadastro de profissionais e assinatura continuam só com o dono.'],
+  ];
+  const accessOf = bid => (bid && (org().access || {})[bid]) || 'profissional';
   function areaIds(u, roles) {
     const s = new Set();
     if (!u) return s;
+    const lv = u.role !== 'gestor' ? accessOf(u.barberId) : 'profissional';
+    if ((lv === 'gestor' && roles.some(r => r === 'gestor' || r === 'membro')) || (lv === 'lider' && roles.includes('membro'))) state.barbers.forEach(b => s.add(b.id));
     for (const g of org().grants) {
       if (g.userId !== u.id || !roles.includes(g.role)) continue;
       const ids = g.nodeId ? orgBarbers(g.nodeId) : new Set(state.barbers.map(b => b.id));
@@ -2278,8 +2301,8 @@ Content-Type: application/json</pre>
     }
     return s;
   }
-  const hasGrants = u => !!u && !isGestor(u) && org().grants.some(g => g.userId === u.id);
-  const isAreaMgr = u => !!u && !isGestor(u) && org().grants.some(g => g.userId === u.id && g.role === 'gestor');
+  const hasGrants = u => !!u && !isGestor(u) && (accessOf(u.barberId) !== 'profissional' || org().grants.some(g => g.userId === u.id));
+  const isAreaMgr = u => !!u && !isGestor(u) && (accessOf(u.barberId) === 'gestor' || org().grants.some(g => g.userId === u.id && g.role === 'gestor'));
   // Quem pode ver os números (faturamento, clientes...) de um barbeiro.
   function seeNum(bid) {
     const u = currentUser();
@@ -2764,7 +2787,7 @@ Content-Type: application/json</pre>
     time: { t: 'Performance da equipe', r: pageTime },
     performance: { t: 'Minha performance', r: pagePerformance },
     lancamentos: { t: 'Lançamentos', r: pageLancamentos, g: 1, a: 1 },
-    barbeiros: { t: 'Barbeiros', r: pageBarbeiros, g: 1 },
+    barbeiros: { t: 'Adicionar profissional', r: pageBarbeiros, g: 1 },
     configuracoes: { t: 'Configurações', r: pageConfiguracoes, g: 1 },
     assinatura: { t: 'Assinatura', r: pageAssinatura, g: 1 },
     admin: { t: 'Painel do SaaS', r: pageAdmin, g: 1 },
@@ -3068,7 +3091,7 @@ Content-Type: application/json</pre>
       const id = route.slice(7);
       page = { r: () => perfFor(id, user) }; title = 'Perfil';
     } else if (PAGES[route]) {
-      page = PAGES[route]; title = route === 'performance' && (isGestor(user) || hasGrants(user)) ? (isGestor(user) ? 'Performance da empresa' : 'Performance da área') : page.t;
+      page = PAGES[route]; title = route === 'performance' && (isGestor(user) || hasGrants(user)) ? (isGestor(user) || accessOf(user.barberId) !== 'profissional' ? 'Performance da empresa' : 'Performance da área') : page.t;
     } else if (SOON_TEXT[route]) {
       page = { r: () => pageSoon(route) }; title = NAV.flatMap(g => g.items).find(i => i.r === route).t;
     } else { route = 'inicio'; page = PAGES.inicio; title = page.t; }
@@ -3550,13 +3573,16 @@ Content-Type: application/json</pre>
     },
     async addBarber(f) {
       const name = val(f, 'name');
-      if (!name) return setMsg(f, 'Digite o nome do barbeiro.');
+      if (!name) return setMsg(f, 'Digite o nome do profissional.');
       let photo = null;
       const file = f.elements.photo.files[0];
       const lim = billing() && billing().max_barbers;
       if (lim && activeBarbers() >= lim) return setMsg(f, `Seu plano permite até ${lim} barbeiros ativos. Troque de plano em Assinatura para cadastrar mais.`);
       if (file) { try { photo = await readImage(file); } catch (e) { return setMsg(f, e.message); } }
-      state.barbers.push({ id: uid('b_'), name, photo, active: true, role: 'Barbeiro', instagram: '' }); save();
+      const id = uid('b_'), access = val(f, 'access');
+      state.barbers.push({ id, name, photo, active: true, role: val(f, 'role') || 'Barbeiro', instagram: '' });
+      if (access === 'lider' || access === 'gestor') { const o = org(); o.access[id] = access; }
+      save();
       toast(`${name} adicionado. Agora envie o convite.`); render();
     },
     weights(f) {
@@ -3638,6 +3664,13 @@ Content-Type: application/json</pre>
     perfBarber(el) { ui.perfBarber = el.value; location.hash = 'perfil-' + el.value; },
     teamMonth(el) { ui.teamMonth = el.value; ui.fcPeek = false; render(); },
     lanDate(el) { ui.lanDate = el.value; },
+    barberRole(el) { const b = barberById(el.dataset.id); if (!b) return; b.role = el.value.trim().slice(0, 60) || 'Barbeiro'; save(); toast('Função salva.'); },
+    barberAccess(el) {
+      if (!isGestor(currentUser())) return;
+      const o = org(), v = el.value, b = barberById(el.dataset.id);
+      if (v === 'lider' || v === 'gestor') o.access[el.dataset.id] = v; else delete o.access[el.dataset.id];
+      save(); toast(`${b ? first(b.name) : 'Profissional'}: acesso de ${ACCESS.find(a => a[0] === v)[1]}.`); render();
+    },
     cmpA(el) { ui.cmpA = el.value; if (ui.cmpB === ui.cmpA) ui.cmpB = null; refreshTeam(); },
     cmpB(el) { ui.cmpB = el.value; refreshTeam(); },
     evoFull(el) { ui.evo = { ...(ui.evo || {}), full: el.checked }; evoRefresh(); },
