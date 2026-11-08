@@ -70,6 +70,8 @@
     access: ['Quem vê o quê', 'No ranking, todos veem os números de todos. A performance detalhada é só a própria, a não ser que a pessoa tenha acesso a uma área: Gestor vê e lança os resultados da área; Membro só vê.'],
     api: ['Integração por API', 'Outro sistema envia os resultados de cada barbeiro por dia. Os campos vindos da API ficam com cadeado em Lançamentos; só o dono destrava para um ajuste manual.'],
     proof: ['Provas do checklist', 'Cada ação precisa de uma foto ou print como prova. A gestão confere e aprova ou recusa; só ação aprovada pontua. Ninguém confere a própria prova.'],
+    compare: ['Comparar profissionais', 'Mostra os números de dois profissionais lado a lado no mês. Verde com ▲ é quem está à frente em cada indicador; vermelho com ▼, quem está atrás; "=" é empate. No meio aparece a diferença. O barbeiro compara os próprios números com o líder de cada indicador; o dono e o gestor de área comparam quem podem ver.'],
+    evo: ['Evolução', 'Compara o profissional com ele mesmo em outro período. Verde com ▲ é onde melhorou; vermelho com ▼, onde caiu. Com o mês em andamento, compara o mesmo número de dias (ex.: 1 a 7 deste mês × 1 a 7 do mês anterior), a não ser que você marque o mês anterior inteiro. Em períodos que não são o mês inteiro, entram os lançamentos por dia.'],
     fechamento: ['Fechamento do mês', 'Apresentação para a equipe: mostra do último colocado ao 4º e depois o pódio, do 3º ao 1º. Cada lugar do pódio só aparece quando o gestor toca em Revelar. O resumo esconde o resultado para não estragar a surpresa se a tela estiver na TV.'],
   };
   const tip = key => TIPS[key] ? `<button type="button" class="tip" data-tip="${key}" aria-label="Explicação: ${esc(TIPS[key][0])}">?</button>` : '';
@@ -1081,10 +1083,11 @@
         ${avatar(b, 64)}
         <div class="pp-who"><small class="tm-eyebrow">Profissional selecionado</small><h2>${esc(b.name)} ${titleChip(R, b.id)}</h2>
           <p class="pp-chips"><span class="chip chip-soft num">${ord(row.pos)} de ${R.rows.length}</span><span class="chip chip-soft num">${score(row.overall)} pts</span><span class="chip lv-chip ${lv.cls}">${lv.name}</span></p></div>
-        <div class="pp-acts"><a class="btn btn-sm" href="#perfil-${esc(b.id)}">${icon('chart')} Performance completa</a>
+        <div class="pp-acts"><button class="btn btn-sm" data-action="cmpWith" data-id="${esc(b.id)}">${icon('users')} Comparar com…</button><a class="btn btn-sm" href="#perfil-${esc(b.id)}">${icon('chart')} Performance completa</a>
           <button class="icon-btn" data-action="profClose" aria-label="Fechar">${icon('x')}</button></div>
       </section>
-      <div class="pp-grid">${strengths(row, prevRow, R, b.id)}</div>
+      <div class="org-tabs pp-tabs" role="toolbar">${[['forte', 'award', 'Pontos fortes e a melhorar'], ['evo', 'chart', 'Evolução']].map(([k, ic, l]) => `<button type="button" class="${(ui.ppTab || 'forte') === k ? 'on' : ''}" aria-pressed="${(ui.ppTab || 'forte') === k}" data-action="ppTab" data-t="${k}">${icon(ic)}<span>${l}</span></button>`).join('')}</div>
+      ${(ui.ppTab || 'forte') === 'evo' ? evoBlock(b.id, ym) : `<div class="pp-grid">${strengths(row, prevRow, R, b.id)}</div>`}
       <div class="pp-grid">
       <section class="section card"><h2 class="section-title">Faturamento de ${esc(b.name.split(' ')[0])} · últimos 6 meses</h2>
         ${lineSvg({ labels: last6.map(ymShort), series: [{ values: fatVals, color: '#d6b46a', fill: true }], yFmt: v => v >= 1000 ? 'R$' + nf0.format(v / 1000) + 'k' : 'R$' + nf0.format(v) })}</section>
@@ -1169,6 +1172,158 @@
       </section>`;
   }
 
+
+  // ---------- Comparativos: profissional × profissional e profissional × ele mesmo ----------
+  const CMP_EXTRA = [{ key: '_score', label: 'Pontuação geral', fmt: 'dec1' }, { key: '_leads', label: 'Indicadores em 1º', fmt: 'int' }];
+  const cmpFmt = (ind, v) => v == null ? '—' : ind.fmt === 'dec1' ? nf1.format(v) : fmt(ind, v) + (ind.key === 'check' ? ' pts' : '');
+  function cmpDiff(ind, a, b) {
+    if (a == null || b == null) return '';
+    const d = a - b;
+    if (Math.abs(d) < 1e-9) return 'Empate';
+    const sign = d > 0 ? '+' : '−', ad = Math.abs(d);
+    const val = ind.fmt === 'pct' ? nf1.format(ad) + ' p.p.' : ind.fmt === 'dec1' ? nf1.format(ad) + ' pts' : fmt(ind, ad);
+    const pct = b > 0 && ind.fmt !== 'pct' ? ` (${sign}${nf0.format((ad / b) * 100)}%)` : '';
+    return sign + val + pct;
+  }
+  // Uma linha: valor de A à esquerda, indicador e diferença no meio, valor de B à direita.
+  function cmpRow(ind, a, b, subA, subB) {
+    const has = a != null && b != null;
+    const ca = !has || Math.abs(a - b) < 1e-9 ? 'eq' : a > b ? 'up' : 'down';
+    const cb = ca === 'up' ? 'down' : ca === 'down' ? 'up' : 'eq';
+    const ar = c => c === 'up' ? '<i class="cmp-ar" aria-label="maior">▲</i>' : c === 'down' ? '<i class="cmp-ar" aria-label="menor">▼</i>' : has ? '<i class="cmp-ar" aria-label="empate">=</i>' : '';
+    return `<div class="cmp-row">
+      <div class="cmp-v ${has ? 'c-' + ca : ''}"><b class="num">${cmpFmt(ind, a)}</b>${ar(ca)}${subA ? `<small>${subA}</small>` : ''}</div>
+      <div class="cmp-mid"><span>${esc(ind.label)}${tip(ind.key)}</span><small class="num">${cmpDiff(ind, a, b)}</small></div>
+      <div class="cmp-v r ${has ? 'c-' + cb : ''}">${ar(cb)}<b class="num">${cmpFmt(ind, b)}</b>${subB ? `<small>${subB}</small>` : ''}</div>
+    </div>`;
+  }
+  const cmpVals = (R, row) => {
+    const o = {};
+    for (const ind of GB.visibleInds(state)) o[ind.key] = row && R.active.some(a => a.key === ind.key) ? row.values[ind.key] : null;
+    o._score = row && R.active.length ? row.overall : null; o._leads = row && R.active.length ? row.leads.length : null;
+    return o;
+  };
+  function cmpList(va, vb, subs) {
+    const inds = [...GB.visibleInds(state), ...CMP_EXTRA];
+    let wa = 0, wb = 0;
+    for (const i of GB.visibleInds(state)) { const a = va[i.key], b = vb[i.key]; if (a != null && b != null) { if (a > b) wa++; else if (b > a) wb++; } }
+    return { html: `<div class="cmp-list">${inds.map(i => cmpRow(i, va[i.key], vb[i.key], subs && subs.a && subs.a[i.key], subs && subs.b && subs.b[i.key])).join('')}</div>`, wa, wb };
+  }
+  const cmpWhoCard = (b, info, winsText, side) => `<div class="cmp-who ${side}">${b ? avatar(b, 52) : `<span class="cmp-crown">${icon('crown')}</span>`}
+    <b>${esc(b ? b.name : 'Líder de cada indicador')}</b>${info}${winsText ? `<span class="cmp-wins num">${winsText}</span>` : ''}</div>`;
+
+  // Quem a pessoa pode comparar: dono todos; gestor de área a área; barbeiro só a si mesmo (contra o líder).
+  function cmpPeople(R) {
+    const u = currentUser();
+    return R.rows.filter(r => isGestor(u) || seeNum(r.barber.id)).map(r => r.barber);
+  }
+  function compareCard(ym) {
+    const R = monthR(ym);
+    if (!R.rows.length || !R.active.length) return '';
+    const people = cmpPeople(R);
+    if (!people.length) return '';
+    const u = currentUser();
+    const ids = people.map(b => b.id);
+    let a = ids.includes(ui.cmpA) ? ui.cmpA : (ids.includes(u.barberId) ? u.barberId : ids[0]);
+    let b = ui.cmpB === 'lider' || (ids.includes(ui.cmpB) && ui.cmpB !== a) ? ui.cmpB : (ids.find(x => x !== a) || 'lider');
+    ui.cmpA = a; ui.cmpB = b;
+    const rA = R.rows.find(r => r.barber.id === a);
+    const va = cmpVals(R, rA);
+    let vb, subB = null, bBarber = null, infoB;
+    if (b === 'lider') {
+      vb = {}; subB = {};
+      for (const ind of GB.visibleInds(state)) {
+        const act = R.active.find(x => x.key === ind.key);
+        vb[ind.key] = act ? act.max : null;
+        subB[ind.key] = act ? act.leaders.map(id => first((barberById(id) || {}).name || '')).join(' + ') : '';
+      }
+      vb._score = Math.max(...R.rows.map(r => r.overall)); vb._leads = null;
+      infoB = `<small>O melhor resultado do mês em cada indicador</small>`;
+    } else {
+      const rB = R.rows.find(r => r.barber.id === b);
+      vb = cmpVals(R, rB); bBarber = rB.barber;
+      infoB = `<small class="num">${ord(rB.pos)} de ${R.rows.length} · ${score(rB.overall)} pts</small>${titleChip(R, b)}`;
+    }
+    const L = cmpList(va, vb, { b: subB });
+    const n = GB.visibleInds(state).filter(i => va[i.key] != null && vb[i.key] != null).length;
+    const opt = (sel, list, extra) => list.map(x => `<option value="${esc(x.id)}" ${x.id === sel ? 'selected' : ''}>${esc(x.name)}</option>`).join('') + (extra || '');
+    const pickA = people.length > 1 ? `<select class="input" id="cmp-a" data-change="cmpA" aria-label="Profissional A">${opt(a, people)}</select>` : `<div class="input cmp-fixed">${esc(rA.barber.name)}</div>`;
+    const pickB = `<select class="input" id="cmp-b" data-change="cmpB" aria-label="Comparar com">${opt(b, people.filter(x => x.id !== a))}<option value="lider" ${b === 'lider' ? 'selected' : ''}>Líder de cada indicador</option></select>`;
+    // Radar dos dois (mesma régua do ranking: 100 = líder).
+    const cA = '#d6b46a', cB = '#5b9dff';
+    const sA = { name: rA.barber.name, color: cA, values: rA.scores };
+    const sB = b === 'lider' ? { name: 'Líder', color: cB, dashed: true, values: Object.fromEntries(R.active.map(i => [i.key, 100])) } : { name: bBarber.name, color: cB, values: R.rows.find(r => r.barber.id === b).scores };
+    const radar = `<div class="rd-grid">
+        <div class="rd-box"><h3>Radar do mês (100 = líder)</h3>${radarSvg(R.active, [sB, sA])}<div class="ch-legend"><span><i style="background:${cA}"></i>${esc(rA.barber.name)}</span><span><i style="background:${cB}"></i>${esc(sB.name)}</span></div></div>
+        ${b === 'lider' ? '' : `<div class="rd-box"><h3>Radar de carreira (média de todos os meses)</h3>${radarSvg(R.active, [{ name: bBarber.name, color: cB, values: careerByInd(b, ym) }, { name: rA.barber.name, color: cA, values: careerByInd(a, ym) }])}<div class="ch-legend"><span><i style="background:${cA}"></i>${esc(rA.barber.name)}</span><span><i style="background:${cB}"></i>${esc(bBarber.name)}</span></div></div>`}
+      </div>`;
+    return `<section class="section card cmp">
+      <h2 class="section-title">Comparar profissionais ${tip('compare')}</h2>
+      <p class="section-note">${isGestor(u) || people.length > 1 ? 'Escolha dois profissionais' : 'Compare seus números com o líder de cada indicador'} em ${esc(ymLabel(ym).replace(' de ', '/'))}. Verde com ▲ é quem está à frente no indicador; vermelho com ▼, quem está atrás.</p>
+      <div class="cmp-pick">${pickA}<span class="cmp-vs">×</span>${pickB}</div>
+      <div class="cmp-sum">
+        ${cmpWhoCard(rA.barber, `<small class="num">${ord(rA.pos)} de ${R.rows.length} · ${score(rA.overall)} pts</small>${titleChip(R, a)}`, b === 'lider' ? `Lidera ${rA.leads.length} de ${R.N}` : `Vence ${L.wa} de ${n}`, 'a')}
+        ${cmpWhoCard(bBarber, infoB, b === 'lider' ? '' : `Vence ${L.wb} de ${n}`, 'b')}
+      </div>
+      ${L.html}
+      ${radar}
+    </section>`;
+  }
+
+  // Evolução: o profissional comparado com ele mesmo em outro período.
+  function evoRanges(ym) {
+    const ev = ui.evo || {};
+    const mode = ev.mode || 'mes', today = iso(new Date());
+    // Período em andamento: compara o mesmo número de dias.
+    const trim = (cur, prev) => {
+      if (ev.full && mode !== 'semana') return [cur, prev];
+      if (cur.start <= today && today <= cur.end) {
+        const days = Math.round((fromIso(today) - fromIso(cur.start)) / 86400000);
+        const s = fromIso(prev.start); const lim = iso(new Date(s.getFullYear(), s.getMonth(), s.getDate() + days));
+        return [{ ...cur, end: today }, { ...prev, end: lim < prev.end ? lim : prev.end }];
+      }
+      return [cur, prev];
+    };
+    if (mode === 'semana') return trim(periodRange('semana', 0), periodRange('semana', -1));
+    if (mode === 'ano') return trim(monthRange(ym), monthRange(addMonths(ym, -12)));
+    if (mode === 'livre') {
+      const c = monthRange(ym), p = monthRange(addMonths(ym, -1));
+      const a1 = ev.a1 || c.start, a2 = ev.a2 || c.end, b1 = ev.b1 || p.start, b2 = ev.b2 || p.end;
+      return [{ start: a1 <= a2 ? a1 : a2, end: a1 <= a2 ? a2 : a1 }, { start: b1 <= b2 ? b1 : b2, end: b1 <= b2 ? b2 : b1 }];
+    }
+    return trim(monthRange(ym), monthRange(addMonths(ym, -1)));
+  }
+  const dShort = d => d.slice(8, 10) + '/' + d.slice(5, 7) + (d.slice(0, 4) !== String(new Date().getFullYear()) ? '/' + d.slice(2, 4) : '');
+  const rLabel = r => `${dShort(r.start)} a ${dShort(r.end)}`;
+  const evoRefresh = () => { if ($('#tm-insights')) refreshTeam(); else render(); };
+  function evoBlock(bid, ym) {
+    const b = barberById(bid); if (!b) return '';
+    const ev = ui.evo || {}, mode = ev.mode || 'mes';
+    const [ra, rb] = evoRanges(ym);
+    const A = computeRanking(state, ra), B = computeRanking(state, rb);
+    const rowA = A.rows.find(r => r.barber.id === bid), rowB = B.rows.find(r => r.barber.id === bid);
+    const va = cmpVals(A, rowA), vb = cmpVals(B, rowB);
+    const L = cmpList(va, vb);
+    const n = GB.visibleInds(state).filter(i => va[i.key] != null && vb[i.key] != null).length;
+    const modes = [['mes', 'Mês × mês anterior'], ['ano', 'Mês × ano passado'], ['semana', 'Semana × anterior'], ['livre', 'Escolher datas']];
+    const running = mode !== 'livre' && mode !== 'semana' && monthRange(ym).start <= iso(new Date()) && iso(new Date()) <= monthRange(ym).end;
+    const pos = (R, row) => row && R.active.length ? `${ord(row.pos)} de ${R.rows.length} · ${score(row.overall)} pts` : 'sem dados';
+    return `<section class="section card evo">
+      <h2 class="section-title">Evolução de ${first(b.name)} ${tip('evo')}</h2>
+      <div class="seg evo-seg" role="group" aria-label="Comparar períodos">${modes.map(([k, l]) => `<button type="button" class="${mode === k ? 'on' : ''}" aria-pressed="${mode === k}" data-action="evoMode" data-m="${k}">${l}</button>`).join('')}</div>
+      ${mode === 'livre' ? `<div class="evo-dates">
+        <label class="field"><span>Período A</span><span class="evo-dd"><input class="input" type="date" data-change="evoDate" data-k="a1" value="${ra.start}"><input class="input" type="date" data-change="evoDate" data-k="a2" value="${ra.end}"></span></label>
+        <label class="field"><span>Período B</span><span class="evo-dd"><input class="input" type="date" data-change="evoDate" data-k="b1" value="${rb.start}"><input class="input" type="date" data-change="evoDate" data-k="b2" value="${rb.end}"></span></label></div>` : ''}
+      ${running ? `<label class="ind-on evo-full"><input type="checkbox" data-change="evoFull" ${ev.full ? 'checked' : ''}> Comparar com o mês anterior inteiro</label>
+        <p class="section-note">${ev.full ? 'O mês atual ainda não acabou: a comparação com o mês inteiro tende a ficar abaixo.' : 'Mês em andamento: compara o mesmo número de dias nos dois períodos.'}</p>` : ''}
+      <div class="cmp-sum">
+        <div class="cmp-who a"><b>${rLabel(ra)}</b><small class="num">${pos(A, rowA)}</small><span class="cmp-wins num">Melhor em ${L.wa} de ${n}</span></div>
+        <div class="cmp-who b"><b>${rLabel(rb)}</b><small class="num">${pos(B, rowB)}</small><span class="cmp-wins num">Melhor em ${L.wb} de ${n}</span></div>
+      </div>
+      ${L.html}
+    </section>`;
+  }
+
   function pageTime(user) {
     const ym = ui.teamMonth || curYm();
     if (!isGestor(user) && user.barberId && !seeNum(ui.teamBarber)) ui.teamBarber = user.barberId;
@@ -1178,8 +1333,8 @@
     return `${monthPicker(ym, user)}
       <div id="tm-prof" class="tm-block">${profTable(ym)}</div>
       <div id="tm-insights" class="tm-block">${ui.profSel ? teamInsights(ui.profSel, ym) : ''}</div>
-      <div id="tm-top" class="tm-block">${teamTop(ym)}</div>
-      <div id="tm-radar" class="tm-block">${teamRadars(ym)}</div>`;
+      <div id="tm-cmp" class="tm-block">${compareCard(ym)}</div>
+      <div id="tm-top" class="tm-block">${teamTop(ym)}</div>`;
   }
 
   function pageLancamentos(user) {
@@ -1201,7 +1356,7 @@
     const top = $('#tm-top'); if (top) top.innerHTML = teamTop(ym);
     const pf = $('#tm-prof'); if (pf) pf.innerHTML = profTable(ym);
     const ins = $('#tm-insights'); if (ins) ins.innerHTML = ui.profSel ? teamInsights(ui.profSel, ym) : '';
-    const rd = $('#tm-radar'); if (rd) rd.innerHTML = teamRadars(ym);
+    const cp = $('#tm-cmp'); if (cp) cp.innerHTML = compareCard(ym);
     const R = monthR(ym);
     document.querySelectorAll('[data-pts]').forEach(el => { const r = R.rows.find(x => x.barber.id === el.dataset.pts); el.textContent = (r ? score(r.overall) : '—') + ' pts'; });
     const row = R.rows.find(r => r.barber.id === ui.teamBarber);
@@ -1312,7 +1467,8 @@
           <div class="stat"><span>Faturamento</span><b class="num">${money0(row.sums.fat)}</b></div>
         </div>
       </div>
-      <section class="section"><h2 class="section-title">Indicadores ${tip('score')}</h2><div class="ind-grid">${cards}</div></section>`;
+      <section class="section"><h2 class="section-title">Indicadores ${tip('score')}</h2><div class="ind-grid">${cards}</div></section>
+      ${evoBlock(b.id, ui.period === 'mes' ? range().start.slice(0, 7) : curYm())}`;
   }
 
   // Visão da barbearia inteira (gestor): totais do mês, detalhe por profissional e radar.
@@ -3162,6 +3318,12 @@ Content-Type: application/json</pre>
       rec[k] = null; if (rec._adj) delete rec._adj[k];
       save(); refreshEditorFields(); refreshTeam(); toast('Voltou para o valor da integração.');
     },
+    cmpWith(el) {
+      ui.cmpA = el.dataset.id; if (ui.cmpB === ui.cmpA) ui.cmpB = null;
+      refreshTeam(); $('#tm-cmp')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+    ppTab(el) { ui.ppTab = el.dataset.t; refreshTeam(); },
+    evoMode(el) { ui.evo = { ...(ui.evo || {}), mode: el.dataset.m }; evoRefresh(); },
     profPick(el) {
       const id = el.dataset.id;
       ui.profSel = ui.profSel === id ? null : id;
@@ -3465,6 +3627,10 @@ Content-Type: application/json</pre>
     perfBarber(el) { ui.perfBarber = el.value; render(); },
     teamMonth(el) { ui.teamMonth = el.value; ui.fcPeek = false; render(); },
     lanDate(el) { ui.lanDate = el.value; },
+    cmpA(el) { ui.cmpA = el.value; if (ui.cmpB === ui.cmpA) ui.cmpB = null; refreshTeam(); },
+    cmpB(el) { ui.cmpB = el.value; refreshTeam(); },
+    evoFull(el) { ui.evo = { ...(ui.evo || {}), full: el.checked }; evoRefresh(); },
+    evoDate(el) { if (!el.value) return; ui.evo = { ...(ui.evo || {}), [el.dataset.k]: el.value }; evoRefresh(); },
     popMonth(el) { ui.teamMonth = ui.popMonth = el.value; ui.popDraft = null; render(); },
     async popPhoto(el) {
       const f = el.files && el.files[0]; if (!f || !ui.popDraft) return;
