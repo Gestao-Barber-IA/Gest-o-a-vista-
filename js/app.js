@@ -1073,8 +1073,6 @@
     const row = R.rows.find(r => r.barber.id === b.id);
     if (!row) return `<div class="card muted">${esc(b.name)} está inativo e não aparece no ranking.</div>`;
     const prevRow = monthR(addMonths(ym, -1)).rows.find(r => r.barber.id === b.id);
-    const last6 = Array.from({ length: 6 }, (_, i) => addMonths(ym, i - 5));
-    const fatVals = last6.map(k => { const r = monthR(k).rows.find(x => x.barber.id === b.id); return hasData(r) ? r.sums.fat : null; });
     const c = career(b.id, ym);
     const lv = levelOf(c.value);
     const cm = c.months.slice(-6);
@@ -1087,8 +1085,6 @@
           <button class="icon-btn" data-action="profClose" aria-label="Fechar">${icon('x')}</button></div>
       </section>
       <div class="pp-grid">
-      <section class="section card"><h2 class="section-title">Faturamento de ${esc(b.name.split(' ')[0])} · últimos 6 meses</h2>
-        ${lineSvg({ labels: last6.map(ymShort), series: [{ values: fatVals, color: '#d6b46a', fill: true }], yFmt: v => v >= 1000 ? 'R$' + nf0.format(v / 1000) + 'k' : 'R$' + nf0.format(v) })}</section>
       <section class="section card">
         <div class="lv-head">
           <span class="lv-badge ${lv.cls}">${icon(lv.name === 'Diamante' ? 'diamond' : lv.name === 'Ouro' ? 'crown' : 'award')}</span>
@@ -1162,7 +1158,7 @@
     const all = rows.length === R.rows.length;
     return `<section class="section card">
         <h2 class="section-title">Detalhado por profissional</h2>
-        <p class="section-note">Toque num profissional para ver o resumo dele; a evolução e os pontos fortes e a melhorar ficam na performance completa.${all ? '' : ' Aparecem só os profissionais cujos números detalhados você pode ver.'}</p>
+        <p class="section-note">Toque num profissional para ver o resumo dele; o faturamento por mês, a evolução e os pontos fortes e a melhorar ficam na performance completa.${all ? '' : ' Aparecem só os profissionais cujos números detalhados você pode ver.'}</p>
         <div class="table-wrap"><table class="pc-table"><thead><tr><th>Profissional</th>${cols.map(c => `<th>${c[0]}${tip({ Faturamento: 'fat', Clientes: 'cli', Serviços: 'serv', 'Ticket médio': 'ticket', Ocupação: 'ocup', Produtos: 'prod', Planos: 'planos' }[c[0]])}</th>`).join('')}<th>Pontos${tip('score')}</th></tr></thead><tbody>
           ${rows.map(r => `<tr class="${ui.profSel === r.barber.id ? 'on' : ''}" data-action="profPick" data-id="${esc(r.barber.id)}"><td><button type="button" class="td-who" data-action="profPick" data-id="${esc(r.barber.id)}" aria-expanded="${ui.profSel === r.barber.id}">${avatar(r.barber, 36)}<span>${esc(r.barber.name)}</span></button></td>
             ${cols.map(c => `<td>${c[1](r)}</td>`).join('')}<td class="td-score">${score(r.overall)}</td></tr>`).join('')}
@@ -1466,8 +1462,31 @@
         </div>
       </div>
       <section class="section"><h2 class="section-title">Indicadores ${tip('score')}</h2><div class="ind-grid">${cards}</div></section>
+      ${fatHistory(b.id)}
       ${perfStrengths(b.id)}
       ${evoBlock(b.id, ui.period === 'mes' ? range().start.slice(0, 7) : curYm())}`;
+  }
+
+  // Faturamento do profissional nos últimos 3, 6 ou 12 meses (performance completa).
+  function fatHistory(bid) {
+    const b = barberById(bid); if (!b) return '';
+    const n = [3, 6, 12].includes(ui.fatN) ? ui.fatN : 6;
+    const ym = ui.period === 'mes' ? range().start.slice(0, 7) : curYm();
+    const months = Array.from({ length: n }, (_, i) => addMonths(ym, i - (n - 1)));
+    const vals = months.map(k => { const r = monthR(k).rows.find(x => x.barber.id === bid); return hasData(r) ? r.sums.fat : null; });
+    const got = vals.filter(v => v != null);
+    const total = got.reduce((a, v) => a + v, 0);
+    const seg = [[3, '3 meses'], [6, '6 meses'], [12, '1 ano']].map(([k, l]) => `<button type="button" class="${n === k ? 'on' : ''}" aria-pressed="${n === k}" data-action="fatRange" data-n="${k}">${l}</button>`).join('');
+    return `<section class="section card fat-hist">
+      <div class="fat-head"><h2 class="section-title">Faturamento de ${first(b.name)} · ${n === 12 ? 'último ano' : `últimos ${n} meses`}</h2>
+        <div class="seg" role="group" aria-label="Período do gráfico">${seg}</div></div>
+      <div class="perf-stats fat-stats">
+        <div class="stat"><span>Total no período</span><b class="num">${money0(total)}</b></div>
+        <div class="stat"><span>Média por mês</span><b class="num">${got.length ? money0(total / got.length) : '—'}</b></div>
+        <div class="stat"><span>Melhor mês</span><b class="num">${got.length ? money0(Math.max(...got)) + ' · ' + ymShort(months[vals.indexOf(Math.max(...got))]) : '—'}</b></div>
+      </div>
+      ${lineSvg({ labels: months.map(ymShort), series: [{ values: vals, color: '#d6b46a', fill: true }], yFmt: v => v >= 1000 ? 'R$' + nf0.format(v / 1000) + 'k' : 'R$' + nf0.format(v) })}
+    </section>`;
   }
 
   // Onde é forte / Onde precisa melhorar: só na performance completa do profissional (metas do mês).
@@ -3330,6 +3349,7 @@ Content-Type: application/json</pre>
       ui.cmpA = el.dataset.id; if (ui.cmpB === ui.cmpA) ui.cmpB = null;
       refreshTeam(); $('#tm-cmp')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     },
+    fatRange(el) { ui.fatN = Number(el.dataset.n); render(); },
     evoMode(el) { ui.evo = { ...(ui.evo || {}), mode: el.dataset.m }; evoRefresh(); },
     profPick(el) {
       const id = el.dataset.id;
