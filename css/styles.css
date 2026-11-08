@@ -1319,3 +1319,49 @@ textarea.input.pop-ta { min-height: 72px; font-family: var(--font-body); font-si
 .pops-edit h4 { margin: 0; font-family: var(--font-display); }
 .pops-vnav { justify-content: center; }
 .pop-viewer img.full { max-height: 72vh; }
+
+/* ---------- Marca Gestão Salão IA: rosé e dourado ---------- */
+html[data-brand="salao"] {
+  --bg: #110b0e;
+  --bg-glow-1: rgba(201, 123, 128, 0.16);
+  --bg-glow-2: rgba(232, 194, 138, 0.08);
+  --surface: #1a1316;
+  --surface-2: #231a1e;
+  --surface-3: #2e2227;
+  --line: #33262b;
+  --line-accent: rgba(227, 169, 163, 0.36);
+  --fg: #f8efec;
+  --muted: #b5a4a1;
+  --faint: #76666a;
+  --accent: #e3a9a3;
+  --accent-strong: #c98a86;
+  --accent-ink: #2a1214;
+  --accent-glow: rgba(227, 169, 163, 0.36);
+  --blue: #b0648a;
+  --blue-light: #e2a2c4;
+  --gold: #e8c28a;
+  --gold-ink: #2b1d00;
+  --drawer-1: #5b2a3d;
+  --drawer-2: #3a1a27;
+  --drawer-3: #140c10;
+}
+html[data-brand="salao"] .brand-ia-word { color: var(--accent); }
+
+/* ---------- Tela inicial: escolha da marca ---------- */
+.bc-in { width: min(100%, 860px); display: grid; gap: 14px; text-align: center; }
+.bc-in h1 { margin: 0; font-family: var(--font-display); font-size: clamp(1.5rem, 4.5vw, 2.2rem); }
+.bc-in > p { margin: 0; color: var(--muted); }
+.bc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 16px; margin-top: 10px; }
+.bc-card { display: grid; justify-items: center; gap: 8px; padding: 26px 20px 22px; border-radius: 26px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; font: inherit; }
+.bc-card img { width: min(62vw, 190px); height: auto; border-radius: 50%; }
+.bc-card b { font-family: var(--font-display); font-size: 1.25rem; margin-top: 6px; }
+.bc-card span { color: var(--muted); }
+.bc-card em { font-style: normal; display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; padding: 8px 16px; border-radius: 999px; font-weight: 700; }
+.bc-card em .ico { width: 18px; height: 18px; }
+.bc-barber em { background: #d6b46a; color: #1d1607; }
+.bc-salao em { background: #e3a9a3; color: #2a1214; }
+.bc-barber:hover, .bc-barber:focus-visible { border-color: rgba(214, 180, 106, 0.6); box-shadow: 0 0 40px rgba(214, 180, 106, 0.18); transform: translateY(-3px); outline: none; }
+.bc-salao:hover, .bc-salao:focus-visible { border-color: rgba(227, 169, 163, 0.6); box-shadow: 0 0 40px rgba(227, 169, 163, 0.2); transform: translateY(-3px); outline: none; }
+.bc-switch { display: block; margin: 14px auto 0; text-align: center; color: var(--accent); font-size: 0.92rem; }
+@media (prefers-reduced-motion: reduce) { .bc-card { transition: none; } }

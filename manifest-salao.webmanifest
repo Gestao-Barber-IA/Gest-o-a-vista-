@@ -1,0 +1,19 @@
+{
+  "name": "Gestão Salão IA",
+  "short_name": "Gestão Salão IA",
+  "description": "Performance da equipe do salão de beleza e esmalteria: ranking, metas, tela do salão e fechamento do mês.",
+  "lang": "pt-BR",
+  "id": "/?marca=salao",
+  "start_url": "/?origem=app&marca=salao",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#140c10",
+  "theme_color": "#140c10",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "assets/icon-salao-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-salao-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-salao-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

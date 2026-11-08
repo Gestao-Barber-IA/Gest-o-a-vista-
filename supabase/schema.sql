@@ -579,9 +579,12 @@ begin
     values (new.id, inv.company_id, coalesce(meta->>'name', ''), coalesce(new.email, ''), coalesce(meta->>'phone', ''), 'barbeiro', 'pendente', inv.barber_id);
     update invites set used = true where code = inv.code;
   else
-    insert into companies (name, email, phone, terms_accepted_at)
-    values (coalesce(nullif(meta->>'company', ''), 'Minha barbearia'), coalesce(new.email, ''), coalesce(meta->>'phone', ''),
-            case when meta ? 'terms_accepted_at' then now() end)
+    -- Marca escolhida no cadastro: Gestão Barber IA (barbearia) ou Gestão Salão IA (salão/esmalteria).
+    insert into companies (name, email, phone, terms_accepted_at, settings)
+    values (coalesce(nullif(meta->>'company', ''), case when meta->>'brand' = 'salao' then 'Meu salão' else 'Minha barbearia' end),
+            coalesce(new.email, ''), coalesce(meta->>'phone', ''),
+            case when meta ? 'terms_accepted_at' then now() end,
+            jsonb_build_object('brand', case when meta->>'brand' = 'salao' then 'salao' else 'barber' end))
     returning id into cid;
     insert into profiles (id, company_id, name, email, phone, role, status)
     values (new.id, cid, coalesce(nullif(meta->>'name', ''), meta->>'full_name', ''), coalesce(new.email, ''), coalesce(meta->>'phone', ''), 'gestor', 'ativo');
