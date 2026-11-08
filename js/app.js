@@ -73,6 +73,14 @@
   Object.defineProperty(Element.prototype, 'innerHTML', { configurable: true, get() { return ihDesc.get.call(this); }, set(v) { ihDesc.set.call(this, MARCA === 'salao' ? UI(String(v)) : v); } });
   const esc = s => { const t = String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); return MARCA === 'salao' ? MK + t + MK : t; };
   const B = () => BRANDS[MARCA];
+  // Modo claro ou escuro: preferência deste aparelho.
+  const THEME_KEY = 'gbia.theme';
+  const getTheme = () => { try { return localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark'; } catch (e) { return 'dark'; } };
+  function applyTheme(t) {
+    document.documentElement.dataset.theme = t;
+    const m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute('content', t === 'light' ? (MARCA === 'salao' ? '#fbf4f2' : '#f5f3ee') : B().theme);
+  }
   // Aplica a marca na página: cores, logo, título, ícone e app instalável.
   function applyBrand(key) {
     const k = BRANDS[key] ? key : 'barber';
@@ -84,8 +92,9 @@
       document.title = b.name;
       const set = (sel, attr, v) => { const el = document.querySelector(sel); if (el) el.setAttribute(attr, v); };
       set('link[rel="manifest"]', 'href', b.manifest); set('link[rel="icon"]', 'href', b.icon); set('link[rel="apple-touch-icon"]', 'href', b.apple);
-      set('meta[name="theme-color"]', 'content', b.theme); set('meta[name="apple-mobile-web-app-title"]', 'content', b.name); set('meta[name="application-name"]', 'content', b.name);
+      set('meta[name="apple-mobile-web-app-title"]', 'content', b.name); set('meta[name="application-name"]', 'content', b.name);
     }
+    applyTheme(getTheme());
   }
   let rkCache = {};
   const save = () => { if (Cloud.enabled) Cloud.save(state); else DB.save(state); rkCache = {}; };
@@ -266,6 +275,7 @@
   function authShell(inner) {
     const other = BRANDS[MARCA === 'salao' ? 'barber' : 'salao'];
     return `<div class="auth"><div class="auth-card">${brand('brand--lg')}${inner}
+      ${Cloud.enabled ? `<button type="button" class="btn btn-block bc-demo-btn" data-action="startDemo" data-b="${MARCA}">${icon('monitor')} ${esc('Ver demonstração do ' + B().name)}</button>` : ''}
       <button type="button" class="link-btn bc-switch" data-action="pickBrand" data-b="${other.key}">${esc((MARCA === 'salao' ? 'É barbearia?' : 'É salão de beleza ou esmalteria?') + ' Use o ' + other.name)}</button>
       <p class="auth-foot">Cada atendimento conta.</p></div></div>`;
   }
@@ -276,14 +286,35 @@
     </div>`;
   }
 
+  // ---------- Modo apresentação (números e profissionais fictícios) ----------
+  const DEMO_ON = !!DB.demo;
+  function demoBar(user) {
+    if (!DEMO_ON) return '';
+    const other = BRANDS[MARCA === 'salao' ? 'barber' : 'salao'];
+    const asOwner = isGestor(user);
+    return `<div class="demo-bar" role="region" aria-label="Modo apresentação">
+      <span class="demo-tag">${icon('monitor')} <b>Modo apresentação</b><small>números e profissionais fictícios</small></span>
+      <span class="demo-acts">
+        <span class="seg demo-seg" role="group" aria-label="Ver como"><button type="button" class="${asOwner ? 'on' : ''}" data-action="demoAs" data-r="dono">Ver como dono</button><button type="button" class="${asOwner ? '' : 'on'}" data-action="demoAs" data-r="pro">Ver como profissional</button></span>
+        <button type="button" class="btn btn-sm" data-action="startDemo" data-b="${other.key}">${esc('Trocar para ' + other.name)}</button>
+        <button type="button" class="btn btn-sm" data-action="demoReset">Reiniciar</button>
+        <button type="button" class="btn btn-sm btn-primary" data-action="demoExit">${icon('x')} Sair</button>
+      </span></div>`;
+  }
+  function demoLogin(role) {
+    const u = role === 'pro' ? state.users.find(x => x.role !== 'gestor' && x.status === 'ativo') : state.users.find(x => x.role === 'gestor');
+    if (u) DB.session.set(u.id, false);
+  }
+
   // Tela inicial: a empresa escolhe o sistema do negócio dela antes de entrar ou se cadastrar.
   function brandChooser() {
     const card = b => `<button type="button" class="bc-card bc-${b.key}" data-action="pickBrand" data-b="${b.key}">
       <img src="${b.logo}" alt="" width="512" height="512"><b>${esc(b.name)}</b><span>${esc(b.tagline)}</span><em>${icon('right')} Continuar</em></button>`;
+    const demo = b => `<button type="button" class="link-btn bc-demo" data-action="startDemo" data-b="${b.key}">${icon('monitor')} ${esc('Ver demonstração do ' + b.name)}</button>`;
     return `<div class="auth bc"><div class="bc-in">
       <h1>Escolha o sistema do seu negócio</h1>
       <p>Toque na marca para entrar ou criar o cadastro.</p>
-      <div class="bc-grid">${card(BRANDS.barber)}${card(BRANDS.salao)}</div>
+      <div class="bc-grid"><div class="bc-col">${card(BRANDS.barber)}${demo(BRANDS.barber)}</div><div class="bc-col">${card(BRANDS.salao)}${demo(BRANDS.salao)}</div></div>
       <p class="auth-foot">Cada atendimento conta.</p></div></div>`;
   }
   function renderAuth(mode, code) {
@@ -420,6 +451,7 @@
   function canOfferInstall() { return !isStandalone() && DB.pref.get('installed', '0') !== '1'; }
   // Mostra o convite depois do login, no celular, no máximo uma vez por sessão e não antes de 7 dias se a pessoa disse "Agora não".
   function maybeOfferInstall() {
+    if (DEMO_ON) return;
     if (!canOfferInstall() || !isMobile() || document.getElementById('install-sheet')) return;
     let shown = false; try { shown = sessionStorage.getItem('gbia.installShown') === '1'; } catch (e) { /* opcional */ }
     if (shown || Date.now() < Number(DB.pref.get('installSnooze', '0'))) return;
@@ -524,6 +556,7 @@
         ${brand()}
         ${groups}
         <div class="nav-sep"></div>
+        ${!DEMO_ON && isGestor(user) ? `<button class="nav-item" data-action="startDemo" data-b="${MARCA}">${icon('monitor')}<span>Modo apresentação</span></button>` : ''}
         ${canOfferInstall() ? `<button class="nav-item" data-action="installApp">${icon('download')}<span>Adicionar à tela de início</span></button>` : ''}
         <button class="nav-item" data-action="logout">${icon('logout')}<span>Sair</span></button>
       </nav>`;
@@ -3323,9 +3356,11 @@ Content-Type: application/json</pre>
         <div class="topbar-title"><h1>${esc(title)}</h1><p>${esc(state.company.name || 'Gestão Barber IA')}</p></div>
         <a class="icon-btn" href="#apresentacao" aria-label="Tela da loja" title="Tela da loja">${icon('monitor')}</a>
         <button class="icon-btn" data-action="fontSize" aria-label="Tamanho da letra" title="Tamanho da letra">${icon('type')}</button>
+        <button class="icon-btn theme-btn" data-action="toggleTheme" aria-label="${getTheme() === 'light' ? 'Ativar modo escuro' : 'Ativar modo claro'}" title="${getTheme() === 'light' ? 'Modo escuro' : 'Modo claro'}">${icon(getTheme() === 'light' ? 'moon' : 'sun')}</button>
         ${isGestor(user) ? `<a class="icon-btn" href="#barbeiros" aria-label="Aprovações pendentes: ${pending}">${icon('bell')}${pending ? `<span class="badge-dot">${pending}</span>` : ''}</a>` : ''}
         <button class="avatar-btn" data-action="togglePopover" aria-label="Perfil e conta">${avatar(who, 40)}</button>
       </header>
+      ${demoBar(user)}
       ${trialBanner(user)}
       <main class="main" id="main">${page.r(user)}</main>
       <button class="fab" data-action="openDrawer" aria-label="Abrir menu">${icon('menu')}</button>
@@ -3624,6 +3659,19 @@ Content-Type: application/json</pre>
       if (p && Cloud.enabled) (p.steps || []).forEach(st => st.path && Cloud.removeFile(POPS_BUCKET, st.path));
       state.pops = popsList().filter(x => x.id !== el.dataset.id); ui.popsOpen = null; save(); toast('POP apagado.'); render();
     },
+    toggleTheme() {
+      const t = getTheme() === 'light' ? 'dark' : 'light';
+      try { localStorage.setItem(THEME_KEY, t); } catch (e) { /* opcional */ }
+      applyTheme(t); render();
+    },
+    startDemo(el) {
+      const b = BRANDS[el.dataset.b] ? el.dataset.b : 'barber';
+      try { sessionStorage.setItem('gbia.demo', b); } catch (e) { toast('Este navegador bloqueou o modo apresentação.'); return; }
+      location.href = location.origin + location.pathname;
+    },
+    demoAs(el) { demoLogin(el.dataset.r); location.hash = 'inicio'; render(); window.scrollTo(0, 0); },
+    demoReset() { state = DB.reset(); rkCache = {}; demoLogin('dono'); toast('Demonstração reiniciada.'); location.hash = 'inicio'; render(); },
+    demoExit() { try { sessionStorage.removeItem('gbia.demo'); } catch (e) { /* opcional */ } location.href = location.origin + location.pathname; },
     pickBrand(el) { const b = el.dataset.b; if (!BRANDS[b]) return; DB.pref.set('brand', b); applyBrand(b); renderAuth(ui.authMode || 'entrar'); },
     goFechamento(el) { ui.teamMonth = el.dataset.ym; location.hash = 'fechamento'; },
     revealNow(el) {
@@ -4132,6 +4180,7 @@ Content-Type: application/json</pre>
     splash(() => {});
     Promise.all([bootCloud(), wait]).then(() => { if (ui.authMode === 'novaSenha') renderAuth('novaSenha'); else render(); });
   } else {
+    if (DEMO_ON && !currentUser()) demoLogin('dono');
     splash(render);
   }
 })();
