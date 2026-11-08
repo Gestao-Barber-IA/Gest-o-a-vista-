@@ -1072,32 +1072,16 @@
     const R = monthR(ym);
     const row = R.rows.find(r => r.barber.id === b.id);
     if (!row) return `<div class="card muted">${esc(b.name)} está inativo e não aparece no ranking.</div>`;
-    const prevRow = monthR(addMonths(ym, -1)).rows.find(r => r.barber.id === b.id);
     const c = career(b.id, ym);
     const lv = levelOf(c.value);
-    const cm = c.months.slice(-6);
     return `
       <section class="card pp-head">
         ${avatar(b, 64)}
         <div class="pp-who"><small class="tm-eyebrow">Profissional selecionado</small><h2>${esc(b.name)} ${titleChip(R, b.id)}</h2>
-          <p class="pp-chips"><span class="chip chip-soft num">${ord(row.pos)} de ${R.rows.length}</span><span class="chip chip-soft num">${score(row.overall)} pts</span><span class="chip lv-chip ${lv.cls}">${lv.name}</span></p></div>
+          <p class="pp-chips"><span class="chip chip-soft num">${ord(row.pos)} de ${R.rows.length}</span><span class="chip chip-soft num">${score(row.overall)} pts</span><span class="chip lv-chip ${lv.cls}">${lv.name}</span><span class="chip chip-soft num">Carreira ${nf1.format(c.value)} pts${tip('career')}</span></p></div>
         <div class="pp-acts"><button class="btn btn-sm" data-action="cmpWith" data-id="${esc(b.id)}">${icon('users')} Comparar com…</button><a class="btn btn-sm" href="#perfil-${esc(b.id)}">${icon('chart')} Performance completa</a>
           <button class="icon-btn" data-action="profClose" aria-label="Fechar">${icon('x')}</button></div>
-      </section>
-      <div class="pp-grid">
-      <section class="section card">
-        <div class="lv-head">
-          <span class="lv-badge ${lv.cls}">${icon(lv.name === 'Diamante' ? 'diamond' : lv.name === 'Ouro' ? 'crown' : 'award')}</span>
-          <div><small class="tm-eyebrow">Nível atual</small><b class="lv-name">${lv.name}</b></div>
-          <div class="lv-career"><small class="tm-eyebrow">Média da carreira</small><b class="num">${nf1.format(c.value)} pts</b>
-            ${c.delta === null ? '' : `<span class="num ${c.delta >= 0 ? 'delta-up' : 'delta-down'}">${c.delta >= 0 ? '+' : ''}${nf1.format(c.delta)} pts neste mês</span>`}</div>
-        </div>
-        <p class="lv-need">${lv.next ? `Faltam <b class="num">${nf1.format(lv.need)} pts</b> de média para chegar ao nível ${lv.next}.` : 'Nível máximo alcançado.'}</p>
-        <p class="section-note">Níveis pela média de carreira: ${GB.LEVELS.map(l => `${l.name} ${l.min ? 'a partir de ' + l.min : 'abaixo de 70'}`).join(' · ')}.</p>
-        ${cm.length ? lineSvg({ labels: cm.map(m => ymShort(m.ym)), series: [{ values: cm.map(m => m.score), color: '#5b9dff', dashed: true }, { values: cm.map(m => m.career), color: '#d6b46a' }], yMax: 100, yFmt: v => nf0.format(v) }) : ''}
-        <div class="ch-legend"><span><i style="background:#d6b46a"></i>Média da carreira</span><span><i class="dash" style="border-color:#5b9dff"></i>Pontuação do mês</span></div>
-      </section>
-      </div>`;
+      </section>`;
   }
 
   function teamRadars(ym, monthOnly) {
