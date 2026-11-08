@@ -5,6 +5,11 @@
   'use strict';
 
   // Modo apresentação: dados fictícios separados (nunca mistura com os dados reais).
+  // Link direto para a demonstração (ex.: página de vendas): ?demo=barber ou ?demo=salao
+  try {
+    const q = new URLSearchParams(window.location.search).get('demo');
+    if (q === 'salao' || q === 'barber') { window.sessionStorage.setItem('gbia.demo', q); window.history.replaceState(null, '', window.location.pathname + window.location.hash); }
+  } catch (e) { /* opcional */ }
   const DEMO = (() => { try { const v = window.sessionStorage.getItem('gbia.demo'); return v === 'salao' || v === 'barber' ? v : ''; } catch (e) { return ''; } })();
   const KEY = DEMO ? 'gbia.demo.' + DEMO : 'gbia.v1';
   const memory = {};
