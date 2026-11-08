@@ -620,6 +620,8 @@
           if (!Array.isArray(st.hidden)) { st.hidden = ['fid']; DB.save(st); } // fidelização começa oculta
           // Demonstração antiga (sem fotos dos profissionais): recria com a versão nova.
           if (st.demo && st.demoV !== 2) { const d = demoState(DEMO || 'barber'); DB.save(d); return d; }
+          // Na apresentação, a marca é sempre a escolhida (Barber ou Salão).
+          if (DEMO && st.brand !== DEMO) { st.brand = DEMO; DB.save(st); }
           return st;
         } catch (e) { /* recria abaixo */ }
       }

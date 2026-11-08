@@ -3347,7 +3347,7 @@ Content-Type: application/json</pre>
   function renderTV() {
     document.body.classList.remove('has-nav');
     if (!Cloud.enabled) state = DB.load();
-    applyBrand(state.brand || 'barber');
+    applyBrand(DB.demo || state.brand || 'barber');
     const tr = tvRange();
     const R = computeRanking(state, tr);
     const dk = darkFor(tr, true);
@@ -3390,7 +3390,7 @@ Content-Type: application/json</pre>
     const user = currentUser();
     if (!user) { renderAuth(ui.authMode); return; }
     // Logado: vale a marca da empresa (e fica lembrada para a tela de login).
-    applyBrand(state.brand || 'barber');
+    applyBrand(DB.demo || state.brand || 'barber');
     if (DB.pref.get('brand', '') !== MARCA) DB.pref.set('brand', MARCA);
 
     let route = h || 'inicio';
@@ -4244,7 +4244,7 @@ Content-Type: application/json</pre>
   {
     const pm = new URLSearchParams(location.search).get('marca');
     if (BRANDS[pm]) DB.pref.set('brand', pm);
-    applyBrand(DB.pref.get('brand', '') || 'barber');
+    applyBrand(DB.demo || DB.pref.get('brand', '') || 'barber');
   }
   if (Cloud.enabled) {
     const wait = new Promise(r => setTimeout(r, 1900));
