@@ -40,6 +40,7 @@
   .btn-wa { background: var(--wa); border-color: var(--wa); color: #fff; }
   .btn-block { width: 100%; }
   section { padding: 56px 0; }
+  section[id] { scroll-margin-top: 64px; }
   .lead { color: var(--soft); font-size: 1.1rem; max-width: 680px; }
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 22px; }
   .center { text-align: center; justify-items: center; }
@@ -134,7 +135,10 @@
   .price { margin: 4px 0 0; display: flex; align-items: baseline; gap: 4px; }
   .price b { font: 800 2.8rem/1 var(--font-d); }
   .price small { color: var(--muted); font-weight: 700; }
-  .old { margin: 0; color: var(--muted); font-size: 0.92rem; min-height: 1.4em; }
+  .pl-lbl { margin: 4px 0 -4px; font: 800 0.74rem var(--font-d); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+  .pl .save { margin: 0; color: var(--good); font-weight: 700; font-size: 0.95rem; }
+  .old { margin: 0; color: var(--muted); font-size: 0.95rem; padding-top: 8px; border-top: 1px dashed var(--line); }
+  .old b { color: var(--soft); }
   .old s { opacity: .8; }
   .save { color: var(--good); font-weight: 700; }
   .pl ul { list-style: none; margin: 6px 0 12px; padding: 0; display: grid; gap: 8px; }
@@ -233,8 +237,7 @@
     <button type="button" class="play" id="play"><span>▶</span><b>Assista à apresentação</b></button>
   </div>
   <div class="cta">
-    <a class="btn btn-primary" href="#agendar">📅 Agendar demonstração por vídeo</a>
-    <a class="btn" data-link="demo" href="../?demo=barber">Testar a demonstração agora</a>
+    <a class="btn btn-primary" data-link="demo" href="../?demo=barber">▶ Testar a demonstração agora</a>
   </div>
   <div class="trust"><span>7 dias grátis</span><span>Sem fidelidade no mensal</span><span>Funciona no celular, tablet e TV</span></div>
 </div></section>
@@ -266,22 +269,22 @@
     <span class="eyebrow">Planos</span>
     <h2>Compare os planos</h2>
     <p class="lead" style="margin:0 auto" data-t="planLead">Todos os planos têm todas as funções. O que muda é o tamanho da equipe, o valor e, no Premium, o suporte prioritário.</p>
-    <div class="per" role="group" aria-label="Forma de pagamento"><button type="button" data-per="mes" aria-pressed="true">Mensal</button><button type="button" data-per="ano" aria-pressed="false">Anual <small>até 29% off</small></button></div>
+    <span class="pill">💰 No plano anual você economiza até 29%</span>
   </div>
   <div class="plans">
     <article class="card pl" data-plan="essencial"><span class="pl-tag" hidden>Recomendado para você</span>
       <h3>Essencial</h3><p class="pl-for" data-u="4">Até 4 barbeiros</p>
-      <p class="price"><small>R$</small><b data-m="99" data-a="80">99</b><small>/mês</small></p><p class="old" data-m="99" data-a="80"></p>
+      <p class="pl-lbl">Plano anual</p><p class="price"><small>R$</small><b>80</b><small>/mês</small></p><p class="save">economia de R$ 228 por ano</p><p class="old">ou <b>R$ 99/mês</b> no plano mensal</p>
       <ul><li>Equipe de até 4 pessoas</li><li>Todas as funções do sistema</li><li>Integração por API</li><li>Ideal para começar a medir</li></ul>
       <a class="btn btn-block" data-buy="Essencial" href="#agendar">Quero o Essencial</a></article>
     <article class="card pl" data-plan="profissional"><span class="pl-tag" hidden>Recomendado para você</span>
       <h3>Profissional</h3><p class="pl-for" data-u="10">Até 10 barbeiros</p>
-      <p class="price"><small>R$</small><b data-m="179" data-a="150">179</b><small>/mês</small></p><p class="old" data-m="179" data-a="150"></p>
+      <p class="pl-lbl">Plano anual</p><p class="price"><small>R$</small><b>150</b><small>/mês</small></p><p class="save">economia de R$ 348 por ano</p><p class="old">ou <b>R$ 179/mês</b> no plano mensal</p>
       <ul><li>Equipe de até 10 pessoas</li><li>Todas as funções do sistema</li><li>Integração por API</li><li>Líderes e gestores por área</li></ul>
       <a class="btn btn-block" data-buy="Profissional" href="#agendar">Quero o Profissional</a></article>
     <article class="card pl" data-plan="premium"><span class="pl-tag" hidden>Recomendado para você</span>
       <h3>Premium</h3><p class="pl-for" data-u="0">Barbeiros ilimitados</p>
-      <p class="price"><small>R$</small><b data-m="279" data-a="199">279</b><small>/mês</small></p><p class="old" data-m="279" data-a="199"></p>
+      <p class="pl-lbl">Plano anual</p><p class="price"><small>R$</small><b>199</b><small>/mês</small></p><p class="save">economia de R$ 960 por ano</p><p class="old">ou <b>R$ 279/mês</b> no plano mensal</p>
       <ul><li>Equipe sem limite de pessoas</li><li>Todas as funções do sistema</li><li>Integração por API</li><li><b>Suporte prioritário</b></li><li>Para equipes grandes e redes</li></ul>
       <a class="btn btn-block" data-buy="Premium" href="#agendar">Quero o Premium</a></article>
   </div>
@@ -350,7 +353,7 @@
 </main>
 
 <footer><div class="wrap"><p><span data-t="name">Gestão Barber IA</span> · <a href="../vendas/">Ver a página completa</a> · <a href="../termos.html">Termos de uso</a> · <a href="../privacidade.html">Privacidade</a></p></div></footer>
-<div class="float"><a class="btn btn-primary btn-block" href="#agendar">📅 Agendar demonstração por vídeo</a></div>
+<div class="float"><a class="btn btn-primary btn-block" href="#planos">💳 Contratar plano</a></div>
 
 <script>
 (function () {
@@ -402,9 +405,6 @@
     qs('.pl').forEach(c => { const on = c.dataset.plan === rec; c.classList.toggle('rec', on); c.querySelector('.pl-tag').hidden = !on; c.querySelector('.btn').classList.toggle('btn-primary', on); });
     qs('[data-c]').forEach(c => c.classList.toggle('rec', c.dataset.c === rec));
     // preços
-    qs('.price b').forEach(b => { b.textContent = per === 'ano' ? b.dataset.a : b.dataset.m; });
-    qs('.old').forEach(o => { const m = +o.dataset.m, a = +o.dataset.a; o.innerHTML = per === 'ano' ? `<s>R$ ${m}</s> · <span class="save">economia de R$ ${((m - a) * 12).toLocaleString('pt-BR')} por ano</span>` : `ou <b>R$ ${a}/mês</b> no plano anual`; });
-    qs('[data-per]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.per === per)));
     // formulário já preenchido com as respostas
     const f = $('#book'); f.tipo.value = seg; f.equipe.value = String(size);
     const ag = $('[data-agenda]'); if (AGENDA) { ag.hidden = false; ag.href = AGENDA; }
@@ -448,9 +448,8 @@
   const sp = new URLSearchParams(location.search);
   if (SEG[sp.get('tipo')] && SIZE[sp.get('equipe')]) { seg = sp.get('tipo'); size = Number(sp.get('equipe')); quiz.hidden = true; document.body.classList.remove('locked'); render(); }
 
-  qs('[data-per]').forEach(x => x.addEventListener('click', () => { per = x.dataset.per; render(); }));
   qs('[data-buy]').forEach(a => a.addEventListener('click', () => {
-    const f = $('#book'); f.dataset.plano = a.dataset.buy; f.dataset.per = per;
+    const f = $('#book'); f.dataset.plano = a.dataset.buy;
   }));
 
   // ---------- agendamento: abre o WhatsApp do consultor com o pedido pronto ----------
@@ -467,7 +466,7 @@
       '', '• Nome: ' + nome, '• WhatsApp: ' + f.tel.value.trim(),
       f.empresa.value.trim() ? '• Negócio: ' + f.empresa.value.trim() : '',
       '• Tipo: ' + S.title, '• Equipe: ' + SIZE[f.equipe.value],
-      f.dataset.plano ? '• Interesse: plano ' + f.dataset.plano + (f.dataset.per === 'ano' ? ' (anual)' : ' (mensal)') : '',
+      f.dataset.plano ? '• Interesse: plano ' + f.dataset.plano : '',
       '• Melhor horário: ' + dia + ', ' + turno,
     ].filter(Boolean);
     window.open('https://wa.me/' + WHATSAPP + '?text=' + encodeURIComponent(linhas.join('\n')), '_blank', 'noopener');
