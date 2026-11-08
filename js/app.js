@@ -346,7 +346,7 @@
     let shown = ''; try { shown = sessionStorage.getItem('gbia.ovtToast') || ''; } catch (x) { /* opcional */ }
     if (shown === e.key) return;
     try { sessionStorage.setItem('gbia.ovtToast', e.key); } catch (x) { /* opcional */ }
-    setTimeout(() => toast(`${U(e.up.name)} ultrapassou e assumiu o ${e.pos}º lugar!`, 6000, 'trophy'), 900);
+    setTimeout(() => toast(`${U(e.up.name)} ultrapassou e assumiu o ${e.pos}º lugar!`, 6000, 'check'), 900);
   }
 
   // ---------- Modo apresentação (números e profissionais fictícios) ----------
