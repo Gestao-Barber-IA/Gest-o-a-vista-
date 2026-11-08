@@ -72,8 +72,21 @@
     proof: ['Provas do checklist', 'Cada ação precisa de uma foto ou print como prova. A gestão confere e aprova ou recusa; só ação aprovada pontua. Ninguém confere a própria prova.'],
     compare: ['Comparar profissionais', 'Mostra os números de dois profissionais lado a lado no mês. Verde com ▲ é quem está à frente em cada indicador; vermelho com ▼, quem está atrás; "=" é empate. No meio aparece a diferença. O barbeiro compara os próprios números com o líder de cada indicador; o dono e o gestor de área comparam quem podem ver.'],
     evo: ['Evolução', 'Compara o profissional com ele mesmo em outro período. Verde com ▲ é onde melhorou; vermelho com ▼, onde caiu. Com o mês em andamento, compara o mesmo número de dias (ex.: 1 a 7 deste mês × 1 a 7 do mês anterior), a não ser que você marque o mês anterior inteiro. Em períodos que não são o mês inteiro, entram os lançamentos por dia.'],
+    access_lv: ['Nível de acesso', () => ACCESS_TIP()],
+    pops: ['POPs · Guia do Sucesso', 'POP é o Procedimento Operacional Padrão: o jeito certo de fazer cada processo da barbearia. Cada POP tem o passo a passo em fotos (toque para ampliar) e, se houver, o link do vídeo. Só o dono cadastra e edita; toda a equipe consulta.'],
+    extras: ['Acessos extras do líder', 'Liberações opcionais que você dá a um líder: conferir e aprovar o checklist de toda a equipe e/ou lançar à mão os números de toda a equipe só nos indicadores marcados. Os outros campos ficam só para leitura para ele. Campos que vêm da integração continuam travados.'],
     fechamento: ['Fechamento do mês', 'Apresentação para a equipe: mostra do último colocado ao 4º e depois o pódio, do 3º ao 1º. Cada lugar do pódio só aparece quando o gestor toca em Revelar. O resumo esconde o resultado para não estragar a surpresa se a tela estiver na TV.'],
   };
+  function leaderExtrasBox(b) {
+    const x = extrasOf(b.id), n = (x.review ? 1 : 0) + x.fields.length;
+    return `<details class="lx" ${ui.lxOpen === b.id ? 'open' : ''} data-id="${esc(b.id)}">
+      <summary>${icon('plus')} Acessos extras do líder ${n ? `<span class="chip chip-ok">${n} liberado${n > 1 ? 's' : ''}</span>` : '<span class="chip chip-soft">nenhum</span>'}${tip('extras')}</summary>
+      <label class="check"><input type="checkbox" data-change="leaderExtra" data-id="${esc(b.id)}" data-k="review" ${x.review ? 'checked' : ''}><span><b>Conferir e aprovar o checklist de toda a equipe</b><small>Aprova ou recusa as provas dos colegas (nunca as próprias).</small></span></label>
+      <p class="lx-sub">Lançar à mão os números de toda a equipe, só nestes indicadores:</p>
+      <div class="lx-grid">${EXTRA_FIELDS().map(f => `<label class="check"><input type="checkbox" data-change="leaderExtra" data-id="${esc(b.id)}" data-k="f:${f.key}" ${x.fields.includes(f.key) ? 'checked' : ''}><span>${esc(f.label)}</span></label>`).join('')}</div>
+    </details>`;
+  }
+  const ACCESS_TIP = () => ACCESS.map(([, l, d]) => `${l}: ${d}`).join(' ');
   const tip = key => TIPS[key] ? `<button type="button" class="tip" data-tip="${key}" aria-label="Explicação: ${esc(TIPS[key][0])}">?</button>` : '';
   const FIELD_TIP = { fat: 'fat', cli: 'cli', serv: 'serv', ticket: 'ticket', ocupPct: 'ocup', fidPct: 'fid', prod: 'prod', check: 'check', planos: 'planos', agend: 'agend', aus: 'aus' };
   const ord = n => n + 'º';
@@ -389,9 +402,10 @@
       { r: 'fechamento', t: 'Fechamento do mês', i: 'clipboard', g: 1, a: 1 },
     ] },
     { group: 'GP · Gestão de pessoas', items: [
-      { r: 'barbeiros', t: 'Barbeiros', i: 'users', g: 1 },
+      { r: 'barbeiros', t: 'Adicionar profissional', i: 'users', g: 1 },
       { r: 'organograma', t: 'Organograma', i: 'org', g: 1 },
       { r: 'checklist', t: 'Checklist Agenda Cheia', i: 'checksq' },
+      { r: 'pops', t: 'POPs · Guia do Sucesso', i: 'book' },
       { r: 'tarefas', t: 'Tarefas', i: 'clipboard', soon: 1 },
       { r: 'metas', t: 'Metas', i: 'target', soon: 1 },
       { r: 'premios', t: 'Prêmios e metas', i: 'gift', soon: 1 },
@@ -420,8 +434,9 @@
     const g = isGestor(user);
     const groups = NAV.filter(gr => !gr.g || g).map(gr => {
       const am = isAreaMgr(user), hg = hasGrants(user);
-      const items = gr.items.filter(it => (!it.g || g || (it.a && am)) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
-        <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && (g || hg) ? (g ? 'Performance da empresa' : 'Performance da área') : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}</a>`).join('');
+      const lf = myExtras().fields.length > 0;
+      const items = gr.items.filter(it => (!it.g || g || (it.a && am) || (it.r === 'lancamentos' && lf)) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
+        <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && (g || hg) ? (g || accessOf(user.barberId) !== 'profissional' ? 'Performance da empresa' : 'Performance da área') : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}</a>`).join('');
       return (gr.group ? `<div class="nav-group">${esc(gr.group)}</div>` : '') + items;
     }).join('');
     const periods = Object.entries(PERIOD_NAMES).map(([k, v]) =>
@@ -624,7 +639,7 @@
     const u = currentUser();
     return `<div class="card empty">${icon('users')}<h2>Nenhum barbeiro cadastrado</h2>
       <p>${isGestor(u) ? 'Cadastre a equipe e envie os convites para começar o ranking.' : 'O gestor ainda não cadastrou a equipe.'}</p>
-      ${isGestor(u) ? `<a class="btn btn-primary" href="#barbeiros">${icon('plus')} Cadastrar barbeiros</a>` : ''}</div>`;
+      ${isGestor(u) ? `<a class="btn btn-primary" href="#barbeiros">${icon('plus')} Adicionar profissional</a>` : ''}</div>`;
   }
 
   // ---------- páginas ----------
@@ -807,6 +822,8 @@
   const ymShort = ym => { const l = monthRange(ym).label; return cap(l.slice(0, 3)) + '/' + ym.slice(2, 4); };
   const monthR = ym => rkCache[ym] || (rkCache[ym] = computeRanking(state, monthRange(ym)));
   const ROLES = ['Barbeiro', 'Barbeiro líder', 'Aprendiz', 'Recepcionista', 'Gerente'];
+  // Sugestões para o campo Função (o dono pode escrever qualquer outra).
+  const roleList = () => `<datalist id="role-list">${[...new Set([...ROLES, ...state.barbers.map(b => b.role).filter(Boolean)])].map(r => `<option value="${esc(r)}">`).join('')}</datalist>`;
   const RADAR_COLORS = ['#d6b46a', '#5b9dff', '#ff5fa8', '#52d37e'];
   const fmtGoal = (ind, v) => fmt(ind, v);
 
@@ -980,6 +997,10 @@
       const isSum = GB.SUM_KEYS.includes(f.key);
       const hasMan = isSum && GB.manualEntries(state, b.id, ym).some(e => isNum(e[f.key]));
       const shownV = isNum(rec[f.key]) ? rec[f.key] : (hasMan ? GB.manualTotal(state, b.id, ym, f.key) : '');
+      if (!fieldOk(b.id, f.key)) {
+        return `<div class="field"><span class="tm-flabel"><span class="tm-ft">${esc(f.label)}${tip(FIELD_TIP[f.key])}</span><span class="lock">${icon('eye')} Só leitura</span></span>
+          <input class="input num" id="m-${f.key}" value="${shownV === '' ? '' : fmtV(shownV)}" placeholder="—" readonly tabindex="-1"></div>`;
+      }
       return `<label class="field"><span class="tm-flabel"><span class="tm-ft">${esc(f.label)}${tip(FIELD_TIP[f.key])}</span>${isSum ? '<span class="lock lock-sum">Total do mês</span>' : ''}</span>
         <input class="input input-edit num" id="m-${f.key}" name="${f.key}" type="number" inputmode="decimal" min="0" ${f.max ? `max="${f.max}"` : ''} step="${f.step}" value="${shownV}" placeholder="—" data-auto="month" ${isSum ? 'data-sum="1"' : ''} data-id="${esc(b.id)}"></label>`;
     }).join('');
@@ -1002,7 +1023,7 @@
 
   function teamEditor(ym) {
     const own = isGestor(currentUser());
-    const list = state.barbers.filter(b => b.active !== false && canEditB(b.id));
+    const list = state.barbers.filter(b => b.active !== false && canLanB(b.id));
     if (!list.length) return emptyBarbers();
     const sel = list.find(b => b.id === ui.teamBarber) || list[0];
     ui.teamBarber = sel.id;
@@ -1015,12 +1036,12 @@
     }).join('')}</div>
     <section class="section card tm-edit">
       <h2 class="section-title">Editar métricas de ${esc(sel.name)} · ${esc(ymLabel(ym).replace(' de ', '/'))}</h2>
-      ${own ? '' : `<p class="section-note">Você lança os números das pessoas da sua área.</p>`}
+      ${own ? '' : canEditB(sel.id) ? `<p class="section-note">Você lança os números das pessoas da sua área.</p>` : `<p class="section-note">Liberado pelo dono para você lançar: <b>${EXTRA_FIELDS().filter(f => myExtras().fields.includes(f.key)).map(f => esc(f.label)).join(', ')}</b>. Os outros campos ficam só para leitura.</p>`}
       <div class="tm-photo">${avatar(sel, 96)}${own ? '' : '</div><!--'}<label class="btn btn-sm" style="cursor:pointer">${icon('camera')} Trocar foto<input type="file" accept="image/*" hidden data-change="barberPhoto" data-id="${esc(sel.id)}"></label>${own ? '</div>' : '-->'}
       <div class="tm-fixed"><small>Nome (fixo)</small><b>${esc(sel.name)}</b></div>
       ${own ? `<div class="grid-2">
         <label class="field"><span class="tm-flabel">Instagram</span><input class="input input-edit" id="m-instagram" name="instagram" value="${esc(sel.instagram || '')}" placeholder="@usuario" data-auto="barber" data-id="${esc(sel.id)}"></label>
-        <label class="field"><span class="tm-flabel">Cargo na empresa</span><select class="input input-edit" id="m-role" name="role" data-auto="barber" data-id="${esc(sel.id)}">${ROLES.map(r => `<option ${r === (sel.role || 'Barbeiro') ? 'selected' : ''}>${r}</option>`).join('')}</select></label>
+        <label class="field"><span class="tm-flabel">Função</span><input class="input input-edit" id="m-role" name="role" list="role-list" value="${esc(sel.role || '')}" placeholder="Ex.: Barbeiro" maxlength="60" data-auto="barber" data-id="${esc(sel.id)}">${roleList()}</label>
       </div>` : ''}
       <div class="lan-date"><label class="field"><span class="tm-flabel">Data do lançamento${tip('lanDate')}</span>
         <input class="input" type="date" id="m-date" value="${lanDate(ym)}" min="${monthRange(ym).start}" max="${monthRange(ym).end}" data-change="lanDate"></label>
@@ -1302,6 +1323,88 @@
     </section>`;
   }
 
+
+  // ---------- POPs · Guia do Sucesso (processos operacionais com fotos do passo a passo e vídeo) ----------
+  const POPS_BUCKET = 'pops';
+  const popsList = () => (Array.isArray(state.pops) ? state.pops : (state.pops = []));
+  const popsById = id => popsList().find(x => x.id === id);
+  const validUrl = u => /^https?:\/\/[^\s]+\.[^\s]+$/i.test(u);
+  const stepImg = (st, cls) => st.path ? `<img class="${cls || ''}" data-file="${POPS_BUCKET}|${esc(st.path)}" alt="${esc(st.cap || 'Passo do POP')}" loading="lazy">` : `<img class="${cls || ''}" src="${esc(st.src || '')}" alt="${esc(st.cap || 'Passo do POP')}" loading="lazy">`;
+  async function popsPhotos(files, popId) {
+    const out = [];
+    for (const file of [...(files || [])].slice(0, 12)) {
+      const data = await readImage(file, Cloud.enabled ? 1600 : 1000, 0.82);
+      if (Cloud.enabled) out.push({ path: await Cloud.uploadFile(POPS_BUCKET, `${Cloud.companyId}/${popId}/${uid('s_')}.jpg`, data), cap: '' });
+      else out.push({ src: data, cap: '' });
+    }
+    return out;
+  }
+  function pagePops(user) {
+    const own = isGestor(user), list = popsList();
+    const card = (p, n) => {
+      const open = ui.popsOpen === p.id, steps = p.steps || [];
+      const ask = ui.confirm === 'popsDel' + p.id;
+      return `<article class="card pops-card ${open ? 'on' : ''}" data-name="${esc((p.name + ' ' + (p.desc || '')).toLowerCase())}">
+        <div class="pops-top">
+          <span class="pops-n num">${n}</span>
+          <div class="pops-who"><h3>${esc(p.name)}</h3>${p.desc ? `<p>${esc(p.desc)}</p>` : ''}
+            <p class="pops-chips"><span class="chip chip-soft">${steps.length} passo${steps.length === 1 ? '' : 's'}</span>${p.video ? `<span class="chip chip-ok">${icon('play')} Vídeo</span>` : ''}</p></div>
+          ${steps[0] ? `<button class="pops-thumb" data-action="popsView" data-id="${esc(p.id)}" data-i="0" aria-label="Ver o passo 1">${stepImg(steps[0])}</button>` : ''}
+        </div>
+        <div class="btn-row">
+          ${steps.length || own ? `<button class="btn btn-sm ${open ? '' : 'btn-primary'}" data-action="popsOpen" data-id="${esc(p.id)}" aria-expanded="${open}">${icon(open ? 'up' : 'down')} ${open ? 'Fechar' : steps.length ? 'Ver passo a passo' : 'Adicionar fotos'}</button>` : ''}
+          ${p.video ? `<a class="btn btn-sm" href="${esc(p.video)}" target="_blank" rel="noopener noreferrer">${icon('play')} Assistir vídeo</a>` : ''}
+        </div>
+        ${open ? `<div class="pops-steps">
+          ${steps.length ? steps.map((st, i) => `<figure class="pops-step">
+            <button class="pops-img" data-action="popsView" data-id="${esc(p.id)}" data-i="${i}" aria-label="Ampliar o passo ${i + 1}">${stepImg(st)}</button>
+            <figcaption><b>Passo ${i + 1}</b>${own ? `<input class="input" value="${esc(st.cap || '')}" placeholder="Legenda (opcional)" maxlength="140" data-change="popsCap" data-id="${esc(p.id)}" data-i="${i}">` : st.cap ? `<span>${esc(st.cap)}</span>` : ''}</figcaption>
+            ${own ? `<div class="pops-stepbtns">
+              <button class="icon-btn" data-action="popsMove" data-id="${esc(p.id)}" data-i="${i}" data-d="-1" aria-label="Subir" ${i === 0 ? 'disabled' : ''}>${icon('up')}</button>
+              <button class="icon-btn" data-action="popsMove" data-id="${esc(p.id)}" data-i="${i}" data-d="1" aria-label="Descer" ${i === steps.length - 1 ? 'disabled' : ''}>${icon('down')}</button>
+              <button class="icon-btn" data-action="popsDelStep" data-id="${esc(p.id)}" data-i="${i}" aria-label="Remover foto">${icon('x')}</button></div>` : ''}
+          </figure>`).join('') : '<p class="muted">Ainda não há fotos do passo a passo.</p>'}
+          ${own ? `<form class="form pops-edit" data-form="popsEdit" data-id="${esc(p.id)}" novalidate>
+            <h4>Editar POP</h4>
+            <div class="grid-2"><label class="field"><span>Nome do processo *</span><input class="input" name="name" value="${esc(p.name)}" maxlength="80" required></label>
+            <label class="field"><span>Link do vídeo (opcional)</span><input class="input" name="video" type="url" inputmode="url" value="${esc(p.video || '')}" placeholder="https://..."></label></div>
+            <label class="field"><span>Descrição (opcional)</span><textarea class="input" name="desc" rows="2" maxlength="400">${esc(p.desc || '')}</textarea></label>
+            <label class="field"><span>Adicionar fotos do passo a passo</span><input class="input" name="photos" type="file" accept="image/*" multiple></label>
+            <p class="form-msg" data-msg></p>
+            <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button>
+            <button type="button" class="btn ${ask ? 'btn-danger' : ''}" data-action="popsDel" data-id="${esc(p.id)}">${ask ? 'Confirmar: apagar este POP' : 'Apagar POP'}</button></div>
+          </form>` : ''}
+        </div>` : ''}
+      </article>`;
+    };
+    return `<section class="card pops-head">
+        <div class="pops-hero">${icon('book')}<div><h2>POPs · Guia do Sucesso ${tip('pops')}</h2><p>Os processos operacionais da ${esc(state.company.name || 'barbearia')}: o passo a passo em fotos e, quando houver, o vídeo explicando.</p></div></div>
+        ${list.length > 3 ? `<input class="input" id="pops-q" type="search" placeholder="Buscar processo…" aria-label="Buscar processo">` : ''}
+      </section>
+      ${own ? `<details class="card pops-new" ${list.length ? '' : 'open'}><summary>${icon('plus')} Novo POP</summary>
+        <form class="form" data-form="popsNew" novalidate>
+          <div class="grid-2"><label class="field"><span>Nome do processo *</span><input class="input" id="pops-name" name="name" maxlength="80" placeholder="Ex.: Recepção do cliente" required></label>
+          <label class="field"><span>Link do vídeo (opcional)</span><input class="input" name="video" type="url" inputmode="url" placeholder="https://youtube.com/..."></label></div>
+          <label class="field"><span>Descrição (opcional)</span><textarea class="input" name="desc" rows="2" maxlength="400" placeholder="Para que serve e quando usar"></textarea></label>
+          <label class="field"><span>Fotos do passo a passo (pode escolher várias, na ordem)</span><input class="input" name="photos" type="file" accept="image/*" multiple></label>
+          <p class="form-msg" data-msg></p>
+          <div><button class="btn btn-primary" type="submit">${icon('plus')} Adicionar POP</button></div>
+        </form></details>` : ''}
+      ${list.length ? `<div class="pops-list">${list.map((p, i) => card(p, i + 1)).join('')}</div><p class="muted pops-none" hidden>Nenhum processo encontrado.</p>`
+        : `<div class="card empty">${icon('book')}<h2>Nenhum POP cadastrado</h2><p>${own ? 'Adicione o primeiro processo acima.' : 'O dono ainda não cadastrou os processos.'}</p></div>`}
+      ${popsViewer()}`;
+  }
+  function popsViewer() {
+    const v = ui.popsView; if (!v) return '';
+    const p = popsById(v.id), steps = (p && p.steps) || [], st = steps[v.i];
+    if (!st) { ui.popsView = null; return ''; }
+    return `<div class="pop-viewer" role="dialog" aria-modal="true" aria-label="Passo do POP"><div class="inst-scrim" data-action="popsViewClose"></div>
+      <figure>${stepImg(st, 'full')}<figcaption><b>${esc(p.name)} · Passo ${v.i + 1} de ${steps.length}</b>${st.cap ? `<span>${esc(st.cap)}</span>` : ''}</figcaption>
+      <div class="btn-row pops-vnav"><button class="btn" data-action="popsViewGo" data-d="-1" ${v.i === 0 ? 'disabled' : ''}>${icon('left')} Anterior</button>
+      <button class="btn" data-action="popsViewGo" data-d="1" ${v.i === steps.length - 1 ? 'disabled' : ''}>Próximo ${icon('right')}</button>
+      <button class="btn" data-action="popsViewClose">${icon('x')} Fechar</button></div></figure></div>`;
+  }
+
   function pageTime(user) {
     const ym = ui.teamMonth || curYm();
     if (!isGestor(user) && user.barberId && !seeNum(ui.teamBarber)) ui.teamBarber = user.barberId;
@@ -1547,7 +1650,11 @@ ${rows.length ? '' : emptyBarbers()}
       const msg = `Olá, ${b.name}! Você foi convidado para a equipe da ${state.company.name} no Gestão Barber IA. Faça seu cadastro por este link: ${link}`;
       return `<li class="list-row" style="${b.active === false ? 'opacity:.6' : ''}">
         ${avatar(b, 48)}
-        <div class="grow"><b>${esc(b.name)}</b>${status} ${b.active === false ? '<span class="chip chip-soft">inativo</span>' : ''}${u ? `<div class="muted" style="font-size:.88rem">${esc(u.email)}</div>` : ''}</div>
+        <div class="grow"><b>${esc(b.name)}</b>${status} ${b.active === false ? '<span class="chip chip-soft">inativo</span>' : ''}${u ? `<div class="muted" style="font-size:.88rem">${esc(u.email)}</div>` : ''}
+          <div class="acc-edit">
+            <label class="field"><span>Função</span><input class="input" name="role" list="role-list" value="${esc(b.role || '')}" placeholder="Ex.: Barbeiro" maxlength="60" data-change="barberRole" data-id="${esc(b.id)}"></label>
+            <label class="field"><span>Nível de acesso</span><select class="input" data-change="barberAccess" data-id="${esc(b.id)}">${ACCESS.map(([k, l]) => `<option value="${k}" ${accessOf(b.id) === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+          </div>${accessOf(b.id) === 'lider' ? leaderExtrasBox(b) : ''}</div>
         <div class="btn-row">
           ${!u ? `<button class="btn btn-sm btn-primary" data-action="invite" data-id="${esc(b.id)}">${icon('link')} ${inv ? 'Ver convite' : 'Convidar'}</button>` : ''}
           ${u && u.status === 'ativo' ? `<button class="btn btn-sm" data-action="resetPass" data-id="${esc(u.id)}">${icon('lock')} ${Cloud.enabled ? 'Enviar redefinição de senha' : 'Nova senha'}</button>` : ''}
@@ -1568,11 +1675,15 @@ ${rows.length ? '' : emptyBarbers()}
 
     return `${pendingHtml}
       <section class="section card">
-        <h2 class="section-title">Adicionar barbeiro</h2>
+        <h2 class="section-title">Adicionar profissional ${tip('access_lv')}</h2>
         ${billing() && billing().max_barbers ? `<p class="section-note">Seu plano: <b class="num">${activeBarbers()} de ${billing().max_barbers}</b> barbeiros ativos. <a href="#assinatura">Trocar de plano</a></p>` : ''}
         <form class="form" data-form="addBarber" novalidate>
           <div class="grid-2"><label class="field"><span>Nome *</span><input class="input" id="nb-name" name="name" required></label>
-          <label class="field"><span>Foto</span><input class="input" id="nb-photo" name="photo" type="file" accept="image/*"></label></div>
+          <label class="field"><span>Foto</span><input class="input" id="nb-photo" name="photo" type="file" accept="image/*"></label>
+          <label class="field"><span>Função</span><input class="input" id="nb-role" name="role" list="role-list" placeholder="Ex.: Barbeiro, Barbeiro líder, Recepcionista" maxlength="60"></label>
+          <label class="field"><span>Nível de acesso</span><select class="input" id="nb-access" name="access">${ACCESS.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label></div>
+          <ul class="acc-help">${ACCESS.map(([, l, d]) => `<li><b>${l}:</b> ${d}</li>`).join('')}</ul>
+          ${roleList()}
           <p class="form-msg" data-msg></p>
           <div><button class="btn btn-primary" type="submit">${icon('plus')} Adicionar</button></div>
         </form>
@@ -2243,6 +2354,10 @@ Content-Type: application/json</pre>
     }
     const uids = new Set(state.users.map(u => u.id));
     o.grants = o.grants.filter(g => uids.has(g.userId) && (g.nodeId === null || o.nodes.some(n => n.id === g.nodeId)));
+    if (!o.access || typeof o.access !== 'object') o.access = {};
+    if (!o.extras || typeof o.extras !== 'object') o.extras = {};
+    for (const k of Object.keys(o.extras)) if (!bids.has(k)) delete o.extras[k];
+    for (const k of Object.keys(o.access)) if (!bids.has(k) || !['lider', 'gestor'].includes(o.access[k])) delete o.access[k];
     return o;
   }
   const orgNode = id => org().nodes.find(n => n.id === id);
@@ -2268,9 +2383,26 @@ Content-Type: application/json</pre>
     return org().grants.some(g => us.includes(g.userId) && g.role === 'gestor') ? 'Gestor' : 'Membro';
   }
   // Barbeiros cujos números a pessoa vê (roles: gestor e/ou membro).
+  // Nível de acesso do profissional (Adicionar profissional): líder vê toda a equipe; gestor também lança e confere.
+  const ACCESS = [
+    ['profissional', 'Profissional', 'Vê o ranking e a própria performance, e preenche o próprio checklist.'],
+    ['lider', 'Líder', 'Também vê a performance detalhada de toda a equipe (detalhado, comparativos e perfis).'],
+    ['gestor', 'Gestor', 'Também lança os resultados e confere o checklist de toda a equipe. Configurações, cadastro de profissionais e assinatura continuam só com o dono.'],
+  ];
+  const accessOf = bid => (bid && (org().access || {})[bid]) || 'profissional';
+  // Acessos extras que o dono pode dar a cada líder: conferir o checklist e lançar métricas específicas.
+  function extrasOf(bid) {
+    if (accessOf(bid) !== 'lider') return { review: false, fields: [] };
+    const e = (org().extras || {})[bid] || {};
+    return { review: !!e.review, fields: Array.isArray(e.fields) ? e.fields : [] };
+  }
+  const myExtras = () => { const u = currentUser(); return u && !isGestor(u) ? extrasOf(u.barberId) : { review: false, fields: [] }; };
+  const EXTRA_FIELDS = () => GB.MONTH_FIELDS.filter(f => !f.calc && !(state.hidden || []).includes(GB.FIELD_IND[f.key] || f.key));
   function areaIds(u, roles) {
     const s = new Set();
     if (!u) return s;
+    const lv = u.role !== 'gestor' ? accessOf(u.barberId) : 'profissional';
+    if ((lv === 'gestor' && roles.some(r => r === 'gestor' || r === 'membro')) || (lv === 'lider' && roles.includes('membro'))) state.barbers.forEach(b => s.add(b.id));
     for (const g of org().grants) {
       if (g.userId !== u.id || !roles.includes(g.role)) continue;
       const ids = g.nodeId ? orgBarbers(g.nodeId) : new Set(state.barbers.map(b => b.id));
@@ -2278,8 +2410,8 @@ Content-Type: application/json</pre>
     }
     return s;
   }
-  const hasGrants = u => !!u && !isGestor(u) && org().grants.some(g => g.userId === u.id);
-  const isAreaMgr = u => !!u && !isGestor(u) && org().grants.some(g => g.userId === u.id && g.role === 'gestor');
+  const hasGrants = u => !!u && !isGestor(u) && (accessOf(u.barberId) !== 'profissional' || org().grants.some(g => g.userId === u.id));
+  const isAreaMgr = u => !!u && !isGestor(u) && (accessOf(u.barberId) === 'gestor' || org().grants.some(g => g.userId === u.id && g.role === 'gestor'));
   // Quem pode ver os números (faturamento, clientes...) de um barbeiro.
   function seeNum(bid) {
     const u = currentUser();
@@ -2288,6 +2420,9 @@ Content-Type: application/json</pre>
   }
   // Quem pode lançar os números do mês de um barbeiro.
   function canEditB(bid) { const u = currentUser(); return !!u && (isGestor(u) || areaIds(u, ['gestor']).has(bid)); }
+  // Lançamentos: quem lança tudo de alguém, ou o líder com métricas liberadas (só essas).
+  const canLanB = bid => canEditB(bid) || myExtras().fields.length > 0;
+  const fieldOk = (bid, key) => canEditB(bid) || myExtras().fields.includes(key);
   // Ranking só com os barbeiros da área (fechamento do gestor de área).
   function scopedR(ym) {
     const u = currentUser();
@@ -2467,9 +2602,9 @@ Content-Type: application/json</pre>
   }
   const popPendingOf = (bid, day) => { const rec = popRec(bid, day); return rec && rec.ev ? Object.values(rec.ev).reduce((a, l) => a + (Array.isArray(l) ? l.filter(e => e.status === 'pendente').length : 0), 0) : 0; };
   // Quem confere: o dono, ou o gestor de área para as pessoas dele (nunca a própria prova).
-  function canReview(bid) { const u = currentUser(); if (!u) return false; if (isGestor(u)) return true; return u.barberId !== bid && areaIds(u, ['gestor']).has(bid); }
+  function canReview(bid) { const u = currentUser(); if (!u) return false; if (isGestor(u)) return true; return u.barberId !== bid && (areaIds(u, ['gestor']).has(bid) || myExtras().review); }
   const popPendingCount = (bid, ym) => (state.pop || []).filter(r => r.barberId === bid && r.day.startsWith(ym) && r.day.length === 10).reduce((a, r) => a + popPendingOf(bid, r.day), 0);
-  const popPeople = () => state.barbers.filter(b => b.active !== false && (canEditB(b.id) || (currentUser() || {}).barberId === b.id));
+  const popPeople = () => state.barbers.filter(b => b.active !== false && (canEditB(b.id) || canReview(b.id) || (currentUser() || {}).barberId === b.id));
   const canPopEdit = bid => canEditB(bid) || (currentUser() || {}).barberId === bid;
 
   const EV_TXT = { pendente: 'Aguardando conferência', aprovado: 'Aprovada', recusado: 'Recusada' };
@@ -2558,6 +2693,10 @@ Content-Type: application/json</pre>
   // Busca as fotos guardadas na nuvem (links temporários).
   function hydrateProofs() {
     if (!Cloud.enabled) return;
+    document.querySelectorAll('img[data-file]').forEach(img => {
+      const [bucket, ...rest] = img.dataset.file.split('|');
+      Cloud.fileUrl(bucket, rest.join('|')).then(u => { img.src = u; img.removeAttribute('data-file'); }).catch(() => { img.alt = 'Foto indisponível'; });
+    });
     document.querySelectorAll('img[data-proof]').forEach(img => {
       Cloud.proofUrl(img.dataset.proof).then(u => { img.src = u; img.removeAttribute('data-proof'); }).catch(() => { img.alt = 'Prova indisponível'; });
     });
@@ -2761,10 +2900,11 @@ Content-Type: application/json</pre>
     fechamento: { t: 'Fechamento do mês', r: pageFechamento, g: 1, a: 1 },
     organograma: { t: 'Organograma', r: pageOrganograma, g: 1 },
     checklist: { t: 'Checklist Agenda Cheia', r: pageChecklist },
+    pops: { t: 'POPs · Guia do Sucesso', r: pagePops },
     time: { t: 'Performance da equipe', r: pageTime },
     performance: { t: 'Minha performance', r: pagePerformance },
     lancamentos: { t: 'Lançamentos', r: pageLancamentos, g: 1, a: 1 },
-    barbeiros: { t: 'Barbeiros', r: pageBarbeiros, g: 1 },
+    barbeiros: { t: 'Adicionar profissional', r: pageBarbeiros, g: 1 },
     configuracoes: { t: 'Configurações', r: pageConfiguracoes, g: 1 },
     assinatura: { t: 'Assinatura', r: pageAssinatura, g: 1 },
     admin: { t: 'Painel do SaaS', r: pageAdmin, g: 1 },
@@ -3068,11 +3208,11 @@ Content-Type: application/json</pre>
       const id = route.slice(7);
       page = { r: () => perfFor(id, user) }; title = 'Perfil';
     } else if (PAGES[route]) {
-      page = PAGES[route]; title = route === 'performance' && (isGestor(user) || hasGrants(user)) ? (isGestor(user) ? 'Performance da empresa' : 'Performance da área') : page.t;
+      page = PAGES[route]; title = route === 'performance' && (isGestor(user) || hasGrants(user)) ? (isGestor(user) || accessOf(user.barberId) !== 'profissional' ? 'Performance da empresa' : 'Performance da área') : page.t;
     } else if (SOON_TEXT[route]) {
       page = { r: () => pageSoon(route) }; title = NAV.flatMap(g => g.items).find(i => i.r === route).t;
     } else { route = 'inicio'; page = PAGES.inicio; title = page.t; }
-    if (page.g && !isGestor(user) && !(page.a && isAreaMgr(user))) { route = 'inicio'; page = PAGES.inicio; title = page.t; }
+    if (page.g && !isGestor(user) && !(page.a && isAreaMgr(user)) && !(route === 'lancamentos' && myExtras().fields.length)) { route = 'inicio'; page = PAGES.inicio; title = page.t; }
 
     const pending = isGestor(user) ? state.users.filter(u => u.status === 'pendente').length : 0;
     const who = isGestor(user) ? { name: state.company.name, photo: state.company.logo } : (barberById(user.barberId) || { name: user.name });
@@ -3358,6 +3498,31 @@ Content-Type: application/json</pre>
       ui.radarSel = sel; const rd = $('#tm-radar'); if (rd) rd.innerHTML = teamRadars(ui.teamMonth || curYm(), rd.dataset.only === '1');
     },
     fcPeek() { ui.fcPeek = !ui.fcPeek; render(); },
+    popsOpen(el) { ui.popsOpen = ui.popsOpen === el.dataset.id ? null : el.dataset.id; ui.confirm = null; render(); },
+    popsView(el) { ui.popsView = { id: el.dataset.id, i: Number(el.dataset.i) }; render(); },
+    popsViewGo(el) { if (ui.popsView) { ui.popsView.i += Number(el.dataset.d); render(); } },
+    popsViewClose() { ui.popsView = null; render(); },
+    popsMove(el) {
+      if (!isGestor(currentUser())) return;
+      const p = popsById(el.dataset.id); if (!p) return;
+      const i = Number(el.dataset.i), j = i + Number(el.dataset.d);
+      if (j < 0 || j >= p.steps.length) return;
+      [p.steps[i], p.steps[j]] = [p.steps[j], p.steps[i]]; p.at = Date.now(); save(); render();
+    },
+    popsDelStep(el) {
+      if (!isGestor(currentUser())) return;
+      const p = popsById(el.dataset.id); if (!p) return;
+      const [st] = p.steps.splice(Number(el.dataset.i), 1);
+      if (st && st.path && Cloud.enabled) Cloud.removeFile(POPS_BUCKET, st.path);
+      p.at = Date.now(); save(); toast('Foto removida.'); render();
+    },
+    popsDel(el) {
+      if (!isGestor(currentUser())) return;
+      if (ui.confirm !== 'popsDel' + el.dataset.id) { ui.confirm = 'popsDel' + el.dataset.id; render(); return; }
+      const p = popsById(el.dataset.id); ui.confirm = null;
+      if (p && Cloud.enabled) (p.steps || []).forEach(st => st.path && Cloud.removeFile(POPS_BUCKET, st.path));
+      state.pops = popsList().filter(x => x.id !== el.dataset.id); ui.popsOpen = null; save(); toast('POP apagado.'); render();
+    },
     goFechamento(el) { ui.teamMonth = el.dataset.ym; location.hash = 'fechamento'; },
     revealNow(el) {
       if (!isGestor(currentUser())) return;
@@ -3550,13 +3715,16 @@ Content-Type: application/json</pre>
     },
     async addBarber(f) {
       const name = val(f, 'name');
-      if (!name) return setMsg(f, 'Digite o nome do barbeiro.');
+      if (!name) return setMsg(f, 'Digite o nome do profissional.');
       let photo = null;
       const file = f.elements.photo.files[0];
       const lim = billing() && billing().max_barbers;
       if (lim && activeBarbers() >= lim) return setMsg(f, `Seu plano permite até ${lim} barbeiros ativos. Troque de plano em Assinatura para cadastrar mais.`);
       if (file) { try { photo = await readImage(file); } catch (e) { return setMsg(f, e.message); } }
-      state.barbers.push({ id: uid('b_'), name, photo, active: true, role: 'Barbeiro', instagram: '' }); save();
+      const id = uid('b_'), access = val(f, 'access');
+      state.barbers.push({ id, name, photo, active: true, role: val(f, 'role') || 'Barbeiro', instagram: '' });
+      if (access === 'lider' || access === 'gestor') { const o = org(); o.access[id] = access; }
+      save();
       toast(`${name} adicionado. Agora envie o convite.`); render();
     },
     weights(f) {
@@ -3579,6 +3747,30 @@ Content-Type: application/json</pre>
       const cfg = { open, close, lunch, days };
       if (GB.hoursPerDay(cfg) <= 0) return setMsg(f, 'O fechamento precisa ser depois da abertura, descontado o almoço.');
       state.ocupCfg = cfg; save(); toast(`Regra salva: 100% = ${nf0.format(GB.hoursPerDay(cfg) * days)} h no mês.`); render();
+    },
+    async popsNew(f) {
+      if (!isGestor(currentUser())) return;
+      const name = val(f, 'name'), video = val(f, 'video'), desc = val(f, 'desc');
+      if (!name) return setMsg(f, 'Digite o nome do processo.');
+      if (video && !validUrl(video)) return setMsg(f, 'O link do vídeo precisa começar com https:// (ex.: https://youtube.com/...).');
+      const id = uid('pop_');
+      setMsg(f, f.elements.photos.files.length ? 'Enviando as fotos…' : '', true);
+      let steps;
+      try { steps = await popsPhotos(f.elements.photos.files, id); } catch (e) { return setMsg(f, Cloud.enabled ? Cloud.message(e) : e.message); }
+      popsList().push({ id, name: name.slice(0, 80), desc: desc.slice(0, 400), video, steps, at: Date.now() });
+      ui.popsOpen = id; save(); toast('POP adicionado.'); render();
+    },
+    async popsEdit(f) {
+      if (!isGestor(currentUser())) return;
+      const p = popsById(f.dataset.id); if (!p) return;
+      const name = val(f, 'name'), video = val(f, 'video'), desc = val(f, 'desc');
+      if (!name) return setMsg(f, 'Digite o nome do processo.');
+      if (video && !validUrl(video)) return setMsg(f, 'O link do vídeo precisa começar com https:// (ex.: https://youtube.com/...).');
+      setMsg(f, f.elements.photos.files.length ? 'Enviando as fotos…' : '', true);
+      let more;
+      try { more = await popsPhotos(f.elements.photos.files, p.id); } catch (e) { return setMsg(f, Cloud.enabled ? Cloud.message(e) : e.message); }
+      Object.assign(p, { name: name.slice(0, 80), desc: desc.slice(0, 400), video, steps: [...(p.steps || []), ...more], at: Date.now() });
+      save(); toast('POP salvo.'); render();
     },
     reveal(f) {
       const c = revealCfg();
@@ -3638,6 +3830,22 @@ Content-Type: application/json</pre>
     perfBarber(el) { ui.perfBarber = el.value; location.hash = 'perfil-' + el.value; },
     teamMonth(el) { ui.teamMonth = el.value; ui.fcPeek = false; render(); },
     lanDate(el) { ui.lanDate = el.value; },
+    popsCap(el) { if (!isGestor(currentUser())) return; const p = popsById(el.dataset.id); if (!p || !p.steps[Number(el.dataset.i)]) return; p.steps[Number(el.dataset.i)].cap = el.value.trim().slice(0, 140); p.at = Date.now(); save(); toast('Legenda salva.'); },
+    barberRole(el) { const b = barberById(el.dataset.id); if (!b) return; b.role = el.value.trim().slice(0, 60) || 'Barbeiro'; save(); toast('Função salva.'); },
+    leaderExtra(el) {
+      if (!isGestor(currentUser())) return;
+      const o = org(), id = el.dataset.id, k = el.dataset.k;
+      const x = o.extras[id] = { review: false, fields: [], ...(o.extras[id] || {}) };
+      if (k === 'review') x.review = el.checked;
+      else { const f = k.slice(2); x.fields = el.checked ? [...new Set([...x.fields, f])] : x.fields.filter(v => v !== f); }
+      ui.lxOpen = id; save(); toast('Acesso do líder atualizado.'); render();
+    },
+    barberAccess(el) {
+      if (!isGestor(currentUser())) return;
+      const o = org(), v = el.value, b = barberById(el.dataset.id);
+      if (v === 'lider' || v === 'gestor') o.access[el.dataset.id] = v; else delete o.access[el.dataset.id];
+      save(); toast(`${b ? first(b.name) : 'Profissional'}: acesso de ${ACCESS.find(a => a[0] === v)[1]}.`); render();
+    },
     cmpA(el) { ui.cmpA = el.value; if (ui.cmpB === ui.cmpA) ui.cmpB = null; refreshTeam(); },
     cmpB(el) { ui.cmpB = el.value; refreshTeam(); },
     evoFull(el) { ui.evo = { ...(ui.evo || {}), full: el.checked }; evoRefresh(); },
@@ -3683,6 +3891,12 @@ Content-Type: application/json</pre>
     FORMS[f.dataset.form]?.(f);
   });
   root.addEventListener('input', e => {
+    if (e.target.id === 'pops-q') {
+      const q = e.target.value.trim().toLowerCase(); let n = 0;
+      document.querySelectorAll('.pops-card').forEach(c => { const ok = !q || c.dataset.name.includes(q); c.hidden = !ok; if (ok) n++; });
+      const none = $('.pops-none'); if (none) none.hidden = n > 0;
+      return;
+    }
     const pp = e.target.closest('[data-pop]');
     if (pp) { popInput(pp); return; }
     const el = e.target.closest('[data-auto]');

@@ -119,7 +119,7 @@ language sql stable security definer set search_path = public as $$
   select barber_id from profiles where id = auth.uid() and status = 'ativo'
 $$;
 
--- Gestor de área (Organograma): pode lançar os números de quem está abaixo dele.
+-- Gestor de área (Organograma) ou nível de acesso Gestor: pode lançar os números de quem está abaixo dele.
 create or replace function public.can_edit_barber(p_barber text) returns boolean
 language sql stable security definer set search_path = public as $$
   with recursive
@@ -131,7 +131,25 @@ language sql stable security definer set search_path = public as $$
               union select n.id from nodes n join sub s on n.pid = s.id)
   select is_gestor()
       or exists (select 1 from mine where nid is null)
+      -- Nível de acesso "Gestor" (Adicionar profissional): lança e confere de toda a equipe.
+      or exists (select 1 from o where my_barber() is not null and o.j->'access'->>my_barber() = 'gestor')
       or exists (select 1 from nodes n join sub s on s.id = n.id where n.people ? ('b:' || p_barber))
+$$;
+
+-- Acessos extras do líder (Adicionar profissional): o dono libera conferir o checklist e/ou lançar métricas específicas.
+create or replace function public.leader_extra() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce((select case when my_barber() is not null and c.settings->'org'->'access'->>my_barber() = 'lider'
+    then coalesce(c.settings->'org'->'extras'->my_barber(), '{}'::jsonb) end
+    from companies c where c.id = my_company()), '{}'::jsonb)
+$$;
+create or replace function public.leader_fields() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select case when jsonb_typeof(leader_extra()->'fields') = 'array' then leader_extra()->'fields' else '[]'::jsonb end
+$$;
+create or replace function public.can_review_barber(p_barber text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select can_edit_barber(p_barber) or coalesce((leader_extra()->>'review')::boolean, false)
 $$;
 
 -- ---------- Regras de acesso (RLS) ----------
@@ -174,14 +192,14 @@ create policy entries_read on public.entries for select using (company_id = my_c
 -- Resultados diários: os da integração (source 'api') só o dono e a própria API gravam;
 -- os lançados à mão (source 'manual') também o gestor de área, para as pessoas dele.
 create policy entries_ins on public.entries for insert
-  with check (company_id = my_company() and (is_gestor() or (source = 'manual' and can_edit_barber(barber_id))));
+  with check (company_id = my_company() and (is_gestor() or (source = 'manual' and (can_edit_barber(barber_id) or jsonb_array_length(leader_fields()) > 0))));
 create policy entries_upd on public.entries for update
-  using (company_id = my_company() and (is_gestor() or (source = 'manual' and can_edit_barber(barber_id))))
-  with check (company_id = my_company() and (is_gestor() or (source = 'manual' and can_edit_barber(barber_id))));
+  using (company_id = my_company() and (is_gestor() or (source = 'manual' and (can_edit_barber(barber_id) or jsonb_array_length(leader_fields()) > 0))))
+  with check (company_id = my_company() and (is_gestor() or (source = 'manual' and (can_edit_barber(barber_id) or jsonb_array_length(leader_fields()) > 0))));
 create policy entries_del on public.entries for delete using (company_id = my_company() and is_gestor());
 create policy monthly_read on public.monthly for select using (company_id = my_company());
-create policy monthly_ins on public.monthly for insert with check (company_id = my_company() and can_edit_barber(barber_id));
-create policy monthly_upd on public.monthly for update using (company_id = my_company() and can_edit_barber(barber_id)) with check (company_id = my_company() and can_edit_barber(barber_id));
+create policy monthly_ins on public.monthly for insert with check (company_id = my_company() and (can_edit_barber(barber_id) or jsonb_array_length(leader_fields()) > 0));
+create policy monthly_upd on public.monthly for update using (company_id = my_company() and (can_edit_barber(barber_id) or jsonb_array_length(leader_fields()) > 0)) with check (company_id = my_company() and (can_edit_barber(barber_id) or jsonb_array_length(leader_fields()) > 0));
 create policy monthly_del on public.monthly for delete using (company_id = my_company() and is_gestor());
 
 -- Total do mês: campo que já tem número da integração só muda pelo dono (ajuste manual),
@@ -191,6 +209,11 @@ language plpgsql security invoker set search_path = public as $$
 declare r record;
 begin
   if current_user not in ('authenticated', 'anon') or is_gestor() then return new; end if;
+  -- Líder com métricas liberadas: só altera essas.
+  if not can_edit_barber(new.barber_id) and exists (
+    select 1 from (select jsonb_object_keys(new.data) k union select jsonb_object_keys(case when tg_op = 'UPDATE' then old.data else '{}'::jsonb end)) x
+    where (new.data->x.k) is distinct from (case when tg_op = 'UPDATE' then old.data->x.k end) and not (leader_fields() ? x.k)
+  ) then raise exception 'Você não tem permissão para lançar este indicador.'; end if;
   if nullif(new.data->'_adj', 'null'::jsonb) is distinct from (case when tg_op = 'UPDATE' then nullif(old.data->'_adj', 'null'::jsonb) end) then
     raise exception 'Só o dono pode ajustar valores da integração.';
   end if;
@@ -205,6 +228,20 @@ end $$;
 drop trigger if exists guard_monthly on public.monthly;
 create trigger guard_monthly before insert or update on public.monthly for each row execute function public.guard_monthly();
 
+-- Lançamentos por dia: o líder com métricas liberadas só grava essas.
+create or replace function public.guard_entry() returns trigger
+language plpgsql security invoker set search_path = public as $$
+begin
+  if current_user not in ('authenticated', 'anon') or is_gestor() or can_edit_barber(new.barber_id) then return new; end if;
+  if exists (
+    select 1 from (select jsonb_object_keys(new.data) k union select jsonb_object_keys(case when tg_op = 'UPDATE' then old.data else '{}'::jsonb end)) x
+    where (new.data->x.k) is distinct from (case when tg_op = 'UPDATE' then old.data->x.k end) and not (leader_fields() ? x.k)
+  ) then raise exception 'Você não tem permissão para lançar este indicador.'; end if;
+  return new;
+end $$;
+drop trigger if exists guard_entry on public.entries;
+create trigger guard_entry before insert or update on public.entries for each row execute function public.guard_entry();
+
 -- Checklist: membros leem; o próprio barbeiro, o gestor de área e o dono preenchem.
 create policy pop_read on public.pop_records for select using (company_id = my_company());
 
@@ -215,7 +252,7 @@ language plpgsql security invoker set search_path = public as $$
 declare reviewer boolean;
 begin
   if current_user not in ('authenticated', 'anon') then return new; end if;
-  reviewer := is_gestor() or (can_edit_barber(new.barber_id) and new.barber_id is distinct from my_barber());
+  reviewer := is_gestor() or (can_review_barber(new.barber_id) and new.barber_id is distinct from my_barber());
   if reviewer then return new; end if;
   if exists (
     select 1 from jsonb_each(coalesce(new.data->'ev', '{}'::jsonb)) k, jsonb_array_elements(case when jsonb_typeof(k.value) = 'array' then k.value else '[]'::jsonb end) e
@@ -237,10 +274,10 @@ drop trigger if exists guard_pop on public.pop_records;
 create trigger guard_pop before insert or update on public.pop_records for each row execute function public.guard_pop();
 drop policy if exists pop_write on public.pop_records;
 create policy pop_ins on public.pop_records for insert
-  with check (company_id = my_company() and (can_edit_barber(barber_id) or barber_id = my_barber()));
+  with check (company_id = my_company() and (can_edit_barber(barber_id) or can_review_barber(barber_id) or barber_id = my_barber()));
 create policy pop_upd on public.pop_records for update
-  using (company_id = my_company() and (can_edit_barber(barber_id) or barber_id = my_barber()))
-  with check (company_id = my_company() and (can_edit_barber(barber_id) or barber_id = my_barber()));
+  using (company_id = my_company() and (can_edit_barber(barber_id) or can_review_barber(barber_id) or barber_id = my_barber()))
+  with check (company_id = my_company() and (can_edit_barber(barber_id) or can_review_barber(barber_id) or barber_id = my_barber()));
 create policy pop_del on public.pop_records for delete using (company_id = my_company() and is_gestor());
 
 -- Fotos das provas (Storage, pasta: barbearia/barbeiro/dia/arquivo.jpg). Bucket privado, até 3 MB por imagem.
@@ -260,6 +297,19 @@ do $$ begin
     create policy provas_delete on storage.objects for delete to authenticated
       using (bucket_id = 'provas' and (storage.foldername(name))[1] = my_company()::text
         and (can_edit_barber((storage.foldername(name))[2]) or (storage.foldername(name))[2] = my_barber()));
+    -- POPs · Guia do Sucesso: fotos do passo a passo (pasta: barbearia/pop/arquivo.jpg). Equipe vê; só o dono envia e apaga.
+    insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+    values ('pops', 'pops', false, 3145728, array['image/jpeg', 'image/png', 'image/webp'])
+    on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+    drop policy if exists pops_read on storage.objects;
+    drop policy if exists pops_insert on storage.objects;
+    drop policy if exists pops_delete on storage.objects;
+    create policy pops_read on storage.objects for select to authenticated
+      using (bucket_id = 'pops' and (storage.foldername(name))[1] = my_company()::text);
+    create policy pops_insert on storage.objects for insert to authenticated
+      with check (bucket_id = 'pops' and (storage.foldername(name))[1] = my_company()::text and is_gestor());
+    create policy pops_delete on storage.objects for delete to authenticated
+      using (bucket_id = 'pops' and (storage.foldername(name))[1] = my_company()::text and is_gestor());
   end if;
 end $$;
 
