@@ -501,7 +501,9 @@
       ['Bruno Rocha', 0.85, 1.15, 0.7, 'Barbeiro'], ['Caio Ferreira', 0.95, 0.9, 0.8, 'Barbeiro'], ['Mateus Pinto', 0.8, 1.0, 0.75, 'Barbeiro'],
       ['Júlia Ramos', 0.65, 1.1, 0.6, 'Aprendiz'],
     ];
-    const barbers = people.map(([name, , , , role]) => ({ id: uid('b_'), name, photo: null, active: true, role, instagram: '' }));
+    // Fotos de pessoas fictícias (geradas por IA), só para a demonstração.
+    const slug = n => n.split(' ')[0].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const barbers = people.map(([name, , , , role]) => ({ id: uid('b_'), name, photo: 'assets/demo/' + slug(name) + '.jpg', active: true, role, instagram: '' }));
     const priceK = sal ? 1.45 : 1;
     const entries = [];
     const today = new Date();
@@ -568,6 +570,7 @@
     return {
       version: 2,
       demo: true,
+      demoV: 2,
       presentation: !!DEMO,
       brand,
       pops: popsList,
@@ -615,6 +618,8 @@
             DB.save(st);
           }
           if (!Array.isArray(st.hidden)) { st.hidden = ['fid']; DB.save(st); } // fidelização começa oculta
+          // Demonstração antiga (sem fotos dos profissionais): recria com a versão nova.
+          if (st.demo && st.demoV !== 2) { const d = demoState(DEMO || 'barber'); DB.save(d); return d; }
           return st;
         } catch (e) { /* recria abaixo */ }
       }
