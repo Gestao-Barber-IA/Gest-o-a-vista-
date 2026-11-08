@@ -402,13 +402,13 @@
     ] },
     { group: 'GP · Gestão de pessoas', items: [
       { r: 'time', t: 'Performance da equipe', i: 'trophy' },
-      { r: 'organograma', t: 'Organograma', i: 'org', g: 1 },
       { r: 'checklist', t: 'Checklist Agenda Cheia', i: 'checksq' },
       { r: 'pops', t: 'POPs · Guia do Sucesso', i: 'book' },
       { r: 'tarefas', t: 'Tarefas', i: 'clipboard', soon: 1 },
       { r: 'metas', t: 'Metas', i: 'target', soon: 1 },
       { r: 'premios', t: 'Prêmios e metas', i: 'gift', soon: 1 },
       { r: 'sonhos', t: 'Sonhos', i: 'rocket', soon: 1 },
+      { r: 'organograma', t: 'Organograma', i: 'org', g: 1 },
     ] },
     { group: 'Gestor', g: 1, items: [
       { r: 'barbeiros', t: 'Adicionar profissional', i: 'users', g: 1 },
