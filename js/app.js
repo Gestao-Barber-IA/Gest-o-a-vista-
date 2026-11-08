@@ -29,7 +29,7 @@
   const BRANDS = {
     barber: { key: 'barber', name: 'Gestão Barber IA', word: 'Barber', logo: 'assets/logo.jpg', manifest: 'manifest.webmanifest', icon: 'assets/icon-192.png', apple: 'assets/apple-touch-icon.png', theme: '#0c0c0e',
       tagline: 'Para barbearias', roles: ['Barbeiro', 'Barbeiro líder', 'Aprendiz', 'Recepcionista', 'Gerente'], role: 'Barbeiro' },
-    salao: { key: 'salao', name: 'Gestão Salão IA', word: 'Salão', logo: 'assets/logo-salao.svg', manifest: 'manifest-salao.webmanifest', icon: 'assets/icon-salao-192.png', apple: 'assets/apple-touch-icon-salao.png', theme: '#140c10',
+    salao: { key: 'salao', name: 'Gestão Salão IA', word: 'Salão', logo: 'assets/logo-salao.jpg', manifest: 'manifest-salao.webmanifest', icon: 'assets/icon-salao-192.png', apple: 'assets/apple-touch-icon-salao.png', theme: '#1a0a10',
       tagline: 'Para salões de beleza e esmalterias', roles: ['Cabeleireira', 'Cabeleireiro', 'Manicure', 'Esteticista', 'Maquiadora', 'Designer de sobrancelhas', 'Recepcionista', 'Gerente'], role: 'Profissional' },
   };
   let MARCA = 'barber';
@@ -559,7 +559,25 @@
   }
 
   // Coroa do 1º lugar: azul com diamante (MVP), dourada (Destaque) ou prata.
+  // Salão: tiara no lugar da coroa (diamante rosa no MVP).
+  function tiaraSvg(tier) {
+    const id = 'tg-' + tier, mvp = tier === 'tier-mvp';
+    const gem = mvp
+      ? `<polygon points="52,-6 60,-20 68,-6 60,8" fill="url(#${id})" stroke="#fff" stroke-width="1.4"/><path d="M52 -6h16M56 -6l4 13 4-13" stroke="#fff" stroke-opacity=".8" stroke-width="1" fill="none"/>`
+      : `<path d="M60 -16c6 7 6 13 0 17c-6-4-6-10 0-17z" fill="url(#${id})" stroke="#fff" stroke-width="1.3"/>`;
+    return `<svg viewBox="0 -22 120 100" aria-hidden="true">
+      <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset=".45" style="stop-color:var(--tc)"/><stop offset="1" style="stop-color:var(--tc2)"/></linearGradient></defs>
+      <path d="M8 70 C30 48 90 48 112 70 L106 78 C86 62 34 62 14 78 Z" fill="url(#${id})" stroke="#fff" stroke-opacity=".7" stroke-width="1.4" stroke-linejoin="round"/>
+      <path d="M20 62 Q24 40 34 34 Q36 46 44 54 M44 54 Q50 26 60 12 Q70 26 76 54 M76 54 Q84 46 86 34 Q96 40 100 62" fill="none" stroke="url(#${id})" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="34" cy="32" r="4.2" fill="#fff"/><circle cx="86" cy="32" r="4.2" fill="#fff"/>
+      <circle cx="30" cy="66" r="2.4" fill="#fff" opacity=".85"/><circle cx="45" cy="60" r="2.4" fill="#fff" opacity=".85"/><circle cx="75" cy="60" r="2.4" fill="#fff" opacity=".85"/><circle cx="90" cy="66" r="2.4" fill="#fff" opacity=".85"/>
+      <circle cx="60" cy="58" r="3.4" fill="url(#${id})" stroke="#fff" stroke-width="1"/>
+      ${gem}
+      <g class="twinkle"><path d="M60 -22v8M56 -18h8" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></g>
+    </svg>`;
+  }
   function crownSvg(tier) {
+    if (MARCA === 'salao') return tiaraSvg(tier);
     const id = 'cg-' + tier;
     const gem = tier === 'tier-mvp'
       ? `<polygon points="49,-4 60,-18 71,-4 60,10" fill="url(#${id})" stroke="#e8f6ff" stroke-width="1.5"/><path d="M49 -4h22M55 -4l5 14 5-14" stroke="#e8f6ff" stroke-width="1" fill="none"/>`
@@ -625,7 +643,7 @@
 
   function podiumLegend(R) {
     return `<div class="pd-legend">
-      <div class="lg-mvp">${icon('diamond')}<span><b>MVP</b>Lidera ${R.mvpNeed} ou mais indicadores.<em>Contorno azul (diamante).</em></span></div>
+      <div class="lg-mvp">${icon('diamond')}<span><b>MVP</b>Lidera ${R.mvpNeed} ou mais indicadores.<em>${MARCA === 'salao' ? 'Contorno rosa (diamante rosa).' : 'Contorno azul (diamante).'}</em></span></div>
       <div class="lg-gold">${icon('crown')}<span><b>Destaque</b>Lidera no mínimo ${R.half} indicadores.<em>Contorno dourado.</em></span></div>
       <div class="lg-pts">${icon('trophy')}<span><b>Classificação por pontos</b>Sem título no período: contorno prata e bronze.</span></div>
     </div>`;
@@ -1994,7 +2012,7 @@ Content-Type: application/json</pre>
     return { R, s };
   }
   const fxDots = n => Array.from({ length: n }, (_, i) => `<i class="fx-dot" style="left:${(i * 37.7) % 100}%;top:${(i * 61.3) % 100}%;--d:${(i % 7) * 0.9}s;--s:${2 + (i % 4)}px"></i>`).join('');
-  const fxConfetti = n => Array.from({ length: n }, (_, i) => `<i class="fx-cf" style="left:${(i * 47.3) % 100}%;--d:${((i * 0.37) % 2.6).toFixed(2)}s;--r:${(i * 53) % 360}deg;--c:${['#d6b46a', '#6cc8ff', '#ffffff', '#f4a95c', '#9b8cff'][i % 5]};--x:${((i % 9) - 4) * 14}px"></i>`).join('');
+  const fxConfetti = n => Array.from({ length: n }, (_, i) => `<i class="fx-cf" style="left:${(i * 47.3) % 100}%;--d:${((i * 0.37) % 2.6).toFixed(2)}s;--r:${(i * 53) % 360}deg;--c:${(MARCA === 'salao' ? ['#eab35a', '#eaa59f', '#fff6ee', '#ff8fc8', '#f3d9c4'] : ['#d6b46a', '#6cc8ff', '#ffffff', '#f4a95c', '#9b8cff'])[i % 5]};--x:${((i % 9) - 4) * 14}px"></i>`).join('');
 
   function fxTier(R, row, place) {
     if (place === 3) return { cls: 'fx-bronze', label: 'Bronze' };

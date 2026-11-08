@@ -1322,28 +1322,29 @@ textarea.input.pop-ta { min-height: 72px; font-family: var(--font-body); font-si
 
 /* ---------- Marca Gestão Salão IA: rosé e dourado ---------- */
 html[data-brand="salao"] {
-  --bg: #110b0e;
-  --bg-glow-1: rgba(201, 123, 128, 0.16);
-  --bg-glow-2: rgba(232, 194, 138, 0.08);
-  --surface: #1a1316;
-  --surface-2: #231a1e;
-  --surface-3: #2e2227;
-  --line: #33262b;
-  --line-accent: rgba(227, 169, 163, 0.36);
-  --fg: #f8efec;
-  --muted: #b5a4a1;
-  --faint: #76666a;
-  --accent: #e3a9a3;
-  --accent-strong: #c98a86;
-  --accent-ink: #2a1214;
-  --accent-glow: rgba(227, 169, 163, 0.36);
-  --blue: #b0648a;
-  --blue-light: #e2a2c4;
-  --gold: #e8c28a;
-  --gold-ink: #2b1d00;
-  --drawer-1: #5b2a3d;
-  --drawer-2: #3a1a27;
-  --drawer-3: #140c10;
+  /* Paleta tirada do logo do Gestão Salão IA: vinho profundo, rose gold e dourado. */
+  --bg: #14080d;
+  --bg-glow-1: rgba(200, 90, 110, 0.18);
+  --bg-glow-2: rgba(234, 179, 90, 0.08);
+  --surface: #1e0f15;
+  --surface-2: #28141c;
+  --surface-3: #341a24;
+  --line: #3d2129;
+  --line-accent: rgba(234, 165, 159, 0.36);
+  --fg: #faefec;
+  --muted: #bca5a3;
+  --faint: #7d6467;
+  --accent: #eaa59f;
+  --accent-strong: #cf8580;
+  --accent-ink: #2b0d13;
+  --accent-glow: rgba(234, 165, 159, 0.36);
+  --blue: #c0577f;
+  --blue-light: #ee9fbe;
+  --gold: #eab35a;
+  --gold-ink: #2b1a00;
+  --drawer-1: #5e1b2e;
+  --drawer-2: #3d1020;
+  --drawer-3: #16080d;
 }
 html[data-brand="salao"] .brand-ia-word { color: var(--accent); }
 
@@ -1360,8 +1361,46 @@ html[data-brand="salao"] .brand-ia-word { color: var(--accent); }
 .bc-card em { font-style: normal; display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; padding: 8px 16px; border-radius: 999px; font-weight: 700; }
 .bc-card em .ico { width: 18px; height: 18px; }
 .bc-barber em { background: #d6b46a; color: #1d1607; }
-.bc-salao em { background: #e3a9a3; color: #2a1214; }
+.bc-salao em { background: #eaa59f; color: #2b0d13; }
 .bc-barber:hover, .bc-barber:focus-visible { border-color: rgba(214, 180, 106, 0.6); box-shadow: 0 0 40px rgba(214, 180, 106, 0.18); transform: translateY(-3px); outline: none; }
 .bc-salao:hover, .bc-salao:focus-visible { border-color: rgba(227, 169, 163, 0.6); box-shadow: 0 0 40px rgba(227, 169, 163, 0.2); transform: translateY(-3px); outline: none; }
 .bc-switch { display: block; margin: 14px auto 0; text-align: center; color: var(--accent); font-size: 0.92rem; }
 @media (prefers-reduced-motion: reduce) { .bc-card { transition: none; } }
+
+/* ---------- Pódio do Gestão Salão IA: espelho em arco, medalhão perolado, tiara e diamante rosa ---------- */
+html[data-brand="salao"] .tier-gold { --tc: #f3cf8a; --tc2: #b07a3a; --glow: rgba(240, 190, 140, 0.55); }
+html[data-brand="salao"] .tier-silver { --tc: #f6eef4; --tc2: #a495ad; --glow: rgba(236, 222, 240, 0.45); }
+html[data-brand="salao"] .tier-plat { --tc: #fbf3f7; --tc2: #b7a7bf; --glow: rgba(245, 230, 245, 0.5); }
+html[data-brand="salao"] .tier-bronze { --tc: #f0a893; --tc2: #9a4f4a; --glow: rgba(235, 150, 135, 0.5); }
+html[data-brand="salao"] .tier-mvp { --tc: #ff9fd0; --tc2: #c2266f; --glow: rgba(255, 120, 190, 0.6); }
+/* moldura de espelho em arco */
+html[data-brand="salao"] .pd-frame { --shape: inset(0 round 50% 50% 9% 9% / 24% 24% 5% 5%);
+  background: linear-gradient(170deg, #fff 0%, var(--tc) 20%, var(--tc2) 58%, var(--tc) 100%); padding: 2.5px; }
+html[data-brand="salao"] .pd-inner { padding-top: 10.5cqw;
+  background: radial-gradient(110% 55% at 50% 0%, color-mix(in srgb, var(--tc) 30%, transparent), transparent 72%),
+    linear-gradient(180deg, #2a121b 0%, #160910 70%, color-mix(in srgb, var(--tc2) 32%, #160910) 100%); }
+html[data-brand="salao"] .pd-1 .pd-inner { padding-top: 12cqw; }
+/* selo redondo perolado */
+html[data-brand="salao"] .pd-badge { clip-path: circle(50%); aspect-ratio: 1; width: 12cqw; transform: translate(-50%, -42%);
+  background: radial-gradient(circle at 35% 30%, #fff, var(--tc) 45%, var(--tc2)); }
+html[data-brand="salao"] .pd-1 .pd-badge { width: 14cqw; }
+html[data-brand="salao"] .pd-badge span { clip-path: circle(48%); background: radial-gradient(circle at 40% 30%, #3a1a25, #12060b); }
+/* título em pílula */
+html[data-brand="salao"] .pd-title { clip-path: inset(0 round 999px); }
+html[data-brand="salao"] .pd-title > span { background: linear-gradient(180deg, #2a0f1a, #12060b); }
+/* pedestal polido, sem feixe de luz */
+html[data-brand="salao"] .pd-beam { display: none; }
+html[data-brand="salao"] .pd-base::before { border-width: 1.5px; background: radial-gradient(ellipse at 50% 35%, rgba(255, 255, 255, 0.22), color-mix(in srgb, var(--tc2) 40%, #12060b) 55%, rgba(0, 0, 0, 0.65) 80%); }
+html[data-brand="salao"] .pd-base::after { border-style: solid; border-color: rgba(255, 255, 255, 0.18); }
+/* brilhos cintilantes */
+html[data-brand="salao"] .pd-sparks span { width: 4px; height: 4px; background: #fff; box-shadow: 0 0 6px var(--tc), 0 0 12px var(--glow); clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); }
+html[data-brand="salao"] .pd-crown { width: 26cqw; transform: translate(-50%, calc(-100% - 3.5cqw)); }
+/* MVP rosa em todo o sistema do salão */
+html[data-brand="salao"] .sub-mvp, html[data-brand="salao"] .lg-mvp .ico, html[data-brand="salao"] .lg-mvp em { color: #ff9fd0; }
+html[data-brand="salao"] .lg-gold .ico, html[data-brand="salao"] .lg-gold em { color: #f3cf8a; }
+html[data-brand="salao"] .chip-mvp { background: #c2266f; }
+html[data-brand="salao"] .c-mvp { color: #ffc2e2; border-color: #ff8fc8; box-shadow: 0 0 22px rgba(255, 120, 190, 0.5); }
+html[data-brand="salao"] .fx-card.fx-gold, html[data-brand="salao"] .fx-fcard.fx-gold { --c1: #f3cf8a; --c2: #b07a3a; --glow: rgba(240, 190, 140, 0.5); }
+html[data-brand="salao"] .fx-card.fx-silver, html[data-brand="salao"] .fx-fcard.fx-silver { --c1: #f6eef4; --c2: #a495ad; --glow: rgba(236, 222, 240, 0.4); }
+html[data-brand="salao"] .fx-card.fx-bronze, html[data-brand="salao"] .fx-fcard.fx-bronze { --c1: #f0a893; --c2: #9a4f4a; --glow: rgba(235, 150, 135, 0.45); }
+html[data-brand="salao"] .fx-card.fx-mvp, html[data-brand="salao"] .fx-fcard.fx-mvp { --c1: #ff9fd0; --c2: #c2266f; --glow: rgba(255, 120, 190, 0.6); }
