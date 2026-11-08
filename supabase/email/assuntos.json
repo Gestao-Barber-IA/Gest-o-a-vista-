@@ -1,0 +1,6 @@
+{
+  "confirmar-cadastro": "{{ $s := false }}{{ with .Data }}{{ if .brand }}{{ if eq .brand \"salao\" }}{{ $s = true }}{{ end }}{{ end }}{{ end }}{{ if $s }}Confirme seu e-mail no Gestão Salão IA{{ else }}Confirme seu e-mail no Gestão Barber IA{{ end }}",
+  "redefinir-senha": "{{ $s := false }}{{ with .Data }}{{ if .brand }}{{ if eq .brand \"salao\" }}{{ $s = true }}{{ end }}{{ end }}{{ end }}{{ if $s }}Crie sua nova senha do Gestão Salão IA{{ else }}Crie sua nova senha do Gestão Barber IA{{ end }}",
+  "trocar-email": "{{ $s := false }}{{ with .Data }}{{ if .brand }}{{ if eq .brand \"salao\" }}{{ $s = true }}{{ end }}{{ end }}{{ end }}{{ if $s }}Confirme seu novo e-mail no Gestão Salão IA{{ else }}Confirme seu novo e-mail no Gestão Barber IA{{ end }}",
+  "convidar-usuario": "{{ $s := false }}{{ with .Data }}{{ if .brand }}{{ if eq .brand \"salao\" }}{{ $s = true }}{{ end }}{{ end }}{{ end }}{{ if $s }}Você foi convidado para o Gestão Salão IA{{ else }}Você foi convidado para o Gestão Barber IA{{ end }}"
+}

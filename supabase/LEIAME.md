@@ -27,14 +27,16 @@ A chave **anon** é pública: ela vai dentro do app e pode ser enviada no chat.
 ## 5. E-mails em português
 Antes, configure um serviço de e-mail próprio (SMTP, veja abaixo): sem ele o Supabase não deixa editar os modelos.
 
-**Authentication → Email Templates**. Para cada modelo, troque o **Subject** e cole o HTML do arquivo:
+**Authentication → Email Templates**. Para cada modelo, cole o **Subject** de `supabase/email/assuntos.json` e o HTML do arquivo:
 
-| Modelo | Assunto | Arquivo |
-|---|---|---|
-| Confirm signup | Confirme seu e-mail no Gestão Barber IA | `supabase/email/confirmar-cadastro.html` |
-| Reset Password | Crie sua nova senha do Gestão Barber IA | `supabase/email/redefinir-senha.html` |
-| Change Email Address | Confirme seu novo e-mail no Gestão Barber IA | `supabase/email/trocar-email.html` |
-| Invite user | Você foi convidado para o Gestão Barber IA | `supabase/email/convidar-usuario.html` |
+| Modelo | Arquivo |
+|---|---|
+| Confirm signup | `supabase/email/confirmar-cadastro.html` |
+| Reset Password | `supabase/email/redefinir-senha.html` |
+| Change Email Address | `supabase/email/trocar-email.html` |
+| Invite user | `supabase/email/convidar-usuario.html` |
+
+Os modelos têm as duas marcas: quem se cadastrou pelo **Gestão Salão IA** recebe o e-mail do salão (vinho e rose gold); os demais, inclusive contas antigas, recebem o do **Gestão Barber IA**. A marca vem do cadastro (`brand` nos dados do usuário).
 
 > O plano grátis do Supabase envia poucos e-mails por hora. Para uso diário com a equipe, configure um serviço de e-mail próprio em **Project Settings → Authentication → SMTP Settings** (ex.: Resend ou Brevo, ambos com plano grátis).
 
