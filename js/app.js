@@ -886,6 +886,7 @@
             <a class="pd-link" href="#perfil-${esc(b.id)}" aria-label="Ver perfil de ${esc(b.name)}, ${ord(place)} lugar"></a>
           </div>
         </div>
+        <div class="pd-ped"></div>
         <div class="pd-base"><i></i><i></i></div>
       </div>`;
     };

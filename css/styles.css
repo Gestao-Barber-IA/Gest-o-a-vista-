@@ -1535,25 +1535,47 @@ html[data-theme="light"] .tv { background: var(--bg); }
 @keyframes fx-rise { from { bottom: -8%; transform: translateX(0); opacity: 0; } 15% { opacity: 0.85; } 50% { transform: translateX(2.5cqw); } to { bottom: 104%; transform: translateX(-1cqw); opacity: 0; } }
 @keyframes fx-flap { 0%, 100% { scale: 1 1; } 50% { scale: 1 0.45; } }
 
-/* Formato: Escudo (flâmula com ponta) */
-html[data-pdl="escudo"] .pd-frame { --shape: polygon(0 5%, 33% 5%, 39% 0, 61% 0, 67% 5%, 100% 5%, 100% 79%, 50% 100%, 0 79%); padding: 0.45cqw;
-  background: linear-gradient(180deg, #fff, var(--tc) 22%, var(--tc2) 70%, var(--tc)); }
-html[data-pdl="escudo"] .pd-inner { padding: 11cqw 2.2cqw 18cqw; gap: 1.3cqw;
-  background: radial-gradient(90% 45% at 50% 18%, color-mix(in srgb, var(--tc) 38%, transparent), transparent 75%),
-    linear-gradient(180deg, color-mix(in srgb, var(--tc2) 88%, #000) 0%, color-mix(in srgb, var(--tc2) 55%, #05060a) 55%, #06070b 100%); }
-html[data-pdl="escudo"] .pd-1 .pd-inner { padding-top: 12cqw; padding-bottom: 20cqw; }
-html[data-pdl="escudo"] .pd-badge { width: auto; aspect-ratio: auto; clip-path: none; padding: 0; background: none; transform: translate(-50%, 0.9cqw); }
-html[data-pdl="escudo"] .pd-badge span { background: none; font-size: max(9px, 2.3cqw); letter-spacing: 0.06em; color: #fff; text-shadow: 0 0 1cqw var(--glow); }
+/* Formato: Escudo (flâmula com ponta), igual à referência; o conteúdo continua o mesmo do Padrão */
+.pd-ped { display: none; }
+html[data-pdl="escudo"] .podium-x::before { content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background: linear-gradient(112deg, transparent 18%, rgba(255, 255, 255, 0.05) 26%, transparent 34%), linear-gradient(68deg, transparent 62%, rgba(255, 255, 255, 0.05) 70%, transparent 78%),
+    linear-gradient(95deg, transparent 40%, rgba(255, 255, 255, 0.035) 47%, transparent 54%); }
+html[data-pdl="escudo"] .pd-row { gap: 4.5cqw; padding-top: 19cqw; }
+html[data-pdl="escudo"] .pd-3 { margin-bottom: 0; }
+html[data-pdl="escudo"] .pd-3 .pd-float { padding-top: 5cqw; }
+html[data-pdl="escudo"] .pd-card { filter: drop-shadow(0 0 1.6cqw var(--glow)); }
+html[data-pdl="escudo"] .pd-frame { --shape: polygon(0 7%, 25% 7%, 50% 0, 75% 7%, 100% 7%, 100% 82%, 50% 100%, 0 82%); padding: 0.55cqw;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tc) 55%, #fff) 0%, var(--tc) 40%, var(--tc) 80%, color-mix(in srgb, var(--tc) 70%, #fff) 100%); }
+html[data-pdl="escudo"] .pd-1 .pd-frame { padding: 0.6cqw; background: linear-gradient(100deg, #9fd6ff 0%, #c6e6ff 22%, #fff3d0 50%, #e2d2ff 78%, #b9a2ff 100%); }
+html[data-pdl="escudo"] .pd-inner { padding: 8cqw 2.2cqw 14cqw;
+  background:
+    linear-gradient(122deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.09) 34%, transparent 34.4%),
+    radial-gradient(65% 26% at 50% 26%, color-mix(in srgb, var(--tc) 40%, transparent), transparent 80%),
+    linear-gradient(180deg, color-mix(in srgb, var(--tc) 30%, var(--tc2)) 0%, var(--tc2) 32%, color-mix(in srgb, var(--tc2) 45%, #040506) 72%, color-mix(in srgb, var(--tc2) 18%, #040506) 100%); }
+html[data-pdl="escudo"] .pd-1 .pd-inner { padding: 9cqw 2.2cqw 15cqw;
+  background:
+    linear-gradient(122deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.04) 34%, transparent 34.4%),
+    radial-gradient(70% 30% at 50% 24%, color-mix(in srgb, var(--tc) 55%, transparent), transparent 80%),
+    linear-gradient(180deg, color-mix(in srgb, var(--tc) 45%, var(--tc2)) 0%, color-mix(in srgb, var(--tc2) 85%, #000) 40%, color-mix(in srgb, var(--tc2) 40%, #040506) 75%, color-mix(in srgb, var(--tc2) 15%, #040506) 100%); }
+html[data-pdl="escudo"] .pd-inner::before { display: none; }
+html[data-pdl="escudo"] .pd-badge { width: auto; aspect-ratio: auto; clip-path: none; padding: 0; background: none; transform: translate(-50%, 1.9cqw); }
+html[data-pdl="escudo"] .pd-badge span { background: none; font-size: max(8px, 1.8cqw); font-weight: 700; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.85); }
 html[data-pdl="escudo"] .pd-badge small { display: none; }
-html[data-pdl="escudo"] .pd-gem { display: block; position: absolute; top: 0; left: 50%; z-index: 4; width: 11cqw; transform: translate(-50%, -105%);
-  filter: drop-shadow(0 0 1.5cqw var(--glow)); animation: pd-gem 3s ease-in-out infinite; }
+html[data-pdl="escudo"] .pd-gem { display: block; position: absolute; top: 0; left: 50%; z-index: 4; width: 9cqw; transform: translate(-50%, -88%);
+  filter: drop-shadow(0 0 1.4cqw var(--glow)); }
+html[data-pdl="escudo"] .pd-2 .pd-gem { --tc: #f5f7fb; --tc2: #8e97aa; --glow: rgba(235, 240, 252, 0.75); }
+html[data-pdl="escudo"] .pd-3 .pd-gem { --tc: #f6b46a; --tc2: #9c5420; --glow: rgba(246, 160, 80, 0.75); }
 html[data-pdl="escudo"] .pd-gem svg { display: block; width: 100%; height: auto; }
-html[data-pdl="escudo"] .pd-name { font-family: var(--font-display); font-weight: 800; text-shadow: 0 0 1.4cqw var(--glow); }
-html[data-pdl="escudo"] .pd-line, html[data-pdl="escudo"] .pd-leads svg, html[data-pdl="escudo"] .pd-pts small { display: none; }
-html[data-pdl="escudo"] .pd-money { border-radius: 99px; border: 0.45cqw solid var(--tc); background: rgba(0, 0, 0, 0.35); }
-html[data-pdl="escudo"] .pd-coin { display: none; }
-html[data-pdl="escudo"] .pd-tierlbl { display: block; }
-@keyframes pd-gem { 0%, 100% { transform: translate(-50%, -105%); } 50% { transform: translate(-50%, -118%); } }
+html[data-pdl="escudo"] .pd-crown { transform: translate(-50%, calc(-100% + 1.6cqw)); animation-name: pd-crown-esc; }
+@keyframes pd-crown-esc { 0%, 100% { transform: translate(-50%, calc(-100% + 1.6cqw)); } 50% { transform: translate(-50%, calc(-100% + 0.4cqw)); } }
+/* Pedestal de luz entre a ponta do escudo e o anel do chão */
+html[data-pdl="escudo"] .pd-base { margin-top: 6cqw; width: 118%; height: 8cqw; }
+html[data-pdl="escudo"] .pd-base::before { box-shadow: 0 0 3cqw var(--glow), inset 0 0 2.5cqw color-mix(in srgb, var(--tc) 35%, transparent);
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--tc) 55%, transparent), color-mix(in srgb, var(--tc) 12%, transparent) 55%, transparent); }
+html[data-pdl="escudo"] .pd-ped { display: block; position: absolute; left: 50%; bottom: 4cqw; z-index: 1; width: 58%; height: 12cqw; transform: translateX(-50%); pointer-events: none;
+  clip-path: polygon(24% 0, 76% 0, 100% 100%, 0 100%); background: linear-gradient(180deg, color-mix(in srgb, var(--tc) 14%, transparent), color-mix(in srgb, var(--tc) 32%, transparent)); }
+html[data-pdl="escudo"] .pd-beam { width: 120%; height: 150%; bottom: 4cqw; opacity: 0.4; clip-path: polygon(38% 0, 62% 0, 100% 100%, 0 100%);
+  background: linear-gradient(to top, color-mix(in srgb, var(--tc) 45%, transparent), transparent 85%); }
 
 /* Formato: Tecnológico */
 html[data-pdl="tech"] .pd-frame { --shape: polygon(11% 0, 89% 0, 100% 6%, 100% 94%, 89% 100%, 11% 100%, 0 94%, 0 6%); padding: 0.4cqw;
@@ -1623,7 +1645,7 @@ html[data-pdl="minimal"] .pd-fx { opacity: 0.5; }
 .th-shape { display: grid; place-items: center; width: 64px; height: 76px; border-radius: 12px; background: #0b0c12; }
 .th-shape i { display: block; width: 34px; height: 54px; background: linear-gradient(180deg, #ffe7a0, #d6a23a 50%, #6e4c10); }
 .th-padrao i { clip-path: polygon(13% 0, 87% 0, 100% 6%, 100% 83%, 72% 100%, 28% 100%, 0 83%, 0 6%); }
-.th-escudo i { clip-path: polygon(0 5%, 33% 5%, 39% 0, 61% 0, 67% 5%, 100% 5%, 100% 79%, 50% 100%, 0 79%); background: linear-gradient(180deg, #8ff0a8, #1f8a43 55%, #0b3a1c); }
+.th-escudo i { clip-path: polygon(0 6%, 27% 6%, 41% 0, 59% 0, 73% 6%, 100% 6%, 100% 77%, 50% 100%, 0 77%); background: linear-gradient(180deg, #8ff0a8, #1f8a43 55%, #0b3a1c); }
 .th-tech i { clip-path: polygon(15% 0, 85% 0, 100% 9%, 100% 91%, 85% 100%, 15% 100%, 0 91%, 0 9%); background: repeating-linear-gradient(0deg, transparent 0 5px, rgba(108, 200, 255, 0.35) 5px 6px), linear-gradient(180deg, #1b5fd6, #071228); }
 .th-minimal i { border-radius: 8px; background: #1a1c25; border: 1.5px solid #d6a23a; }
 .th-bday { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-top: 16px; }
