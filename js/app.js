@@ -2508,7 +2508,40 @@ Content-Type: application/json</pre>
           ${Object.values(BRANDS).map(x => `<option value="${x.key}" ${MARCA === x.key ? 'selected' : ''}>${esc(x.name + ' · ' + x.tagline.replace('Para ', ''))}</option>`).join('')}</select></label>
         <p class="form-msg" data-msg></p>
         <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
-      </form></section>`;
+      </form></section>
+    <section class="section card">
+      <h2 class="section-title">Cópia dos seus dados</h2>
+      <p class="muted">Baixe quando quiser tudo o que a sua empresa tem no sistema. Os dados são seus: guarde a cópia num lugar seguro, uma vez por mês.</p>
+      <div class="row-wrap" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
+        <button class="btn btn-sm" data-action="exportJson">${icon('download')} Cópia completa (JSON)</button>
+        <button class="btn btn-sm" data-action="exportCsv">${icon('download')} Lançamentos em planilha (CSV)</button>
+      </div></section>`;
+  }
+
+  // Cópia dos dados da empresa (portabilidade, LGPD). Sem senhas, chave da API nem convites.
+  function downloadFile(name, blob) {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+  function exportSlug() { return (state.company.name || 'empresa').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'empresa'; }
+  function exportJson() {
+    const { apiKey, invites, cloud, demo, ...rest } = state;
+    const out = { sistema: B().name, geradoEm: new Date().toISOString(), ...rest, users: (state.users || []).map(u => ({ name: u.name, email: u.email, phone: u.phone || '', role: u.role, status: u.status, barberId: u.barberId || null })) };
+    downloadFile(`copia-${exportSlug()}-${iso(new Date())}.json`, new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' }));
+    toast('Cópia completa baixada.');
+  }
+  function exportCsv() {
+    const cols = GB.FIELDS.filter(f => !f.legacy), q = v => { const t = v === null || v === undefined ? '' : String(v); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+    const num = v => (v === null || v === undefined || v === '') ? '' : String(v).replace('.', ',');
+    const rows = [['Data', 'Profissional', 'Origem', ...cols.map(f => f.label)]];
+    [...(state.entries || [])].sort((x, y) => x.date < y.date ? -1 : x.date > y.date ? 1 : 0).forEach(e => {
+      const b = barberById(e.barberId); rows.push([e.date, b ? b.name : e.barberId, e.source || 'manual', ...cols.map(f => num(e[f.key]))]);
+    });
+    rows.push([]); rows.push(['Fechamento mensal']); const mc = GB.MONTH_FIELDS.filter(f => !f.calc);
+    rows.push(['Mês', 'Profissional', ...mc.map(f => f.label)]);
+    [...(state.monthly || [])].sort((x, y) => x.month < y.month ? -1 : 1).forEach(m => { const b = barberById(m.barberId); rows.push([m.month, b ? b.name : m.barberId, ...mc.map(f => num(m[f.key]))]); });
+    downloadFile(`lancamentos-${exportSlug()}-${iso(new Date())}.csv`, new Blob(['\ufeff' + rows.map(r => r.map(q).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+    toast('Planilha baixada.');
   }
 
   function pageCadastro(user) {
@@ -5115,6 +5148,8 @@ Content-Type: application/json</pre>
     popViewClose() { ui.popView = null; render(); },
     popRevMore() { ui.popRevAll = true; render(); },
     popCsv() { popCsv(); },
+    exportJson() { exportJson(); },
+    exportCsv() { exportCsv(); },
     popPrint() { document.body.classList.add('printing'); setTimeout(() => { window.print(); document.body.classList.remove('printing'); }, 50); },
     popSave() { save(); toast('Checklist salvo.'); },
     popReset() {
