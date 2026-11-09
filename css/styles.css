@@ -2027,3 +2027,14 @@ html[data-brand="salao"] .rp-board { --rpg: #f0b8a8; --rpg2: #b26e78; --rpl: rgb
 @keyframes fx-p-out { to { opacity: 0; transform: scale(0.85) translateY(-4vh); filter: blur(10px); } }
 @keyframes fx-word { from { opacity: 0; transform: translateY(30px) scale(0.6); filter: blur(8px); } }
 @keyframes fx-letter-up { from { opacity: 0; transform: translateY(-60%) scale(0.4) rotate(-8deg); filter: blur(10px); } }
+/* Recorte da música */
+.pm-trim { grid-column: 1 / -1; display: grid; gap: 10px; margin-top: 4px; padding: 12px; border-radius: 14px; background: rgba(0, 0, 0, 0.25); border: 1px dashed var(--line-accent); }
+.pm-wave { width: 100%; height: 110px; border-radius: 10px; background: #0d0e14; cursor: crosshair; touch-action: manipulation; }
+.pm-trim-info { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.9rem; color: var(--fg-soft); }
+.pm-trim-info b { color: var(--fg); }
+.pm-drop { display: inline-flex; align-items: center; gap: 4px; color: #ff9a5c; }
+.pm-drop .ico { width: 16px; height: 16px; }
+.pm-trim-ctl { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pm-len { display: inline-flex; align-items: center; gap: 6px; font-size: 0.88rem; color: var(--fg-soft); }
+.pm-len .input { width: auto; min-height: 0; padding: 5px 8px; }
+.pm-trim-hint { margin: 0; font-size: 0.84rem; color: var(--fg-soft); }

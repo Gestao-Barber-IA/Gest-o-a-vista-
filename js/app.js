@@ -4085,6 +4085,66 @@ Content-Type: application/json</pre>
     for (let i = 0; i < n; i++) out.setInt16(44 + i * 2, Math.max(-1, Math.min(1, d[i] * g)) * 0x7fff, true);
     return new Blob([out], { type: 'audio/wav' });
   }
+  // ----- Recorte da música -----
+  const pmLead = p => p === 'intro' ? 4.5 : (Music.buildDur[p] || 3); // segundos até a explosão (2º clarão da abertura / revelação)
+  const PM_LENS = [15, 20, 30, 45, 60, 0];
+  // Energia da música a cada 0,25 s (RMS), guardada por música.
+  const pmEnvCache = {};
+  function pmEnv(id, buf) {
+    if (pmEnvCache[id]) return pmEnvCache[id];
+    const d = buf.getChannelData(0), d2 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : null, step = Math.floor(buf.sampleRate * 0.25), e = [];
+    for (let i = 0; i + step <= d.length; i += step) { let s2 = 0; for (let k = i; k < i + step; k += 4) { const v = d2 ? (d[k] + d2[k]) / 2 : d[k]; s2 += v * v; } e.push(Math.sqrt(s2 / (step / 4))); }
+    const mx = Math.max(1e-6, ...e);
+    return (pmEnvCache[id] = e.map(v => v / mx));
+  }
+  // Recorte automático: procura o ponto em que a música mais cresce e entra forte (a "explosão"),
+  // e começa alguns segundos antes, para a explosão cair na hora da revelação.
+  function pmAuto(env, lead) {
+    const n = env.length, sm = env.map((_, i) => { let a = 0, c = 0; for (let k = Math.max(0, i - 2); k <= Math.min(n - 1, i + 2); k++) { a += env[k]; c++; } return a / c; });
+    const avg = (a, b) => { a = Math.max(0, a); b = Math.min(n, b); if (b <= a) return 0; let t = 0; for (let k = a; k < b; k++) t += sm[k]; return t / (b - a); };
+    const loud = [...sm].sort((a, b) => a - b)[Math.floor(n * 0.6)] || 0;
+    let best = -1, bi = 0;
+    for (let i = 16; i < n - 24; i++) { // a partir de 4 s, até 6 s antes do fim
+      const before = avg(i - 48, i), after = avg(i, i + 24), jump = avg(i, i + 4) - avg(i - 4, i);
+      if (after < loud) continue;
+      const sc = (after - before) * 1.4 + jump * 1.2 + after * 0.4;
+      if (sc > best) { best = sc; bi = i; }
+    }
+    const drop = bi * 0.25;
+    return { drop, start: Math.max(0, Math.round((drop - lead) * 10) / 10) };
+  }
+  function pmTrimHtml(place, m) {
+    const sel = ui.pmSel || { start: m.start || 0, len: m.end ? Math.round(m.end - (m.start || 0)) : 0 };
+    return `<div class="pm-trim">
+      <canvas class="pm-wave" data-action="pmWave" data-p="${place}" width="900" height="110" role="img" aria-label="Onda da música. Toque para escolher onde o recorte começa."></canvas>
+      <div class="pm-trim-info num"><span>Início <b>${fmtSec(sel.start)}</b></span><span>Fim <b>${sel.len ? fmtSec(Math.min(m.dur || 9999, sel.start + sel.len)) : 'até o fim'}</b></span>${sel.drop != null ? `<span class="pm-drop">${icon('bolt')} Explosão em <b>${fmtSec(sel.drop)}</b></span>` : ''}</div>
+      <div class="pm-trim-ctl">
+        <button class="btn btn-sm" data-action="pmNudge" data-d="-1" aria-label="Voltar 1 segundo">${icon('left')} 1 s</button>
+        <button class="btn btn-sm" data-action="pmNudge" data-d="1" aria-label="Avançar 1 segundo">1 s ${icon('right')}</button>
+        <label class="pm-len">Duração <select class="input" data-change="pmLen">${PM_LENS.map(l => `<option value="${l}" ${sel.len === l ? 'selected' : ''}>${l ? l + ' s' : 'até o fim'}</option>`).join('')}</select></label>
+        <button class="btn btn-sm" data-action="pmAutoCut" data-p="${place}">${icon('sparkle')} Recorte automático</button>
+        <button class="btn btn-sm" data-action="pmPreview" data-p="${place}">${icon('play')} Ouvir recorte</button>
+        <button class="btn btn-sm btn-primary" data-action="pmTrimSave" data-p="${place}">${icon('check')} Salvar recorte</button>
+        <button class="btn btn-sm" data-action="pmTrim" data-p="${place}">Cancelar</button>
+      </div>
+      <p class="pm-trim-hint">Toque na onda para escolher onde a música começa. O <b>recorte automático</b> acha o momento em que a música mais cresce e começa ${nf1.format(pmLead(place))} s antes, para a explosão cair ${place === 'intro' ? 'no 2º clarão da abertura (EXPECTATIVAS)' : 'bem na hora da revelação'}.</p>
+    </div>`;
+  }
+  async function pmDraw() {
+    const cv = document.querySelector('.pm-wave'); if (!cv || !ui.pmTrim) return;
+    const place = pmKey(cv.dataset.p), m = pmAll()[place]; if (!m) return;
+    const buf = await Music.customBuf(place); if (!buf || !cv.isConnected) return;
+    const env = pmEnv(m.id, buf), c = cv.getContext('2d'), W = cv.width, H = cv.height, dur = buf.duration;
+    const sel = ui.pmSel || { start: m.start || 0, len: 0 }, x = t => (t / dur) * W;
+    const css = getComputedStyle(document.documentElement), acc = css.getPropertyValue('--accent').trim() || '#d6b46a';
+    c.clearRect(0, 0, W, H);
+    const s0 = x(sel.start), s1 = sel.len ? x(Math.min(dur, sel.start + sel.len)) : W;
+    c.fillStyle = 'rgba(255,255,255,0.06)'; c.fillRect(s0, 0, s1 - s0, H);
+    const bw = W / env.length;
+    env.forEach((v, i) => { const h = Math.max(2, v * (H - 10)), xi = i * bw; c.fillStyle = xi >= s0 && xi <= s1 ? acc : 'rgba(160,160,170,0.45)'; c.fillRect(xi, (H - h) / 2, Math.max(1, bw - 0.6), h); });
+    c.fillStyle = '#ffffff'; c.fillRect(s0 - 1, 0, 3, H);
+    if (sel.drop != null) { const xd = x(sel.drop); c.strokeStyle = '#ff8a3c'; c.setLineDash([5, 4]); c.lineWidth = 2; c.beginPath(); c.moveTo(xd, 0); c.lineTo(xd, H); c.stroke(); c.setLineDash([]); }
+  }
   const pmKey = v => v === 'intro' ? 'intro' : Number(v);
   const pmName = p => p === 'intro' ? 'da abertura' : `do ${p}º lugar`;
   const fmtSec = v => { v = Math.max(0, Math.round(Number(v) || 0)); return Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0'); };
@@ -4100,15 +4160,16 @@ Content-Type: application/json</pre>
       return `<div class="pm-row">
         <span class="pm-place p${place}">${place === 'intro' ? icon('play') : place + 'º'}</span>
         <div class="pm-info">${m && m.acct ? `<b>${esc(m.name)} <span class="chip chip-ok">${icon('cloud')} da sua conta</span></b><small>${m.dur ? `Duração ${fmtSec(m.dur)} · ` : ''}começa em ${fmtSec(m.start || 0)}</small>`
-          : m ? `<b>${esc(m.name)}</b><small>${m.dur ? `Duração ${fmtSec(m.dur)} · ` : ''}começa em <label class="pm-start"><input class="input num" type="number" min="0" step="1" value="${Math.round(m.start || 0)}" data-change="pmStart" data-p="${place}" aria-label="Segundo em que a música ${pmName(place)} começa"> s</label></small>`
+          : m ? `<b>${esc(m.name)}</b><small>${m.dur ? `Duração ${fmtSec(m.dur)} · ` : ''}${m.end ? `trecho de ${fmtSec(m.start || 0)} a ${fmtSec(m.end)} · ` : ''}começa em <label class="pm-start"><input class="input num" type="number" min="0" step="1" value="${Math.round(m.start || 0)}" data-change="pmStart" data-p="${place}" aria-label="Segundo em que a música ${pmName(place)} começa"> s</label></small>`
           : place === 'intro' ? `<b>Abertura sem música</b><small>Envie uma música para tocar assim que o fechamento começar</small>`
           : `<b>Trilha padrão do app</b><small>${place === 1 ? 'Hino com subida de tom e aplausos' : place === 2 ? 'Progressão com bateria e melodia' : 'Fanfarra curta'}</small>`}</div>
         <div class="pm-btns">
           <button class="btn btn-sm" data-action="pmTest" data-p="${place}">${icon('play')} Ouvir</button>
+          ${m && !m.acct ? `<button class="btn btn-sm ${ui.pmTrim === place ? 'btn-primary' : ''}" data-action="pmTrim" data-p="${place}">${icon('scissors')} Recortar</button>` : ''}
           <label class="btn btn-sm ${m ? '' : 'btn-primary'}" style="cursor:pointer">${icon('upload')} ${m && m.acct ? 'Trocar nesta demonstração' : m ? 'Trocar' : 'Enviar música'}<input type="file" accept="audio/*,video/mp4,video/*,.mp3,.mp4,.m4a,.aac,.wav,.ogg,.mov" hidden data-change="pmFile" data-p="${place}"></label>
           ${m && !m.acct ? `<button class="btn btn-sm" data-action="pmDel" data-p="${place}" aria-label="Remover a música ${pmName(place)}">${icon('trash')}</button>` : ''}
         </div>
-      </div>`;
+      </div>${ui.pmTrim === place && m && !m.acct ? pmTrimHtml(place, m) : ''}`;
     };
     return `<section class="section card pm-card">
       <h2 class="section-title">Músicas do fechamento</h2>
@@ -4190,8 +4251,8 @@ Content-Type: application/json</pre>
     },
     preload() { for (const p2 of ['intro', 1, 2, 3]) this.customBuf(p2); },
     // Toca a música da colocação a partir do segundo escolhido, com o volume subindo. Retorna false se não houver música pronta.
-    playCustom(place, rise = 3) {
-      const m = pmAll()[place], c = Sound.ctx;
+    playCustom(place, rise = 3, ov = null) {
+      const m0 = pmAll()[place], m = m0 && ov ? { ...m0, ...ov } : m0, c = Sound.ctx;
       const ready = m && m.id && this.bufs[m.id];
       if (!Sound.on || !ready || !c) return false;
       const go = buf => {
@@ -4200,7 +4261,11 @@ Content-Type: application/json</pre>
         const src = c.createBufferSource(), g = c.createGain(), t = c.currentTime + 0.02;
         src.buffer = buf; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35, t + 0.3); g.gain.linearRampToValueAtTime(1, t + rise);
         const an = c.createAnalyser(); an.fftSize = 256; an.smoothingTimeConstant = 0.6;
-        src.connect(g); g.connect(an); an.connect(c.destination); src.start(t, Math.min(Math.max(0, Number(m.start) || 0), Math.max(0, buf.duration - 1)));
+        const st = Math.min(Math.max(0, Number(m.start) || 0), Math.max(0, buf.duration - 1));
+        src.connect(g); g.connect(an); an.connect(c.destination); src.start(t, st);
+        // Fim do recorte: abaixa nos últimos 2 s e para.
+        const len = Number(m.end) > st ? Number(m.end) - st : 0;
+        if (len > rise + 2) { g.gain.setValueAtTime(1, t + len - 2); g.gain.linearRampToValueAtTime(0.0001, t + len); src.stop(t + len + 0.05); }
         this.cur = { src, g, an };
         return true;
       };
@@ -4571,6 +4636,7 @@ Content-Type: application/json</pre>
     maybeOvertakeToast();
     hydrateProofs();
     if (document.querySelector('img[data-card]')) hydrateCards();
+    if (document.querySelector('.pm-wave')) pmDraw();
     setTimeout(maybeAutoReveal, 700);
     setTimeout(() => maybeGoalCelebrate(user), 1200);
   }
@@ -4729,6 +4795,39 @@ Content-Type: application/json</pre>
       if (!done) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
       const log = cardDlLog(); log[k] = todayIso(); DB.pref.set('cardDl', JSON.stringify(log));
       toast('Card salvo.'); render();
+    },
+    pmTrim(el) {
+      const place = pmKey(el.dataset.p), m = pmAll()[place];
+      if (ui.pmTrim === place) { ui.pmTrim = null; ui.pmSel = null; Music.stop(); render(); return; }
+      ui.pmTrim = place; ui.pmSel = m ? { start: m.start || 0, len: m.end ? Math.round(m.end - (m.start || 0)) : 30 } : null; render();
+    },
+    pmWave(el, ev) {
+      const m = pmAll()[ui.pmTrim]; if (!m || !ui.pmSel || !ev) return;
+      const r = el.getBoundingClientRect(), f = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
+      ui.pmSel.start = Math.max(0, Math.min((m.dur || 0) - 2, Math.round(f * (m.dur || 0) * 10) / 10)); render();
+    },
+    pmNudge(el) { if (!ui.pmSel) return; const m = pmAll()[ui.pmTrim]; ui.pmSel.start = Math.max(0, Math.min((m && m.dur || 9999) - 2, Math.round((ui.pmSel.start + Number(el.dataset.d)) * 10) / 10)); render(); },
+    async pmAutoCut(el) {
+      const place = pmKey(el.dataset.p), m = pmAll()[place]; if (!m) return;
+      el.disabled = true; const buf = await Music.customBuf(place); el.disabled = false;
+      if (!buf) { toast('Não foi possível ler a música.'); return; }
+      const r = pmAuto(pmEnv(m.id, buf), pmLead(place));
+      ui.pmSel = { ...(ui.pmSel || {}), start: r.start, drop: r.drop, len: (ui.pmSel && ui.pmSel.len != null) ? ui.pmSel.len : 30 };
+      toast(`Explosão encontrada em ${fmtSec(r.drop)}. O recorte começa em ${fmtSec(r.start)}.`); render();
+    },
+    async pmPreview(el) {
+      const place = pmKey(el.dataset.p), sel = ui.pmSel; if (!sel) return;
+      Sound.on = true; Sound.ensure(); Music.stop();
+      const buf = await Music.customBuf(place); if (!buf) return;
+      Music.playCustom(place, 1.2, { start: sel.start, end: sel.len ? sel.start + sel.len : 0 });
+      clearTimeout(ui.pmTimer); ui.pmTimer = setTimeout(() => Music.fadeCustom(1.5), Math.min(20, sel.len || 20) * 1000);
+    },
+    pmTrimSave(el) {
+      const place = pmKey(el.dataset.p), pm = { ...(state.podiumMusic || {}) }, sel = ui.pmSel;
+      if (!pm[place] || !sel) return;
+      pm[place] = { ...pm[place], start: sel.start, end: sel.len ? Math.min(pm[place].dur || 9999, sel.start + sel.len) : null };
+      state.podiumMusic = pm; ui.pmTrim = null; ui.pmSel = null; Music.stop(); save();
+      toast(`Recorte salvo: ${fmtSec(pm[place].start)}${pm[place].end ? ' a ' + fmtSec(pm[place].end) : ' até o fim'}.`); render();
     },
     async pmTest(el) {
       const place = pmKey(el.dataset.p);
@@ -5294,6 +5393,7 @@ Content-Type: application/json</pre>
     perfBarber(el) { ui.perfBarber = el.value; location.hash = 'perfil-' + el.value; },
     teamMonth(el) { ui.teamMonth = el.value; ui.fcPeek = false; render(); },
     hgYm(el) { ui.hgYm = el.value; render(); },
+    pmLen(el) { if (ui.pmSel) { ui.pmSel.len = Number(el.value) || 0; render(); } },
     pmStart(el) {
       const place = pmKey(el.dataset.p), pm = { ...(state.podiumMusic || {}) };
       if (!pm[place]) return;
@@ -5374,7 +5474,7 @@ Content-Type: application/json</pre>
         else await FileStore.put('music|' + id, up);
         if (old) { if (old.path && Cloud.enabled) Cloud.removeFile(MUSIC_BUCKET, old.path); else FileStore.del('music|' + old.id); }
         Music.bufs[id] = buf;
-        pm[place] = entry; state.podiumMusic = pm; save();
+        pm[place] = entry; state.podiumMusic = pm; ui.pmTrim = null; ui.pmSel = null; save();
         toast(`Música ${pmName(place)} salva. Escolha o segundo em que ela começa.`); render();
       } catch (e) {
         toast(/bucket|not found|policy|mime|row-level/i.test(String(e && e.message)) ? 'O armazenamento de músicas ainda não foi ativado no servidor.' : (e && e.message) || 'Não foi possível enviar a música.');
