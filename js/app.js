@@ -127,7 +127,7 @@
     cli: ['Clientes atendidos', 'Quantidade de clientes atendidos pelo barbeiro no período.'],
     planos: ['Planos mensais', 'Quantidade de planos mensais (assinaturas) vendidos pelo barbeiro no período.'],
     fid: ['Taxa de fidelização', 'Clientes que voltaram ÷ clientes atendidos no período.'],
-    prod: ['Venda de produtos', 'Valor vendido em produtos (pomadas, shampoos, óleos…) pelo barbeiro no período.'],
+    prod: ['Venda de produtos', 'Quantidade de produtos (pomadas, shampoos, óleos…) vendidos pelo barbeiro no período.'],
     agend: ['Agendamentos', 'Quantidade de agendamentos do barbeiro no mês. Aparece nos totais da Performance; não entra na pontuação.'],
     aus: ['Dias de ausência', 'Dias em que o barbeiro não trabalhou por férias, atestado ou folga extra. Cada dia desconta um dia da capacidade da taxa de ocupação.'],
     score: ['Como a pontuação funciona', 'Em cada indicador, o 1º do período recebe nota 100, o último 0 e os outros ficam no meio, proporcional ao resultado. A pontuação geral é a média dessas notas, ponderada pelos pesos. Quem tem título (MVP ou Destaque) fica em 1º; os demais seguem pela pontuação.'],
@@ -1206,7 +1206,7 @@
   }
   // Histórico do mês: o que entrou à mão em cada dia.
   function lanHistory(b, ym) {
-    const L = { fat: v => money0(v), cli: v => nf0.format(v) + ' clientes', serv: v => nf0.format(v) + ' serviços', prod: v => 'produtos ' + money0(v), check: v => nf1.format(v) + ' pts checklist', planos: v => nf0.format(v) + ' planos' };
+    const L = { fat: v => money0(v), cli: v => nf0.format(v) + ' clientes', serv: v => nf0.format(v) + ' serviços', prod: v => nf0.format(v) + ' produtos', check: v => nf1.format(v) + ' pts checklist', planos: v => nf0.format(v) + ' planos' };
     const days = GB.manualEntries(state, b.id, ym).filter(e => GB.SUM_KEYS.some(k => isNum(e[k]) && Number(e[k]) !== 0)).sort((a, c) => c.date.localeCompare(a.date));
     if (!days.length) return '';
     return `<details class="lan-hist" ${ui.lanHistOpen ? 'open' : ''}><summary>Lançamentos por dia em ${esc(ymLabel(ym).replace(' de ', '/'))} (${days.length})</summary>
@@ -1349,7 +1349,7 @@
       ['Serviços', r => nf0.format(r.sums.serv), true],
       ['Ticket médio', r => r.sums.cli > 0 ? money0(r.sums.fat / r.sums.cli) : '—', vis('ticket')],
       ['Ocupação', r => r.values.ocup != null ? nf1.format(r.values.ocup) + '%' : '—', vis('ocup')],
-      ['Produtos', r => money0(r.sums.prod), vis('prod')],
+      ['Produtos', r => nf0.format(r.sums.prod || 0), vis('prod')],
       ['Planos', r => nf0.format(r.sums.planos), vis('planos')],
     ].filter(c => c[2]);
     const all = rows.length === R.rows.length;
@@ -1802,7 +1802,7 @@
         ${stat('Agendamentos', nf0.format(agend))}
         ${stat('Clientes atendidos', nf0.format(cli))}
         ${stat('Serviços realizados', nf0.format(sum('serv')))}
-        ${vis('prod') ? stat('Venda de produtos', money0(sum('prod'))) : ''}
+        ${vis('prod') ? stat('Produtos vendidos', nf0.format(sum('prod'))) : ''}
         ${vis('planos') ? stat('Planos mensais', nf0.format(sum('planos'))) : ''}
         ${stat('Ticket médio da casa', cli > 0 ? money0(fat / cli) : '—')}
         ${vis('ocup') ? stat('Ocupação média', ocups.length ? nf1.format(ocups.reduce((a, v) => a + v, 0) / ocups.length) + '%' : '—') : ''}
@@ -1963,7 +1963,7 @@ ${rows.length ? '' : emptyBarbers()}
         <div class="btn-row" style="justify-content:center"><a class="btn btn-primary" href="#assinatura">${icon('card')} Ver planos</a><a class="btn" href="#lancamentos">Lançar à mão</a></div></section>`;
     }
     const ex = JSON.stringify([
-      { data: iso(new Date()), barbeiro: state.barbers[0]?.name || 'Nome do barbeiro', faturamento: 420.5, servicos: 9, clientes: 8, checklist_pop: 1, horas_disponiveis: 8, horas_ocupadas: 6.5, planos_mensais: 1, clientes_retorno: 5, venda_produtos: 60 },
+      { data: iso(new Date()), barbeiro: state.barbers[0]?.name || 'Nome do barbeiro', faturamento: 420.5, servicos: 9, clientes: 8, checklist_pop: 1, horas_disponiveis: 8, horas_ocupadas: 6.5, planos_mensais: 1, clientes_retorno: 5, venda_produtos: 2 },
     ], null, 2);
     return `
       <section class="section card">
