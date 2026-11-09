@@ -374,10 +374,51 @@
       <span class="demo-acts">
         <span class="seg demo-seg" role="group" aria-label="Ver como"><button type="button" class="${asOwner ? 'on' : ''}" data-action="demoAs" data-r="dono">Ver como dono</button><button type="button" class="${asOwner ? '' : 'on'}" data-action="demoAs" data-r="pro">Ver como profissional</button></span>
         <button type="button" class="btn btn-sm btn-primary" data-action="pitchStart">${icon('play')} Apresentar o sistema</button>
+        <button type="button" class="btn btn-sm ${ui.kitOpen ? 'on' : ''}" data-action="kitToggle" aria-expanded="${!!ui.kitOpen}">${icon('palette')} Marca do cliente</button>
         <button type="button" class="btn btn-sm" data-action="startDemo" data-b="${other.key}">${esc('Trocar para ' + other.name)}</button>
         <button type="button" class="btn btn-sm" data-action="demoReset">Reiniciar</button>
         <button type="button" class="btn btn-sm btn-primary" data-action="demoExit">${icon('x')} Sair</button>
-      </span></div>`;
+      </span></div>${ui.kitOpen ? kitPanel() : ''}`;
+  }
+  // ---------- Modo apresentação: marca do cliente (logo e nome da empresa visitada) ----------
+  // O app troca o nome e o logo da empresa e se recolore com as cores do logo, para o dono já se ver no sistema.
+  const KIT_VARS = ['--accent', '--accent-strong', '--accent-ink', '--accent-glow', '--line-accent', '--bg-glow-1', '--bg-glow-2', '--drawer-1', '--drawer-2', '--drawer-3', '--blue', '--blue-light', '--gold'];
+  const demoKit = () => { try { return JSON.parse(DB.pref.get('demoKit', '') || 'null'); } catch (e) { return null; } };
+  const lumOf = h => { const [r, g, b] = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  async function applyKitColors() {
+    const st = document.documentElement.style, kit = DEMO_ON && demoKit();
+    if (!kit || !kit.logo) { KIT_VARS.forEach(v => st.removeProperty(v)); return; }
+    const p = await brandPalette(), A = p.a, Bc = p.b;
+    const set = (k, v) => st.setProperty(k, v);
+    set('--accent', A); set('--accent-strong', mixHex(A, '#000000', 0.25)); set('--accent-ink', lumOf(A) > 0.5 ? '#14100a' : '#ffffff');
+    set('--accent-glow', A + '59'); set('--line-accent', A + '55'); set('--bg-glow-1', Bc + '30'); set('--bg-glow-2', A + '1a');
+    set('--drawer-1', mixHex(Bc, '#000000', 0.45)); set('--drawer-2', mixHex(Bc, '#000000', 0.68)); set('--drawer-3', mixHex(Bc, '#000000', 0.88));
+    set('--blue', Bc); set('--blue-light', mixHex(Bc, '#ffffff', 0.4)); set('--gold', mixHex(A, '#ffffff', 0.2));
+  }
+  // Garante que o nome e o logo do cliente estejam na demonstração (também depois de Reiniciar ou da virada do mês).
+  function ensureKit() {
+    const kit = DEMO_ON && demoKit(); if (!kit) return;
+    let ch = false;
+    if (kit.name && state.company.name !== kit.name) { state.company.name = kit.name; ch = true; }
+    if (kit.logo && state.company.logo !== kit.logo) { state.company.logo = kit.logo; ch = true; }
+    if (ch) save();
+  }
+  function kitPanel() {
+    const kit = demoKit() || {};
+    return `<div class="demo-kit card"><form class="form" data-form="demoKit" novalidate>
+      <div class="demo-kit-row">
+        <span class="demo-kit-logo">${kit.logo ? `<img src="${esc(kit.logo)}" alt="Logo do cliente">` : icon('camera')}</span>
+        <div class="grid-2 grow">
+          <label class="field"><span>Nome da empresa do cliente</span><input class="input" name="name" maxlength="60" value="${esc(kit.name || '')}" placeholder="${MARCA === 'salao' ? 'Ex.: Studio Glamour' : 'Ex.: Barbearia do João'}"></label>
+          <label class="field"><span>Logo da empresa do cliente</span><input class="input" name="logo" type="file" accept="image/*"></label>
+        </div>
+      </div>
+      <p class="section-note">O sistema troca o nome e o logo em todas as telas e se adapta às cores do logo — o dono já se vê usando. Fica só neste aparelho, só no modo apresentação.</p>
+      <p class="form-msg" data-msg></p>
+      <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Aplicar a marca do cliente</button>
+        ${kit.logo || kit.name ? `<button class="btn" type="button" data-action="kitClear">${icon('undo')} Voltar ao padrão</button>` : ''}
+        <button class="btn" type="button" data-action="kitToggle">Fechar</button></div>
+    </form></div>`;
   }
   function demoLogin(role) {
     const u = role === 'pro' ? state.users.find(x => x.role !== 'gestor' && x.status === 'ativo') : state.users.find(x => x.role === 'gestor');
@@ -2305,6 +2346,7 @@ ${rows.length ? '' : emptyBarbers()}
         <div class="grow"><b>${esc(b.name)}</b>${status} ${b.active === false ? '<span class="chip chip-soft">inativo</span>' : ''}${u ? `<div class="muted" style="font-size:.88rem">${esc(u.email)}</div>` : ''}
           <div class="acc-edit">
             <label class="field"><span>Função</span><input class="input" name="role" list="role-list" value="${esc(b.role || '')}" placeholder="Ex.: Barbeiro" maxlength="60" data-change="barberRole" data-id="${esc(b.id)}"></label>
+            <label class="field"><span>Nascimento</span><input class="input" type="date" value="${esc((state.births || {})[b.id] || '')}" data-change="barberBirth" data-id="${esc(b.id)}" aria-label="Data de nascimento de ${esc(b.name)}"></label>
             <label class="field"><span>Nível de acesso</span><select class="input" data-change="barberAccess" data-id="${esc(b.id)}">${ACCESS.map(([k, l]) => `<option value="${k}" ${accessOf(b.id) === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
           </div>${accessOf(b.id) === 'lider' ? leaderExtrasBox(b) : ''}</div>
         <div class="btn-row">
@@ -2333,6 +2375,7 @@ ${rows.length ? '' : emptyBarbers()}
           <div class="grid-2"><label class="field"><span>Nome *</span><input class="input" id="nb-name" name="name" required></label>
           <label class="field"><span>Foto</span><input class="input" id="nb-photo" name="photo" type="file" accept="image/*"></label>
           <label class="field"><span>Função</span><input class="input" id="nb-role" name="role" list="role-list" placeholder="Ex.: Barbeiro, Barbeiro líder, Recepcionista" maxlength="60"></label>
+          <label class="field"><span>Data de nascimento</span><input class="input" id="nb-birth" name="birth" type="date"></label>
           <label class="field"><span>Nível de acesso</span><select class="input" id="nb-access" name="access">${ACCESS.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label></div>
           <ul class="acc-help">${ACCESS.map(([, l, d]) => `<li><b>${l}:</b> ${d}</li>`).join('')}</ul>
           ${roleList()}
@@ -2851,7 +2894,7 @@ Content-Type: application/json</pre>
         <p class="fx-kicker">E para você…</p>
         <h1 class="pt-ask">Quanto você estaria disposto a pagar por um sistema que faça ${w.sal ? 'seu salão' : 'sua barbearia'} <b>rodar no automático</b>, mesmo sem você estar presente?</h1>
         <div class="pt-ask-list"><span>${icon('rocket')} Colaboradores em alta performance</span><span>${icon('bolt')} Equipe proativa</span><span>${icon('checksq')} Tudo limpo e organizado</span></div>
-        <a class="btn btn-primary pt-cta" href="oferta/" target="_blank" rel="noopener">${icon('rocket')} Conhecer os planos</a>
+        <a class="btn btn-primary pt-cta" href="oferta/?tipo=${w.sal ? 'salao' : 'barbearia'}&utm_source=apresentacao&ir=planos" target="_blank" rel="noopener">${icon('rocket')} Conhecer os planos</a>
         <p class="pt-lead sm">${brand} · Cada atendimento conta.</p></div>`,
         note: `Leia a pergunta devagar e fique em silêncio até a pessoa responder um valor. Depois: "Faz sentido começarmos pela sua equipe ainda este mês?" e abra os planos ali mesmo — o investimento costuma ficar bem abaixo do valor que ela disse. Se houver dúvida, volte ao slide de dores e pergunte qual delas mais pesa.` },
     ];
@@ -3924,17 +3967,126 @@ Content-Type: application/json</pre>
     c.fillText(tt ? `PARABÉNS, ${first(r.barber.name).toUpperCase()}! · ${B().name.toUpperCase()}` : `${B().name.toUpperCase()} · CADA ATENDIMENTO CONTA`, W / 2, H - 54); sp('0px');
     return cv;
   }
+  // ---------- Cards de parabéns (sem números) e de aniversário, nas cores do logo da empresa ----------
+  // Cores da identidade visual tiradas do logo: a cor mais marcante (a) e uma segunda (b).
+  const paletteCache = {};
+  async function brandPalette() {
+    const src = state.company.logo || B().logo, key = String(src).length + '|' + String(src).slice(-60);
+    if (paletteCache[key]) return paletteCache[key];
+    const fb = MARCA === 'salao' ? { a: '#f0b8a8', b: '#b26e78' } : { a: '#e4c271', b: '#a8822f' };
+    let pal = fb;
+    try {
+      const im = await loadImg(src);
+      if (im) {
+        const cv = document.createElement('canvas'); cv.width = cv.height = 64; const c = cv.getContext('2d'); c.drawImage(im, 0, 0, 64, 64);
+        const d = c.getImageData(0, 0, 64, 64).data, bins = {};
+        for (let i = 0; i < d.length; i += 4) {
+          const r = d[i], g = d[i + 1], b = d[i + 2]; if (d[i + 3] < 200) continue;
+          const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, sat = mx === mn ? 0 : (mx - mn) / (255 - Math.abs(mx + mn - 255));
+          if (sat < 0.3 || l < 40 || l > 235) continue;
+          let h = mx === r ? ((g - b) / (mx - mn)) % 6 : mx === g ? (b - r) / (mx - mn) + 2 : (r - g) / (mx - mn) + 4; h = (h * 60 + 360) % 360;
+          const k = Math.round(h / 24) % 15, x = bins[k] || (bins[k] = { w: 0, n: 0, r: 0, g: 0, b: 0, h: k });
+          x.w += sat; x.n++; x.r += r; x.g += g; x.b += b;
+        }
+        const top = Object.values(bins).filter(x => x.n > 12).sort((x, y) => y.w - x.w);
+        const hex = x => '#' + [x.r, x.g, x.b].map(v => Math.round(v / x.n).toString(16).padStart(2, '0')).join('');
+        if (top.length) {
+          const a = hex(top[0]), far = top.find(x => Math.min(Math.abs(x.h - top[0].h), 15 - Math.abs(x.h - top[0].h)) >= 3);
+          pal = { a: mixHex(a, '#ffffff', 0.15), b: far ? hex(far) : mixHex(a, '#000000', 0.45) };
+        }
+      }
+    } catch (e) { pal = fb; }
+    return (paletteCache[key] = pal);
+  }
+  const MONTH_NAMES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  // Base comum: fundo nas cores da marca, confete, logo e nome da empresa no topo, foto grande com aro.
+  async function drawCelebration(bid, opt) {
+    const b = barberById(bid); if (!b) return null;
+    const pal = await brandPalette(), A = pal.a, Bc = pal.b;
+    const D = "'Archivo', 'Arial Black', sans-serif", S = "'Cormorant Garamond', Georgia, serif", T = "'Hind', 'Helvetica Neue', Arial, sans-serif";
+    try { await Promise.all([document.fonts.load('800 80px Archivo'), document.fonts.load('700 80px "Cormorant Garamond"'), document.fonts.load('italic 600 40px "Cormorant Garamond"'), document.fonts.load('500 40px Hind')]); } catch (e) { /* fonte do sistema */ }
+    const W = 1080, H = 1920, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d'), sp = v => { try { c.letterSpacing = v; } catch (e) { /* opcional */ } };
+    let g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, mixHex(Bc, '#000000', 0.72)); g.addColorStop(0.55, mixHex(A, '#000000', 0.88)); g.addColorStop(1, '#050507'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+    g = c.createRadialGradient(W / 2, 860, 60, W / 2, 860, 900); g.addColorStop(0, A + '55'); g.addColorStop(1, 'transparent'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+    // raios de luz atrás da foto
+    c.save(); c.translate(W / 2, 860); for (let i = 0; i < 24; i++) { c.rotate(Math.PI / 12); c.fillStyle = `rgba(255,255,255,${i % 2 ? 0.035 : 0.06})`; c.beginPath(); c.moveTo(0, 0); c.lineTo(-60, -1100); c.lineTo(60, -1100); c.closePath(); c.fill(); } c.restore();
+    const conf = [A, Bc, '#ffffff', mixHex(A, '#ffffff', 0.5)];
+    for (let i = 0; i < 90; i++) { const x = (i * 197) % W, y = (i * 331) % H; if ((y > 520 && y < 1320 && x > 220 && x < 860) || (y > 90 && y < 450 && x > 100 && x < 980) || (y > 1150 && y < 1780 && x > 40 && x < 1040)) continue; c.save(); c.translate(x, y); c.rotate(i * 0.7); c.globalAlpha = 0.75; c.fillStyle = conf[i % 4]; if (i % 3) c.fillRect(-6, -11, 12, 22); else { c.beginPath(); c.arc(0, 0, 7, 0, 7); c.fill(); } c.restore(); }
+    // logo e empresa
+    const logoIm = await loadImg(state.company.logo || B().logo);
+    if (logoIm) { c.save(); c.beginPath(); c.arc(W / 2, 150, 78, 0, 7); c.fillStyle = '#0b0b0f'; c.fill(); c.clip(); const k = Math.max(156 / logoIm.width, 156 / logoIm.height); c.drawImage(logoIm, W / 2 - logoIm.width * k / 2, 150 - logoIm.height * k / 2, logoIm.width * k, logoIm.height * k); c.restore(); c.lineWidth = 4; c.strokeStyle = A; c.beginPath(); c.arc(W / 2, 150, 80, 0, 7); c.stroke(); }
+    c.textAlign = 'center'; c.fillStyle = '#ffffff'; sp('5px'); fitFont(c, (state.company.name || '').toUpperCase(), 700, 32, T, 900); c.fillText((state.company.name || '').toUpperCase(), W / 2, 276); sp('0px');
+    // título
+    c.save(); c.shadowColor = A; c.shadowBlur = 40; g = c.createLinearGradient(0, 300, 0, 420); g.addColorStop(0, '#ffffff'); g.addColorStop(1, mixHex(A, '#ffffff', 0.25)); c.fillStyle = g;
+    sp('4px'); fitFont(c, opt.title, 700, 120, S, 980); c.fillText(opt.title, W / 2, 410); sp('0px'); c.restore();
+    // foto
+    const PX = W / 2, PY = 860, PR = 290;
+    c.save(); c.shadowColor = A; c.shadowBlur = 70; c.beginPath(); c.arc(PX, PY, PR + 18, 0, 7); g = c.createLinearGradient(PX - PR, PY - PR, PX + PR, PY + PR); g.addColorStop(0, mixHex(A, '#ffffff', 0.4)); g.addColorStop(0.5, A); g.addColorStop(1, Bc); c.fillStyle = g; c.fill(); c.restore();
+    c.save(); c.beginPath(); c.arc(PX, PY, PR, 0, 7); c.clip(); c.fillStyle = '#15161f'; c.fillRect(PX - PR, PY - PR, PR * 2, PR * 2);
+    const im = opt.photo !== false ? await loadImg(b.photo) : null;
+    if (im) { const k = Math.max((PR * 2) / im.width, (PR * 2) / im.height); c.drawImage(im, PX - im.width * k / 2, PY - im.height * k * 0.42, im.width * k, im.height * k); }
+    else { c.fillStyle = A; c.font = `800 200px ${D}`; c.textBaseline = 'middle'; c.fillText(b.name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase(), PX, PY + 10); c.textBaseline = 'alphabetic'; }
+    c.restore();
+    opt.decor && opt.decor(c, { PX, PY, PR, A, Bc });
+    // nome e textos
+    let y = PY + PR + 130;
+    c.save(); c.shadowColor = 'rgba(0,0,0,0.6)'; c.shadowBlur = 20; c.fillStyle = '#ffffff'; fitFont(c, b.name, 800, 96, D, 960); c.fillText(b.name, W / 2, y); c.restore();
+    y += 78; sp('8px'); c.font = `700 40px ${T}`; c.fillStyle = A; fitFont(c, opt.sub, 700, 40, T, 960); c.fillText(opt.sub, W / 2, y); sp('0px');
+    y += 90; c.font = `italic 600 46px ${S}`; c.fillStyle = 'rgba(255,255,255,0.92)';
+    const words = opt.msg.split(' '); let line = '', lines = [];
+    for (const w of words) { const t = line ? line + ' ' + w : w; if (c.measureText(t).width > 880) { lines.push(line); line = w; } else line = t; } if (line) lines.push(line);
+    lines.slice(0, 4).forEach((l, i) => c.fillText(l, W / 2, y + i * 60));
+    sp('4px'); c.font = `600 30px ${T}`; c.fillStyle = 'rgba(255,255,255,0.7)'; c.fillText(opt.foot, W / 2, H - 70); sp('0px');
+    return cv;
+  }
+  // Coroa (cores da marca) apoiada no topo da foto.
+  function drawCrown(c, { PX, PY, PR, A, Bc }) {
+    const w = 300, h = 170, x = PX - w / 2, y = PY - PR - h + 40;
+    c.save(); c.shadowColor = A; c.shadowBlur = 40;
+    const g = c.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, '#ffffff'); g.addColorStop(0.35, mixHex(A, '#ffffff', 0.3)); g.addColorStop(1, mixHex(A, Bc, 0.5));
+    c.fillStyle = g; c.strokeStyle = '#ffffff'; c.lineWidth = 4;
+    c.beginPath(); c.moveTo(x + 18, y + h - 34); c.lineTo(x, y + 40); c.lineTo(x + 78, y + 92); c.lineTo(PX, y); c.lineTo(x + w - 78, y + 92); c.lineTo(x + w, y + 40); c.lineTo(x + w - 18, y + h - 34); c.closePath(); c.fill(); c.stroke();
+    c.beginPath(); c.roundRect ? c.roundRect(x + 14, y + h - 40, w - 28, 40, 10) : c.rect(x + 14, y + h - 40, w - 28, 40); c.fill(); c.stroke();
+    c.shadowBlur = 0; c.fillStyle = '#ffffff';
+    for (const [cx, cy, r] of [[x, y + 40, 13], [PX, y, 15], [x + w, y + 40, 13]]) { c.beginPath(); c.arc(cx, cy, r, 0, 7); c.fill(); }
+    c.fillStyle = Bc; for (const cx of [PX - 80, PX, PX + 80]) { c.beginPath(); c.arc(cx, y + h - 20, cx === PX ? 11 : 8, 0, 7); c.fill(); }
+    c.restore();
+  }
+  // Balões nas cores da marca, ao lado da foto.
+  function drawBalloons(c, { PX, PY, PR, A, Bc }) {
+    const cols = [A, Bc, mixHex(A, '#ffffff', 0.45), mixHex(Bc, '#ffffff', 0.3)];
+    [[PX - PR - 120, PY - 260, 0], [PX - PR - 30, PY - 380, 1], [PX + PR + 40, PY - 360, 2], [PX + PR + 130, PY - 220, 3]].forEach(([bx, by, i]) => {
+      c.strokeStyle = 'rgba(255,255,255,0.6)'; c.lineWidth = 2; c.beginPath(); c.moveTo(bx, by + 90); c.quadraticCurveTo(bx + (i % 2 ? 30 : -30), by + 220, bx + (PX - bx) * 0.25, by + 360); c.stroke();
+      c.save(); c.shadowColor = cols[i]; c.shadowBlur = 30; c.fillStyle = cols[i]; c.beginPath(); c.ellipse(bx, by, 66, 84, 0, 0, 7); c.fill(); c.restore();
+      c.fillStyle = 'rgba(255,255,255,0.35)'; c.beginPath(); c.ellipse(bx - 22, by - 30, 14, 24, -0.4, 0, 7); c.fill();
+      c.fillStyle = cols[i]; c.beginPath(); c.moveTo(bx - 10, by + 86); c.lineTo(bx + 10, by + 86); c.lineTo(bx, by + 100); c.closePath(); c.fill();
+    });
+  }
+  async function drawCongrats(ym, bid, withPhoto) {
+    const R = monthR(ym), tt = R.title.barberId === bid ? R.title.type : null;
+    const mon = cap(MONTH_NAMES[Number(ym.slice(5, 7)) - 1]) + ' ' + ym.slice(0, 4);
+    return drawCelebration(bid, { photo: withPhoto, title: 'Parabéns!', sub: (tt === 'mvp' ? 'MVP DO MÊS' : 'DESTAQUE DO MÊS') + ' · ' + mon.toUpperCase(), decor: drawCrown,
+      msg: 'Obrigado pela dedicação e pela entrega em cada atendimento. Você é inspiração para toda a equipe!', foot: 'ORGULHO DA EQUIPE ' + (state.company.name || '').toUpperCase() });
+  }
+  async function drawBirthday(bid, withPhoto) {
+    const bd = (state.births || {})[bid]; if (!bd) return null;
+    const [, m, d] = bd.split('-').map(Number), b = barberById(bid);
+    return drawCelebration(bid, { photo: withPhoto, title: 'Feliz aniversário!', sub: `${d} DE ${MONTH_NAMES[m - 1].toUpperCase()}`, decor: drawBalloons,
+      msg: `Hoje o dia é todo seu, ${b.name.trim().split(/\s+/)[0]}! Que o seu novo ciclo seja cheio de saúde, alegria e conquistas.`, foot: 'COM CARINHO, EQUIPE ' + (state.company.name || '').toUpperCase() });
+  }
   async function cardBlob(ym, bid, v = '') {
     const key = ym + '|' + bid + '|' + v;
     if (cardCache[key]) return cardCache[key];
-    let cv = await drawCard(ym, bid, true, v);
+    const draw = ph => v === 'parabens' ? drawCongrats(ym, bid, ph) : v === 'aniver' ? drawBirthday(bid, ph) : drawCard(ym, bid, ph, v);
+    let cv = await draw(true);
     if (!cv) return null;
     let blob = await new Promise(res => { try { cv.toBlob(res, 'image/png'); } catch (e) { res(null); } });
-    if (!blob) { cv = await drawCard(ym, bid, false, v); blob = await new Promise(res => cv.toBlob(res, 'image/png')); } // foto sem permissão: card com as iniciais
+    if (!blob) { cv = await draw(false); blob = await new Promise(res => cv.toBlob(res, 'image/png')); } // foto sem permissão: card com as iniciais
     cardCache[key] = blob;
     return blob;
   }
-  const cardName = (ym, bid, v) => `${v === 'title' ? (monthR(ym).title.type === 'mvp' ? 'mvp-do-mes' : 'destaque-do-mes') : 'card'}-${(barberById(bid)?.name || 'profissional').toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${ym}.png`;
+  const cardName = (ym, bid, v) => `${v === 'aniver' ? 'aniversario' : v === 'parabens' ? 'parabens-' + (monthR(ym).title.type === 'mvp' ? 'mvp' : 'destaque') : v === 'title' ? (monthR(ym).title.type === 'mvp' ? 'mvp-do-mes' : 'destaque-do-mes') : 'card'}-${(barberById(bid)?.name || 'profissional').toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${ym}.png`;
   async function hydrateCards() {
     for (const img of document.querySelectorAll('img[data-card]')) {
       if (img.dataset.done) continue;
@@ -3990,7 +4142,21 @@ Content-Type: application/json</pre>
                 <span class="num">Liderou ${w.leads.length} de ${R.N} indicadores · ${score(w.overall)} pts</span>
                 <button class="btn btn-primary" data-action="cardDl" data-k="${ym}|${w.barber.id}|title">${icon('download')} Baixar card do ${t.type === 'mvp' ? 'MVP' : 'Destaque'}</button>
                 <small class="muted">Imagem no tamanho dos stories, para postar e parabenizar.</small></div></div>
+            <div class="cd-item"><img class="cd-thumb" data-card="${ym}|${w.barber.id}|parabens" alt="Card de parabéns" width="270" height="480">
+              <div class="cd-info"><span class="cd-kicker">${icon('crown')} Card de parabéns</span><b>Sem números, só a homenagem</b>
+                <span class="num">Foto com coroa, nas cores do seu logo</span>
+                <button class="btn btn-primary" data-action="cardDl" data-k="${ym}|${w.barber.id}|parabens">${icon('download')} Baixar card de parabéns</button>
+                <small class="muted">Para postar nos stories do Instagram, do WhatsApp e nas redes sociais.</small></div></div>
           </section>` : `<section class="section card cd-title none"><p class="cd-none">${icon('trophy')}<span><b>Não houve MVP nem Destaque em ${esc(monthRange(ym).label)}.</b> Ninguém liderou ${R.half} ou mais dos ${R.Nrule} indicadores. Os cards individuais estão logo abaixo do painel.</span></p></section>`; })()}
+        ${(() => { const mm = ym.slice(5, 7), bs = state.births || {};
+          const list = state.barbers.filter(b => b.active !== false && bs[b.id] && bs[b.id].slice(5, 7) === mm).sort((a, b) => bs[a.id].slice(8) - bs[b.id].slice(8));
+          return `<section class="section card cd-bday">
+            <h2 class="section-title">${icon('gift')} Aniversariantes de ${esc(MONTH_NAMES[Number(mm) - 1])}</h2>
+            ${list.length ? `<div class="cd-list">${list.map(b => `<div class="cd-item"><img class="cd-thumb" data-card="${ym}|${b.id}|aniver" alt="Card de aniversário de ${esc(b.name)}" width="270" height="480">
+              <div class="cd-info"><b>${esc(b.name)}</b><span class="num">${Number(bs[b.id].slice(8))} de ${esc(MONTH_NAMES[Number(mm) - 1])}</span>
+              <button class="btn btn-sm btn-primary" data-action="cardDl" data-k="${ym}|${b.id}|aniver">${icon('download')} Baixar card de aniversário</button></div></div>`).join('')}</div>`
+              : `<p class="section-note">Nenhum aniversariante neste mês${Object.keys(bs).length ? '' : '. Cadastre a data de nascimento de cada profissional em <a href="#barbeiros">Adicionar profissional</a>'}.</p>`}
+          </section>`; })()}
         ${repBoard(ym)}
         ${(() => { const rows = monthR(ym).rows.filter(r => Object.keys(r.sums.n).length); return rows.length ? `<section class="section card">
           <h2 class="section-title">Cards individuais</h2>
@@ -4638,7 +4804,7 @@ Content-Type: application/json</pre>
       <div class="tv-progress" aria-hidden="true"><i style="animation-duration:${TV_SECONDS}s${reduce ? ';animation:none;width:100%' : ''}"></i></div>
       <div class="tv-fit">
       <header class="tv-head">
-        ${logo('tv-logo')}
+        ${state.company.logo ? `<img class="brand-mark tv-logo" src="${esc(state.company.logo)}" alt="${esc(state.company.name || 'Logo')}">` : logo('tv-logo')}
         <div class="tv-title"><b>${esc(state.company.name)}</b><span>Tela da loja · ${esc(tr.type === 'mes' ? 'Mês' : PERIOD_NAMES[ui.period])}: ${esc(tr.label)}</span></div>
         <div class="tv-controls">
           <button class="btn btn-sm" data-action="tvSound" aria-pressed="${Sound.on}">${icon('sound')} ${Sound.on ? 'Sons ativos' : 'Sons desligados'}</button>
@@ -5180,7 +5346,13 @@ Content-Type: application/json</pre>
       location.href = location.origin + location.pathname;
     },
     demoAs(el) { demoLogin(el.dataset.r); location.hash = 'inicio'; render(); window.scrollTo(0, 0); },
-    demoReset() { state = DB.reset(); rkCache = {}; demoLogin('dono'); toast('Demonstração reiniciada.'); location.hash = 'inicio'; render(); },
+    kitToggle() { ui.kitOpen = !ui.kitOpen; render(); },
+    kitClear() {
+      const kit = demoKit(); DB.pref.set('demoKit', '');
+      if (kit && kit.orig) { state.company.name = kit.orig.name; state.company.logo = kit.orig.logo; save(); }
+      applyKitColors(); ui.kitOpen = false; toast('Voltou ao padrão da demonstração.'); render();
+    },
+    demoReset() { state = DB.reset(); ensureKit(); rkCache = {}; demoLogin('dono'); toast('Demonstração reiniciada.'); location.hash = 'inicio'; render(); },
     demoExit() { try { sessionStorage.removeItem('gbia.demo'); } catch (e) { /* opcional */ } location.href = location.origin + location.pathname; },
     pickBrand(el) { const b = el.dataset.b; if (!BRANDS[b]) return; DB.pref.set('brand', b); applyBrand(b); renderAuth(ui.authMode || 'entrar'); },
     goFechamento(el) { ui.teamMonth = el.dataset.ym; location.hash = 'fechamento'; },
@@ -5383,6 +5555,7 @@ Content-Type: application/json</pre>
       if (file) { try { photo = await readImage(file); } catch (e) { return setMsg(f, e.message); } }
       const id = uid('b_'), access = val(f, 'access');
       state.barbers.push({ id, name, photo, active: true, role: val(f, 'role') || B().role, instagram: '' });
+      const birth = val(f, 'birth'); if (/^\d{4}-\d{2}-\d{2}$/.test(birth)) state.births = { ...(state.births || {}), [id]: birth };
       if (access === 'lider' || access === 'gestor') { const o = org(); o.access[id] = access; }
       save();
       toast(`${U(name)} adicionado. Agora envie o convite.`); render();
@@ -5453,6 +5626,17 @@ Content-Type: application/json</pre>
       state.houseGoalsM = M;
       ui.hgEdit = false; ui.hgYm = null; save(); render();
       toast(Object.keys(g).length ? `Metas de ${monthRange(tgt).label.split(' de ')[0]} salvas${dflt ? ' (valem também para os meses seguintes)' : ''}.` : 'Metas removidas.');
+    },
+    async demoKit(f) {
+      const old = demoKit() || {}, name = val(f, 'name').slice(0, 60), file = f.elements.logo.files[0];
+      let logo = old.logo || null;
+      if (file) { try { logo = await readImage(file, 512, 0.9); } catch (e) { return setMsg(f, e.message); } }
+      if (!name && !logo) return setMsg(f, 'Digite o nome ou envie o logo da empresa do cliente.');
+      const orig = old.orig || { name: state.company.name, logo: state.company.logo || null };
+      try { DB.pref.set('demoKit', JSON.stringify({ name, logo, orig })); } catch (e) { return setMsg(f, 'Imagem grande demais para guardar. Tente outro arquivo.'); }
+      state.company.name = name || orig.name; state.company.logo = logo; save();
+      await applyKitColors(); ui.kitOpen = false;
+      toast(`Pronto! A demonstração agora é da ${name || 'empresa do cliente'}.`); render();
     },
     pdBday(f) {
       const v = val(f, 'bday');
@@ -5536,6 +5720,12 @@ Content-Type: application/json</pre>
       try { await Cloud.admin.leadUpdate(l.id, { status: el.value }); toast('Situação atualizada.'); render(); } catch (e) { l.status = prev; toast(Cloud.message(e)); render(); }
     },
     popsCap(el) { if (!isGestor(currentUser())) return; const p = popsById(el.dataset.id); if (!p || !p.steps[Number(el.dataset.i)]) return; p.steps[Number(el.dataset.i)].cap = el.value.trim().slice(0, 140); p.at = Date.now(); save(); toast('Legenda salva.'); },
+    barberBirth(el) {
+      const b = barberById(el.dataset.id); if (!b) return;
+      const v = el.value, bs = { ...(state.births || {}) };
+      if (/^\d{4}-\d{2}-\d{2}$/.test(v)) bs[b.id] = v; else delete bs[b.id];
+      state.births = bs; save(); toast(v ? 'Data de nascimento salva.' : 'Data de nascimento removida.');
+    },
     barberRole(el) { const b = barberById(el.dataset.id); if (!b) return; b.role = el.value.trim().slice(0, 60) || B().role; save(); toast('Função salva.'); },
     leaderExtra(el) {
       if (!isGestor(currentUser())) return;
@@ -5762,6 +5952,7 @@ Content-Type: application/json</pre>
     if (BRANDS[pm]) DB.pref.set('brand', pm);
     applyBrand(DB.demo || DB.pref.get('brand', '') || 'barber');
   }
+  if (DEMO_ON) { try { ensureKit(); applyKitColors(); } catch (e) { /* opcional */ } }
   if (DEMO_ON) { let pf = null; try { pf = sessionStorage.getItem('gbia.pitch'); sessionStorage.removeItem('gbia.pitch'); } catch (e) { /* opcional */ } if (pf) setTimeout(() => { if (currentUser()) pitchOpen(); }, 2400); }
   if (DEMO_ON && Cloud.demoMusic) {
     Cloud.demoMusic.load().then(m => { if (m && Object.keys(m).length) { ui.acctMusic = m; if (location.hash === '#fechamento') render(); } }).catch(() => { /* sem conta: só as músicas deste aparelho */ });

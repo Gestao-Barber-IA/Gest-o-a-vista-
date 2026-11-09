@@ -639,7 +639,7 @@
     return {
       version: 2,
       demo: true,
-      demoV: 7,
+      demoV: 8,
       demoYm: curYm,
       presentation: !!DEMO,
       brand,
@@ -652,6 +652,8 @@
       hidden: ['fid'],
       goals: { team: { ...DEFAULT_GOALS, fat: 16000, ticket: 105, serv: 175, cli: 145, ocup: 65, planos: 7, prod: 28 }, byBarber: {} },
       // Metas fictícias da empresa: umas batidas e outras quase, para mostrar barras, "faltam" e a conquista.
+      // Datas de nascimento fictícias: dois aniversariantes no mês atual.
+      births: Object.fromEntries(barbers.map((b, i) => { const m = i === 2 || i === 5 ? Number(curYm.slice(5, 7)) : ((Number(curYm.slice(5, 7)) + i * 3) % 12) + 1; return [b.id, `${1990 + i * 2}-${String(m).padStart(2, '0')}-${String(i === 2 ? 12 : i === 5 ? 24 : 5 + i * 3).padStart(2, '0')}`]; })),
       houseGoals: { fat: 115000, agend: 1150, cli: 1050, serv: 1450, prod: 150, planos: 40, ticket: 100, ocup: 65 },
       // O mês seguinte já com a régua mais alta (metas por mês).
       houseGoalsM: { [addMonths(curYm, 1)]: { fat: 125000, agend: 1250, cli: 1120, serv: 1520, prod: 175, planos: 42, ticket: 105, ocup: 66 } },
@@ -693,7 +695,7 @@
           }
           if (!Array.isArray(st.hidden)) { st.hidden = ['fid']; DB.save(st); } // fidelização começa oculta
           // Demonstração antiga (sem fotos dos profissionais): recria com a versão nova.
-          if (st.demo && (st.demoV !== 7 || st.demoYm !== iso(new Date()).slice(0, 7))) { const d = demoState(DEMO || 'barber'); DB.save(d); return d; }
+          if (st.demo && (st.demoV !== 8 || st.demoYm !== iso(new Date()).slice(0, 7))) { const d = demoState(DEMO || 'barber'); DB.save(d); return d; }
           // Na apresentação, a marca é sempre a escolhida (Barber ou Salão).
           if (DEMO && st.brand !== DEMO) { st.brand = DEMO; DB.save(st); }
           return st;
