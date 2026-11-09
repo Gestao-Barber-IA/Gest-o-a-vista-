@@ -1953,3 +1953,19 @@ html[data-brand="salao"] .rp-board { --rpg: #f0b8a8; --rpg2: #b26e78; --rpl: rgb
 .fx-lsum { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; margin: 6px 0 0; font-size: 0.9rem; color: rgba(255, 255, 255, 0.78); }
 .fx-lsum b { color: #fff; }
 @media (max-width: 560px) { .fx-lgrid { gap: 8px; } .fx-lgrid .fx-lcard { width: calc(50% - 4px); } .fx-lppl .fx-photo { width: 52px; } .fx-lcard { padding: 10px 8px; } }
+/* Músicas do pódio */
+.pm-list { display: grid; gap: 10px; }
+.pm-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px; border-radius: 16px; background: var(--surface-2); border: 1px solid var(--line); }
+.pm-place { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; font-family: var(--font-display); font-weight: 800; font-size: 1.1rem; color: #1a1408; }
+.pm-place.p1 { background: linear-gradient(135deg, #fff3c4, #e2b23c); }
+.pm-place.p2 { background: linear-gradient(135deg, #ffffff, #aab3c4); }
+.pm-place.p3 { background: linear-gradient(135deg, #ffd9b0, #c9782f); }
+.pm-info { display: grid; gap: 2px; min-width: 0; }
+.pm-info b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-info small { color: var(--fg-soft); display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.pm-start { display: inline-flex; align-items: center; gap: 4px; }
+.pm-start .input { width: 72px; min-height: 0; padding: 4px 8px; }
+.pm-btns { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.pm-note { display: flex; gap: 8px; align-items: flex-start; margin: 12px 0 0; font-size: 0.85rem; color: var(--fg-soft); }
+.pm-note .ico { flex: none; width: 18px; height: 18px; color: var(--accent); }
+@media (max-width: 560px) { .pm-row { grid-template-columns: auto minmax(0, 1fr); } .pm-btns { grid-column: 1 / -1; justify-content: flex-start; } }

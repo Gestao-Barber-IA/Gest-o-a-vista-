@@ -310,6 +310,19 @@ do $$ begin
       with check (bucket_id = 'pops' and (storage.foldername(name))[1] = my_company()::text and is_gestor());
     create policy pops_delete on storage.objects for delete to authenticated
       using (bucket_id = 'pops' and (storage.foldername(name))[1] = my_company()::text and is_gestor());
+    -- Músicas do pódio (Fechamento): uma por colocação (pasta: barbearia/podio-N-id.mp3). Equipe ouve; só o dono envia e apaga. Até 12 MB.
+    insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+    values ('musicas', 'musicas', false, 12582912, array['audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/x-m4a', 'audio/aac', 'audio/wav', 'audio/x-wav', 'audio/wave', 'audio/ogg', 'audio/webm'])
+    on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+    drop policy if exists musicas_read on storage.objects;
+    drop policy if exists musicas_insert on storage.objects;
+    drop policy if exists musicas_delete on storage.objects;
+    create policy musicas_read on storage.objects for select to authenticated
+      using (bucket_id = 'musicas' and (storage.foldername(name))[1] = my_company()::text);
+    create policy musicas_insert on storage.objects for insert to authenticated
+      with check (bucket_id = 'musicas' and (storage.foldername(name))[1] = my_company()::text and is_gestor());
+    create policy musicas_delete on storage.objects for delete to authenticated
+      using (bucket_id = 'musicas' and (storage.foldername(name))[1] = my_company()::text and is_gestor());
   end if;
 end $$;
 
