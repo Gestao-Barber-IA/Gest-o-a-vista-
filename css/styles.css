@@ -1084,9 +1084,17 @@ textarea.input.pop-ta { min-height: 72px; font-family: var(--font-body); font-si
 .rd-label { fill: #cfcac0; font-size: 11px; font-family: var(--font-body); }
 
 /* ---------- Tela da loja (modo apresentação) ---------- */
-.tv { position: fixed; inset: 0; z-index: 70; overflow-y: auto; display: grid; align-content: start; gap: 22px;
+.tv { position: fixed; inset: 0; z-index: 70; overflow-y: auto; display: grid; align-content: start;
   padding: calc(22px + env(safe-area-inset-top, 0px)) var(--gutter-r) calc(28px + env(safe-area-inset-bottom, 0px)) var(--gutter-l);
   background: radial-gradient(70% 45% at 15% 0%, rgba(58, 98, 207, 0.18), transparent 70%), radial-gradient(60% 40% at 90% 10%, rgba(214, 180, 106, 0.1), transparent 70%), var(--bg); }
+.tv-fit { display: grid; align-content: start; gap: 22px; min-width: 0; }
+/* Tela deitada (computador/TV): cabe inteira na tela, sem rolagem; o app ajusta o tamanho (zoom). */
+.tv.tv-fitted { overflow: hidden; align-content: center; }
+.tv-fitted :is(.tv-head, .tv-body) { max-width: 1680px; }
+.tv-fitted .tv-split { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: start; }
+.tv-fitted .gd-grid { grid-template-columns: repeat(var(--gd-cols, 4), minmax(0, 1fr)); }
+.tv-fitted .al-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.tv-fitted .gd-photo { width: min(150px, 78%); }
 .tv-progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; right: 0; z-index: 2; height: 4px; background: var(--surface-3); }
 .tv-progress i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent-strong), var(--accent)); animation: tv-progress linear forwards; }
 @keyframes tv-progress { to { width: 100%; } }

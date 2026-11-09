@@ -63,7 +63,7 @@
       calc: s => s.n.planos ? s.planos : null },
     { key: 'fid', label: 'Taxa de fidelização', weight: 10, fmt: 'pct',
       calc: s => s.n.ret && s.cli > 0 ? (s.ret / s.cli) * 100 : null },
-    { key: 'prod', label: 'Venda de produtos', weight: 8, fmt: 'money',
+    { key: 'prod', label: 'Venda de produtos', weight: 8, fmt: 'int',
       calc: s => s.n.prod ? s.prod : null },
   ];
 
@@ -78,7 +78,7 @@
     { key: 'hOcup', label: 'Horas em comandas finalizadas', api: 'horas_ocupadas', step: '0.5' },
     { key: 'planos', label: 'Planos mensais vendidos', api: 'planos_mensais', step: '1' },
     { key: 'ret', label: 'Clientes que voltaram', api: 'clientes_retorno', step: '1' },
-    { key: 'prod', label: 'Venda de produtos (R$)', api: 'venda_produtos', step: '0.01' },
+    { key: 'prod', label: 'Produtos vendidos (quantidade)', api: 'venda_produtos', step: '1' },
   ];
 
   // ---------- períodos ----------
@@ -117,7 +117,7 @@
     { key: 'ocupPct', label: 'Taxa de ocupação (%)', step: '0.1', daily: 'hOcup' },
     { key: 'aus', label: 'Dias de ausência (férias, atestado)', step: '1', max: 31 },
     { key: 'fidPct', label: 'Taxa de fidelização (%)', step: '0.1', daily: 'ret', max: 100 },
-    { key: 'prod', label: 'Venda de produtos (R$)', step: '0.01', daily: 'prod' },
+    { key: 'prod', label: 'Produtos vendidos (quantidade)', step: '1', daily: 'prod' },
     { key: 'check', label: 'Pontos Checklist Agenda Cheia', step: '1', daily: 'check' },
     { key: 'planos', label: 'Planos mensais vendidos', step: '1', daily: 'planos' },
   ];
@@ -350,7 +350,7 @@
     }
   }
 
-  const DEFAULT_GOALS = { fat: 6000, check: 390, ocup: 75, ticket: 60, serv: 130, cli: 110, planos: 4, fid: 50, prod: 500 };
+  const DEFAULT_GOALS = { fat: 6000, check: 390, ocup: 75, ticket: 60, serv: 130, cli: 110, planos: 4, fid: 50, prod: 20 };
   const goalFor = (state, barberId, key) => {
     const ind = state.goals?.byBarber?.[barberId]?.[key];
     return isNum(ind) ? Number(ind) : Number(state.goals?.team?.[key] ?? DEFAULT_GOALS[key]);
@@ -537,7 +537,7 @@
         monthly.push({ barberId: barbers[i].id, month: ym,
           check: Math.round((10 + r() * 10 + disc * 8) * frac),
           planos: Math.round(r() * 4 * vol * frac),
-          prod: Math.round((150 + r() * 450) * frac) });
+          prod: Math.round((6 + r() * 18) * frac) });
       });
     }
     // Checklist Agenda Cheia de exemplo no mês atual.
@@ -575,7 +575,7 @@
     return {
       version: 2,
       demo: true,
-      demoV: 2,
+      demoV: 3,
       presentation: !!DEMO,
       brand,
       pops: popsList,
@@ -624,7 +624,7 @@
           }
           if (!Array.isArray(st.hidden)) { st.hidden = ['fid']; DB.save(st); } // fidelização começa oculta
           // Demonstração antiga (sem fotos dos profissionais): recria com a versão nova.
-          if (st.demo && st.demoV !== 2) { const d = demoState(DEMO || 'barber'); DB.save(d); return d; }
+          if (st.demo && st.demoV !== 3) { const d = demoState(DEMO || 'barber'); DB.save(d); return d; }
           // Na apresentação, a marca é sempre a escolhida (Barber ou Salão).
           if (DEMO && st.brand !== DEMO) { st.brand = DEMO; DB.save(st); }
           return st;
