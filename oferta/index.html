@@ -97,12 +97,19 @@
   .trust span::before { content: "✓ "; color: var(--good); font-weight: 800; }
 
   /* ---------- dores ---------- */
-  .pains { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
-  .pains .card { display: grid; gap: 8px; }
-  .pains h3 { font-size: 1.08rem; }
-  .pains p { margin: 0; color: var(--soft); font-size: 0.97rem; }
-  .pains .fix { color: var(--fg); }
-  .pains .fix b { color: var(--accent); }
+  .pains { display: grid; gap: 24px 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+  /* problema (vermelho) e solução (verde) */
+  .pair { display: grid; gap: 8px; align-content: start; }
+  .pain-box, .fix-box { display: flex; gap: 12px; align-items: flex-start; padding: 16px 18px; border-radius: 18px; }
+  .pain-box { background: rgba(255, 90, 90, 0.10); border: 1px solid rgba(255, 90, 90, 0.38); }
+  .fix-box { background: rgba(82, 211, 126, 0.10); border: 1px solid rgba(82, 211, 126, 0.38); }
+  .mk { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-weight: 800; font-size: 0.95rem; line-height: 1; margin-top: 1px; }
+  .mk-x { background: #ff5a5a; color: #fff; }
+  .mk-ok { background: #2fbf63; color: #fff; }
+  .pain-box h3 { font-size: 1.06rem; color: #ffd9d9; }
+  html[data-brand="salao"] .pain-box h3 { color: #ffdcdc; }
+  .fix-box p { margin: 0; color: var(--fg); font-size: 0.97rem; }
+  .fix-box b { color: #63e08e; }
 
   /* ---------- resultados ---------- */
   .res { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
@@ -247,12 +254,12 @@
 <section><div class="wrap">
   <div class="head center reveal"><span class="eyebrow">O que trava o resultado</span><h2 data-t="painH">Se a sua barbearia vive alguma dessas situações, o sistema foi feito para você</h2></div>
   <div class="pains">
-    <div class="card reveal"><h3 data-t="pa1">A equipe só descobre o resultado no fim do mês</h3><p class="fix"><b>Com o sistema:</b> ranking em tempo real no celular de cada um, com quanto falta para subir.</p></div>
-    <div class="card reveal"><h3>A meta é falada na reunião e esquecida na segunda</h3><p class="fix"><b>Com o sistema:</b> metas do mês divididas pelos dias, com o avanço visível o tempo todo.</p></div>
-    <div class="card reveal"><h3>A agenda tem buracos e ninguém faz nada</h3><p class="fix"><b>Com o sistema:</b> Checklist Agenda Cheia com stories, abordagens e avaliações, com foto como prova.</p></div>
-    <div class="card reveal"><h3>Cobrar resultado vira desgaste</h3><p class="fix"><b>Com o sistema:</b> os números falam, e a conversa passa a ser sobre o próximo passo.</p></div>
-    <div class="card reveal"><h3>Quem se esforça não é reconhecido</h3><p class="fix"><b>Com o sistema:</b> pódio, MVP, avisos de ultrapassagem e a revelação no Fechamento do mês.</p></div>
-    <div class="card reveal"><h3 data-t="pa6">Tudo depende de você estar na barbearia</h3><p class="fix"><b>Com o sistema:</b> líderes e gestores com os acessos que você libera, e tudo no seu celular.</p></div>
+    <div class="pair reveal"><div class="pain-box"><i class="mk mk-x" aria-hidden="true">✕</i><h3 data-t="pa1">A equipe só descobre o resultado no fim do mês</h3></div><div class="fix-box"><i class="mk mk-ok" aria-hidden="true">✓</i><p><b>Com o sistema:</b> ranking em tempo real no celular de cada um, com quanto falta para subir.</p></div></div>
+    <div class="pair reveal"><div class="pain-box"><i class="mk mk-x" aria-hidden="true">✕</i><h3>A meta é falada na reunião e esquecida na segunda</h3></div><div class="fix-box"><i class="mk mk-ok" aria-hidden="true">✓</i><p><b>Com o sistema:</b> metas do mês divididas pelos dias, com o avanço visível o tempo todo.</p></div></div>
+    <div class="pair reveal"><div class="pain-box"><i class="mk mk-x" aria-hidden="true">✕</i><h3>A agenda tem buracos e ninguém faz nada</h3></div><div class="fix-box"><i class="mk mk-ok" aria-hidden="true">✓</i><p><b>Com o sistema:</b> Checklist Agenda Cheia com stories, abordagens e avaliações, com foto como prova.</p></div></div>
+    <div class="pair reveal"><div class="pain-box"><i class="mk mk-x" aria-hidden="true">✕</i><h3>Cobrar resultado vira desgaste</h3></div><div class="fix-box"><i class="mk mk-ok" aria-hidden="true">✓</i><p><b>Com o sistema:</b> os números falam, e a conversa passa a ser sobre o próximo passo.</p></div></div>
+    <div class="pair reveal"><div class="pain-box"><i class="mk mk-x" aria-hidden="true">✕</i><h3>Quem se esforça não é reconhecido</h3></div><div class="fix-box"><i class="mk mk-ok" aria-hidden="true">✓</i><p><b>Com o sistema:</b> pódio, MVP, avisos de ultrapassagem e a revelação no Fechamento do mês.</p></div></div>
+    <div class="pair reveal"><div class="pain-box"><i class="mk mk-x" aria-hidden="true">✕</i><h3 data-t="pa6">Tudo depende de você estar na barbearia</h3></div><div class="fix-box"><i class="mk mk-ok" aria-hidden="true">✓</i><p><b>Com o sistema:</b> líderes e gestores com os acessos que você libera, e tudo no seu celular.</p></div></div>
   </div>
 </div></section>
 
