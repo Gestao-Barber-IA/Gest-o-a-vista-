@@ -161,7 +161,7 @@
     leads: ['Interessados', 'Cadastros feitos na página de vendas (gest-o-a-vista.vercel.app/oferta) antes do quiz: nome, celular, e-mail e as respostas do quiz. Use a situação para organizar o contato: Novo, Contatado, Virou cliente ou Descartado. Só o dono do SaaS vê esta lista.'],
     pops: ['POPs · Guia do Sucesso', 'POP é o Procedimento Operacional Padrão: o jeito certo de fazer cada processo da barbearia. Cada POP tem o passo a passo em fotos (toque para ampliar) e, se houver, o link do vídeo. Só o dono cadastra e edita; toda a equipe consulta.'],
     extras: ['Acessos extras do líder', 'Liberações opcionais que você dá a um líder: conferir e aprovar o checklist de toda a equipe e/ou lançar à mão os números de toda a equipe só nos indicadores marcados. Os outros campos ficam só para leitura para ele. Campos que vêm da integração continuam travados.'],
-    fechamento: ['Fechamento do mês', 'Apresentação para a equipe: mostra do último colocado ao 4º e depois o pódio, do 3º ao 1º. Cada lugar do pódio só aparece quando o gestor toca em Revelar. O resumo esconde o resultado para não estragar a surpresa se a tela estiver na TV.'],
+    fechamento: ['Fechamento do mês', 'Apresentação para a equipe: revela só os 3 primeiros colocados, do 3º ao 1º. Cada lugar do pódio só aparece quando o gestor toca em Revelar. O resumo esconde o resultado para não estragar a surpresa se a tela estiver na TV.'],
   };
   function leaderExtrasBox(b) {
     const x = extrasOf(b.id), n = (x.review ? 1 : 0) + x.fields.length;
@@ -2547,7 +2547,7 @@ Content-Type: application/json</pre>
         <div class="fc-peek"><p class="section-note">${hide ? 'O título e as colocações ficam escondidos aqui para não estragar a surpresa se a tela estiver espelhada na TV.' : 'Só você deveria estar vendo isto.'}</p>
           <button class="btn btn-sm" data-action="fcPeek">${icon(hide ? 'eye' : 'lock')} ${hide ? 'Ver o resultado (só para mim)' : 'Esconder de novo'}</button></div>
         ${hide ? '' : `<ol class="fc-top">${top.map(r => `<li>${avatar(r.barber, 40)}<span><b>${ord(r.pos)} ${esc(r.barber.name)}</b><small class="muted num">${score(r.overall)} pts · ${r.leads.length}/${R.N} lideradas</small></span></li>`).join('')}</ol>`}
-        <p class="section-note">A apresentação mostra cada barbeiro do último ao 4º colocado. Depois vem o pódio: cada lugar, do 3º ao 1º, só aparece quando você tocar em Revelar. Use em tela cheia na TV da loja.</p>
+        <p class="section-note">A apresentação revela só os 3 primeiros colocados: cada lugar, do 3º ao 1º, só aparece quando você tocar em Revelar, com música que cresce até o 1º lugar. Use em tela cheia na TV da loja.</p>
       </section>` : ''}`;
   }
 
@@ -2556,11 +2556,10 @@ Content-Type: application/json</pre>
     return `<div class="fx-photo"><span>${b.photo ? `<img src="${esc(b.photo)}" alt="">` : esc(ini)}</span></div>`;
   }
   function fxSlides(ym) {
-    // No celular da equipe (ao vivo ou depois), a revelação mostra só o pódio.
+    // A apresentação revela só os 3 primeiros colocados. No celular da equipe (ao vivo ou depois), começa direto no pódio.
     const mode = ui.fx && ui.fx.mode;
     const R = mode ? monthR(ym) : scopedR(ym);
     const rows = R.rows, s = mode ? [] : [{ k: 'intro' }];
-    if (!mode) for (let i = rows.length - 1; i >= 3; i--) s.push({ k: 'card', row: rows[i] });
     s.push({ k: 'podium' });
     for (const p of [3, 2, 1]) if (rows[p - 1]) s.push({ k: 'card', row: rows[p - 1], place: p });
     s.push({ k: 'final' });
