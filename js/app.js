@@ -263,7 +263,7 @@
           <div class="splash-bar" aria-hidden="true"><span></span></div>
         </div>
       </div>`;
-    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const reduce = reduceMotion();
     setTimeout(next, reduce ? 600 : 1900);
   }
 
@@ -2190,7 +2190,7 @@ Content-Type: application/json</pre>
     scope.querySelectorAll('[data-count]').forEach(el => {
       const target = Number(el.dataset.count), dec = Number(el.dataset.dec || 0);
       const f = dec ? nf1 : nf0;
-      if (matchMedia('(prefers-reduced-motion: reduce)').matches) { el.textContent = f.format(target); return; }
+      if (reduceMotion()) { el.textContent = f.format(target); return; }
       const t0 = performance.now(), dur = 1500;
       const step = now => {
         const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3);
@@ -3202,7 +3202,7 @@ Content-Type: application/json</pre>
   function applyLive() {
     const a = ui.liveAnim;
     ui.liveAnim = null;
-    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const reduce = reduceMotion();
     if (a) {
       document.querySelectorAll('.rank-list').forEach(list => {
         const rows = [...list.querySelectorAll('.rank-row[data-id]')];
@@ -3407,6 +3407,7 @@ Content-Type: application/json</pre>
 
   function renderTV() {
     document.body.classList.remove('has-nav');
+    document.documentElement.classList.add('tv-motion');
     if (!Cloud.enabled) state = DB.load();
     applyBrand(DB.demo || state.brand || 'barber');
     const tr = tvRange();
@@ -3415,7 +3416,7 @@ Content-Type: application/json</pre>
     if (!dk) liveDetect(R);
     const slides = dk ? [() => suspenseCard(dk, true)] : [tvRanking, tvGuardians, tvAlerts];
     const i = ((ui.tvIndex % slides.length) + slides.length) % slides.length;
-    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const reduce = reduceMotion();
     root.innerHTML = `<div class="tv">
       <div class="tv-progress" aria-hidden="true"><i style="animation-duration:${TV_SECONDS}s${reduce ? ';animation:none;width:100%' : ''}"></i></div>
       <div class="tv-fit">
@@ -3444,6 +3445,8 @@ Content-Type: application/json</pre>
     ui.tvTimer = setTimeout(() => { ui.tvIndex = i + 1; if (location.hash === '#apresentacao') { renderTV(); window.scrollTo(0, 0); } }, TV_SECONDS * 1000);
   }
 
+  // A Tela da loja é uma vitrine: mantém as animações mesmo com "reduzir movimento" ligado no aparelho.
+  function reduceMotion() { return matchMedia('(prefers-reduced-motion: reduce)').matches && !document.documentElement.classList.contains('tv-motion'); }
   // Computador, notebook e TV (tela deitada): a Tela da loja se ajusta ao tamanho da tela, sem rolagem.
   // No celular em pé continua rolando normalmente.
   function fitTV() {
@@ -3503,6 +3506,7 @@ Content-Type: application/json</pre>
     if (alias[route]) { ui.cfgTab = alias[route]; route = 'configuracoes'; }
     if (route === 'gestao-visual') route = 'inicio';
     if (route === 'apresentacao') { renderTV(); return; }
+    document.documentElement.classList.remove('tv-motion');
     let page, title;
     if (route.startsWith('perfil-')) {
       const id = route.slice(7);
