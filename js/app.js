@@ -2020,21 +2020,58 @@
     const agend = (state.monthly || []).filter(m => m.month === ym && ids.has(m.barberId) && isNum(m.agend)).reduce((a, m) => a + Number(m.agend), 0);
     const fat = sum('fat'), cli = sum('cli');
     const ocups = rows.map(r => r.values.ocup).filter(v => v != null);
-    const stat = (label, value) => `<div class="pc-stat"><span>${label}</span><b class="num">${value}</b></div>`;
+    // Metas da empresa (só o dono define; valem para todos os meses).
+    const user = currentUser(), own = !scope && isGestor(user);
+    const hg = !scope ? (state.houseGoals || {}) : {};
+    const cur = ym === curYm(), now = new Date(), dim = new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0).getDate();
+    const frac = cur ? Math.min(1, now.getDate() / dim) : 1;
+    const HG_FMT = { fat: money0, ticket: money0, ocup: v => nf1.format(v) + '%' };
+    const fmtG = (k, v) => (HG_FMT[k] || (x => nf0.format(x)))(v);
+    const SUMK = ['fat', 'agend', 'cli', 'serv', 'prod', 'planos'];
+    const stat = (label, value, k, raw) => {
+      const g = k && hg[k];
+      if (!isNum(g) || g <= 0 || raw == null) return `<div class="pc-stat"><span>${label}</span><b class="num">${value}</b></div>`;
+      const pct = (raw / g) * 100, done = raw >= g;
+      const gap = k === 'ocup' ? nf1.format(Math.abs(g - raw)) + ' p.p.' : fmtG(k, Math.abs(g - raw));
+      const proj = cur && frac < 1 && SUMK.includes(k) && raw > 0 ? raw / frac : null;
+      return `<div class="pc-stat has-goal ${done ? 'done' : ''}"><span>${label}</span><b class="num">${value}</b>
+        <div class="pc-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(Math.min(pct, 100))}" aria-label="${esc(label)}: ${nf0.format(pct)}% da meta"><i style="width:${Math.min(100, pct).toFixed(1)}%"></i></div>
+        <div class="pc-goal num"><span>Meta ${fmtG(k, g)}</span><em>${nf0.format(pct)}%</em></div>
+        <small class="pc-left num">${done ? `${icon('check')} Meta batida${raw > g ? ` · ${gap} acima` : ''}` : `Faltam <b>${gap}</b>`}</small>
+        ${proj != null && !done ? `<small class="pc-proj num ${proj >= g ? 'ok' : 'low'}">No ritmo atual: ${fmtG(k, proj)} no fim do mês</small>` : ''}
+      </div>`;
+    };
+    // Sugestão: soma das metas individuais dos profissionais ativos.
+    const act = state.barbers.filter(b => b.active !== false);
+    const sugg = k => k === 'agend' ? null : ['ticket', 'ocup'].includes(k) ? GB.goalFor(state, '', k) : act.reduce((a, b) => a + GB.goalFor(state, b.id, k), 0);
+    const HG_FIELDS = [['fat', 'Faturamento total (R$)', '0.01'], ['agend', 'Agendamentos', '1'], ['cli', 'Clientes atendidos', '1'], ['serv', 'Serviços realizados', '1'],
+      ...(vis('prod') ? [['prod', 'Produtos vendidos', '1']] : []), ...(vis('planos') ? [['planos', 'Planos mensais', '1']] : []),
+      ['ticket', 'Ticket médio da casa (R$)', '0.01'], ...(vis('ocup') ? [['ocup', 'Ocupação média (%)', '0.1']] : [])];
+    const goalForm = own && ui.hgEdit ? `<section class="section card">
+        <h2 class="section-title">Metas mensais da empresa</h2>
+        <p class="section-note">Valem para todos os meses. Deixe em branco o indicador que não tiver meta. A sugestão em cinza é a soma das metas individuais da equipe.</p>
+        <form class="form" data-form="houseGoals" novalidate>
+          <div class="grid-2">${HG_FIELDS.map(([k, l, st]) => { const sg = sugg(k); return `<label class="field"><span>${l}</span><input class="input num" type="number" min="0" step="${st}" name="${k}" id="hg-${k}" value="${isNum(hg[k]) ? hg[k] : ''}" placeholder="${sg ? 'Sugestão: ' + (st === '1' ? Math.round(sg) : Math.round(sg * 100) / 100) : ''}"></label>`; }).join('')}</div>
+          <p class="form-msg" data-msg></p>
+          <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar metas</button><button class="btn" type="button" data-action="hgEdit">Cancelar</button></div>
+        </form>
+      </section>` : '';
     return `
       <div class="card tm-month"><label class="field"><span class="tm-eyebrow">Mês</span>
-        <select class="input" id="pc-month" data-change="teamMonth">${monthOptions(ym)}</select></label></div>
+        <select class="input" id="pc-month" data-change="teamMonth">${monthOptions(ym)}</select></label>
+        ${own && !ui.hgEdit ? `<button class="btn btn-sm pc-goal-btn" data-action="hgEdit">${icon('target')} ${Object.keys(hg).length ? 'Editar metas da empresa' : 'Cadastrar metas da empresa'}</button>` : ''}</div>
+      ${goalForm}
       ${has ? '' : `<div class="pc-empty">Nenhum dado lançado ainda. Assim que você cadastrar profissionais e lançar as métricas do mês, os totais e o comparativo aparecem aqui automaticamente.</div>`}
       <section class="section card pc-totals">
-        ${stat('Faturamento total', money0(fat))}
-        ${stat('Agendamentos', nf0.format(agend))}
-        ${stat('Clientes atendidos', nf0.format(cli))}
-        ${stat('Serviços realizados', nf0.format(sum('serv')))}
-        ${vis('prod') ? stat('Produtos vendidos', nf0.format(sum('prod'))) : ''}
-        ${vis('planos') ? stat('Planos mensais', nf0.format(sum('planos'))) : ''}
-        ${stat('Ticket médio da casa', cli > 0 ? money0(fat / cli) : '—')}
+        ${stat('Faturamento total', money0(fat), 'fat', fat)}
+        ${stat('Agendamentos', nf0.format(agend), 'agend', agend)}
+        ${stat('Clientes atendidos', nf0.format(cli), 'cli', cli)}
+        ${stat('Serviços realizados', nf0.format(sum('serv')), 'serv', sum('serv'))}
+        ${vis('prod') ? stat('Produtos vendidos', nf0.format(sum('prod')), 'prod', sum('prod')) : ''}
+        ${vis('planos') ? stat('Planos mensais', nf0.format(sum('planos')), 'planos', sum('planos')) : ''}
+        ${stat('Ticket médio da casa', cli > 0 ? money0(fat / cli) : '—', 'ticket', cli > 0 ? fat / cli : null)}
         ${all.some(r => r.sums.n.comanda) ? stat('Maior comanda do mês', money2(Math.max(...all.map(r => r.sums.n.comanda ? r.sums.comanda : 0)))) : ''}
-        ${vis('ocup') ? stat('Ocupação média', ocups.length ? nf1.format(ocups.reduce((a, v) => a + v, 0) / ocups.length) + '%' : '—') : ''}
+        ${vis('ocup') ? stat('Ocupação média', ocups.length ? nf1.format(ocups.reduce((a, v) => a + v, 0) / ocups.length) + '%' : '—', 'ocup', ocups.length ? ocups.reduce((a, v) => a + v, 0) / ocups.length : null) : ''}
         ${stat('Profissionais', nf0.format(all.length))}
       </section>
       ${all.length ? `<p class="section-note">Cada número acima é a soma dos ${nf0.format(all.length)} profissionais ${scope ? 'da sua área' : 'da equipe'} no mês${gone.length ? `, incluindo ${gone.length === 1 ? '1 profissional desligado que tem' : `${gone.length} profissionais desligados que têm`} resultados lançados nesse mês` : ''}. O ticket médio da casa é o faturamento total dividido pelo total de clientes, e a ocupação é a média dos profissionais.</p>` : ''}
@@ -3965,6 +4002,7 @@ Content-Type: application/json</pre>
       c.items.splice(i, 1); ui.confirm = null; save(); render();
     },
     popItemMove(el) { const c = popCfgW(), i = Number(el.dataset.i), j = i + Number(el.dataset.d); if (j < 0 || j >= c.items.length) return; [c.items[i], c.items[j]] = [c.items[j], c.items[i]]; save(); render(); },
+    hgEdit() { ui.hgEdit = !ui.hgEdit; render(); if (ui.hgEdit) setTimeout(() => { const f = $('#hg-fat'); if (f) { f.focus(); f.scrollIntoView({ block: 'center' }); } }, 50); },
     cfgTab(el) { ui.cfgTab = el.dataset.t; ui.confirm = null; render(); },
     pdLayout(el) { state.theme = { ...pdTheme(), layout: el.dataset.v }; save(); render(); toast('Formato do escudo: ' + (PD_LAYOUTS.find(l => l.k === el.dataset.v) || {}).n + '.'); },
     pdAutoToggle(el) {
@@ -4394,6 +4432,18 @@ Content-Type: application/json</pre>
       try { more = await popsPhotos(f.elements.photos.files, p.id); } catch (e) { return setMsg(f, Cloud.enabled ? Cloud.message(e) : e.message); }
       Object.assign(p, { name: name.slice(0, 80), desc: desc.slice(0, 400), video, steps: [...(p.steps || []), ...more], at: Date.now() });
       save(); toast('POP salvo.'); render();
+    },
+    houseGoals(f) {
+      const g = {};
+      for (const el of f.querySelectorAll('input[name]')) {
+        const v = el.value.trim().replace(',', '.');
+        if (v === '') continue;
+        const n = Number(v);
+        if (!isFinite(n) || n < 0) { setMsg(f, 'Confira os valores: use só números positivos.'); el.focus(); return; }
+        if (n > 0) g[el.name] = n;
+      }
+      state.houseGoals = g; ui.hgEdit = false; save(); render();
+      toast(Object.keys(g).length ? 'Metas da empresa salvas.' : 'Metas da empresa removidas.');
     },
     pdBday(f) {
       const v = val(f, 'bday');

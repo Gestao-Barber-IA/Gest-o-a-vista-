@@ -1665,3 +1665,19 @@ html[data-pdl="minimal"] .pd-fx { opacity: 0.5; }
 .th-tg::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--fg-soft); transition: transform 0.15s, background 0.15s; }
 .th-auto-it.on .th-tg { background: var(--accent); border-color: var(--accent); }
 .th-auto-it.on .th-tg::after { transform: translateX(16px); background: #fff; }
+/* Metas da empresa */
+.tm-month .pc-goal-btn { margin-top: 12px; }
+.pc-stat.has-goal { gap: 6px; }
+.pc-bar { height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--fg) 10%, transparent); overflow: hidden; margin-top: 4px; }
+.pc-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 70%, #000), var(--accent)); transition: width 0.6s; }
+.pc-stat.done .pc-bar i { background: linear-gradient(90deg, #1f9d55, #3ee07a); }
+.pc-goal { display: flex; justify-content: space-between; gap: 8px; font-size: 0.86rem; color: var(--fg-soft); }
+.pc-stat .pc-goal span { text-transform: none; letter-spacing: 0; font-size: inherit; color: inherit; }
+.pc-goal em { font-style: normal; font-weight: 700; color: var(--fg); }
+.pc-left { font-size: 0.88rem; color: var(--fg-soft); display: flex; align-items: center; gap: 6px; }
+.pc-left b { font-family: inherit; font-size: inherit; color: var(--fg); }
+.pc-stat.done .pc-left { color: #3ee07a; font-weight: 700; }
+.pc-left .ico { width: 16px; height: 16px; }
+.pc-proj { font-size: 0.8rem; }
+.pc-proj.ok { color: #3ee07a; }
+.pc-proj.low { color: #ffb347; }
