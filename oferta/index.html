@@ -108,7 +108,7 @@
   .trust { display: flex; flex-wrap: wrap; gap: 8px 18px; justify-content: center; color: var(--muted); font-size: 0.92rem; }
   .trust span::before { content: "✓ "; color: var(--good); font-weight: 800; }
 
-  .ideal { display: inline-block; max-width: 100%; text-align: center; line-height: 1.45; padding: 10px 16px; border-radius: 14px; text-decoration: none;
+  .ideal { display: inline-block; justify-self: center; max-width: min(100%, 560px); text-align: center; line-height: 1.45; padding: 10px 16px; border-radius: 14px; text-decoration: none;
     background: color-mix(in srgb, var(--accent) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); color: var(--fg); font-weight: 600; }
   .ideal b { color: var(--accent); }
   .ideal span b { color: var(--accent); }
@@ -292,7 +292,6 @@
 <section class="hero"><div class="wrap">
   <span class="pill" data-t="pill">Para barbearias com até 4 profissionais</span>
   <h1 data-t="h1">Coloque a sua equipe batendo meta <em>todo mês</em>, sem planilha e sem cobrança no grito</h1>
-  <a class="ideal" href="#planos" hidden>✨ <span data-ideal>Plano ideal para você: Profissional · R$ 150/mês no anual</span> <b>→</b></a>
   <p class="lead" data-t="lead">Veja em poucos minutos como o ranking em tempo real, as metas e o checklist com prova mudam a rotina da sua equipe.</p>
   <div class="video" id="video">
     <img data-shot="tv" alt="" width="1280" height="720">
@@ -333,6 +332,7 @@
     <p class="lead" style="margin:0 auto" data-t="planLead">Todos os planos têm todas as funções. O que muda é o tamanho da equipe, o valor e, no Premium, o suporte prioritário.</p>
     <span class="pill">💰 No plano anual você economiza até 29%</span>
     <p class="promo" data-promo hidden></p>
+    <a class="ideal" href="#plano-rec" hidden>✨ <span data-ideal>Plano ideal para você: Profissional · R$ 150/mês no anual</span> <b>→</b></a>
   </div>
   <div class="plans">
     <article class="card pl" data-plan="essencial"><span class="pl-tag" hidden>Recomendado para você</span>
@@ -434,7 +434,7 @@
   // Garantia: dias para pedir o dinheiro de volta (0 desliga). Só deixe ligada se for cumprir.
   const GARANTIA_DIAS = 7;
   // Oferta de lançamento (texto vazio desliga). Tire assim que as vagas acabarem.
-  const OFERTA = 'Oferta de lançamento: os <b>primeiros 20 clientes</b> pagam <b>metade do valor no 1º mês</b>.';
+  const OFERTA = 'Oferta de lançamento: os <b>primeiros 20 clientes</b> têm <b>50% de desconto no 1º mês</b>.';
 
   const SEG = {
     barbearia: { brand: 'barber', label: 'barbearia', a: 'uma barbearia', da: 'da sua barbearia', na: 'na barbearia', pro: 'barbeiros', title: 'Barbearia' },
@@ -476,6 +476,7 @@
     qs('.pl').forEach(c => { const on = c.dataset.plan === rec; c.classList.toggle('rec', on); c.querySelector('.pl-tag').hidden = !on; c.querySelector('.btn').classList.toggle('btn-primary', on); });
     qs('[data-c]').forEach(c => c.classList.toggle('rec', c.dataset.c === rec));
     const recCard = document.querySelector(`[data-plan="${rec}"]`);
+    qs('.pl').forEach(c => c.removeAttribute('id')); recCard.id = 'plano-rec';
     $('[data-ideal]').innerHTML = `Plano ideal para ${S.da.replace('da sua ', 'a sua ').replace('do seu ', 'o seu ')}: <b>${recCard.querySelector('h3').textContent}</b> · R$ ${recCard.querySelector('.price b').textContent}/mês no anual`;
     $('.ideal').hidden = false;
     const gf = document.querySelector('[data-gfaq]'); if (gf) gf.hidden = !(GARANTIA_DIAS > 0);
