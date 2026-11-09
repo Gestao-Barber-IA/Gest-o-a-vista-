@@ -1,25 +1,42 @@
-# Gestão Barber IA
+# Gestão Barber IA e Gestão Salão IA
 
-Painel de performance da equipe da barbearia: ranking em tempo real, pódio, destaques por indicador, título de Destaque/MVP do período e lançamento de resultados.
+Sistema de gestão de performance da equipe para barbearias (**Gestão Barber IA**) e salões de beleza e esmalterias (**Gestão Salão IA**): ranking ao vivo, pódio, Destaque e MVP do mês, metas, checklist, POPs, fechamento do mês com revelação do pódio e cards para os stories.
 
 ## Como abrir
 
-É um app web estático: basta abrir o `index.html` por um servidor (ex.: `python3 -m http.server`) ou publicar a pasta no GitHub Pages, Netlify ou Vercel.
+É um app web estático, sem etapa de build: abra o `index.html` por um servidor (ex.: `python3 -m http.server`) ou publique a pasta (hoje: Vercel, gest-o-a-vista.vercel.app).
 
-Acesso de demonstração: `gestor@demo.com` ou `barbeiro@demo.com`, senha `demo123`.
+- Modo apresentação com dados fictícios: `?demo=barber` ou `?demo=salao`
+- Página de vendas com quiz e planos: `/oferta` (`/vendas` redireciona para ela)
 
 ## O que já funciona
 
-- Abertura com frases motivacionais aleatórias
-- Login, criação da conta da barbearia (gestor) e cadastro de barbeiro por **link de convite** (WhatsApp, e-mail ou copiar); o gestor aprova antes do acesso
-- Início: atalhos, pódio, ranking em tempo real, destaques por indicador, título do período e classificação geral
-- Minha performance / perfil de cada barbeiro, com comparação ao período anterior
-- Time e ranking por mês: destaques, classificação em cartões, nível de carreira, metas (forte / precisa melhorar), gráficos e radares de competência
-- Lançamento do total do mês por barbeiro, com salvamento automático; campos que vêm da integração ficam travados
-- Metas mensais da equipe com ajuste individual
-- Integração & API: chave da API, formato dos dados e teste de importação em JSON
-- Pesos dos indicadores, dados da empresa, meu cadastro, central de ajuda e modo apresentação (TV)
-- Filtro de período: semana, mês e trimestre
+**Dono e equipe**
+- Cadastro da empresa (gestor), convite de profissionais por link e aprovação; níveis de acesso Profissional, Líder e Gestor; organograma
+- Início com pódio, ranking em tempo real, avisos de ultrapassagem e título do período; para o gestor, **Primeiros passos** (conta nova) e **Pendências** (aprovações, provas do checklist, lançamentos do mês, fechamento e aniversários da semana)
+- Performance da empresa (ritmo diário, metas da empresa com card de conquista, evolução e relatório em PDF) e Performance da equipe (detalhado por profissional, comparativos, pontos fortes e a melhorar)
+- Lançamentos manuais (total do mês ou por dia) e integração por API; campos da integração ficam travados
+- Checklist Agenda Cheia com prova por foto, conferência da gestão, pontos no ranking e lembrete diário; fotos apagadas após 7 dias
+- POPs · Guia do Sucesso com passo a passo em fotos
+
+**Apresentações**
+- Tela da loja para a TV, que se ajusta a qualquer tela
+- Fechamento do mês: abertura animada com música, revelação do 3º ao 1º com música própria por colocação, Líderes do mês e Parabéns ao pódio, também no celular da equipe
+- Relatórios mensais: painel do mês (infográfico e PDF), card de cada profissional, card do MVP/Destaque (rosé gold no Gestão Salão IA), card de parabéns e card de aniversário, prontos para os stories
+- Temas da temporada (Copa, aniversário da empresa etc.) e formatos do escudo do pódio
+- Modo apresentação para vender o sistema, com slides, roteiro (`docs/roteiro-apresentacao.md`) e a marca do cliente
+
+**Dados**
+- Fotos dos profissionais e logo no armazenamento do Supabase (pasta pública `fotos`, com nome de arquivo aleatório); fotos antigas, guardadas dentro do cadastro, são levadas para lá automaticamente quando o gestor entra
+- **Cópia dos seus dados** em Configurações › Empresa: arquivo completo (JSON) e planilha dos lançamentos (CSV), sem senhas nem chave da API
+
+## Testes
+
+```
+node --test tests/*.test.js
+```
+
+Cobrem as regras de pontuação, Destaque, MVP, desempate, ranking e níveis (`tests/regras.test.js`). Rodam também no GitHub a cada PR (`.github/workflows/testes.yml`).
 
 ## Regras de pontuação
 
@@ -40,7 +57,7 @@ Com `js/config.js` preenchido, o app usa o Supabase: login de verdade, confirma�
 
 Passo a passo: [`supabase/LEIAME.md`](supabase/LEIAME.md).
 
-- `supabase/schema.sql`: tabelas, regras de acesso (cada barbearia só vê os próprios dados; só o gestor altera), cadastro por convite e aprovação
+- `supabase/schema.sql`: tabelas, regras de acesso (cada barbearia só vê os próprios dados; só o gestor altera), cadastro por convite e aprovação, pastas do Storage (`provas`, `pops`, `musicas`, `fotos`)
 - `supabase/functions/lancamentos`: API que recebe os resultados de outro sistema
 - `supabase/email/`: e-mails em português com a marca
 - `js/cloud.js`: ligação do app com o Supabase
