@@ -118,12 +118,20 @@ Leia linha por linha, olhando para a pessoa:
 
 > "Não precisa mudar seu sistema de agenda nem treinar ninguém por semanas. Cadastra a equipe, lança os números e liga a TV. No primeiro fechamento a equipe já sente a diferença."
 
-## 14. Convite: "Vamos multiplicar a performance da sua barbearia/do seu salão?"
-**Objetivo:** fechar.
+## 14. A pergunta final: quanto vale?
+**Objetivo:** ancorar o valor antes de mostrar o preço.
+
+Leia a pergunta da tela devagar:
+
+> "E para você, quanto você estaria disposto a pagar por um sistema que faça sua barbearia/seu salão rodar no automático, mesmo sem você estar presente? Com seus colaboradores atuando em alta performance, sendo proativos e mantendo tudo limpo e organizado?"
+
+**Fique em silêncio até a pessoa responder um valor.**
 
 > "Faz sentido começarmos pela sua equipe ainda este mês?"
 
-Se a resposta for sim, abra **Conhecer os planos** ali mesmo. Se houver dúvida, volte ao slide 3 e pergunte qual dor mais pesa.
+Abra **Conhecer os planos** ali mesmo. O investimento costuma ficar bem abaixo do valor que ela disse.
+
+Se houver dúvida, volte ao slide 3 e pergunte qual dor mais pesa.
 
 ---
 

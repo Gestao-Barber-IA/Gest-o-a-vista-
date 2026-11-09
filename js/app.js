@@ -2848,11 +2848,12 @@ Content-Type: application/json</pre>
         <div class="pt-steps"><div><b>1</b><span>Cadastre a equipe e convide cada ${w.pro} pelo link</span></div><div><b>2</b><span>Lance os resultados ou conecte o sistema que você já usa</span></div><div><b>3</b><span>Ligue a Tela da loja e faça o primeiro fechamento</span></div></div></div>`,
         note: `"Não precisa mudar seu sistema de agenda nem treinar ninguém por semanas. Cadastra a equipe, lança os números e liga a TV. No primeiro fechamento a equipe já sente a diferença."` },
       { html: `<div class="pt-slide pt-cover"><div class="fx-emblem"><span class="fx-orbit"></span><span class="fx-orbit o2"></span>${logo('fx-logo')}</div>
-        <h1 class="pt-brand sm">Vamos multiplicar a performance ${w.sal ? 'do seu salão' : 'da sua barbearia'}?</h1>
-        <p class="pt-lead">Clareza para você. Performance para a equipe. Tudo na palma da mão.</p>
+        <p class="fx-kicker">E para você…</p>
+        <h1 class="pt-ask">Quanto você estaria disposto a pagar por um sistema que faça ${w.sal ? 'seu salão' : 'sua barbearia'} <b>rodar no automático</b>, mesmo sem você estar presente?</h1>
+        <div class="pt-ask-list"><span>${icon('rocket')} Colaboradores em alta performance</span><span>${icon('bolt')} Equipe proativa</span><span>${icon('checksq')} Tudo limpo e organizado</span></div>
         <a class="btn btn-primary pt-cta" href="oferta/" target="_blank" rel="noopener">${icon('rocket')} Conhecer os planos</a>
         <p class="pt-lead sm">${brand} · Cada atendimento conta.</p></div>`,
-        note: `Chamada direta: "Faz sentido começarmos pela sua equipe ainda este mês?" Se sim, abra os planos ali mesmo. Se houver dúvida, volte ao slide de dores e pergunte qual delas mais pesa.` },
+        note: `Leia a pergunta devagar e fique em silêncio até a pessoa responder um valor. Depois: "Faz sentido começarmos pela sua equipe ainda este mês?" e abra os planos ali mesmo — o investimento costuma ficar bem abaixo do valor que ela disse. Se houver dúvida, volte ao slide de dores e pergunte qual delas mais pesa.` },
     ];
   }
   function pitchOpen() {
