@@ -630,3 +630,42 @@ begin
   where id = p_id;
 end $$;
 grant execute on function public.admin_update_company(uuid, jsonb) to authenticated;
+
+-- ---------- Interessados (cadastro da página de vendas /oferta) ----------
+-- Qualquer pessoa pode se cadastrar; só o dono do SaaS vê e edita a lista.
+create table if not exists public.leads (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  nome text not null check (char_length(nome) between 1 and 80),
+  sobrenome text not null default '' check (char_length(sobrenome) <= 80),
+  celular text not null check (char_length(celular) between 10 and 20),
+  email text not null default '' check (char_length(email) <= 120),
+  tipo text check (tipo in ('barbearia', 'salao', 'esmalteria', 'estetica')),
+  equipe int check (equipe in (4, 10, 99)),
+  origem text not null default '' check (char_length(origem) <= 200),
+  consentimento boolean not null default false check (consentimento),
+  status text not null default 'novo' check (status in ('novo', 'contatado', 'cliente', 'descartado')),
+  nota text not null default '' check (char_length(nota) <= 500)
+);
+create index if not exists leads_created on public.leads (created_at desc);
+alter table public.leads enable row level security;
+grant insert on public.leads to anon, authenticated;
+grant select, update, delete on public.leads to authenticated;
+grant select, insert, update, delete on public.leads to service_role;
+drop policy if exists leads_insert on public.leads;
+drop policy if exists leads_admin_read on public.leads;
+drop policy if exists leads_admin_upd on public.leads;
+drop policy if exists leads_admin_del on public.leads;
+create policy leads_insert on public.leads for insert to anon, authenticated
+  with check (status = 'novo' and nota = '' and consentimento);
+create policy leads_admin_read on public.leads for select using (is_platform_admin());
+create policy leads_admin_upd on public.leads for update using (is_platform_admin()) with check (is_platform_admin());
+create policy leads_admin_del on public.leads for delete using (is_platform_admin());
+-- Respostas do quiz, enviadas logo depois do cadastro (só preenche o que estiver vazio, até 2 horas depois).
+create or replace function public.lead_quiz(p_id uuid, p_tipo text, p_equipe int) returns void
+language sql security definer set search_path = public as $$
+  update leads set tipo = coalesce(tipo, p_tipo), equipe = coalesce(equipe, p_equipe)
+  where id = p_id and created_at > now() - interval '2 hours'
+    and p_tipo in ('barbearia', 'salao', 'esmalteria', 'estetica') and p_equipe in (4, 10, 99)
+$$;
+grant execute on function public.lead_quiz(uuid, text, int) to anon, authenticated;

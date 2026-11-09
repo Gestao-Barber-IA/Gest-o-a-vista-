@@ -145,6 +145,7 @@
     compare: ['Comparar profissionais', 'Mostra os números de dois profissionais lado a lado no mês. Verde com ▲ é quem está à frente em cada indicador; vermelho com ▼, quem está atrás; "=" é empate. No meio aparece a diferença. O barbeiro compara os próprios números com o líder de cada indicador; o dono e o gestor de área comparam quem podem ver.'],
     evo: ['Evolução', 'Compara o profissional com ele mesmo em outro período. Verde com ▲ é onde melhorou; vermelho com ▼, onde caiu. Com o mês em andamento, compara o mesmo número de dias (ex.: 1 a 7 deste mês × 1 a 7 do mês anterior), a não ser que você marque o mês anterior inteiro. Em períodos que não são o mês inteiro, entram os lançamentos por dia.'],
     access_lv: ['Nível de acesso', () => ACCESS_TIP()],
+    leads: ['Interessados', 'Cadastros feitos na página de vendas (gest-o-a-vista.vercel.app/oferta) antes do quiz: nome, celular, e-mail e as respostas do quiz. Use a situação para organizar o contato: Novo, Contatado, Virou cliente ou Descartado. Só o dono do SaaS vê esta lista.'],
     pops: ['POPs · Guia do Sucesso', 'POP é o Procedimento Operacional Padrão: o jeito certo de fazer cada processo da barbearia. Cada POP tem o passo a passo em fotos (toque para ampliar) e, se houver, o link do vídeo. Só o dono cadastra e edita; toda a equipe consulta.'],
     extras: ['Acessos extras do líder', 'Liberações opcionais que você dá a um líder: conferir e aprovar o checklist de toda a equipe e/ou lançar à mão os números de toda a equipe só nos indicadores marcados. Os outros campos ficam só para leitura para ele. Campos que vêm da integração continuam travados.'],
     fechamento: ['Fechamento do mês', 'Apresentação para a equipe: mostra do último colocado ao 4º e depois o pódio, do 3º ao 1º. Cada lugar do pódio só aparece quando o gestor toca em Revelar. O resumo esconde o resultado para não estragar a surpresa se a tela estiver na TV.'],
@@ -2464,6 +2465,41 @@ Content-Type: application/json</pre>
   }
 
   // ---------- Painel do dono do SaaS ----------
+  const adminTabs = () => `<div class="org-tabs" role="toolbar">${[['empresas', 'building', 'Empresas'], ['leads', 'users', 'Interessados']].map(([k, ic, l]) => `<button type="button" class="${(ui.adminTab || 'empresas') === k ? 'on' : ''}" aria-pressed="${(ui.adminTab || 'empresas') === k}" data-action="adminTab" data-t="${k}">${icon(ic)}<span>${l}</span></button>`).join('')}</div>`;
+  // Interessados que se cadastraram na página de vendas (/oferta).
+  const LEAD_TIPO = { barbearia: 'Barbearia', salao: 'Salão de beleza', esmalteria: 'Esmalteria', estetica: 'Clínica de estética' };
+  const LEAD_EQ = { 4: 'até 4', 10: '5 a 10', 99: 'mais de 10' };
+  const LEAD_ST = [['novo', 'Novo'], ['contatado', 'Contatado'], ['cliente', 'Virou cliente'], ['descartado', 'Descartado']];
+  function adminLeads() {
+    if (!ui.leadsData) {
+      ui.leadsData = 'loading';
+      Cloud.admin.leads().then(list => { ui.leadsData = { list }; render(); }).catch(e => { ui.leadsData = { error: Cloud.message(e) }; render(); });
+    }
+    if (ui.leadsData === 'loading') return `<div class="card muted">Carregando interessados…</div>`;
+    if (ui.leadsData.error) return `<div class="card">${esc(ui.leadsData.error)} <button class="btn btn-sm" data-action="leadsReload">Tentar de novo</button></div>`;
+    const list = ui.leadsData.list, f = ui.leadFilter || 'novo';
+    const rows = list.filter(l => f === 'todos' || l.status === f);
+    const cnt = k => list.filter(l => l.status === k).length;
+    const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const wa = l => { const n = String(l.celular || '').replace(/\D/g, ''); const msg = `Olá, ${l.nome}! Aqui é da equipe do ${l.tipo && l.tipo !== 'barbearia' ? 'Gestão Salão IA' : 'Gestão Barber IA'}. Vi que você se cadastrou para conhecer o sistema. Posso te mostrar como funciona?`; return `https://wa.me/55${n}?text=${encodeURIComponent(msg)}`; };
+    return `<section class="section card">
+        <h2 class="section-title">Interessados ${tip('leads')}</h2>
+        <p class="section-note">Pessoas que se cadastraram na página de vendas antes do quiz. Contatos de quem veio pelo formulário do Instagram ficam na Central de Cadastros do Meta.</p>
+        <div class="perf-stats">${LEAD_ST.map(([k, l]) => `<div class="stat"><span>${l}</span><b class="num">${cnt(k)}</b></div>`).join('')}<div class="stat"><span>Total</span><b class="num">${list.length}</b></div></div>
+      </section>
+      <section class="section">
+        <div class="btn-row">${[['novo', 'Novos'], ['contatado', 'Contatados'], ['cliente', 'Clientes'], ['descartado', 'Descartados'], ['todos', 'Todos']].map(([k, l]) => `<button class="btn btn-sm ${k === f ? 'btn-primary' : ''}" data-action="leadFilter" data-f="${k}">${l}</button>`).join('')}
+          <button class="btn btn-sm" data-action="leadsReload">${icon('check')} Atualizar</button>
+          <button class="btn btn-sm" data-action="leadsCsv">${icon('download')} Baixar planilha</button></div>
+        ${rows.length ? `<ul class="list lead-list">${rows.map(l => `<li class="list-row">
+          <div class="grow"><b>${esc(l.nome)} ${esc(l.sobrenome || '')}</b>
+            <span class="muted">${esc(l.celular)}${l.email ? ' · ' + esc(l.email) : ''}</span>
+            <span class="muted">${l.tipo ? esc(LEAD_TIPO[l.tipo] || l.tipo) : 'Quiz não respondido'}${l.equipe ? ' · equipe ' + LEAD_EQ[l.equipe] : ''} · ${when(l.created_at)}${l.origem ? ' · ' + esc(l.origem) : ''}</span></div>
+          <div class="btn-row"><a class="btn btn-sm btn-primary" href="${wa(l)}" target="_blank" rel="noopener">${icon('chat')} WhatsApp</a>
+            <select class="input lead-st" data-change="leadStatus" data-id="${esc(l.id)}" aria-label="Situação">${LEAD_ST.map(([k, t]) => `<option value="${k}" ${l.status === k ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+        </li>`).join('')}</ul>` : '<div class="card muted">Nenhum interessado nesta lista.</div>'}
+      </section>`;
+  }
   function pageAdmin() {
     const b = billing();
     if (!b || !b.admin) return `<div class="card muted">Área restrita.</div>`;
@@ -2482,7 +2518,8 @@ Content-Type: application/json</pre>
     const groups = { todas: () => true, teste: c => c.access === 'trial', pagantes: c => c.access === 'paid' && c.sub_status !== 'courtesy', bloqueadas: c => c.access === 'blocked', cortesia: c => c.sub_status === 'courtesy' };
     const rows = list.filter(groups[f]);
     const kpi = (l, v) => `<div class="stat"><span>${l}</span><b class="num">${v}</b></div>`;
-    return `
+    if (ui.adminTab === 'leads') return adminTabs() + adminLeads();
+    return `${adminTabs()}
       <section class="section card">
         <h2 class="section-title">Resumo do SaaS</h2>
         <div class="perf-stats">
@@ -3728,6 +3765,17 @@ Content-Type: application/json</pre>
       if (!ui.notifOpen) { ui.notifSeenBefore = DB.pref.get(OVT_SEEN, ''); const f = overtakeFeed(); if (f[0]) DB.pref.set(OVT_SEEN, f[0].key); }
       ui.notifOpen = !ui.notifOpen; render();
     },
+    adminTab(el) { ui.adminTab = el.dataset.t; render(); },
+    leadFilter(el) { ui.leadFilter = el.dataset.f; render(); },
+    leadsReload() { ui.leadsData = null; render(); },
+    leadsCsv() {
+      const list = (ui.leadsData && ui.leadsData.list) || [];
+      const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      const rows = [['Data', 'Nome', 'Sobrenome', 'Celular', 'E-mail', 'Tipo', 'Equipe', 'Origem', 'Situação']].concat(list.map(l => [new Date(l.created_at).toLocaleString('pt-BR'), l.nome, l.sobrenome, l.celular, l.email, LEAD_TIPO[l.tipo] || '', l.equipe ? LEAD_EQ[l.equipe] : '', l.origem, (LEAD_ST.find(x => x[0] === l.status) || [, l.status])[1]]));
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob(['\ufeff' + rows.map(r => r.map(q).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+      a.download = `interessados-${iso(new Date())}.csv`; document.body.appendChild(a); a.click(); a.remove();
+    },
     toggleTheme() {
       const t = getTheme() === 'light' ? 'dark' : 'light';
       try { localStorage.setItem(THEME_KEY, t); } catch (e) { /* opcional */ }
@@ -4051,6 +4099,11 @@ Content-Type: application/json</pre>
     perfBarber(el) { ui.perfBarber = el.value; location.hash = 'perfil-' + el.value; },
     teamMonth(el) { ui.teamMonth = el.value; ui.fcPeek = false; render(); },
     lanDate(el) { ui.lanDate = el.value; },
+    async leadStatus(el) {
+      const l = ui.leadsData && ui.leadsData.list && ui.leadsData.list.find(x => x.id === el.dataset.id); if (!l) return;
+      const prev = l.status; l.status = el.value;
+      try { await Cloud.admin.leadUpdate(l.id, { status: el.value }); toast('Situação atualizada.'); render(); } catch (e) { l.status = prev; toast(Cloud.message(e)); render(); }
+    },
     popsCap(el) { if (!isGestor(currentUser())) return; const p = popsById(el.dataset.id); if (!p || !p.steps[Number(el.dataset.i)]) return; p.steps[Number(el.dataset.i)].cap = el.value.trim().slice(0, 140); p.at = Date.now(); save(); toast('Legenda salva.'); },
     barberRole(el) { const b = barberById(el.dataset.id); if (!b) return; b.role = el.value.trim().slice(0, 60) || B().role; save(); toast('Função salva.'); },
     leaderExtra(el) {

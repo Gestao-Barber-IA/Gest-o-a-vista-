@@ -66,6 +66,18 @@
   .q-opts .ic { font-size: 2rem; line-height: 1; }
   .q-opts b { font-family: var(--font-d); font-size: 1.05rem; }
   .q-opts small { color: #a8a094; font-size: 0.84rem; }
+  .lead { width: 100%; display: grid; gap: 12px; text-align: left; }
+  .lead-row { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (max-width: 380px) { .lead-row { grid-template-columns: 1fr; } }
+  .lead label { display: grid; gap: 6px; font-weight: 600; font-size: 0.92rem; color: #e9e3d8; }
+  .lead input[type=text], .lead input:not([type]), .lead input[type=tel], .lead input[type=email] { width: 100%; padding: 13px 14px; border-radius: 14px; border: 1px solid #3a3336; background: #171416; color: #f6f2e8; font: 1rem var(--font-b); }
+  .lead input:focus { outline: 2px solid #d6b46a; outline-offset: 1px; }
+  .lead-ok { display: flex !important; gap: 10px; align-items: flex-start; font-weight: 500 !important; color: #c9c2b6 !important; font-size: 0.86rem !important; }
+  .lead-ok input { width: 20px; height: 20px; flex: none; margin-top: 1px; accent-color: #d6b46a; }
+  .lead-ok a { color: #d6b46a; }
+  .lead-msg { margin: 0; min-height: 1.2em; color: #ff8a8a; font-weight: 600; font-size: 0.92rem; }
+  .q-go { padding: 16px 20px; border-radius: 16px; border: 0; background: linear-gradient(90deg, #d6b46a, #eaa59f); color: #1d1607; font: 800 1.05rem var(--font-b); cursor: pointer; }
+  .q-go:disabled { opacity: .7; }
   .q-back { background: none; border: 0; color: #a8a094; text-decoration: underline; cursor: pointer; font: inherit; }
   .q-load { display: grid; gap: 14px; justify-items: center; }
   .spin { width: 46px; height: 46px; border-radius: 50%; border: 4px solid #2f2a2d; border-top-color: #d6b46a; animation: sp 0.9s linear infinite; }
@@ -96,13 +108,32 @@
   .trust { display: flex; flex-wrap: wrap; gap: 8px 18px; justify-content: center; color: var(--muted); font-size: 0.92rem; }
   .trust span::before { content: "✓ "; color: var(--good); font-weight: 800; }
 
+  .ideal { display: inline-block; max-width: 100%; text-align: center; line-height: 1.45; padding: 10px 16px; border-radius: 14px; text-decoration: none;
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); color: var(--fg); font-weight: 600; }
+  .ideal b { color: var(--accent); }
+  .ideal span b { color: var(--accent); }
+  /* garantia e oferta */
+  .guarantee { display: flex; gap: 16px; align-items: center; margin-top: 22px; padding: 18px 20px; border-radius: 20px; border: 1px solid rgba(82, 211, 126, .4); background: rgba(82, 211, 126, .08); }
+  .guarantee .seal { flex: none; width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; text-align: center; background: #2fbf63; color: #fff; font: 800 0.72rem/1.05 var(--font-d); }
+  .guarantee .seal b { display: block; font-size: 1.35rem; }
+  .guarantee h3 { font-size: 1.1rem; margin-bottom: 4px; }
+  .guarantee p { margin: 0; color: var(--soft); font-size: 0.96rem; }
+  .promo { display: block; margin: 0; max-width: 560px; justify-self: center; text-align: center; padding: 12px 16px; border-radius: 16px; border: 1px dashed color-mix(in srgb, var(--accent) 60%, transparent); background: color-mix(in srgb, var(--accent) 10%, transparent); font-weight: 600; }
+  .promo b { color: var(--accent); }
   /* ---------- dores ---------- */
-  .pains { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
-  .pains .card { display: grid; gap: 8px; }
-  .pains h3 { font-size: 1.08rem; }
-  .pains p { margin: 0; color: var(--soft); font-size: 0.97rem; }
-  .pains .fix { color: var(--fg); }
-  .pains .fix b { color: var(--accent); }
+  .pains { display: grid; gap: 24px 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+  /* problema (vermelho) e solução (verde) */
+  .pair { display: grid; gap: 8px; align-content: start; }
+  .pain-box, .fix-box { display: flex; gap: 12px; align-items: flex-start; padding: 16px 18px; border-radius: 18px; }
+  .pain-box { background: rgba(255, 90, 90, 0.10); border: 1px solid rgba(255, 90, 90, 0.38); }
+  .fix-box { background: rgba(82, 211, 126, 0.10); border: 1px solid rgba(82, 211, 126, 0.38); }
+  .mk { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-weight: 800; font-size: 0.95rem; line-height: 1; margin-top: 1px; }
+  .mk-x { background: #ff5a5a; color: #fff; }
+  .mk-ok { background: #2fbf63; color: #fff; }
+  .pain-box h3 { font-size: 1.06rem; color: #ffd9d9; }
+  html[data-brand="salao"] .pain-box h3 { color: #ffdcdc; }
+  .fix-box p { margin: 0; color: var(--fg); font-size: 0.97rem; }
+  .fix-box b { color: #63e08e; }
 
   /* ---------- resultados ---------- */
   .res { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
@@ -183,18 +214,45 @@
   details[open] summary::after { content: "–"; }
   details p { margin: 10px 0 0; color: var(--soft); }
   footer { padding: 30px 0 110px; color: var(--muted); font-size: 0.9rem; text-align: center; }
-  .float { position: fixed; left: 16px; right: 16px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 20; display: none; }
+  .float { position: fixed; left: 16px; right: 16px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 20; display: none;
+    opacity: 0; transform: translateY(24px); pointer-events: none; transition: opacity .35s ease, transform .35s ease; }
+  .float.on { opacity: 1; transform: none; pointer-events: auto; }
   @media (max-width: 720px) { .float { display: block; } }
+  /* brilho que passa e luz pulsando em volta, discretos */
+  .btn-glow { position: relative; overflow: hidden; isolation: isolate; animation: glow 2.8s ease-in-out infinite; }
+  .btn-glow::after { content: ""; position: absolute; top: 0; bottom: 0; left: -60%; width: 45%; z-index: -1;
+    background: linear-gradient(100deg, transparent, rgba(255,255,255,.55), transparent); transform: skewX(-20deg); animation: shine 3.6s ease-in-out infinite; }
+  .btn-glow .arr { display: inline-block; animation: nudge 1.8s ease-in-out infinite; }
+  @keyframes shine { 0%, 55% { left: -60%; } 85%, 100% { left: 130%; } }
+  @keyframes glow { 0%, 100% { box-shadow: 0 10px 30px var(--glow); } 50% { box-shadow: 0 10px 44px var(--glow), 0 0 0 6px color-mix(in srgb, var(--accent) 18%, transparent); } }
+  @keyframes nudge { 0%, 100% { transform: none; } 50% { transform: translateX(4px); } }
   .reveal { opacity: 0; transform: translateY(16px); transition: opacity .6s ease, transform .6s ease; }
   .reveal.in { opacity: 1; transform: none; }
-  @media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } .play span, .spin { animation: none; } html { scroll-behavior: auto; } }
+  @media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } .play span, .spin, .btn-glow, .btn-glow::after, .btn-glow .arr { animation: none; } html { scroll-behavior: auto; } }
 </style>
 </head>
 <body class="locked">
 
 <!-- Quiz: duas perguntas antes da página -->
 <div class="quiz" id="quiz" role="dialog" aria-modal="true" aria-labelledby="q-h">
-  <div class="q-in" id="q1">
+  <div class="q-in" id="q0">
+    <div class="q-logos"><img src="../assets/logo.jpg" alt="Gestão Barber IA"><img src="../assets/logo-salao.jpg" alt="Gestão Salão IA"></div>
+    <span class="q-step">Antes de começar</span>
+    <h1 id="q0-h">Descubra o plano ideal para a sua equipe</h1>
+    <p>Leva menos de 1 minuto. Preencha seus dados e responda 2 perguntas rápidas.</p>
+    <form class="lead" id="lead" novalidate>
+      <div class="lead-row">
+        <label>Nome *<input name="nome" autocomplete="given-name" required maxlength="80"></label>
+        <label>Sobrenome *<input name="sobrenome" autocomplete="family-name" required maxlength="80"></label>
+      </div>
+      <label>Celular (WhatsApp) *<input name="celular" type="tel" inputmode="tel" autocomplete="tel" placeholder="(19) 99999-9999" required maxlength="20"></label>
+      <label>E-mail *<input name="email" type="email" inputmode="email" autocomplete="email" placeholder="voce@email.com" required maxlength="120"></label>
+      <label class="lead-ok"><input type="checkbox" name="ok" required><span>Autorizo o contato por WhatsApp, telefone ou e-mail sobre o sistema. Veja a <a href="../privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a>.</span></label>
+      <p class="lead-msg" data-lmsg></p>
+      <button class="q-go" type="submit">Continuar para o quiz →</button>
+    </form>
+  </div>
+  <div class="q-in" id="q1" hidden>
     <div class="q-logos"><img src="../assets/logo.jpg" alt="Gestão Barber IA"><img src="../assets/logo-salao.jpg" alt="Gestão Salão IA"></div>
     <div class="q-bar" aria-hidden="true"><i style="width:50%"></i></div>
     <span class="q-step">Pergunta 1 de 2</span>
@@ -233,6 +291,7 @@
 <section class="hero"><div class="wrap">
   <span class="pill" data-t="pill">Para barbearias com até 4 profissionais</span>
   <h1 data-t="h1">Coloque a sua equipe batendo meta <em>todo mês</em>, sem planilha e sem cobrança no grito</h1>
+  <a class="ideal" href="#planos" hidden>✨ <span data-ideal>Plano ideal para você: Profissional · R$ 150/mês no anual</span> <b>→</b></a>
   <p class="lead" data-t="lead">Veja em poucos minutos como o ranking em tempo real, as metas e o checklist com prova mudam a rotina da sua equipe.</p>
   <div class="video" id="video">
     <img data-shot="tv" alt="" width="1280" height="720">
@@ -247,12 +306,12 @@
 <section><div class="wrap">
   <div class="head center reveal"><span class="eyebrow">O que trava o resultado</span><h2 data-t="painH">Se a sua barbearia vive alguma dessas situações, o sistema foi feito para você</h2></div>
   <div class="pains">
-    <div class="card reveal"><h3 data-t="pa1">A equipe só descobre o resultado no fim do mês</h3><p class="fix"><b>Com o sistema:</b> ranking em tempo real no celular de cada um, com quanto falta para subir.</p></div>
-    <div class="card reveal"><h3>A meta é falada na reunião e esquecida na segunda</h3><p class="fix"><b>Com o sistema:</b> metas do mês divididas pelos dias, com o avanço visível o tempo todo.</p></div>
-    <div class="card reveal"><h3>A agenda tem buracos e ninguém faz nada</h3><p class="fix"><b>Com o sistema:</b> Checklist Agenda Cheia com stories, abordagens e avaliações, com foto como prova.</p></div>
-    <div class="card reveal"><h3>Cobrar resultado vira desgaste</h3><p class="fix"><b>Com o sistema:</b> os números falam, e a conversa passa a ser sobre o próximo passo.</p></div>
-    <div class="card reveal"><h3>Quem se esforça não é reconhecido</h3><p class="fix"><b>Com o sistema:</b> pódio, MVP, avisos de ultrapassagem e a revelação no Fechamento do mês.</p></div>
-    <div class="card reveal"><h3 data-t="pa6">Tudo depende de você estar na barbearia</h3><p class="fix"><b>Com o sistema:</b> líderes e gestores com os acessos que você libera, e tudo no seu celular.</p></div>
+    <div class="pair reveal"><div class="pain-box"><i class="mk mk-x" aria-hidden="true">✕</i><h3 data-t="pa1">A equipe só descobre o resultado no fim do mês</h3></div><div class="fix-box"><i class="mk mk-ok" aria-hidden="true">✓</i><p><b>Com o sistema:</b> ranking em tempo real no celular de cada um, com quanto falta para subir.</p></div></div>
+    <div class="pair reveal"><div class="pain-box"><i class="mk mk-x" aria-hidden="true">✕</i><h3>A meta é falada na reunião e esquecida na segunda</h3></div><div class="fix-box"><i class="mk mk-ok" aria-hidden="true">✓</i><p><b>Com o sistema:</b> metas do mês divididas pelos dias, com o avanço visível o tempo todo.</p></div></div>
+    <div class="pair reveal"><div class="pain-box"><i class="mk mk-x" aria-hidden="true">✕</i><h3>A agenda tem buracos e ninguém faz nada</h3></div><div class="fix-box"><i class="mk mk-ok" aria-hidden="true">✓</i><p><b>Com o sistema:</b> Checklist Agenda Cheia com stories, abordagens e avaliações, com foto como prova.</p></div></div>
+    <div class="pair reveal"><div class="pain-box"><i class="mk mk-x" aria-hidden="true">✕</i><h3>Cobrar resultado vira desgaste</h3></div><div class="fix-box"><i class="mk mk-ok" aria-hidden="true">✓</i><p><b>Com o sistema:</b> os números falam, e a conversa passa a ser sobre o próximo passo.</p></div></div>
+    <div class="pair reveal"><div class="pain-box"><i class="mk mk-x" aria-hidden="true">✕</i><h3>Quem se esforça não é reconhecido</h3></div><div class="fix-box"><i class="mk mk-ok" aria-hidden="true">✓</i><p><b>Com o sistema:</b> pódio, MVP, avisos de ultrapassagem e a revelação no Fechamento do mês.</p></div></div>
+    <div class="pair reveal"><div class="pain-box"><i class="mk mk-x" aria-hidden="true">✕</i><h3 data-t="pa6">Tudo depende de você estar na barbearia</h3></div><div class="fix-box"><i class="mk mk-ok" aria-hidden="true">✓</i><p><b>Com o sistema:</b> líderes e gestores com os acessos que você libera, e tudo no seu celular.</p></div></div>
   </div>
 </div></section>
 
@@ -272,6 +331,7 @@
     <h2>Compare os planos</h2>
     <p class="lead" style="margin:0 auto" data-t="planLead">Todos os planos têm todas as funções. O que muda é o tamanho da equipe, o valor e, no Premium, o suporte prioritário.</p>
     <span class="pill">💰 No plano anual você economiza até 29%</span>
+    <p class="promo" data-promo hidden></p>
   </div>
   <div class="plans">
     <article class="card pl" data-plan="essencial"><span class="pl-tag" hidden>Recomendado para você</span>
@@ -290,6 +350,8 @@
       <ul><li>Equipe sem limite de pessoas</li><li>Todas as funções do sistema</li><li>Integração por API</li><li><b>Suporte prioritário</b></li><li>Para equipes grandes e redes</li></ul>
       <a class="btn btn-block" data-buy="Premium" href="#agendar">Quero o Premium</a></article>
   </div>
+  <div class="guarantee reveal" data-guarantee hidden><div class="seal"><b data-gdays>7</b>DIAS</div>
+    <div><h3>Garantia de satisfação</h3><p data-gtext></p></div></div>
   <div class="tbl-wrap reveal"><table>
     <thead><tr><th>Comparativo</th><th data-c="essencial">Essencial</th><th data-c="profissional">Profissional</th><th data-c="premium">Premium</th></tr></thead>
     <tbody>
@@ -350,13 +412,15 @@
   <details><summary>Preciso instalar alguma coisa?</summary><p>Não. Abre no navegador do celular, do computador ou da TV, e dá para adicionar à tela de início como um aplicativo.</p></details>
   <details><summary>Como é a demonstração por vídeo?</summary><p>Uma chamada rápida pelo WhatsApp ou Google Meet, no horário que você escolher. O consultor mostra o sistema e ajuda a escolher o plano.</p></details>
   <details><summary>Tenho que lançar os números todo dia?</summary><p>Não precisa. Dá para lançar o total do mês em segundos, ou ligar a integração com o seu sistema de agenda para os números entrarem sozinhos.</p></details>
+  <details data-gfaq><summary>E se não der certo na minha equipe?</summary><p>Você tem 7 dias grátis para testar e, depois de contratar, garantia de satisfação: se em 7 dias o sistema não fizer diferença, devolvemos o valor pago.</p></details>
   <details><summary>Como funciona o pagamento?</summary><p>Depois dos 7 dias grátis você escolhe o plano pelo tamanho da equipe. No mensal não há fidelidade. No anual o valor por mês fica menor.</p></details>
 </div></section>
 </main>
 
 <footer><div class="wrap"><p><span data-t="name">Gestão Barber IA</span> · <a href="../termos.html">Termos de uso</a> · <a href="../privacidade.html">Privacidade</a></p></div></footer>
-<div class="float"><a class="btn btn-primary btn-block" href="#planos">💳 Contratar plano</a></div>
+<div class="float" id="float" aria-hidden="true"><a class="btn btn-primary btn-block btn-glow" href="#planos" tabindex="-1">Ver planos e preços <span class="arr" aria-hidden="true">→</span></a></div>
 
+<script src="../js/config.js"></script>
 <script>
 (function () {
   // ---------- Configuração ----------
@@ -366,6 +430,10 @@
   // Depoimentos reais de clientes (com autorização). Vazio: a seção de depoimentos não aparece.
   // Exemplo: { nome: 'Nome', negocio: 'Barbearia X · Cidade', texto: '...', resultado: '+20% no faturamento em 3 meses', foto: '' }
   const DEPOIMENTOS = [];
+  // Garantia: dias para pedir o dinheiro de volta (0 desliga). Só deixe ligada se for cumprir.
+  const GARANTIA_DIAS = 7;
+  // Oferta de lançamento (texto vazio desliga). Tire assim que as vagas acabarem.
+  const OFERTA = 'Oferta de lançamento: os <b>primeiros 20 clientes</b> pagam <b>metade do valor no 1º mês</b>.';
 
   const SEG = {
     barbearia: { brand: 'barber', label: 'barbearia', a: 'uma barbearia', da: 'da sua barbearia', na: 'na barbearia', pro: 'barbeiros', title: 'Barbearia' },
@@ -406,6 +474,16 @@
     // plano recomendado pelo quiz
     qs('.pl').forEach(c => { const on = c.dataset.plan === rec; c.classList.toggle('rec', on); c.querySelector('.pl-tag').hidden = !on; c.querySelector('.btn').classList.toggle('btn-primary', on); });
     qs('[data-c]').forEach(c => c.classList.toggle('rec', c.dataset.c === rec));
+    const recCard = document.querySelector(`[data-plan="${rec}"]`);
+    $('[data-ideal]').innerHTML = `Plano ideal para ${S.da.replace('da sua ', 'a sua ').replace('do seu ', 'o seu ')}: <b>${recCard.querySelector('h3').textContent}</b> · R$ ${recCard.querySelector('.price b').textContent}/mês no anual`;
+    $('.ideal').hidden = false;
+    const gf = document.querySelector('[data-gfaq]'); if (gf) gf.hidden = !(GARANTIA_DIAS > 0);
+    if (gf && GARANTIA_DIAS > 0) gf.querySelector('p').textContent = `Você tem 7 dias grátis para testar e, depois de contratar, garantia de satisfação: se em ${GARANTIA_DIAS} dias o sistema não fizer diferença, devolvemos o valor pago.`;
+    if (GARANTIA_DIAS > 0) {
+      $('[data-guarantee]').hidden = false; $('[data-gdays]').textContent = GARANTIA_DIAS;
+      $('[data-gtext]').textContent = `Use o sistema com a sua equipe por ${GARANTIA_DIAS} dias depois de contratar. Se não fizer diferença, devolvemos o valor pago, sem burocracia.`;
+    }
+    if (OFERTA) { $('[data-promo]').hidden = false; $('[data-promo]').innerHTML = '🎁 ' + OFERTA; }
     // preços
     // formulário já preenchido com as respostas
     const f = $('#book'); f.tipo.value = seg; f.equipe.value = String(size);
@@ -433,7 +511,7 @@
 
   // ---------- quiz ----------
   const quiz = $('#quiz');
-  const show = id => ['q1', 'q2', 'q3'].forEach(k => { $('#' + k).hidden = k !== id; });
+  const show = id => ['q0', 'q1', 'q2', 'q3'].forEach(k => { $('#' + k).hidden = k !== id; });
   function finish() {
     show('q3');
     setTimeout(() => { quiz.hidden = true; document.body.classList.remove('locked'); render(); window.scrollTo(0, 0); }, 1100);
@@ -446,11 +524,55 @@
   }));
   qs('[data-q2]').forEach(b => b.addEventListener('click', () => { size = Number(b.dataset.q2); finish(); }));
   $('[data-back]').addEventListener('click', () => show('q1'));
-  // Link já respondido (ex.: ?tipo=salao&equipe=10) pula o quiz.
+  // ---------- cadastro do interessado (salvo no banco; só o dono do SaaS vê) ----------
+  const CFG = window.GB_CONFIG || {};
   const sp = new URLSearchParams(location.search);
-  if (SEG[sp.get('tipo')] && SIZE[sp.get('equipe')]) { seg = sp.get('tipo'); size = Number(sp.get('equipe')); quiz.hidden = true; document.body.classList.remove('locked'); render(); }
-  // Só o tipo de negócio no link (?tipo=salao): o quiz já começa na pergunta 2.
-  else if (SEG[sp.get('tipo')]) { const btn = document.querySelector(`[data-q1="${sp.get('tipo')}"]`); if (btn) btn.click(); }
+  const LKEY = 'gbia.lead';
+  const getLead = () => { try { return JSON.parse(localStorage.getItem(LKEY) || 'null'); } catch (e) { return null; } };
+  const origem = ['utm_source', 'utm_medium', 'utm_campaign'].map(k => sp.get(k)).filter(Boolean).join(' / ') || (sp.has('fbclid') ? 'instagram/facebook' : (document.referrer ? new URL(document.referrer).hostname : 'direto'));
+  async function api(path, body) {
+    if (!CFG.supabaseUrl || !CFG.supabaseAnonKey) throw new Error('sem servidor');
+    const r = await fetch(CFG.supabaseUrl.replace(/\/$/, '') + '/rest/v1/' + path, { method: 'POST',
+      headers: { apikey: CFG.supabaseAnonKey, Authorization: 'Bearer ' + CFG.supabaseAnonKey, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error('falhou ' + r.status);
+  }
+  const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
+  function startQuiz() {
+    // Só o tipo de negócio no link (?tipo=salao): o quiz já começa na pergunta 2.
+    if (SEG[sp.get('tipo')]) { const btn = document.querySelector(`[data-q1="${sp.get('tipo')}"]`); if (btn) { btn.click(); return; } }
+    show('q1');
+  }
+  $('#lead').addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = e.target, m = f.querySelector('[data-lmsg]');
+    const nome = f.nome.value.trim(), sobrenome = f.sobrenome.value.trim(), cel = f.celular.value.replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, ''), email = f.email.value.trim();
+    if (!nome) { m.textContent = 'Digite o seu nome.'; return f.nome.focus(); }
+    if (!sobrenome) { m.textContent = 'Digite o seu sobrenome.'; return f.sobrenome.focus(); }
+    if (cel.length < 10 || cel.length > 11) { m.textContent = 'Digite o celular com DDD.'; return f.celular.focus(); }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { m.textContent = 'Digite um e-mail válido.'; return f.email.focus(); }
+    if (!f.ok.checked) { m.textContent = 'Marque a autorização de contato para continuar.'; return; }
+    m.textContent = ''; const btn = f.querySelector('button'); btn.disabled = true; btn.textContent = 'Salvando…';
+    const id = uuid();
+    try { await api('leads', { id, nome, sobrenome, celular: cel, email, origem: origem.slice(0, 200), consentimento: true }); } catch (x) { /* segue para o quiz mesmo sem conexão */ }
+    try { localStorage.setItem(LKEY, JSON.stringify({ id, nome, sobrenome, celular: f.celular.value.trim(), email, at: Date.now() })); } catch (x) { /* opcional */ }
+    prefill(); startQuiz();
+  });
+  // Preenche o agendamento com os dados do cadastro.
+  function prefill() {
+    const l = getLead(), b = $('#book'); if (!l || !b) return;
+    if (!b.nome.value) b.nome.value = (l.nome + ' ' + (l.sobrenome || '')).trim();
+    if (!b.tel.value) b.tel.value = l.celular || '';
+  }
+  // Respostas do quiz vão junto do cadastro.
+  const sendQuiz = () => { const l = getLead(); if (l && l.id && !l.quiz) { api('rpc/lead_quiz', { p_id: l.id, p_tipo: seg, p_equipe: size }).then(() => { l.quiz = true; try { localStorage.setItem(LKEY, JSON.stringify(l)); } catch (x) { /* opcional */ } }).catch(() => {}); } };
+  qs('[data-q2]').forEach(b => b.addEventListener('click', sendQuiz));
+
+  // Quem já se cadastrou (neste aparelho ou pelo formulário do Instagram: ?cadastro=ok) vai direto ao quiz.
+  const done = !!getLead() || sp.get('cadastro') === 'ok';
+  if (SEG[sp.get('tipo')] && SIZE[sp.get('equipe')] && done) { seg = sp.get('tipo'); size = Number(sp.get('equipe')); quiz.hidden = true; document.body.classList.remove('locked'); render(); }
+  else if (done) startQuiz();
+  else show('q0');
+  prefill();
 
   qs('[data-buy]').forEach(a => a.addEventListener('click', () => {
     const f = $('#book'); f.dataset.plano = a.dataset.buy;
@@ -476,6 +598,16 @@
     window.open('https://wa.me/' + WHATSAPP + '?text=' + encodeURIComponent(linhas.join('\n')), '_blank', 'noopener');
   });
 
+  // Botão "Ver planos e preços": aparece depois do início e some quando os planos ou o agendamento estão na tela.
+  const fl = $('#float'), heroEl = document.querySelector('.hero'), zones = [$('#planos'), $('#agendar')];
+  function floatCheck() {
+    if (!fl) return;
+    const vh = window.innerHeight, past = heroEl.getBoundingClientRect().bottom < vh * 0.35;
+    const over = zones.some(z => { const r = z.getBoundingClientRect(); return r.top < vh * 0.85 && r.bottom > vh * 0.15; });
+    const on = past && !over && document.getElementById('quiz').hidden;
+    fl.classList.toggle('on', on); fl.setAttribute('aria-hidden', String(!on)); fl.querySelector('a').tabIndex = on ? 0 : -1;
+  }
+  window.addEventListener('scroll', floatCheck, { passive: true }); window.addEventListener('resize', floatCheck); floatCheck();
   // Entrada suave dos blocos ao rolar.
   const io = 'IntersectionObserver' in window ? new IntersectionObserver(es => es.forEach(x => { if (x.isIntersecting) { x.target.classList.add('in'); io.unobserve(x.target); } }), { threshold: 0.12 }) : null;
   qs('.reveal').forEach(el => io ? io.observe(el) : el.classList.add('in'));
