@@ -2141,3 +2141,12 @@ html[data-brand="salao"] .pt-ask b { background-image: linear-gradient(180deg, #
 .cd-title { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 16px; }
 .cd-bday .section-title { display: flex; align-items: center; gap: 8px; }
 .cd-bday .section-title .ico { width: 22px; height: 22px; color: var(--accent); }
+/* Modo apresentação: marca do cliente */
+.demo-kit { margin: 10px var(--gutter-r) 0 var(--gutter-l); }
+.demo-kit-row { display: flex; gap: 16px; align-items: center; }
+.demo-kit-logo { display: grid; place-items: center; flex: none; width: 76px; height: 76px; border-radius: 50%; overflow: hidden; background: var(--surface-2); border: 2px solid var(--line-accent); color: var(--muted); }
+.demo-kit-logo img { width: 100%; height: 100%; object-fit: cover; }
+.demo-kit-logo .ico { width: 28px; height: 28px; }
+.demo-kit-row .grow { flex: 1; min-width: 0; }
+.demo-acts .btn.on { border-color: var(--accent); }
+@media (max-width: 560px) { .demo-kit-row { flex-direction: column; align-items: stretch; } .demo-kit-logo { align-self: center; } }

@@ -374,10 +374,51 @@
       <span class="demo-acts">
         <span class="seg demo-seg" role="group" aria-label="Ver como"><button type="button" class="${asOwner ? 'on' : ''}" data-action="demoAs" data-r="dono">Ver como dono</button><button type="button" class="${asOwner ? '' : 'on'}" data-action="demoAs" data-r="pro">Ver como profissional</button></span>
         <button type="button" class="btn btn-sm btn-primary" data-action="pitchStart">${icon('play')} Apresentar o sistema</button>
+        <button type="button" class="btn btn-sm ${ui.kitOpen ? 'on' : ''}" data-action="kitToggle" aria-expanded="${!!ui.kitOpen}">${icon('palette')} Marca do cliente</button>
         <button type="button" class="btn btn-sm" data-action="startDemo" data-b="${other.key}">${esc('Trocar para ' + other.name)}</button>
         <button type="button" class="btn btn-sm" data-action="demoReset">Reiniciar</button>
         <button type="button" class="btn btn-sm btn-primary" data-action="demoExit">${icon('x')} Sair</button>
-      </span></div>`;
+      </span></div>${ui.kitOpen ? kitPanel() : ''}`;
+  }
+  // ---------- Modo apresentação: marca do cliente (logo e nome da empresa visitada) ----------
+  // O app troca o nome e o logo da empresa e se recolore com as cores do logo, para o dono já se ver no sistema.
+  const KIT_VARS = ['--accent', '--accent-strong', '--accent-ink', '--accent-glow', '--line-accent', '--bg-glow-1', '--bg-glow-2', '--drawer-1', '--drawer-2', '--drawer-3', '--blue', '--blue-light', '--gold'];
+  const demoKit = () => { try { return JSON.parse(DB.pref.get('demoKit', '') || 'null'); } catch (e) { return null; } };
+  const lumOf = h => { const [r, g, b] = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  async function applyKitColors() {
+    const st = document.documentElement.style, kit = DEMO_ON && demoKit();
+    if (!kit || !kit.logo) { KIT_VARS.forEach(v => st.removeProperty(v)); return; }
+    const p = await brandPalette(), A = p.a, Bc = p.b;
+    const set = (k, v) => st.setProperty(k, v);
+    set('--accent', A); set('--accent-strong', mixHex(A, '#000000', 0.25)); set('--accent-ink', lumOf(A) > 0.5 ? '#14100a' : '#ffffff');
+    set('--accent-glow', A + '59'); set('--line-accent', A + '55'); set('--bg-glow-1', Bc + '30'); set('--bg-glow-2', A + '1a');
+    set('--drawer-1', mixHex(Bc, '#000000', 0.45)); set('--drawer-2', mixHex(Bc, '#000000', 0.68)); set('--drawer-3', mixHex(Bc, '#000000', 0.88));
+    set('--blue', Bc); set('--blue-light', mixHex(Bc, '#ffffff', 0.4)); set('--gold', mixHex(A, '#ffffff', 0.2));
+  }
+  // Garante que o nome e o logo do cliente estejam na demonstração (também depois de Reiniciar ou da virada do mês).
+  function ensureKit() {
+    const kit = DEMO_ON && demoKit(); if (!kit) return;
+    let ch = false;
+    if (kit.name && state.company.name !== kit.name) { state.company.name = kit.name; ch = true; }
+    if (kit.logo && state.company.logo !== kit.logo) { state.company.logo = kit.logo; ch = true; }
+    if (ch) save();
+  }
+  function kitPanel() {
+    const kit = demoKit() || {};
+    return `<div class="demo-kit card"><form class="form" data-form="demoKit" novalidate>
+      <div class="demo-kit-row">
+        <span class="demo-kit-logo">${kit.logo ? `<img src="${esc(kit.logo)}" alt="Logo do cliente">` : icon('camera')}</span>
+        <div class="grid-2 grow">
+          <label class="field"><span>Nome da empresa do cliente</span><input class="input" name="name" maxlength="60" value="${esc(kit.name || '')}" placeholder="${MARCA === 'salao' ? 'Ex.: Studio Glamour' : 'Ex.: Barbearia do João'}"></label>
+          <label class="field"><span>Logo da empresa do cliente</span><input class="input" name="logo" type="file" accept="image/*"></label>
+        </div>
+      </div>
+      <p class="section-note">O sistema troca o nome e o logo em todas as telas e se adapta às cores do logo — o dono já se vê usando. Fica só neste aparelho, só no modo apresentação.</p>
+      <p class="form-msg" data-msg></p>
+      <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Aplicar a marca do cliente</button>
+        ${kit.logo || kit.name ? `<button class="btn" type="button" data-action="kitClear">${icon('undo')} Voltar ao padrão</button>` : ''}
+        <button class="btn" type="button" data-action="kitToggle">Fechar</button></div>
+    </form></div>`;
   }
   function demoLogin(role) {
     const u = role === 'pro' ? state.users.find(x => x.role !== 'gestor' && x.status === 'ativo') : state.users.find(x => x.role === 'gestor');
@@ -4763,7 +4804,7 @@ Content-Type: application/json</pre>
       <div class="tv-progress" aria-hidden="true"><i style="animation-duration:${TV_SECONDS}s${reduce ? ';animation:none;width:100%' : ''}"></i></div>
       <div class="tv-fit">
       <header class="tv-head">
-        ${logo('tv-logo')}
+        ${state.company.logo ? `<img class="brand-mark tv-logo" src="${esc(state.company.logo)}" alt="${esc(state.company.name || 'Logo')}">` : logo('tv-logo')}
         <div class="tv-title"><b>${esc(state.company.name)}</b><span>Tela da loja · ${esc(tr.type === 'mes' ? 'Mês' : PERIOD_NAMES[ui.period])}: ${esc(tr.label)}</span></div>
         <div class="tv-controls">
           <button class="btn btn-sm" data-action="tvSound" aria-pressed="${Sound.on}">${icon('sound')} ${Sound.on ? 'Sons ativos' : 'Sons desligados'}</button>
@@ -5305,7 +5346,13 @@ Content-Type: application/json</pre>
       location.href = location.origin + location.pathname;
     },
     demoAs(el) { demoLogin(el.dataset.r); location.hash = 'inicio'; render(); window.scrollTo(0, 0); },
-    demoReset() { state = DB.reset(); rkCache = {}; demoLogin('dono'); toast('Demonstração reiniciada.'); location.hash = 'inicio'; render(); },
+    kitToggle() { ui.kitOpen = !ui.kitOpen; render(); },
+    kitClear() {
+      const kit = demoKit(); DB.pref.set('demoKit', '');
+      if (kit && kit.orig) { state.company.name = kit.orig.name; state.company.logo = kit.orig.logo; save(); }
+      applyKitColors(); ui.kitOpen = false; toast('Voltou ao padrão da demonstração.'); render();
+    },
+    demoReset() { state = DB.reset(); ensureKit(); rkCache = {}; demoLogin('dono'); toast('Demonstração reiniciada.'); location.hash = 'inicio'; render(); },
     demoExit() { try { sessionStorage.removeItem('gbia.demo'); } catch (e) { /* opcional */ } location.href = location.origin + location.pathname; },
     pickBrand(el) { const b = el.dataset.b; if (!BRANDS[b]) return; DB.pref.set('brand', b); applyBrand(b); renderAuth(ui.authMode || 'entrar'); },
     goFechamento(el) { ui.teamMonth = el.dataset.ym; location.hash = 'fechamento'; },
@@ -5579,6 +5626,17 @@ Content-Type: application/json</pre>
       state.houseGoalsM = M;
       ui.hgEdit = false; ui.hgYm = null; save(); render();
       toast(Object.keys(g).length ? `Metas de ${monthRange(tgt).label.split(' de ')[0]} salvas${dflt ? ' (valem também para os meses seguintes)' : ''}.` : 'Metas removidas.');
+    },
+    async demoKit(f) {
+      const old = demoKit() || {}, name = val(f, 'name').slice(0, 60), file = f.elements.logo.files[0];
+      let logo = old.logo || null;
+      if (file) { try { logo = await readImage(file, 512, 0.9); } catch (e) { return setMsg(f, e.message); } }
+      if (!name && !logo) return setMsg(f, 'Digite o nome ou envie o logo da empresa do cliente.');
+      const orig = old.orig || { name: state.company.name, logo: state.company.logo || null };
+      try { DB.pref.set('demoKit', JSON.stringify({ name, logo, orig })); } catch (e) { return setMsg(f, 'Imagem grande demais para guardar. Tente outro arquivo.'); }
+      state.company.name = name || orig.name; state.company.logo = logo; save();
+      await applyKitColors(); ui.kitOpen = false;
+      toast(`Pronto! A demonstração agora é da ${name || 'empresa do cliente'}.`); render();
     },
     pdBday(f) {
       const v = val(f, 'bday');
@@ -5894,6 +5952,7 @@ Content-Type: application/json</pre>
     if (BRANDS[pm]) DB.pref.set('brand', pm);
     applyBrand(DB.demo || DB.pref.get('brand', '') || 'barber');
   }
+  if (DEMO_ON) { try { ensureKit(); applyKitColors(); } catch (e) { /* opcional */ } }
   if (DEMO_ON) { let pf = null; try { pf = sessionStorage.getItem('gbia.pitch'); sessionStorage.removeItem('gbia.pitch'); } catch (e) { /* opcional */ } if (pf) setTimeout(() => { if (currentUser()) pitchOpen(); }, 2400); }
   if (DEMO_ON && Cloud.demoMusic) {
     Cloud.demoMusic.load().then(m => { if (m && Object.keys(m).length) { ui.acctMusic = m; if (location.hash === '#fechamento') render(); } }).catch(() => { /* sem conta: só as músicas deste aparelho */ });
