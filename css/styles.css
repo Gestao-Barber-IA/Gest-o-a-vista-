@@ -1089,7 +1089,8 @@ textarea.input.pop-ta { min-height: 72px; font-family: var(--font-body); font-si
   background: radial-gradient(70% 45% at 15% 0%, rgba(58, 98, 207, 0.18), transparent 70%), radial-gradient(60% 40% at 90% 10%, rgba(214, 180, 106, 0.1), transparent 70%), var(--bg); }
 .tv-fit { display: grid; align-content: start; gap: 22px; min-width: 0; }
 /* Tela deitada (computador/TV): cabe inteira na tela, sem rolagem; o app ajusta o tamanho (zoom). */
-.tv.tv-fitted { overflow: hidden; align-content: center; }
+.tv.tv-fitted { overflow: hidden; display: block; }
+.tv-fitted .tv-fit { position: absolute; transform-origin: 0 0; }
 .tv-fitted :is(.tv-head, .tv-body) { max-width: 1680px; }
 .tv-fitted .tv-split { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: start; }
 .tv-fitted .gd-grid { grid-template-columns: repeat(var(--gd-cols, 4), minmax(0, 1fr)); }
