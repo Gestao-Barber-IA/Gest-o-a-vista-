@@ -573,6 +573,7 @@
     { group: 'Apresentações', items: [
       { r: 'apresentacao', t: 'Tela da loja', i: 'monitor' },
       { r: 'fechamento', t: 'Fechamento do mês', i: 'clipboard', g: 1, a: 1 },
+      { r: 'temas', t: 'Temas', i: 'palette', g: 1 },
     ] },
     { group: 'GP · Gestão de pessoas', items: [
       { r: 'time', t: 'Performance da equipe', i: 'trophy' },
@@ -691,6 +692,131 @@
     </svg>`;
   }
 
+  // ---------- temas do pódio: formato do escudo + tema da temporada ----------
+  const PD_LAYOUTS = [
+    { k: 'padrao', n: 'Padrão', d: 'O escudo clássico do Gestão Barber IA, com brilho e luzes.' },
+    { k: 'escudo', n: 'Escudo', d: 'Flâmula com ponta embaixo, cor cheia e diamantes no 2º e 3º lugar.' },
+    { k: 'tech', n: 'Tecnológico', d: 'Visual de painel futurista: cantos cortados, grade e foto hexagonal.' },
+    { k: 'minimal', n: 'Minimalista', d: 'Cartões limpos, sem efeitos. Ideal para telas menores.' },
+  ];
+  // c: cores do 1º, 2º e 3º lugar [cor clara, cor escura]; fx: efeito no fundo; fxc: cores do efeito.
+  const SEASONS = [
+    { k: 'natal', n: 'Natal', when: '1 a 26 de dezembro', c: [['#ffd66b', '#b07c1c'], ['#5fe08a', '#17803c'], ['#ff5b5b', '#a3122a']], fx: 'snow', fxc: ['#ffffff'] },
+    { k: 'anonovo', n: 'Ano Novo', when: '27 de dezembro a 7 de janeiro', c: [['#ffd66b', '#b07c1c'], ['#eef2fa', '#8790a6'], ['#f7c59f', '#a8643a']], fx: 'confetti', fxc: ['#ffd66b', '#ffffff', '#f7c59f'] },
+    { k: 'carnaval', n: 'Carnaval', when: 'As duas semanas do Carnaval', c: [['#ffd23f', '#c27a00'], ['#c084ff', '#6a2bd1'], ['#3ee08f', '#0f8a52']], fx: 'confetti', fxc: ['#ffd23f', '#c084ff', '#3ee08f', '#ff5fa2', '#4cc9f0'] },
+    { k: 'mulheres', n: 'Mês das Mulheres', when: 'Março', c: [['#d6a4ff', '#7a3fc4'], ['#ff9fd0', '#c2266f'], ['#ffb08f', '#c2553a']], fx: 'petal', fxc: ['#d6a4ff', '#ff9fd0', '#ffffff'] },
+    { k: 'junina', n: 'Festa Junina', when: '1º de junho a 31 de julho', c: [['#ffc93c', '#b8650a'], ['#ff6b5b', '#a8231a'], ['#5aa8ff', '#1d55b8']], fx: 'spark', fxc: ['#ffb23f', '#ff7a1f', '#ffd66b'] },
+    { k: 'pais', n: 'Dia dos Pais', when: 'Agosto, até o Dia dos Pais', c: [['#ffd66b', '#b07c1c'], ['#7fb2ff', '#23468f'], ['#d9a066', '#7a4a24']], fx: 'star', fxc: ['#ffd66b', '#ffffff'] },
+    { k: 'criancas', n: 'Dia das Crianças', when: '5 a 12 de outubro', c: [['#ffd23f', '#c27a00'], ['#4cc9f0', '#1769a8'], ['#ff6b6b', '#b3262f']], fx: 'bubble', fxc: ['#ffd23f', '#4cc9f0', '#ff6b6b', '#7bdc6b'] },
+    { k: 'outubrorosa', n: 'Outubro Rosa', when: 'Outubro', c: [['#ff8fc2', '#c2266f'], ['#ffd1e6', '#c4789c'], ['#ff5f97', '#9c1450']], fx: 'petal', fxc: ['#ff8fc2', '#ffd1e6', '#ffffff'] },
+    { k: 'halloween', n: 'Halloween', when: '26 a 31 de outubro', c: [['#ff9a2e', '#b04a06'], ['#b47cff', '#4f22a0'], ['#95e85a', '#3c7d14']], fx: 'bat', fxc: ['#c9a0ff', '#ff9a2e'] },
+    { k: 'novembroazul', n: 'Novembro Azul', when: 'Novembro', c: [['#6cc0ff', '#1b58c9'], ['#bcd9ff', '#4a6ea8'], ['#4fd6e0', '#127a85']], fx: 'bubble', fxc: ['#6cc0ff', '#bcd9ff'] },
+  ];
+  const seasonBy = k => SEASONS.find(s => s.k === k) || null;
+  function pdTheme() {
+    const t = state.theme || {};
+    return { layout: PD_LAYOUTS.some(l => l.k === t.layout) ? t.layout : 'padrao', season: t.season === 'auto' || seasonBy(t.season) ? t.season : 'off' };
+  }
+  // Tema automático pelo calendário.
+  function easter(y) {
+    const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+    const h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const mo = Math.floor((h + l - 7 * m + 114) / 31), da = ((h + l - 7 * m + 114) % 31) + 1;
+    return new Date(y, mo - 1, da);
+  }
+  function seasonOn(dt) {
+    const d = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()), y = d.getFullYear(), m = d.getMonth() + 1, day = d.getDate();
+    const tue = easter(y); tue.setDate(tue.getDate() - 47);
+    const diff = Math.round((d - tue) / 864e5);
+    if (diff >= -12 && diff <= 1) return 'carnaval';
+    if (m === 12) return day <= 26 ? 'natal' : 'anonovo';
+    if (m === 1 && day <= 7) return 'anonovo';
+    if (m === 3) return 'mulheres';
+    if (m === 6 || m === 7) return 'junina';
+    if (m === 8) { const first = new Date(y, 7, 1).getDay(); const fathers = 1 + ((7 - first) % 7) + 7; return day <= fathers ? 'pais' : null; }
+    if (m === 10) return day >= 5 && day <= 12 ? 'criancas' : day >= 26 ? 'halloween' : 'outubrorosa';
+    if (m === 11) return 'novembroazul';
+    return null;
+  }
+  function activeSeason() {
+    const s = pdTheme().season;
+    return s === 'off' ? null : seasonBy(s === 'auto' ? seasonOn(new Date()) : s);
+  }
+  function applyPdTheme() {
+    const html = document.documentElement, s = activeSeason();
+    html.dataset.pdl = pdTheme().layout;
+    if (s) html.dataset.pds = s.k; else delete html.dataset.pds;
+  }
+  // Cores do tema no escudo (vence as cores de MVP, Destaque, prata e bronze).
+  function seasonVars(place) {
+    const s = activeSeason();
+    if (!s) return '';
+    const [a, b] = s.c[place - 1];
+    return `;--tc:${a};--tc2:${b};--glow:color-mix(in srgb, ${a} 55%, transparent)`;
+  }
+  // Efeito de fundo do pódio (neve, confete, pétalas...).
+  function seasonFx(s) {
+    if (!s) return '';
+    const n = s.fx === 'bat' ? 9 : s.fx === 'bubble' ? 14 : 24;
+    const parts = Array.from({ length: n }, (_, i) => {
+      const left = (i * 41 + 7) % 100, dl = ((i * 0.97) % 7).toFixed(2), dur = (6 + (i % 5) * 1.3).toFixed(1), sz = (0.7 + ((i * 13) % 7) / 10).toFixed(2);
+      return `<span style="left:${left}%;--dl:-${dl}s;--dur:${dur}s;--sz:${sz};--c:${s.fxc[i % s.fxc.length]}"></span>`;
+    }).join('');
+    const flags = s.k === 'junina' ? `<svg class="pd-flags" viewBox="0 0 400 40" preserveAspectRatio="none" aria-hidden="true"><path d="M0 4 Q200 30 400 4" fill="none" stroke="#e9d9b8" stroke-width="1.2"/>${Array.from({ length: 15 }, (_, i) => {
+      const x = 12 + i * 26.5, t = x / 400, yy = 4 + 4 * 26 * t * (1 - t);
+      return `<path d="M${(x - 8).toFixed(1)} ${yy.toFixed(1)} L${(x + 8).toFixed(1)} ${yy.toFixed(1)} L${(x + 8).toFixed(1)} ${(yy + 16).toFixed(1)} L${x.toFixed(1)} ${(yy + 11).toFixed(1)} L${(x - 8).toFixed(1)} ${(yy + 16).toFixed(1)} Z" fill="${['#ff5b5b', '#ffc93c', '#5aa8ff', '#5fe08a', '#c084ff'][i % 5]}"/>`;
+    }).join('')}</svg>` : '';
+    return `<div class="pd-fx fx-${s.fx}" aria-hidden="true">${parts}</div>${flags}`;
+  }
+  // Enfeite do 1º lugar no lugar da coroa.
+  function seasonTopper(k) {
+    const T = {
+      natal: `<path d="M18 62 C20 30 44 6 72 4 C88 3 98 10 100 20 L90 22 C84 18 80 22 82 32 C84 44 92 52 100 62 Z" fill="url(#st-g)"/><path d="M30 40 C40 22 56 12 72 10" stroke="#fff" stroke-opacity=".35" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <rect x="10" y="56" width="100" height="20" rx="10" fill="#fff"/><circle cx="99" cy="19" r="10" fill="#fff"/>
+        <defs><linearGradient id="st-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff5b5b"/><stop offset="1" stop-color="#b3101e"/></linearGradient></defs>`,
+      anonovo: `<path d="M38 74 L60 4 L82 74 Z" fill="url(#st-g)" stroke="#fff" stroke-opacity=".7" stroke-width="1.4"/><path d="M47 46 L73 46 M42 60 L78 60 M53 28 L67 28" stroke="#1a1a24" stroke-width="4"/>
+        <circle cx="60" cy="2" r="7" fill="#fff"/>
+        <g stroke="#ffd66b" stroke-width="2" stroke-linecap="round" class="twinkle"><path d="M14 4v-10M14 14v10M4 9h-8M24 9h8M7 2l-5-5M21 16l5 5M21 2l5-5M7 16l-5 5"/></g>
+        <g stroke="#fff" stroke-width="1.6" stroke-linecap="round"><path d="M106 22v-8M106 30v8M98 26h-6M114 26h6"/></g>
+        <defs><linearGradient id="st-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe7a0"/><stop offset=".5" stop-color="#e2a92c"/><stop offset="1" stop-color="#9c6a12"/></linearGradient></defs>`,
+      carnaval: `<path d="M94 30 C98 6 108 -8 116 -16 C116 4 110 20 100 32 Z" fill="#3ee08f"/><path d="M86 28 C86 2 92 -12 98 -20 C102 0 98 16 92 30 Z" fill="#ff5fa2"/><path d="M80 30 C76 8 78 -6 82 -14 C90 4 90 18 86 32 Z" fill="#4cc9f0"/>
+        <path d="M8 42 C8 26 40 24 60 36 C80 24 112 26 112 42 C112 62 88 68 74 58 C68 54 52 54 46 58 C32 68 8 62 8 42 Z" fill="url(#st-g)" stroke="#ffd23f" stroke-width="2.5"/>
+        <ellipse cx="36" cy="44" rx="12" ry="7.5" fill="#0b0b12"/><ellipse cx="84" cy="44" rx="12" ry="7.5" fill="#0b0b12"/>
+        <circle cx="60" cy="40" r="3" fill="#ffd23f"/><circle cx="20" cy="36" r="2" fill="#fff"/><circle cx="100" cy="36" r="2" fill="#fff"/>
+        <defs><linearGradient id="st-g" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#8a3fe0"/><stop offset=".5" stop-color="#c084ff"/><stop offset="1" stop-color="#8a3fe0"/></linearGradient></defs>`,
+      mulheres: `<path d="M60 52 C58 62 60 70 62 78" stroke="#3fae6a" stroke-width="3.5" fill="none" stroke-linecap="round"/><path d="M61 66 C70 58 82 60 86 64 C78 70 68 70 61 66Z M60 70 C50 62 38 64 34 68 C42 74 52 74 60 70Z" fill="#3fae6a"/>
+        ${[0, 60, 120, 180, 240, 300].map(a => `<ellipse cx="60" cy="10" rx="13" ry="21" transform="rotate(${a} 60 30)" fill="url(#st-g)" stroke="#fff" stroke-opacity=".5" stroke-width="1"/>`).join('')}
+        <circle cx="60" cy="30" r="10" fill="#ffd23f" stroke="#fff" stroke-width="1.5"/>
+        <defs><linearGradient id="st-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0d4ff"/><stop offset="1" stop-color="#9b55e6"/></linearGradient></defs>`,
+      junina: `<ellipse cx="60" cy="66" rx="56" ry="12" fill="#e2b25a" stroke="#9c6a24" stroke-width="2"/><path d="M28 64 C28 30 42 16 60 16 C78 16 92 30 92 64 Z" fill="#efc76f" stroke="#9c6a24" stroke-width="2"/>
+        <path d="M29 50 H91 V60 H29 Z" fill="#e0332f"/><rect x="66" y="26" width="13" height="11" fill="#4f8de8" transform="rotate(10 72 31)"/>
+        <path d="M40 30 L50 32 M38 40 L48 41 M76 42 L86 40 M50 22 L58 24" stroke="#9c6a24" stroke-width="1.6" stroke-linecap="round"/>
+        <path d="M14 70 L24 66 M96 66 L106 70 M30 74 L40 71" stroke="#9c6a24" stroke-width="1.4" stroke-linecap="round"/>`,
+      pais: `<path d="M60 40 L16 16 C8 12 4 20 4 40 C4 60 8 68 16 64 Z" fill="url(#st-g)" stroke="#fff" stroke-opacity=".6" stroke-width="1.4"/><path d="M60 40 L104 16 C112 12 116 20 116 40 C116 60 112 68 104 64 Z" fill="url(#st-g)" stroke="#fff" stroke-opacity=".6" stroke-width="1.4"/>
+        <rect x="48" y="28" width="24" height="24" rx="6" fill="#ffd66b" stroke="#fff" stroke-width="1.4"/><path d="M22 28 L34 34 M22 52 L34 46 M98 28 L86 34 M98 52 L86 46" stroke="#fff" stroke-opacity=".35" stroke-width="2"/>
+        <g class="twinkle"><path d="M60 -12v10M55 -7h10" stroke="#ffd66b" stroke-width="1.8" stroke-linecap="round"/></g>
+        <defs><linearGradient id="st-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4d7fd6"/><stop offset="1" stop-color="#16316e"/></linearGradient></defs>`,
+      criancas: `<path d="M60 78 C56 62 40 52 34 40 M60 78 C60 60 60 44 60 30 M60 78 C64 62 80 52 86 40" stroke="#fff" stroke-opacity=".8" stroke-width="1.4" fill="none"/>
+        <ellipse cx="32" cy="22" rx="15" ry="18" fill="#ff6b6b"/><ellipse cx="88" cy="22" rx="15" ry="18" fill="#4cc9f0"/><ellipse cx="60" cy="8" rx="16" ry="19" fill="#ffd23f"/>
+        <path d="M30 40 l2 4 2-4z M58 27 l2 4 2-4z M86 40 l2 4 2-4z" fill="#fff"/>
+        <ellipse cx="27" cy="14" rx="4" ry="6" fill="#fff" opacity=".45"/><ellipse cx="55" cy="0" rx="4" ry="6" fill="#fff" opacity=".45"/><ellipse cx="83" cy="14" rx="4" ry="6" fill="#fff" opacity=".45"/>`,
+      outubrorosa: `<path d="M38 78 L64 24 C72 6 70 -14 60 -14 C50 -14 48 6 56 24 L82 78" fill="none" stroke="url(#st-g)" stroke-width="15" stroke-linejoin="round"/>
+        <path d="M60 -6 C54 -6 54 6 58 16" stroke="#fff" stroke-opacity=".5" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <defs><linearGradient id="st-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffc2dd"/><stop offset="1" stop-color="#e0337e"/></linearGradient></defs>`,
+      halloween: `<ellipse cx="60" cy="68" rx="54" ry="10" fill="#2a1840" stroke="#b47cff" stroke-width="2"/><path d="M32 66 L54 0 C58 -12 72 -16 82 -10 C72 -6 66 4 70 16 L88 66 Z" fill="#2a1840" stroke="#b47cff" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M37 50 L83 50 L87 62 L33 62 Z" fill="#ff8a1f"/><rect x="52" y="49" width="16" height="14" rx="2" fill="none" stroke="#ffd23f" stroke-width="2.6"/>
+        <g class="twinkle"><path d="M98 0v8M94 4h8" stroke="#ffd23f" stroke-width="1.6" stroke-linecap="round"/></g>`,
+      novembroazul: `<path d="M60 40 C52 26 34 24 22 36 C16 42 8 42 4 36 C6 54 24 60 38 54 C48 50 56 46 60 44 C64 46 72 50 82 54 C96 60 114 54 116 36 C112 42 104 42 98 36 C86 24 68 26 60 40 Z" fill="url(#st-g)" stroke="#fff" stroke-opacity=".75" stroke-width="1.6"/>
+        <path d="M30 40 C40 34 50 36 56 42 M90 40 C80 34 70 36 64 42" stroke="#fff" stroke-opacity=".35" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <g class="twinkle"><path d="M60 -2v10M55 3h10" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></g>
+        <defs><linearGradient id="st-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fd0ff"/><stop offset="1" stop-color="#1b58c9"/></linearGradient></defs>`,
+    };
+    return `<svg viewBox="0 -22 120 100" aria-hidden="true">${(T[k] || '').replace(/st-g/g, 'st-' + k)}</svg>`;
+  }
+  // Diamante do 2º e 3º lugar (formato Escudo).
+  const gemSvg = place => `<svg viewBox="0 0 40 32" aria-hidden="true"><defs><linearGradient id="gm-${place}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset=".5" style="stop-color:var(--tc)"/><stop offset="1" style="stop-color:var(--tc2)"/></linearGradient></defs>
+    <path d="M8 2h24l7 9-19 20L1 11z" fill="url(#gm-${place})" stroke="#fff" stroke-opacity=".8" stroke-width="1.2" stroke-linejoin="round"/><path d="M1 11h38M13 2l-3 9 10 20 10-20-3-9M10 11l10-9 10 9" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="1"/></svg>`;
+
   function pdPhoto(b) {
     const ini = (b.name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase();
     return `<div class="pd-photo"><span>${b.photo ? `<img src="${esc(b.photo)}" alt="">` : esc(ini)}</span></div>`;
@@ -705,7 +831,7 @@
       `<span style="left:${8 + ((i * 37) % 84)}%;--dl:${((i * 0.73) % 4).toFixed(2)}s;--dur:${(3.2 + (i % 4) * 0.6).toFixed(1)}s"></span>`).join('');
     const card = (row, place) => {
       const delay = { 1: '0.15s', 2: '0s', 3: '0.3s' }[place];
-      if (!row) return `<div class="pd pd-${place} tier-silver pd-empty" style="--in:${delay}"><div class="pd-float"><div class="pd-card"><div class="pd-frame"><div class="pd-inner"><span class="muted">Vago</span></div></div>
+      if (!row) return `<div class="pd pd-${place} tier-silver pd-empty" style="--in:${delay}${seasonVars(place)}"><div class="pd-float"><div class="pd-card"><div class="pd-frame"><div class="pd-inner"><span class="muted">Vago</span></div></div>
         <div class="pd-badge"><span>${ord(place)}<small>LUGAR</small></span></div></div></div><div class="pd-base"></div></div>`;
       const b = row.barber;
       const t = place === 1 && R.title.barberId === b.id ? R.title.type : null;
@@ -714,12 +840,14 @@
       const middle = t
         ? `<div class="pd-title"><span>${icon(t === 'mvp' ? 'diamond' : 'crown')}<span><b>${t === 'mvp' ? 'MVP' : 'DESTAQUE'}</b><i class="num">${leadsTxt}</i></span></span></div>`
         : '';
-      return `<div class="pd pd-${place} ${tier}" data-id="${esc(b.id)}" data-pos="${place}" style="--in:${delay};--fd:${place === 1 ? '0s' : place === 2 ? '-2s' : '-4s'}">
+      const sn = activeSeason();
+      const tierLbl = place === 2 ? 'Prata' : place === 3 ? 'Bronze' : t === 'mvp' ? 'MVP' : t === 'destaque' ? 'Destaque' : 'Ouro';
+      return `<div class="pd pd-${place} ${tier}" data-id="${esc(b.id)}" data-pos="${place}" style="--in:${delay};--fd:${place === 1 ? '0s' : place === 2 ? '-2s' : '-4s'}${seasonVars(place)}">
         <div class="pd-beam"></div>
         ${place === 1 ? `<div class="pd-sparks">${sparks}</div>` : ''}
         <div class="pd-float">
           <div class="pd-card">
-            ${place === 1 ? `<div class="pd-crown">${crownSvg(tier)}</div>` : ''}
+            ${place === 1 ? `<div class="pd-crown${sn ? ' pd-topper' : ''}">${sn ? seasonTopper(sn.k) : crownSvg(tier)}</div>` : `<div class="pd-gem">${gemSvg(place)}</div>`}
             <div class="pd-frame"><div class="pd-inner">
               ${pdPhoto(b)}
               <div class="pd-name">${esc(b.name)}</div>
@@ -728,6 +856,7 @@
               <div class="pd-pts">${score(row.overall)}<small>pts</small></div>
               <div class="pd-money"><span class="pd-coin">$</span>${money0(row.sums.fat)}</div>
               ${t ? '' : `<div class="pd-leads" title="1º lugar em ${row.leads.length} de ${R.N} indicadores">${barsSvg}<span>${leadsTxt}</span></div>`}
+              <div class="pd-tierlbl">${tierLbl}</div>
             </div></div>
             <div class="pd-badge"><span>${ord(place)}<small>LUGAR</small></span></div>
             <a class="pd-link" href="#perfil-${esc(b.id)}" aria-label="Ver perfil de ${esc(b.name)}, ${ord(place)} lugar"></a>
@@ -736,14 +865,14 @@
         <div class="pd-base"><i></i><i></i></div>
       </div>`;
     };
-    return `<div class="podium-x"><div class="pd-row">${card(rows[1], 2)}${card(rows[0], 1)}${card(rows[2], 3)}</div></div>`;
+    return `<div class="podium-x">${seasonFx(activeSeason())}<div class="pd-row">${card(rows[1], 2)}${card(rows[0], 1)}${card(rows[2], 3)}</div></div>`;
   }
 
   function podiumLegend(R) {
     return `<div class="pd-legend">
-      <div class="lg-mvp">${icon('diamond')}<span><b>MVP</b>Lidera ${R.mvpNeed} ou mais indicadores.<em>${MARCA === 'salao' ? 'Contorno rosa (diamante rosa).' : 'Contorno azul (diamante).'}</em></span></div>
-      <div class="lg-gold">${icon('crown')}<span><b>Destaque</b>Lidera no mínimo ${R.half} indicadores.<em>Contorno dourado.</em></span></div>
-      <div class="lg-pts">${icon('trophy')}<span><b>Classificação por pontos</b>Sem título no período: contorno prata e bronze.</span></div>
+      <div class="lg-mvp">${icon('diamond')}<span><b>MVP</b>Lidera ${R.mvpNeed} ou mais indicadores.<em>${activeSeason() ? 'Selo MVP no 1º lugar.' : MARCA === 'salao' ? 'Contorno rosa (diamante rosa).' : 'Contorno azul (diamante).'}</em></span></div>
+      <div class="lg-gold">${icon('crown')}<span><b>Destaque</b>Lidera no mínimo ${R.half} indicadores.<em>${activeSeason() ? 'Selo Destaque no 1º lugar.' : 'Contorno dourado.'}</em></span></div>
+      <div class="lg-pts">${icon('trophy')}<span><b>Classificação por pontos</b>${activeSeason() ? `Tema ${esc(activeSeason().n)}: as cores do pódio seguem o tema.` : 'Sem título no período: contorno prata e bronze.'}</span></div>
     </div>`;
   }
 
@@ -3136,9 +3265,44 @@ Content-Type: application/json</pre>
       <a class="btn" href="#inicio">Voltar ao início</a></div>`;
   }
 
+
+  // ---------- Temas ----------
+  function sampleRanking() {
+    const names = MARCA === 'salao' ? ['Ana Beatriz', 'Carla Nunes', 'Paula Reis'] : ['Rafael Lima', 'Diego Moura', 'Thiago Alves'];
+    const rows = names.map((name, i) => ({ barber: { id: 'ex' + i, name, photo: null }, overall: [92.4, 84, 79.1][i], sums: { fat: [18400, 15900, 13200][i] }, leads: Array(5 - i * 2).fill('x'), pos: i + 1 }));
+    return { rows, N: 8, title: { barberId: 'ex0', type: 'mvp' }, mvpNeed: 5, half: 4 };
+  }
+  function pageTemas() {
+    const th = pdTheme(), R0 = computeRanking(state, range());
+    const R = R0.rows.length >= 3 ? R0 : sampleRanking();
+    const auto = seasonBy(seasonOn(new Date()));
+    const opt = (on, action, v, body) => `<button type="button" class="th-opt ${on ? 'on' : ''}" aria-pressed="${on}" data-action="${action}" data-v="${v}">${body}${on ? `<span class="th-check">${icon('check')}</span>` : ''}</button>`;
+    const sw = s => `<span class="th-sw">${s.c.map(([a, b]) => `<i style="background:linear-gradient(135deg, ${a}, ${b})"></i>`).join('')}</span>`;
+    return `
+      <section class="section card">
+        <h2 class="section-title">Prévia do pódio</h2>
+        <p class="section-note">O tema vale para o pódio da Tela da loja e do Início, em todos os aparelhos da equipe. ${R === R0 ? 'A prévia usa o ranking atual.' : 'Prévia com nomes de exemplo.'}</p>
+        <div class="th-stage">${podium(R)}</div>
+      </section>
+      <section class="section card">
+        <h2 class="section-title">Formato do escudo</h2>
+        <div class="th-grid">${PD_LAYOUTS.map(l => opt(th.layout === l.k, 'pdLayout', l.k, `<span class="th-shape th-${l.k}"><i></i></span><b>${esc(l.n)}</b><small>${esc(l.d)}</small>`)).join('')}</div>
+      </section>
+      <section class="section card">
+        <h2 class="section-title">Tema da temporada</h2>
+        <p class="section-note">Muda as cores do pódio, troca a coroa do 1º lugar por um enfeite do tema e coloca um efeito no fundo. No automático, o app escolhe o tema pela data.</p>
+        <div class="th-grid th-seasons">
+          ${opt(th.season === 'off', 'pdSeason', 'off', `<span class="th-ico th-plain">${icon('x')}</span><b>Sem tema</b><small>Cores normais: MVP, Destaque, prata e bronze.</small>`)}
+          ${opt(th.season === 'auto', 'pdSeason', 'auto', `<span class="th-ico th-plain">${icon('clock')}</span><b>Automático pelo calendário</b><small>${auto ? `Hoje: ${esc(auto.n)}.` : 'Hoje: sem tema (fora das datas).'}</small>`)}
+          ${SEASONS.map(s => opt(th.season === s.k, 'pdSeason', s.k, `<span class="th-ico">${seasonTopper(s.k)}</span><b>${esc(s.n)}</b><small>${esc(s.when)}</small>${sw(s)}`)).join('')}
+        </div>
+      </section>`;
+  }
+
   const PAGES = {
     inicio: { t: 'Início', r: pageInicio },
     fechamento: { t: 'Fechamento do mês', r: pageFechamento, g: 1, a: 1 },
+    temas: { t: 'Temas', r: pageTemas, g: 1 },
     organograma: { t: 'Organograma', r: pageOrganograma, g: 1 },
     checklist: { t: 'Checklist Agenda Cheia', r: pageChecklist },
     pops: { t: 'POPs · Guia do Sucesso', r: pagePops },
@@ -3410,6 +3574,7 @@ Content-Type: application/json</pre>
     document.documentElement.classList.add('tv-motion');
     if (!Cloud.enabled) state = DB.load();
     applyBrand(DB.demo || state.brand || 'barber');
+    applyPdTheme();
     const tr = tvRange();
     const R = computeRanking(state, tr);
     const dk = darkFor(tr, true);
@@ -3498,6 +3663,7 @@ Content-Type: application/json</pre>
     // Logado: vale a marca da empresa (e fica lembrada para a tela de login).
     applyBrand(DB.demo || state.brand || 'barber');
     if (DB.pref.get('brand', '') !== MARCA) DB.pref.set('brand', MARCA);
+    applyPdTheme();
 
     let route = h || 'inicio';
     if (route !== 'fechamento') ui.fcPeek = false;
@@ -3691,6 +3857,12 @@ Content-Type: application/json</pre>
     },
     popItemMove(el) { const c = popCfgW(), i = Number(el.dataset.i), j = i + Number(el.dataset.d); if (j < 0 || j >= c.items.length) return; [c.items[i], c.items[j]] = [c.items[j], c.items[i]]; save(); render(); },
     cfgTab(el) { ui.cfgTab = el.dataset.t; ui.confirm = null; render(); },
+    pdLayout(el) { state.theme = { ...pdTheme(), layout: el.dataset.v }; save(); render(); toast('Formato do escudo: ' + (PD_LAYOUTS.find(l => l.k === el.dataset.v) || {}).n + '.'); },
+    pdSeason(el) {
+      const v = el.dataset.v;
+      state.theme = { ...pdTheme(), season: v }; save(); render();
+      toast(v === 'off' ? 'Pódio sem tema.' : v === 'auto' ? 'Tema automático pelo calendário.' : 'Tema ' + seasonBy(v).n + ' aplicado.');
+    },
     orgTab(el) { ui.orgTab = el.dataset.t; ui.orgSheet = null; ui.confirm = null; render(); },
     orgGo(el) { ui.orgNode = el.dataset.id || null; render(); },
     orgEdit(el) { ui.orgSheet = { id: el.dataset.id }; ui.confirm = null; render(); setTimeout(() => $('#os-name')?.focus(), 30); },
