@@ -1651,3 +1651,17 @@ html[data-pdl="minimal"] .pd-fx { opacity: 0.5; }
 .th-bday { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-top: 16px; }
 .th-bday .field { flex: 1 1 220px; max-width: 320px; }
 .th-bday .form-msg { flex-basis: 100%; margin: 0; color: var(--fg-soft); }
+.th-auto { grid-column: 1 / -1; display: grid; gap: 10px; padding: 14px; border-radius: 16px; border: 1.5px dashed var(--line-accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.th-auto > small { color: var(--fg-soft); font-size: 0.84rem; }
+.th-auto-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: 8px; }
+.th-auto-it { display: flex; align-items: center; gap: 10px; padding: 8px 12px 8px 8px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); font: inherit; text-align: left; cursor: pointer; opacity: 0.6; }
+.th-auto-it.on { opacity: 1; border-color: var(--line-accent); }
+.th-auto-it .th-ico { width: 44px; height: 38px; flex: none; border-radius: 10px; }
+.th-auto-it .th-ico svg { width: 34px; }
+.th-auto-it > span:nth-child(2) { display: grid; flex: 1; min-width: 0; }
+.th-auto-it b { font-size: 0.92rem; }
+.th-auto-it small { color: var(--fg-soft); font-size: 0.78rem; line-height: 1.25; }
+.th-tg { position: relative; flex: none; width: 40px; height: 24px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--line); transition: background 0.15s; }
+.th-tg::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--fg-soft); transition: transform 0.15s, background 0.15s; }
+.th-auto-it.on .th-tg { background: var(--accent); border-color: var(--accent); }
+.th-auto-it.on .th-tg::after { transform: translateX(16px); background: #fff; }
