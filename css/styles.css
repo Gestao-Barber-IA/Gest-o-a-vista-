@@ -77,6 +77,12 @@ img { max-width: 100%; }
 .drawer .brand-sub { font-size: 11.5px; }
 .drawer .brand-mark { width: 46px; height: 46px; }
 .drawer .brand { gap: 10px; }
+/* Itens do menu numa linha só (ex.: Performance da empresa) */
+.drawer .nav-item > span { white-space: nowrap; }
+/* Com o selo Em breve, o nome pode quebrar para o selo caber */
+.drawer .nav-item > span:has(+ .nav-soon) { white-space: normal; min-width: 0; }
+.drawer .nav-soon { flex: none; white-space: nowrap; }
+.drawer .nav-item { font-size: min(1.05rem, 17px); }
 .brand-ia-word { color: var(--blue-light); }
 .brand-sub { display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
 .brand-ia { font-family: var(--font-display); font-weight: 800; font-size: 0.7rem; letter-spacing: 0.12em; padding: 2px 7px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); }
@@ -1197,7 +1203,7 @@ textarea.input.pop-ta { min-height: 72px; font-family: var(--font-body); font-si
   body.has-nav { padding-left: var(--side); }
   body.has-nav .drawer { width: var(--side); transform: none; transition: none; z-index: 25; padding: 20px 14px 24px; gap: 2px; box-shadow: none; }
   body.has-nav .drawer .brand { margin-bottom: 10px; }
-  body.has-nav .drawer .nav-item { padding: 9px 12px; font-size: 0.97rem; gap: 12px; border-radius: 12px; }
+  body.has-nav .drawer .nav-item { padding: 9px 12px; font-size: min(0.97rem, 16px); gap: 12px; border-radius: 12px; }
   body.has-nav .drawer .nav-item .ico { width: 20px; height: 20px; }
   body.has-nav .drawer .nav-group { margin: 12px 0 2px 10px; font-size: 0.7rem; }
   body.has-nav .scrim, body.has-nav .fab, body.has-nav .topbar > [data-action="openDrawer"] { display: none !important; }

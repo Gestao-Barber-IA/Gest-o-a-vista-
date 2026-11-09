@@ -204,7 +204,7 @@
     ? `<span class="brand ${cls}">${logo()}</span>`
     : `<span class="brand ${cls}">${logo()}
       <span class="brand-text"><span class="brand-name">Gestão ${B().word} <span class="brand-ia-word">IA</span></span>
-      <span class="brand-sub">Sistema de gestão</span></span>
+      <span class="brand-sub">Sistema de performance</span></span>
     </span>`;
 
   function toast(msg, ms = 2800, ic = '') {
