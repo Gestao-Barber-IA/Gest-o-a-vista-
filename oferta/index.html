@@ -235,11 +235,11 @@
 
 <!-- Quiz: duas perguntas antes da página -->
 <div class="quiz" id="quiz" role="dialog" aria-modal="true" aria-labelledby="q-h">
-  <div class="q-in" id="q0">
-    <div class="q-logos"><img src="../assets/logo.jpg" alt="Gestão Barber IA"><img src="../assets/logo-salao.jpg" alt="Gestão Salão IA"></div>
-    <span class="q-step">Antes de começar</span>
-    <h1 id="q0-h">Descubra o plano ideal para a sua equipe</h1>
-    <p>Leva menos de 1 minuto. Preencha seus dados e responda 2 perguntas rápidas.</p>
+  <div class="q-in" id="q0" hidden>
+    <div class="q-bar" aria-hidden="true"><i style="width:100%"></i></div>
+    <span class="q-step">Último passo</span>
+    <h1 id="q0-h">Seu plano ideal está pronto!</h1>
+    <p data-q="q0p">Preencha seus dados para ver a apresentação feita para a sua equipe.</p>
     <form class="lead" id="lead" novalidate>
       <div class="lead-row">
         <label>Nome *<input name="nome" autocomplete="given-name" required maxlength="80"></label>
@@ -249,12 +249,13 @@
       <label>E-mail *<input name="email" type="email" inputmode="email" autocomplete="email" placeholder="voce@email.com" required maxlength="120"></label>
       <label class="lead-ok"><input type="checkbox" name="ok" required><span>Autorizo o contato por WhatsApp, telefone ou e-mail sobre o sistema. Veja a <a href="../privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a>.</span></label>
       <p class="lead-msg" data-lmsg></p>
-      <button class="q-go" type="submit">Continuar para o quiz →</button>
+      <button class="q-go" type="submit">Ver meu plano ideal →</button>
+      <button type="button" class="q-back" data-back2>← Voltar</button>
     </form>
   </div>
   <div class="q-in" id="q1" hidden>
     <div class="q-logos"><img src="../assets/logo.jpg" alt="Gestão Barber IA"><img src="../assets/logo-salao.jpg" alt="Gestão Salão IA"></div>
-    <div class="q-bar" aria-hidden="true"><i style="width:50%"></i></div>
+    <div class="q-bar" aria-hidden="true"><i style="width:33%"></i></div>
     <span class="q-step">Pergunta 1 de 2</span>
     <h1 id="q-h">Qual é o seu negócio?</h1>
     <p>Vamos mostrar como o sistema funciona na sua realidade.</p>
@@ -266,7 +267,7 @@
     </div>
   </div>
   <div class="q-in" id="q2" hidden>
-    <div class="q-bar" aria-hidden="true"><i style="width:100%"></i></div>
+    <div class="q-bar" aria-hidden="true"><i style="width:66%"></i></div>
     <span class="q-step">Pergunta 2 de 2</span>
     <h1 data-q="q2h">Quantos profissionais atendem na sua equipe?</h1>
     <p>Assim indicamos o plano certo para o tamanho do seu time.</p>
@@ -522,8 +523,9 @@
     $('[data-q="q3h"]').textContent = `Preparando a apresentação para ${S.a}…`;
     show('q2');
   }));
-  qs('[data-q2]').forEach(b => b.addEventListener('click', () => { size = Number(b.dataset.q2); finish(); }));
+  qs('[data-q2]').forEach(b => b.addEventListener('click', () => { size = Number(b.dataset.q2); if (hasLead()) finish(); else { $('[data-q="q0p"]').textContent = `Preencha seus dados para ver a apresentação feita para ${SEG[seg].a} com ${SIZE_COM[size]}.`; show('q0'); $('#lead [name=nome]').focus({ preventScroll: true }); } }));
   $('[data-back]').addEventListener('click', () => show('q1'));
+  $('[data-back2]').addEventListener('click', () => show('q2'));
   // ---------- cadastro do interessado (salvo no banco; só o dono do SaaS vê) ----------
   const CFG = window.GB_CONFIG || {};
   const sp = new URLSearchParams(location.search);
@@ -537,6 +539,7 @@
     if (!r.ok) throw new Error('falhou ' + r.status);
   }
   const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
+  const hasLead = () => !!getLead() || sp.get('cadastro') === 'ok';
   function startQuiz() {
     // Só o tipo de negócio no link (?tipo=salao): o quiz já começa na pergunta 2.
     if (SEG[sp.get('tipo')]) { const btn = document.querySelector(`[data-q1="${sp.get('tipo')}"]`); if (btn) { btn.click(); return; } }
@@ -553,9 +556,9 @@
     if (!f.ok.checked) { m.textContent = 'Marque a autorização de contato para continuar.'; return; }
     m.textContent = ''; const btn = f.querySelector('button'); btn.disabled = true; btn.textContent = 'Salvando…';
     const id = uuid();
-    try { await api('leads', { id, nome, sobrenome, celular: cel, email, origem: origem.slice(0, 200), consentimento: true }); } catch (x) { /* segue para o quiz mesmo sem conexão */ }
-    try { localStorage.setItem(LKEY, JSON.stringify({ id, nome, sobrenome, celular: f.celular.value.trim(), email, at: Date.now() })); } catch (x) { /* opcional */ }
-    prefill(); startQuiz();
+    try { await api('leads', { id, nome, sobrenome, celular: cel, email, tipo: seg, equipe: size, origem: origem.slice(0, 200), consentimento: true }); } catch (x) { /* segue mesmo sem conexão */ }
+    try { localStorage.setItem(LKEY, JSON.stringify({ id, nome, sobrenome, celular: f.celular.value.trim(), email, quiz: true, at: Date.now() })); } catch (x) { /* opcional */ }
+    prefill(); finish();
   });
   // Preenche o agendamento com os dados do cadastro.
   function prefill() {
@@ -564,14 +567,13 @@
     if (!b.tel.value) b.tel.value = l.celular || '';
   }
   // Respostas do quiz vão junto do cadastro.
+  // (Cadastros antigos, feitos antes do quiz: completa as respostas.)
   const sendQuiz = () => { const l = getLead(); if (l && l.id && !l.quiz) { api('rpc/lead_quiz', { p_id: l.id, p_tipo: seg, p_equipe: size }).then(() => { l.quiz = true; try { localStorage.setItem(LKEY, JSON.stringify(l)); } catch (x) { /* opcional */ } }).catch(() => {}); } };
-  qs('[data-q2]').forEach(b => b.addEventListener('click', sendQuiz));
 
   // Quem já se cadastrou (neste aparelho ou pelo formulário do Instagram: ?cadastro=ok) vai direto ao quiz.
-  const done = !!getLead() || sp.get('cadastro') === 'ok';
+  const done = hasLead();
   if (SEG[sp.get('tipo')] && SIZE[sp.get('equipe')] && done) { seg = sp.get('tipo'); size = Number(sp.get('equipe')); quiz.hidden = true; document.body.classList.remove('locked'); render(); }
-  else if (done) startQuiz();
-  else show('q0');
+  else startQuiz();
   prefill();
 
   qs('[data-buy]').forEach(a => a.addEventListener('click', () => {
