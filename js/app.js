@@ -2676,7 +2676,11 @@ Content-Type: application/json</pre>
 
   function fxRender() {
     const fx = ui.fx; if (!fx) return;
-    Music.fadeCustom(1.5); // a música da colocação anterior sai suave ao passar de tela
+    Music.fadeCustom(1.5); // a música da tela anterior sai suave ao passar de tela
+    if (fxSlides(fx.ym).s[fx.i]?.k === 'intro' && (state.podiumMusic || {}).intro) {
+      // Abertura: a música da empresa entra assim que estiver carregada, enquanto a abertura estiver na tela.
+      Music.customBuf('intro').then(b => { const now = ui.fx && fxSlides(ui.fx.ym).s[ui.fx.i]; if (b && now && now.k === 'intro' && !Music.cur) Music.playCustom('intro', 2.5); });
+    }
     let ov = document.getElementById('fx');
     if (!ov) {
       ov = document.createElement('div');
@@ -4049,26 +4053,29 @@ Content-Type: application/json</pre>
     get(k) { return this.run('readonly', st => st.get(k)).catch(() => null); },
     del(k) { return this.run('readwrite', st => st.delete(k)).catch(() => null); },
   };
+  const pmKey = v => v === 'intro' ? 'intro' : Number(v);
+  const pmName = p => p === 'intro' ? 'da abertura' : `do ${p}º lugar`;
   const fmtSec = v => { v = Math.max(0, Math.round(Number(v) || 0)); return Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0'); };
   function podiumMusicCard() {
     const pm = state.podiumMusic || {};
     const row = place => {
       const m = pm[place];
       return `<div class="pm-row">
-        <span class="pm-place p${place}">${place}º</span>
-        <div class="pm-info">${m ? `<b>${esc(m.name)}</b><small>${m.dur ? `Duração ${fmtSec(m.dur)} · ` : ''}começa em <label class="pm-start"><input class="input num" type="number" min="0" step="1" value="${Math.round(m.start || 0)}" data-change="pmStart" data-p="${place}" aria-label="Segundo em que a música do ${place}º lugar começa"> s</label></small>`
+        <span class="pm-place p${place}">${place === 'intro' ? icon('play') : place + 'º'}</span>
+        <div class="pm-info">${m ? `<b>${esc(m.name)}</b><small>${m.dur ? `Duração ${fmtSec(m.dur)} · ` : ''}começa em <label class="pm-start"><input class="input num" type="number" min="0" step="1" value="${Math.round(m.start || 0)}" data-change="pmStart" data-p="${place}" aria-label="Segundo em que a música ${pmName(place)} começa"> s</label></small>`
+          : place === 'intro' ? `<b>Abertura sem música</b><small>Envie uma música para tocar assim que o fechamento começar</small>`
           : `<b>Trilha padrão do app</b><small>${place === 1 ? 'Hino com subida de tom e aplausos' : place === 2 ? 'Progressão com bateria e melodia' : 'Fanfarra curta'}</small>`}</div>
         <div class="pm-btns">
           <button class="btn btn-sm" data-action="pmTest" data-p="${place}">${icon('play')} Ouvir</button>
           <label class="btn btn-sm ${m ? '' : 'btn-primary'}" style="cursor:pointer">${icon('upload')} ${m ? 'Trocar' : 'Enviar música'}<input type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg" hidden data-change="pmFile" data-p="${place}"></label>
-          ${m ? `<button class="btn btn-sm" data-action="pmDel" data-p="${place}" aria-label="Remover a música do ${place}º lugar">${icon('trash')}</button>` : ''}
+          ${m ? `<button class="btn btn-sm" data-action="pmDel" data-p="${place}" aria-label="Remover a música ${pmName(place)}">${icon('trash')}</button>` : ''}
         </div>
       </div>`;
     };
     return `<section class="section card pm-card">
-      <h2 class="section-title">Músicas do pódio</h2>
-      <p class="section-note">Escolha uma música para cada colocação. Ao tocar em Revelar, ela começa no segundo que você escolher, com o volume subindo, e continua na revelação. Sem música enviada, toca a trilha do app. Arquivos de áudio de até 12 MB (MP3, M4A, WAV).</p>
-      <div class="pm-list">${[3, 2, 1].map(row).join('')}</div>
+      <h2 class="section-title">Músicas do fechamento</h2>
+      <p class="section-note"><b>Abertura:</b> a música começa assim que você inicia o fechamento e sai suave ao passar de tela. <b>Pódio:</b> escolha uma música para cada colocação. Ao tocar em Revelar, ela começa no segundo que você escolher, com o volume subindo, e continua na revelação. Sem música enviada, toca a trilha do app. Arquivos de áudio de até 12 MB (MP3, M4A, WAV).</p>
+      <div class="pm-list">${row('intro')}<p class="pm-sub">Pódio</p>${[3, 2, 1].map(row).join('')}</div>
       <p class="pm-note">${icon('help')}<span>Tocar música comercial (artistas, rádio, streaming) no estabelecimento pode exigir licença do ECAD. Músicas livres de direitos, como as da Biblioteca de Áudio do YouTube e da Pixabay Music, evitam isso.</span></p>
     </section>`;
   }
@@ -4131,7 +4138,7 @@ Content-Type: application/json</pre>
         return await new Promise((res, rej) => c.decodeAudioData(ab, res, rej));
       })().then(b => { if (b) this.bufs[m.id] = b; else delete this.bufs[m.id]; return b; }).catch(() => (delete this.bufs[m.id], null)));
     },
-    preload() { for (const p2 of [1, 2, 3]) this.customBuf(p2); },
+    preload() { for (const p2 of ['intro', 1, 2, 3]) this.customBuf(p2); },
     // Toca a música da colocação a partir do segundo escolhido, com o volume subindo. Retorna false se não houver música pronta.
     playCustom(place, rise = 3) {
       const m = (state.podiumMusic || {})[place], c = Sound.ctx;
@@ -4673,7 +4680,7 @@ Content-Type: application/json</pre>
       toast('Card salvo.'); render();
     },
     async pmTest(el) {
-      const place = Number(el.dataset.p);
+      const place = pmKey(el.dataset.p);
       if (!Sound.on) { Sound.on = true; }
       Sound.ensure();
       if (ui.pmTest === place) { ui.pmTest = null; Music.stop(); el.innerHTML = `${icon('play')} Ouvir`; return; }
@@ -4684,15 +4691,16 @@ Content-Type: application/json</pre>
         el.disabled = true; const buf = await Music.customBuf(place); el.disabled = false;
         if (!buf) { toast('Não foi possível carregar a música. Tente enviar de novo.'); ui.pmTest = null; el.innerHTML = `${icon('play')} Ouvir`; return; }
         Music.playCustom(place, 1.5);
-      } else { Music.build(place); setTimeout(() => { if (ui.pmTest === place) Music.win(place); }, Music.buildDur[place] * 1000); }
+      } else if (place === 'intro') { ui.pmTest = null; el.innerHTML = `${icon('play')} Ouvir`; toast('A abertura ainda não tem música. Envie uma para ouvir.'); return; }
+      else { Music.build(place); setTimeout(() => { if (ui.pmTest === place) Music.win(place); }, Music.buildDur[place] * 1000); }
       clearTimeout(ui.pmTimer);
       ui.pmTimer = setTimeout(() => { if (ui.pmTest === place) { ui.pmTest = null; Music.fadeCustom(1.5); const b = document.querySelector(`[data-action="pmTest"][data-p="${place}"]`); if (b) b.innerHTML = `${icon('play')} Ouvir`; } }, m ? 15000 : (Music.buildDur[place] + 9) * 1000);
     },
     async pmDel(el) {
-      const place = Number(el.dataset.p), pm = { ...(state.podiumMusic || {}) }, m = pm[place];
+      const place = pmKey(el.dataset.p), pm = { ...(state.podiumMusic || {}) }, m = pm[place];
       if (!m) return;
       if (m.path && Cloud.enabled) Cloud.removeFile(MUSIC_BUCKET, m.path); else FileStore.del('music|' + m.id);
-      delete pm[place]; state.podiumMusic = pm; save(); Music.stop(); toast(`Música do ${place}º lugar removida. Volta a trilha do app.`); render();
+      delete pm[place]; state.podiumMusic = pm; save(); Music.stop(); toast(place === 'intro' ? 'Música da abertura removida. A abertura fica sem música.' : `Música do ${place}º lugar removida. Volta a trilha do app.`); render();
     },
     repOpen(el) { ui.repYm = el.dataset.ym; if (location.hash !== '#relatorios') location.hash = 'relatorios'; else render(); window.scrollTo(0, 0); },
     repBack() { ui.repYm = null; render(); },
@@ -5236,11 +5244,11 @@ Content-Type: application/json</pre>
     teamMonth(el) { ui.teamMonth = el.value; ui.fcPeek = false; render(); },
     hgYm(el) { ui.hgYm = el.value; render(); },
     pmStart(el) {
-      const place = Number(el.dataset.p), pm = { ...(state.podiumMusic || {}) };
+      const place = pmKey(el.dataset.p), pm = { ...(state.podiumMusic || {}) };
       if (!pm[place]) return;
       const max = Math.max(0, (pm[place].dur || 600) - 2);
       pm[place] = { ...pm[place], start: Math.min(max, Math.max(0, Math.round(Number(el.value) || 0))) };
-      state.podiumMusic = pm; save(); toast(`A música do ${place}º lugar começa em ${fmtSec(pm[place].start)}.`);
+      state.podiumMusic = pm; save(); toast(`A música ${pmName(place)} começa em ${fmtSec(pm[place].start)}.`);
     },
     repYm(el) { ui.repYm = el.value; render(); },
     lanDate(el) { ui.lanDate = el.value; },
@@ -5291,7 +5299,7 @@ Content-Type: application/json</pre>
       try { b.photo = await readImage(el.files[0]); save(); toast('Foto atualizada.'); render(); } catch (e) { toast(e.message); }
     },
     async pmFile(el) {
-      const place = Number(el.dataset.p), f = el.files && el.files[0];
+      const place = pmKey(el.dataset.p), f = el.files && el.files[0];
       if (!f) return;
       if (f.size > MUSIC_MAX) { toast('A música passa de 12 MB. Use um arquivo menor (MP3 de até uns 8 minutos).'); return; }
       if (f.type && !/^audio\//.test(f.type)) { toast('Envie um arquivo de áudio (MP3, M4A ou WAV).'); return; }
@@ -5309,7 +5317,7 @@ Content-Type: application/json</pre>
         if (old) { if (old.path && Cloud.enabled) Cloud.removeFile(MUSIC_BUCKET, old.path); else FileStore.del('music|' + old.id); }
         Music.bufs[id] = buf;
         pm[place] = entry; state.podiumMusic = pm; save();
-        toast(`Música do ${place}º lugar salva. Escolha o segundo em que ela começa.`); render();
+        toast(`Música ${pmName(place)} salva. Escolha o segundo em que ela começa.`); render();
       } catch (e) {
         toast(/bucket|not found|policy|mime|row-level/i.test(String(e && e.message)) ? 'O armazenamento de músicas ainda não foi ativado no servidor.' : (e && e.message) || 'Não foi possível enviar a música.');
       }
