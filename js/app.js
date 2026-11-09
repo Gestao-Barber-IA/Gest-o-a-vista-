@@ -2584,14 +2584,19 @@ Content-Type: application/json</pre>
 
   function fxSlideHtml(R, sl, ym) {
     const n = R.rows.length, month = esc(ymLabel(ym).replace(' de ', '/'));
-    if (sl.k === 'intro') return `<div class="fx-slide fx-intro">
+    if (sl.k === 'intro') return `<div class="fx-slide fx-intro has-open">
         <div class="fx-emblem"><span class="fx-orbit"></span><span class="fx-orbit o2"></span>${logo('fx-logo')}</div>
         <p class="fx-kicker">${esc(state.company.name)}</p>
         <h1 class="fx-title">Fechamento</h1>
         <p class="fx-month">${month}</p>
         <p class="fx-tag">Cada atendimento conta.</p>
         <p class="fx-count"><b data-count="${n}">0</b> barbeiros</p>
-        <p class="fx-hint">Toque, deslize ou use as setas</p></div>`;
+        <p class="fx-hint">Toque, deslize ou use as setas</p></div>
+      <div class="fx-open" aria-hidden="true"><span class="fx-open-flash"></span><span class="fx-open-flash f2"></span><span class="fx-open-rays"></span>
+        <div class="fx-open-p1"><p class="fx-open-a">É hora do</p>
+          <p class="fx-open-b">${'FECHAMENTO'.split('').map((ch, i) => `<i style="--i:${i}">${ch}</i>`).join('')}</p></div>
+        <div class="fx-open-p2"><p class="fx-open-c">${['Aumente', 'as'].map((w, i) => `<span style="--i:${i}">${w}</span>`).join(' ')}</p>
+          <p class="fx-open-d">${'EXPECTATIVAS'.split('').map((ch, i) => `<i style="--i:${i}">${ch}</i>`).join('')}</p></div></div>`;
     if (sl.k === 'podium') {
       const t1 = fxTier(R, R.rows[0], 1);
       return `<div class="fx-slide fx-pintro">
@@ -2677,7 +2682,17 @@ Content-Type: application/json</pre>
   function fxRender() {
     const fx = ui.fx; if (!fx) return;
     Music.fadeCustom(1.5); // a música da tela anterior sai suave ao passar de tela
-    if (fxSlides(fx.ym).s[fx.i]?.k === 'intro' && (state.podiumMusic || {}).intro) {
+    if (!ui.beatRaf) { // a apresentação pulsa no ritmo da música (variável --beat de 0 a 1)
+      const loop = () => {
+        const ov2 = document.getElementById('fx');
+        if (!ov2 || !ui.fx) { ui.beatRaf = null; ui.beatV = 0; return; }
+        const v = Music.level(); ui.beatV = v > (ui.beatV || 0) ? v : (ui.beatV || 0) * 0.9;
+        ov2.style.setProperty('--beat', ui.beatV.toFixed(3));
+        ui.beatRaf = requestAnimationFrame(loop);
+      };
+      ui.beatRaf = requestAnimationFrame(loop);
+    }
+    if (fxSlides(fx.ym).s[fx.i]?.k === 'intro' && pmAll().intro) {
       // Abertura: a música da empresa entra assim que estiver carregada, enquanto a abertura estiver na tela.
       Music.customBuf('intro').then(b => { const now = ui.fx && fxSlides(ui.fx.ym).s[ui.fx.i]; if (b && now && now.k === 'intro' && !Music.cur) Music.playCustom('intro', 2.5); });
     }
@@ -4053,28 +4068,113 @@ Content-Type: application/json</pre>
     get(k) { return this.run('readonly', st => st.get(k)).catch(() => null); },
     del(k) { return this.run('readwrite', st => st.delete(k)).catch(() => null); },
   };
+  // Áudio compacto: mono, taxa menor e no máximo `maxSec` segundos (para vídeos MP4 e arquivos grandes).
+  async function audioCompact(buf, rate, maxSec) {
+    const len = Math.min(buf.duration, maxSec);
+    const off = new OfflineAudioContext(1, Math.ceil(len * rate), rate);
+    const src = off.createBufferSource(); src.buffer = buf; src.connect(off.destination); src.start(0, 0, len);
+    return off.startRendering();
+  }
+  function wavBlob(buf) {
+    const d = buf.getChannelData(0), n = d.length, out = new DataView(new ArrayBuffer(44 + n * 2)), rate = buf.sampleRate;
+    const str = (o, t) => { for (let i = 0; i < t.length; i++) out.setUint8(o + i, t.charCodeAt(i)); };
+    str(0, 'RIFF'); out.setUint32(4, 36 + n * 2, true); str(8, 'WAVE'); str(12, 'fmt '); out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 1, true);
+    out.setUint32(24, rate, true); out.setUint32(28, rate * 2, true); out.setUint16(32, 2, true); out.setUint16(34, 16, true); str(36, 'data'); out.setUint32(40, n * 2, true);
+    let peak = 0; for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(d[i]));
+    const g = peak > 0 ? Math.min(1 / peak, 4) * 0.95 : 1; // normaliza o volume
+    for (let i = 0; i < n; i++) out.setInt16(44 + i * 2, Math.max(-1, Math.min(1, d[i] * g)) * 0x7fff, true);
+    return new Blob([out], { type: 'audio/wav' });
+  }
+  // ----- Recorte da música -----
+  const pmLead = p => p === 'intro' ? 4.5 : (Music.buildDur[p] || 3); // segundos até a explosão (2º clarão da abertura / revelação)
+  const PM_LENS = [15, 20, 30, 45, 60, 0];
+  // Energia da música a cada 0,25 s (RMS), guardada por música.
+  const pmEnvCache = {};
+  function pmEnv(id, buf) {
+    if (pmEnvCache[id]) return pmEnvCache[id];
+    const d = buf.getChannelData(0), d2 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : null, step = Math.floor(buf.sampleRate * 0.25), e = [];
+    for (let i = 0; i + step <= d.length; i += step) { let s2 = 0; for (let k = i; k < i + step; k += 4) { const v = d2 ? (d[k] + d2[k]) / 2 : d[k]; s2 += v * v; } e.push(Math.sqrt(s2 / (step / 4))); }
+    const mx = Math.max(1e-6, ...e);
+    return (pmEnvCache[id] = e.map(v => v / mx));
+  }
+  // Recorte automático: procura o ponto em que a música mais cresce e entra forte (a "explosão"),
+  // e começa alguns segundos antes, para a explosão cair na hora da revelação.
+  function pmAuto(env, lead) {
+    const n = env.length, sm = env.map((_, i) => { let a = 0, c = 0; for (let k = Math.max(0, i - 2); k <= Math.min(n - 1, i + 2); k++) { a += env[k]; c++; } return a / c; });
+    const avg = (a, b) => { a = Math.max(0, a); b = Math.min(n, b); if (b <= a) return 0; let t = 0; for (let k = a; k < b; k++) t += sm[k]; return t / (b - a); };
+    const loud = [...sm].sort((a, b) => a - b)[Math.floor(n * 0.6)] || 0;
+    let best = -1, bi = 0;
+    for (let i = 16; i < n - 24; i++) { // a partir de 4 s, até 6 s antes do fim
+      const before = avg(i - 48, i), after = avg(i, i + 24), jump = avg(i, i + 4) - avg(i - 4, i);
+      if (after < loud) continue;
+      const sc = (after - before) * 1.4 + jump * 1.2 + after * 0.4;
+      if (sc > best) { best = sc; bi = i; }
+    }
+    const drop = bi * 0.25;
+    return { drop, start: Math.max(0, Math.round((drop - lead) * 10) / 10) };
+  }
+  function pmTrimHtml(place, m) {
+    const sel = ui.pmSel || { start: m.start || 0, len: m.end ? Math.round(m.end - (m.start || 0)) : 0 };
+    return `<div class="pm-trim">
+      <canvas class="pm-wave" data-action="pmWave" data-p="${place}" width="900" height="110" role="img" aria-label="Onda da música. Toque para escolher onde o recorte começa."></canvas>
+      <div class="pm-trim-info num"><span>Início <b>${fmtSec(sel.start)}</b></span><span>Fim <b>${sel.len ? fmtSec(Math.min(m.dur || 9999, sel.start + sel.len)) : 'até o fim'}</b></span>${sel.drop != null ? `<span class="pm-drop">${icon('bolt')} Explosão em <b>${fmtSec(sel.drop)}</b></span>` : ''}</div>
+      <div class="pm-trim-ctl">
+        <button class="btn btn-sm" data-action="pmNudge" data-d="-1" aria-label="Voltar 1 segundo">${icon('left')} 1 s</button>
+        <button class="btn btn-sm" data-action="pmNudge" data-d="1" aria-label="Avançar 1 segundo">1 s ${icon('right')}</button>
+        <label class="pm-len">Duração <select class="input" data-change="pmLen">${PM_LENS.map(l => `<option value="${l}" ${sel.len === l ? 'selected' : ''}>${l ? l + ' s' : 'até o fim'}</option>`).join('')}</select></label>
+        <button class="btn btn-sm" data-action="pmAutoCut" data-p="${place}">${icon('sparkle')} Recorte automático</button>
+        <button class="btn btn-sm" data-action="pmPreview" data-p="${place}">${icon('play')} Ouvir recorte</button>
+        <button class="btn btn-sm btn-primary" data-action="pmTrimSave" data-p="${place}">${icon('check')} Salvar recorte</button>
+        <button class="btn btn-sm" data-action="pmTrim" data-p="${place}">Cancelar</button>
+      </div>
+      <p class="pm-trim-hint">Toque na onda para escolher onde a música começa. O <b>recorte automático</b> acha o momento em que a música mais cresce e começa ${nf1.format(pmLead(place))} s antes, para a explosão cair ${place === 'intro' ? 'no 2º clarão da abertura (EXPECTATIVAS)' : 'bem na hora da revelação'}.</p>
+    </div>`;
+  }
+  async function pmDraw() {
+    const cv = document.querySelector('.pm-wave'); if (!cv || !ui.pmTrim) return;
+    const place = pmKey(cv.dataset.p), m = pmAll()[place]; if (!m) return;
+    const buf = await Music.customBuf(place); if (!buf || !cv.isConnected) return;
+    const env = pmEnv(m.id, buf), c = cv.getContext('2d'), W = cv.width, H = cv.height, dur = buf.duration;
+    const sel = ui.pmSel || { start: m.start || 0, len: 0 }, x = t => (t / dur) * W;
+    const css = getComputedStyle(document.documentElement), acc = css.getPropertyValue('--accent').trim() || '#d6b46a';
+    c.clearRect(0, 0, W, H);
+    const s0 = x(sel.start), s1 = sel.len ? x(Math.min(dur, sel.start + sel.len)) : W;
+    c.fillStyle = 'rgba(255,255,255,0.06)'; c.fillRect(s0, 0, s1 - s0, H);
+    const bw = W / env.length;
+    env.forEach((v, i) => { const h = Math.max(2, v * (H - 10)), xi = i * bw; c.fillStyle = xi >= s0 && xi <= s1 ? acc : 'rgba(160,160,170,0.45)'; c.fillRect(xi, (H - h) / 2, Math.max(1, bw - 0.6), h); });
+    c.fillStyle = '#ffffff'; c.fillRect(s0 - 1, 0, 3, H);
+    if (sel.drop != null) { const xd = x(sel.drop); c.strokeStyle = '#ff8a3c'; c.setLineDash([5, 4]); c.lineWidth = 2; c.beginPath(); c.moveTo(xd, 0); c.lineTo(xd, H); c.stroke(); c.setLineDash([]); }
+  }
   const pmKey = v => v === 'intro' ? 'intro' : Number(v);
   const pmName = p => p === 'intro' ? 'da abertura' : `do ${p}º lugar`;
   const fmtSec = v => { v = Math.max(0, Math.round(Number(v) || 0)); return Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0'); };
+  // Músicas em uso: as da conta (no modo apresentação aberto a partir da conta) e, por cima, as enviadas aqui.
+  function pmAll() {
+    const acct = DEMO_ON && ui.acctMusic ? Object.fromEntries(Object.entries(ui.acctMusic).filter(([, m]) => m && m.path).map(([k, m]) => [k, { ...m, acct: true }])) : {};
+    return { ...acct, ...(state.podiumMusic || {}) };
+  }
   function podiumMusicCard() {
-    const pm = state.podiumMusic || {};
+    const pm = pmAll();
     const row = place => {
       const m = pm[place];
       return `<div class="pm-row">
         <span class="pm-place p${place}">${place === 'intro' ? icon('play') : place + 'º'}</span>
-        <div class="pm-info">${m ? `<b>${esc(m.name)}</b><small>${m.dur ? `Duração ${fmtSec(m.dur)} · ` : ''}começa em <label class="pm-start"><input class="input num" type="number" min="0" step="1" value="${Math.round(m.start || 0)}" data-change="pmStart" data-p="${place}" aria-label="Segundo em que a música ${pmName(place)} começa"> s</label></small>`
+        <div class="pm-info">${m && m.acct ? `<b>${esc(m.name)} <span class="chip chip-ok">${icon('cloud')} da sua conta</span></b><small>${m.dur ? `Duração ${fmtSec(m.dur)} · ` : ''}começa em ${fmtSec(m.start || 0)}</small>`
+          : m ? `<b>${esc(m.name)}</b><small>${m.dur ? `Duração ${fmtSec(m.dur)} · ` : ''}${m.end ? `trecho de ${fmtSec(m.start || 0)} a ${fmtSec(m.end)} · ` : ''}começa em <label class="pm-start"><input class="input num" type="number" min="0" step="1" value="${Math.round(m.start || 0)}" data-change="pmStart" data-p="${place}" aria-label="Segundo em que a música ${pmName(place)} começa"> s</label></small>`
           : place === 'intro' ? `<b>Abertura sem música</b><small>Envie uma música para tocar assim que o fechamento começar</small>`
           : `<b>Trilha padrão do app</b><small>${place === 1 ? 'Hino com subida de tom e aplausos' : place === 2 ? 'Progressão com bateria e melodia' : 'Fanfarra curta'}</small>`}</div>
         <div class="pm-btns">
           <button class="btn btn-sm" data-action="pmTest" data-p="${place}">${icon('play')} Ouvir</button>
-          <label class="btn btn-sm ${m ? '' : 'btn-primary'}" style="cursor:pointer">${icon('upload')} ${m ? 'Trocar' : 'Enviar música'}<input type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg" hidden data-change="pmFile" data-p="${place}"></label>
-          ${m ? `<button class="btn btn-sm" data-action="pmDel" data-p="${place}" aria-label="Remover a música ${pmName(place)}">${icon('trash')}</button>` : ''}
+          ${m && !m.acct ? `<button class="btn btn-sm ${ui.pmTrim === place ? 'btn-primary' : ''}" data-action="pmTrim" data-p="${place}">${icon('scissors')} Recortar</button>` : ''}
+          <label class="btn btn-sm ${m ? '' : 'btn-primary'}" style="cursor:pointer">${icon('upload')} ${m && m.acct ? 'Trocar nesta demonstração' : m ? 'Trocar' : 'Enviar música'}<input type="file" accept="audio/*,video/mp4,video/*,.mp3,.mp4,.m4a,.aac,.wav,.ogg,.mov" hidden data-change="pmFile" data-p="${place}"></label>
+          ${m && !m.acct ? `<button class="btn btn-sm" data-action="pmDel" data-p="${place}" aria-label="Remover a música ${pmName(place)}">${icon('trash')}</button>` : ''}
         </div>
-      </div>`;
+      </div>${ui.pmTrim === place && m && !m.acct ? pmTrimHtml(place, m) : ''}`;
     };
     return `<section class="section card pm-card">
       <h2 class="section-title">Músicas do fechamento</h2>
-      <p class="section-note"><b>Abertura:</b> a música começa assim que você inicia o fechamento e sai suave ao passar de tela. <b>Pódio:</b> escolha uma música para cada colocação. Ao tocar em Revelar, ela começa no segundo que você escolher, com o volume subindo, e continua na revelação. Sem música enviada, toca a trilha do app. Arquivos de áudio de até 12 MB (MP3, M4A, WAV).</p>
+      <p class="section-note"><b>Abertura:</b> a música começa assim que você inicia o fechamento e sai suave ao passar de tela. <b>Pódio:</b> escolha uma música para cada colocação. Ao tocar em Revelar, ela começa no segundo que você escolher, com o volume subindo, e continua na revelação. Sem música enviada, toca a trilha do app. Aceita MP3, MP4 (inclusive vídeo: o app separa só o áudio), M4A e WAV.</p>
+      ${DEMO_ON ? `<p class="pm-note pm-demo">${icon('cloud')}<span>${ui.acctMusic ? '<b>Modo apresentação:</b> as músicas marcadas "da sua conta" estão salvas no servidor e tocam aqui sem precisar enviar de novo. Para trocar de vez, troque na sua conta. O que você enviar aqui vale só para este aparelho.' : '<b>Modo apresentação:</b> o que você enviar aqui fica só neste aparelho. Para salvar no servidor, envie as músicas na sua conta (Fechamento do mês) e abra o modo apresentação a partir dela: as mesmas músicas tocam aqui.'}</span></p>` : ''}
       <div class="pm-list">${row('intro')}<p class="pm-sub">Pódio</p>${[3, 2, 1].map(row).join('')}</div>
       <p class="pm-note">${icon('help')}<span>Tocar música comercial (artistas, rádio, streaming) no estabelecimento pode exigir licença do ECAD. Músicas livres de direitos, como as da Biblioteca de Áudio do YouTube e da Pixabay Music, evitam isso.</span></p>
     </section>`;
@@ -4088,6 +4188,7 @@ Content-Type: application/json</pre>
     out(c) {
       if (!this.bus || this.bus.context !== c) {
         const comp = c.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 6; comp.connect(c.destination);
+        this.busAn = c.createAnalyser(); this.busAn.fftSize = 256; this.busAn.smoothingTimeConstant = 0.6; comp.connect(this.busAn);
         this.bus = c.createGain(); this.bus.gain.value = 0.6; this.bus.connect(comp);
       }
       return this.bus;
@@ -4127,21 +4228,31 @@ Content-Type: application/json</pre>
     // ----- Música enviada pela empresa para cada colocação (Fechamento → Músicas do pódio) -----
     bufs: {}, cur: null,
     async customBuf(place) {
-      const m = (state.podiumMusic || {})[place];
+      const m = pmAll()[place];
       if (!m || !m.id) return null;
       if (this.bufs[m.id]) return this.bufs[m.id];
       const c = Sound.ensure(); if (!c) return null;
       return (this.bufs[m.id] = (async () => {
         let ab;
         if (m.path && Cloud.enabled) ab = await (await fetch(await Cloud.fileUrl(MUSIC_BUCKET, m.path))).arrayBuffer();
+        else if (m.acct && Cloud.demoMusic) ab = await (await fetch(await Cloud.demoMusic.url(m.path))).arrayBuffer();
         else { const blob = await FileStore.get('music|' + m.id); if (!blob) return null; ab = await blob.arrayBuffer(); }
         return await new Promise((res, rej) => c.decodeAudioData(ab, res, rej));
       })().then(b => { if (b) this.bufs[m.id] = b; else delete this.bufs[m.id]; return b; }).catch(() => (delete this.bufs[m.id], null)));
     },
+    // Energia dos graves da música tocando agora (0 a 1): faz a tela pulsar no ritmo.
+    level() {
+      const an = (this.cur && this.cur.an) || this.busAn;
+      if (!an) return 0;
+      const a = this.fq && this.fq.length === an.frequencyBinCount ? this.fq : (this.fq = new Uint8Array(an.frequencyBinCount));
+      an.getByteFrequencyData(a);
+      let sum = 0; for (let i = 1; i < 9; i++) sum += a[i];
+      return Math.max(0, Math.min(1, (sum / 8 / 255 - 0.2) / 0.55));
+    },
     preload() { for (const p2 of ['intro', 1, 2, 3]) this.customBuf(p2); },
     // Toca a música da colocação a partir do segundo escolhido, com o volume subindo. Retorna false se não houver música pronta.
-    playCustom(place, rise = 3) {
-      const m = (state.podiumMusic || {})[place], c = Sound.ctx;
+    playCustom(place, rise = 3, ov = null) {
+      const m0 = pmAll()[place], m = m0 && ov ? { ...m0, ...ov } : m0, c = Sound.ctx;
       const ready = m && m.id && this.bufs[m.id];
       if (!Sound.on || !ready || !c) return false;
       const go = buf => {
@@ -4149,8 +4260,13 @@ Content-Type: application/json</pre>
         this.fadeCustom(0.2);
         const src = c.createBufferSource(), g = c.createGain(), t = c.currentTime + 0.02;
         src.buffer = buf; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35, t + 0.3); g.gain.linearRampToValueAtTime(1, t + rise);
-        src.connect(g).connect(c.destination); src.start(t, Math.min(Math.max(0, Number(m.start) || 0), Math.max(0, buf.duration - 1)));
-        this.cur = { src, g };
+        const an = c.createAnalyser(); an.fftSize = 256; an.smoothingTimeConstant = 0.6;
+        const st = Math.min(Math.max(0, Number(m.start) || 0), Math.max(0, buf.duration - 1));
+        src.connect(g); g.connect(an); an.connect(c.destination); src.start(t, st);
+        // Fim do recorte: abaixa nos últimos 2 s e para.
+        const len = Number(m.end) > st ? Number(m.end) - st : 0;
+        if (len > rise + 2) { g.gain.setValueAtTime(1, t + len - 2); g.gain.linearRampToValueAtTime(0.0001, t + len); src.stop(t + len + 0.05); }
+        this.cur = { src, g, an };
         return true;
       };
       return ready instanceof AudioBuffer ? go(ready) : false; // ainda carregando: usa a trilha do app
@@ -4520,6 +4636,7 @@ Content-Type: application/json</pre>
     maybeOvertakeToast();
     hydrateProofs();
     if (document.querySelector('img[data-card]')) hydrateCards();
+    if (document.querySelector('.pm-wave')) pmDraw();
     setTimeout(maybeAutoReveal, 700);
     setTimeout(() => maybeGoalCelebrate(user), 1200);
   }
@@ -4679,6 +4796,39 @@ Content-Type: application/json</pre>
       const log = cardDlLog(); log[k] = todayIso(); DB.pref.set('cardDl', JSON.stringify(log));
       toast('Card salvo.'); render();
     },
+    pmTrim(el) {
+      const place = pmKey(el.dataset.p), m = pmAll()[place];
+      if (ui.pmTrim === place) { ui.pmTrim = null; ui.pmSel = null; Music.stop(); render(); return; }
+      ui.pmTrim = place; ui.pmSel = m ? { start: m.start || 0, len: m.end ? Math.round(m.end - (m.start || 0)) : 30 } : null; render();
+    },
+    pmWave(el, ev) {
+      const m = pmAll()[ui.pmTrim]; if (!m || !ui.pmSel || !ev) return;
+      const r = el.getBoundingClientRect(), f = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
+      ui.pmSel.start = Math.max(0, Math.min((m.dur || 0) - 2, Math.round(f * (m.dur || 0) * 10) / 10)); render();
+    },
+    pmNudge(el) { if (!ui.pmSel) return; const m = pmAll()[ui.pmTrim]; ui.pmSel.start = Math.max(0, Math.min((m && m.dur || 9999) - 2, Math.round((ui.pmSel.start + Number(el.dataset.d)) * 10) / 10)); render(); },
+    async pmAutoCut(el) {
+      const place = pmKey(el.dataset.p), m = pmAll()[place]; if (!m) return;
+      el.disabled = true; const buf = await Music.customBuf(place); el.disabled = false;
+      if (!buf) { toast('Não foi possível ler a música.'); return; }
+      const r = pmAuto(pmEnv(m.id, buf), pmLead(place));
+      ui.pmSel = { ...(ui.pmSel || {}), start: r.start, drop: r.drop, len: (ui.pmSel && ui.pmSel.len != null) ? ui.pmSel.len : 30 };
+      toast(`Explosão encontrada em ${fmtSec(r.drop)}. O recorte começa em ${fmtSec(r.start)}.`); render();
+    },
+    async pmPreview(el) {
+      const place = pmKey(el.dataset.p), sel = ui.pmSel; if (!sel) return;
+      Sound.on = true; Sound.ensure(); Music.stop();
+      const buf = await Music.customBuf(place); if (!buf) return;
+      Music.playCustom(place, 1.2, { start: sel.start, end: sel.len ? sel.start + sel.len : 0 });
+      clearTimeout(ui.pmTimer); ui.pmTimer = setTimeout(() => Music.fadeCustom(1.5), Math.min(20, sel.len || 20) * 1000);
+    },
+    pmTrimSave(el) {
+      const place = pmKey(el.dataset.p), pm = { ...(state.podiumMusic || {}) }, sel = ui.pmSel;
+      if (!pm[place] || !sel) return;
+      pm[place] = { ...pm[place], start: sel.start, end: sel.len ? Math.min(pm[place].dur || 9999, sel.start + sel.len) : null };
+      state.podiumMusic = pm; ui.pmTrim = null; ui.pmSel = null; Music.stop(); save();
+      toast(`Recorte salvo: ${fmtSec(pm[place].start)}${pm[place].end ? ' a ' + fmtSec(pm[place].end) : ' até o fim'}.`); render();
+    },
     async pmTest(el) {
       const place = pmKey(el.dataset.p);
       if (!Sound.on) { Sound.on = true; }
@@ -4686,7 +4836,7 @@ Content-Type: application/json</pre>
       if (ui.pmTest === place) { ui.pmTest = null; Music.stop(); el.innerHTML = `${icon('play')} Ouvir`; return; }
       document.querySelectorAll('[data-action="pmTest"]').forEach(b => { b.innerHTML = `${icon('play')} Ouvir`; });
       Music.stop(); ui.pmTest = place; el.innerHTML = `${icon('x')} Parar`;
-      const m = (state.podiumMusic || {})[place];
+      const m = pmAll()[place];
       if (m) {
         el.disabled = true; const buf = await Music.customBuf(place); el.disabled = false;
         if (!buf) { toast('Não foi possível carregar a música. Tente enviar de novo.'); ui.pmTest = null; el.innerHTML = `${icon('play')} Ouvir`; return; }
@@ -5243,6 +5393,7 @@ Content-Type: application/json</pre>
     perfBarber(el) { ui.perfBarber = el.value; location.hash = 'perfil-' + el.value; },
     teamMonth(el) { ui.teamMonth = el.value; ui.fcPeek = false; render(); },
     hgYm(el) { ui.hgYm = el.value; render(); },
+    pmLen(el) { if (ui.pmSel) { ui.pmSel.len = Number(el.value) || 0; render(); } },
     pmStart(el) {
       const place = pmKey(el.dataset.p), pm = { ...(state.podiumMusic || {}) };
       if (!pm[place]) return;
@@ -5301,22 +5452,29 @@ Content-Type: application/json</pre>
     async pmFile(el) {
       const place = pmKey(el.dataset.p), f = el.files && el.files[0];
       if (!f) return;
-      if (f.size > MUSIC_MAX) { toast('A música passa de 12 MB. Use um arquivo menor (MP3 de até uns 8 minutos).'); return; }
-      if (f.type && !/^audio\//.test(f.type)) { toast('Envie um arquivo de áudio (MP3, M4A ou WAV).'); return; }
-      toast('Enviando a música…', 6000);
+      const isVideo = /^video\//.test(f.type) || /\.(mp4|mov|m4v|webm)$/i.test(f.name);
+      if (f.type && !/^(audio|video)\//.test(f.type)) { toast('Envie um arquivo de áudio ou vídeo (MP3, MP4, M4A ou WAV).'); return; }
+      if (f.size > 300 * 1024 * 1024) { toast('Arquivo grande demais. Use um vídeo ou música de até 300 MB.'); return; }
+      toast(isVideo || f.size > MUSIC_MAX ? 'Separando o áudio do arquivo…' : 'Enviando a música…', 8000);
       try {
         const ab = await f.arrayBuffer();
         const c = Sound.ensure();
-        const buf = c ? await new Promise((res, rej) => c.decodeAudioData(ab.slice(0), res, rej)) : null;
-        if (!buf) throw new Error('Não foi possível ler este arquivo de áudio.');
-        const id = uid('m_'), ext = (f.name.split('.').pop() || 'mp3').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 4) || 'mp3';
+        let buf = c ? await new Promise((res, rej) => c.decodeAudioData(ab.slice(0), res, rej)).catch(() => null) : null;
+        if (!buf) throw new Error(isVideo ? 'Não foi possível tirar o áudio deste vídeo. Tente outro arquivo ou um MP3.' : 'Não foi possível ler este arquivo de áudio.');
+        // Vídeo (MP4) ou arquivo grande: guarda só o áudio, compactado (mono, 24 kHz, até 4 minutos) para caber nos 12 MB.
+        let up = f, ext = (f.name.split('.').pop() || 'mp3').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 4) || 'mp3';
+        if (isVideo || f.size > MUSIC_MAX) {
+          buf = await audioCompact(buf, 24000, 240);
+          up = new File([wavBlob(buf)], f.name.replace(/\.[^.]+$/, '') + '.wav', { type: 'audio/wav' }); ext = 'wav';
+        }
+        const id = uid('m_');
         const pm = { ...(state.podiumMusic || {}) }, old = pm[place];
         const entry = { id, name: f.name.replace(/\.[^.]+$/, '').slice(0, 80), start: 0, dur: Math.round(buf.duration) };
-        if (Cloud.enabled) entry.path = await Cloud.uploadBlob(MUSIC_BUCKET, `${Cloud.companyId}/podio-${place}-${id}.${ext}`, f);
-        else await FileStore.put('music|' + id, f);
+        if (Cloud.enabled) entry.path = await Cloud.uploadBlob(MUSIC_BUCKET, `${Cloud.companyId}/podio-${place}-${id}.${ext}`, up);
+        else await FileStore.put('music|' + id, up);
         if (old) { if (old.path && Cloud.enabled) Cloud.removeFile(MUSIC_BUCKET, old.path); else FileStore.del('music|' + old.id); }
         Music.bufs[id] = buf;
-        pm[place] = entry; state.podiumMusic = pm; save();
+        pm[place] = entry; state.podiumMusic = pm; ui.pmTrim = null; ui.pmSel = null; save();
         toast(`Música ${pmName(place)} salva. Escolha o segundo em que ela começa.`); render();
       } catch (e) {
         toast(/bucket|not found|policy|mime|row-level/i.test(String(e && e.message)) ? 'O armazenamento de músicas ainda não foi ativado no servidor.' : (e && e.message) || 'Não foi possível enviar a música.');
@@ -5476,6 +5634,9 @@ Content-Type: application/json</pre>
     const pm = new URLSearchParams(location.search).get('marca');
     if (BRANDS[pm]) DB.pref.set('brand', pm);
     applyBrand(DB.demo || DB.pref.get('brand', '') || 'barber');
+  }
+  if (DEMO_ON && Cloud.demoMusic) {
+    Cloud.demoMusic.load().then(m => { if (m && Object.keys(m).length) { ui.acctMusic = m; if (location.hash === '#fechamento') render(); } }).catch(() => { /* sem conta: só as músicas deste aparelho */ });
   }
   if (Cloud.enabled) {
     const wait = new Promise(r => setTimeout(r, 1900));
