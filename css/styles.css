@@ -2150,3 +2150,19 @@ html[data-brand="salao"] .pt-ask b { background-image: linear-gradient(180deg, #
 .demo-kit-row .grow { flex: 1; min-width: 0; }
 .demo-acts .btn.on { border-color: var(--accent); }
 @media (max-width: 560px) { .demo-kit-row { flex-direction: column; align-items: stretch; } .demo-kit-logo { align-self: center; } }
+
+/* Primeiros passos e pendências do gestor (Início) */
+.gd-card { margin-bottom: 16px; border-color: var(--line-accent); }
+.gd-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.gd-bar { height: 6px; border-radius: 6px; background: var(--line); overflow: hidden; margin: 4px 0 12px; }
+.gd-bar i { display: block; height: 100%; background: var(--accent); border-radius: 6px; }
+.gd-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.gd-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.gd-row.ok { opacity: 0.6; }
+.gd-row.ok .gd-t { text-decoration: line-through; }
+.gd-dot { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 0.85rem; background: var(--line); color: var(--fg); }
+.gd-row.ok .gd-dot { background: var(--accent); color: #111; }
+.gd-dot .ico { width: 16px; height: 16px; }
+.gd-t { flex: 1; min-width: 0; }
+.gd-row .btn { flex: none; }
+@media (max-width: 420px) { .gd-row { flex-wrap: wrap; } .gd-row .btn { margin-left: 40px; } }

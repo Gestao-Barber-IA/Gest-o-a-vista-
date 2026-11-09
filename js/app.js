@@ -1222,7 +1222,7 @@
     liveDetect(R);
     return `
       ${periodBar()}
-      ${isGestor(user) ? suspenseNote() : ''}
+      ${isGestor(user) ? suspenseNote() + gestorGuide() : ''}
       ${monthOnlyData(R) ? `<div class="card week-note"><p>${icon('help')}<span>Os resultados lançados à mão são <b>totais do mês</b>, por isso não aparecem na visão por semana. A Semana mostra só resultados diários (da integração ou do checklist).</span></p>
         <button class="btn btn-primary btn-sm" data-action="period" data-period="mes">Ver o mês</button></div>` : ''}
       <div class="home-cols">
@@ -1231,6 +1231,51 @@
       </div>
       ${R.rows.length ? titleCard(R) : ''}
       ${howLink()}`;
+  }
+
+  // ---------- Primeiros passos e pendências do gestor (Início) ----------
+  function guideSteps() {
+    const hg = state.houseGoals || {}, hm = (state.houseGoalsM || {})[curYm()] || {};
+    return [
+      { ok: !!state.company.logo, t: 'Coloque o logo e os dados da empresa', h: 'empresa', b: 'Abrir dados' },
+      { ok: state.barbers.filter(b => b.active !== false).length >= 2, t: 'Cadastre a equipe (com foto e aniversário)', h: 'barbeiros', b: 'Adicionar' },
+      { ok: Object.keys(hg).length > 0 || Object.keys(hm).length > 0, t: 'Defina as metas do mês', h: 'performance', b: 'Definir metas' },
+      { ok: (state.entries || []).length > 0 || (state.monthly || []).length > 0, t: 'Lance os primeiros resultados (ou ligue a integração)', h: 'lancamentos', b: 'Lançar' },
+      { ok: DB.pref.get('tvSeen', '') === '1', t: 'Ligue a Tela da loja na TV', h: 'apresentacao', b: 'Abrir a TV' },
+    ];
+  }
+  function gestorPending() {
+    const out = [], now = new Date(), day = now.getDate(), ym = curYm(), prev = addMonths(ym, -1);
+    const waiting = state.users.filter(u => u.status === 'pendente').length;
+    if (waiting) out.push({ t: `${waiting} ${waiting > 1 ? 'pessoas aguardam' : 'pessoa aguarda'} sua aprovação para entrar`, h: 'barbeiros', b: 'Aprovar' });
+    let proofs = 0;
+    for (let i = 0; i < 7; i++) { const d = iso(new Date(now.getFullYear(), now.getMonth(), day - i)); for (const b of state.barbers) proofs += popPendingOf(b.id, d); }
+    if (proofs) out.push({ t: `${proofs} ${proofs > 1 ? 'provas' : 'prova'} do checklist para conferir`, h: 'checklist', b: 'Conferir' });
+    const hasMonth = k => (state.entries || []).some(e => e.date.slice(0, 7) === k) || (state.monthly || []).some(m => m.month === k);
+    if (day >= 5 && !hasMonth(ym)) out.push({ t: `Ainda não há resultados de ${monthRange(ym).label.split(' de ')[0]}. Lance os números para o ranking andar.`, h: 'lancamentos', b: 'Lançar' });
+    if (day <= 7 && hasMonth(prev) && DB.pref.get('fcSeen', '') !== prev) out.push({ t: `Hora do fechamento de ${monthRange(prev).label.split(' de ')[0]}: revele o pódio para a equipe.`, h: 'fechamento', b: 'Fazer o fechamento' });
+    const soon = [];
+    for (const b of state.barbers) {
+      const bd = (state.births || {})[b.id]; if (!bd || b.active === false) continue;
+      const [, m, d] = bd.split('-').map(Number);
+      let nx = new Date(now.getFullYear(), m - 1, d); if (nx < new Date(now.getFullYear(), now.getMonth(), day)) nx = new Date(now.getFullYear() + 1, m - 1, d);
+      const diff = Math.round((nx - new Date(now.getFullYear(), now.getMonth(), day)) / 864e5);
+      if (diff <= 7) soon.push(`${b.name.split(' ')[0]} (${diff === 0 ? 'hoje' : diff === 1 ? 'amanhã' : String(d).padStart(2, '0') + '/' + String(m).padStart(2, '0')})`);
+    }
+    if (soon.length) out.push({ t: `Aniversário chegando: ${soon.join(', ')}. O card está pronto para os stories.`, h: 'relatorios', b: 'Ver card', bday: 1 });
+    return out;
+  }
+  function gestorGuide() {
+    if (DB.demo) return '';
+    const steps = guideSteps(), done = steps.filter(x => x.ok).length;
+    const row = (x, i) => `<li class="gd-row ${x.ok ? 'ok' : ''}"><span class="gd-dot">${x.ok ? icon('check') : (i === undefined ? icon(x.bday ? 'gift' : 'bell') : i + 1)}</span><span class="gd-t">${esc(x.t)}</span>${x.ok ? '' : `<a class="btn btn-sm" href="#${x.h}">${esc(x.b)}</a>`}</li>`;
+    if (done < steps.length && DB.pref.get('guideHide', '') !== '1') {
+      return `<section class="card gd-card"><div class="gd-head"><h2 class="section-title">Primeiros passos · ${done} de ${steps.length}</h2><button class="link-btn" data-action="guideHide">Ocultar</button></div>
+        <div class="gd-bar"><i style="width:${Math.round(done / steps.length * 100)}%"></i></div>
+        <ol class="gd-list">${steps.map((x, i) => row(x, i)).join('')}</ol></section>`;
+    }
+    const pend = gestorPending();
+    return pend.length ? `<section class="card gd-card"><h2 class="section-title">Pendências</h2><ul class="gd-list">${pend.map(x => row(x)).join('')}</ul></section>` : '';
   }
 
   // ---------- Performance da equipe (antigo Time e ranking, por mês) ----------
@@ -4876,6 +4921,7 @@ Content-Type: application/json</pre>
   }
 
   function renderTV() {
+    if (!DB.demo) DB.pref.set('tvSeen', '1');
     document.body.classList.remove('has-nav');
     document.documentElement.classList.add('tv-motion');
     if (!Cloud.enabled) state = DB.load();
@@ -4973,6 +5019,7 @@ Content-Type: application/json</pre>
 
     let route = h || 'inicio';
     if (route !== 'fechamento') ui.fcPeek = false;
+    if (route === 'fechamento' && new Date().getDate() <= 7) DB.pref.set('fcSeen', addMonths(curYm(), -1));
     if (route !== 'time') ui.profSel = null;
     const alias = { empresa: 'empresa', integracao: 'integracao' };
     if (alias[route]) { ui.cfgTab = alias[route]; route = 'configuracoes'; }
@@ -5149,6 +5196,7 @@ Content-Type: application/json</pre>
     popRevMore() { ui.popRevAll = true; render(); },
     popCsv() { popCsv(); },
     exportJson() { exportJson(); },
+    guideHide() { DB.pref.set('guideHide', '1'); render(); },
     exportCsv() { exportCsv(); },
     popPrint() { document.body.classList.add('printing'); setTimeout(() => { window.print(); document.body.classList.remove('printing'); }, 50); },
     popSave() { save(); toast('Checklist salvo.'); },
