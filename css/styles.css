@@ -1913,3 +1913,22 @@ html[data-brand="salao"] .rp-board { --rpg: #f0b8a8; --rpg2: #b26e78; --rpl: rgb
 .rp-hint { flex-basis: 100%; display: flex; align-items: center; gap: 8px; margin: 0; font-size: 0.88rem; color: var(--fg-soft); }
 .rp-hint .ico { width: 18px; height: 18px; color: var(--accent); flex: none; }
 .rp-logo-img { max-height: 11cqw; object-fit: contain; }
+/* Cards do mês (profissional) */
+.cd-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 14px; }
+.cd-item { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 14px; align-items: center; padding: 12px; border-radius: 18px; background: var(--surface-2); border: 1px solid var(--line); }
+.cd-thumb { width: 120px; height: auto; aspect-ratio: 9 / 16; border-radius: 12px; object-fit: cover; background: linear-gradient(180deg, #191536, #0c0b18); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); }
+.cd-info { display: grid; gap: 8px; justify-items: start; min-width: 0; }
+.cd-info b { font-size: 1.05rem; }
+.cd-info > span.num { color: var(--fg-soft); font-size: 0.9rem; }
+.cd-info .chip .ico { width: 14px; height: 14px; }
+.cd-title .cd-item { grid-template-columns: 150px minmax(0, 1fr); background: transparent; border: 0; padding: 0; }
+.cd-title .cd-thumb { width: 150px; }
+.cd-title.mvp { border-color: rgba(108, 200, 255, 0.55); box-shadow: 0 0 30px rgba(70, 165, 255, 0.18); }
+.cd-title.destaque { border-color: rgba(248, 208, 108, 0.55); box-shadow: 0 0 30px rgba(248, 200, 90, 0.18); }
+.cd-kicker { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+.cd-title.mvp .cd-kicker { color: #6cc8ff; }
+.cd-kicker .ico { width: 18px; height: 18px; }
+.cd-title .cd-info b { font-size: 1.3rem; }
+.cd-none { display: flex; gap: 10px; align-items: flex-start; margin: 0; color: var(--fg-soft); }
+.cd-none .ico { flex: none; width: 22px; height: 22px; color: var(--accent); }
+.cd-none b { color: var(--fg); }
