@@ -1957,9 +1957,13 @@
         <select class="input" id="pc-month" data-change="teamMonth">${monthOptions(ym)}</select></label></div>${suspenseCard(dk)}${ownNumbers(R, (currentUser() || {}).barberId, ym)}`;
     const vis = k => GB.visibleInds(state).some(i => i.key === k);
     const rows = [...R.rows].filter(r => !scope || scope.has(r.barber.id)).sort((a, b) => b.sums.fat - a.sums.fat);
-    const has = rows.some(r => Object.keys(r.sums.n).length);
-    const sum = k => rows.reduce((a, r) => a + (r.sums[k] || 0), 0);
-    const ids = new Set(rows.map(r => r.barber.id));
+    // Totais da empresa = soma de todos os profissionais do mês, inclusive quem foi desligado depois e tem resultados lançados nesse mês.
+    const gone = state.barbers.filter(b => b.active === false && (!scope || scope.has(b.id)))
+      .map(b => ({ barber: b, sums: GB.aggregate(state, b.id, monthRange(ym)), values: {} })).filter(r => Object.keys(r.sums.n).length);
+    const all = rows.concat(gone);
+    const has = all.some(r => Object.keys(r.sums.n).length);
+    const sum = k => all.reduce((a, r) => a + (r.sums[k] || 0), 0);
+    const ids = new Set(all.map(r => r.barber.id));
     const agend = (state.monthly || []).filter(m => m.month === ym && ids.has(m.barberId) && isNum(m.agend)).reduce((a, m) => a + Number(m.agend), 0);
     const fat = sum('fat'), cli = sum('cli');
     const ocups = rows.map(r => r.values.ocup).filter(v => v != null);
@@ -1976,10 +1980,11 @@
         ${vis('prod') ? stat('Produtos vendidos', nf0.format(sum('prod'))) : ''}
         ${vis('planos') ? stat('Planos mensais', nf0.format(sum('planos'))) : ''}
         ${stat('Ticket médio da casa', cli > 0 ? money0(fat / cli) : '—')}
-        ${rows.some(r => r.sums.n.comanda) ? stat('Maior comanda do mês', money2(Math.max(...rows.map(r => r.sums.n.comanda ? r.sums.comanda : 0)))) : ''}
+        ${all.some(r => r.sums.n.comanda) ? stat('Maior comanda do mês', money2(Math.max(...all.map(r => r.sums.n.comanda ? r.sums.comanda : 0)))) : ''}
         ${vis('ocup') ? stat('Ocupação média', ocups.length ? nf1.format(ocups.reduce((a, v) => a + v, 0) / ocups.length) + '%' : '—') : ''}
-        ${stat('Profissionais', nf0.format(rows.length))}
+        ${stat('Profissionais', nf0.format(all.length))}
       </section>
+      ${all.length ? `<p class="section-note">Cada número acima é a soma dos ${nf0.format(all.length)} profissionais ${scope ? 'da sua área' : 'da equipe'} no mês${gone.length ? `, incluindo ${gone.length === 1 ? '1 profissional desligado que tem' : `${gone.length} profissionais desligados que têm`} resultados lançados nesse mês` : ''}. O ticket médio da casa é o faturamento total dividido pelo total de clientes, e a ocupação é a média dos profissionais.</p>` : ''}
 ${rows.length ? '' : emptyBarbers()}
       <p class="section-note">O detalhado por profissional, o ranking e o radar estão em Performance da equipe.</p>`;
   }
