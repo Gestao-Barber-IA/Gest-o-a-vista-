@@ -8,6 +8,24 @@
   const enabled = !GB.DB.demo && !!(CFG.supabaseUrl && CFG.supabaseAnonKey && window.supabase && window.supabase.createClient);
   const Cloud = { enabled, user: null, profile: null, companyId: null, recovery: false, last: null, onRemote: null, onError: null, onAuth: null };
   GB.Cloud = Cloud;
+  // Modo apresentação aberto a partir de uma conta: só lê as músicas do fechamento que o dono salvou na conta
+  // (os dados fictícios continuam só neste navegador; nada é gravado na nuvem).
+  if (GB.DB.demo && CFG.supabaseUrl && CFG.supabaseAnonKey && window.supabase && window.supabase.createClient) {
+    let c2 = null;
+    const cli = () => c2 || (c2 = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } }));
+    Cloud.demoMusic = {
+      async load() {
+        const c3 = cli();
+        const { data: { session } } = await c3.auth.getSession();
+        if (!session) return null;
+        const { data: prof } = await c3.from('profiles').select('company_id, role').eq('id', session.user.id).maybeSingle();
+        if (!prof || prof.role !== 'gestor' || !prof.company_id) return null;
+        const { data: co } = await c3.from('companies').select('settings').eq('id', prof.company_id).maybeSingle();
+        return (co && co.settings && co.settings.music) || null;
+      },
+      async url(path) { const { data, error } = await cli().storage.from('musicas').createSignedUrl(path, 3600); if (error) throw error; return data.signedUrl; },
+    };
+  }
   if (!enabled) return;
 
   const c = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey, {

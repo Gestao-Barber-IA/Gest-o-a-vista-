@@ -2692,7 +2692,7 @@ Content-Type: application/json</pre>
       };
       ui.beatRaf = requestAnimationFrame(loop);
     }
-    if (fxSlides(fx.ym).s[fx.i]?.k === 'intro' && (state.podiumMusic || {}).intro) {
+    if (fxSlides(fx.ym).s[fx.i]?.k === 'intro' && pmAll().intro) {
       // Abertura: a música da empresa entra assim que estiver carregada, enquanto a abertura estiver na tela.
       Music.customBuf('intro').then(b => { const now = ui.fx && fxSlides(ui.fx.ym).s[ui.fx.i]; if (b && now && now.k === 'intro' && !Music.cur) Music.playCustom('intro', 2.5); });
     }
@@ -4071,25 +4071,32 @@ Content-Type: application/json</pre>
   const pmKey = v => v === 'intro' ? 'intro' : Number(v);
   const pmName = p => p === 'intro' ? 'da abertura' : `do ${p}º lugar`;
   const fmtSec = v => { v = Math.max(0, Math.round(Number(v) || 0)); return Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0'); };
+  // Músicas em uso: as da conta (no modo apresentação aberto a partir da conta) e, por cima, as enviadas aqui.
+  function pmAll() {
+    const acct = DEMO_ON && ui.acctMusic ? Object.fromEntries(Object.entries(ui.acctMusic).filter(([, m]) => m && m.path).map(([k, m]) => [k, { ...m, acct: true }])) : {};
+    return { ...acct, ...(state.podiumMusic || {}) };
+  }
   function podiumMusicCard() {
-    const pm = state.podiumMusic || {};
+    const pm = pmAll();
     const row = place => {
       const m = pm[place];
       return `<div class="pm-row">
         <span class="pm-place p${place}">${place === 'intro' ? icon('play') : place + 'º'}</span>
-        <div class="pm-info">${m ? `<b>${esc(m.name)}</b><small>${m.dur ? `Duração ${fmtSec(m.dur)} · ` : ''}começa em <label class="pm-start"><input class="input num" type="number" min="0" step="1" value="${Math.round(m.start || 0)}" data-change="pmStart" data-p="${place}" aria-label="Segundo em que a música ${pmName(place)} começa"> s</label></small>`
+        <div class="pm-info">${m && m.acct ? `<b>${esc(m.name)} <span class="chip chip-ok">${icon('cloud')} da sua conta</span></b><small>${m.dur ? `Duração ${fmtSec(m.dur)} · ` : ''}começa em ${fmtSec(m.start || 0)}</small>`
+          : m ? `<b>${esc(m.name)}</b><small>${m.dur ? `Duração ${fmtSec(m.dur)} · ` : ''}começa em <label class="pm-start"><input class="input num" type="number" min="0" step="1" value="${Math.round(m.start || 0)}" data-change="pmStart" data-p="${place}" aria-label="Segundo em que a música ${pmName(place)} começa"> s</label></small>`
           : place === 'intro' ? `<b>Abertura sem música</b><small>Envie uma música para tocar assim que o fechamento começar</small>`
           : `<b>Trilha padrão do app</b><small>${place === 1 ? 'Hino com subida de tom e aplausos' : place === 2 ? 'Progressão com bateria e melodia' : 'Fanfarra curta'}</small>`}</div>
         <div class="pm-btns">
           <button class="btn btn-sm" data-action="pmTest" data-p="${place}">${icon('play')} Ouvir</button>
-          <label class="btn btn-sm ${m ? '' : 'btn-primary'}" style="cursor:pointer">${icon('upload')} ${m ? 'Trocar' : 'Enviar música'}<input type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg" hidden data-change="pmFile" data-p="${place}"></label>
-          ${m ? `<button class="btn btn-sm" data-action="pmDel" data-p="${place}" aria-label="Remover a música ${pmName(place)}">${icon('trash')}</button>` : ''}
+          <label class="btn btn-sm ${m ? '' : 'btn-primary'}" style="cursor:pointer">${icon('upload')} ${m && m.acct ? 'Trocar nesta demonstração' : m ? 'Trocar' : 'Enviar música'}<input type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg" hidden data-change="pmFile" data-p="${place}"></label>
+          ${m && !m.acct ? `<button class="btn btn-sm" data-action="pmDel" data-p="${place}" aria-label="Remover a música ${pmName(place)}">${icon('trash')}</button>` : ''}
         </div>
       </div>`;
     };
     return `<section class="section card pm-card">
       <h2 class="section-title">Músicas do fechamento</h2>
       <p class="section-note"><b>Abertura:</b> a música começa assim que você inicia o fechamento e sai suave ao passar de tela. <b>Pódio:</b> escolha uma música para cada colocação. Ao tocar em Revelar, ela começa no segundo que você escolher, com o volume subindo, e continua na revelação. Sem música enviada, toca a trilha do app. Arquivos de áudio de até 12 MB (MP3, M4A, WAV).</p>
+      ${DEMO_ON ? `<p class="pm-note pm-demo">${icon('cloud')}<span>${ui.acctMusic ? '<b>Modo apresentação:</b> as músicas marcadas "da sua conta" estão salvas no servidor e tocam aqui sem precisar enviar de novo. Para trocar de vez, troque na sua conta. O que você enviar aqui vale só para este aparelho.' : '<b>Modo apresentação:</b> o que você enviar aqui fica só neste aparelho. Para salvar no servidor, envie as músicas na sua conta (Fechamento do mês) e abra o modo apresentação a partir dela: as mesmas músicas tocam aqui.'}</span></p>` : ''}
       <div class="pm-list">${row('intro')}<p class="pm-sub">Pódio</p>${[3, 2, 1].map(row).join('')}</div>
       <p class="pm-note">${icon('help')}<span>Tocar música comercial (artistas, rádio, streaming) no estabelecimento pode exigir licença do ECAD. Músicas livres de direitos, como as da Biblioteca de Áudio do YouTube e da Pixabay Music, evitam isso.</span></p>
     </section>`;
@@ -4143,13 +4150,14 @@ Content-Type: application/json</pre>
     // ----- Música enviada pela empresa para cada colocação (Fechamento → Músicas do pódio) -----
     bufs: {}, cur: null,
     async customBuf(place) {
-      const m = (state.podiumMusic || {})[place];
+      const m = pmAll()[place];
       if (!m || !m.id) return null;
       if (this.bufs[m.id]) return this.bufs[m.id];
       const c = Sound.ensure(); if (!c) return null;
       return (this.bufs[m.id] = (async () => {
         let ab;
         if (m.path && Cloud.enabled) ab = await (await fetch(await Cloud.fileUrl(MUSIC_BUCKET, m.path))).arrayBuffer();
+        else if (m.acct && Cloud.demoMusic) ab = await (await fetch(await Cloud.demoMusic.url(m.path))).arrayBuffer();
         else { const blob = await FileStore.get('music|' + m.id); if (!blob) return null; ab = await blob.arrayBuffer(); }
         return await new Promise((res, rej) => c.decodeAudioData(ab, res, rej));
       })().then(b => { if (b) this.bufs[m.id] = b; else delete this.bufs[m.id]; return b; }).catch(() => (delete this.bufs[m.id], null)));
@@ -4166,7 +4174,7 @@ Content-Type: application/json</pre>
     preload() { for (const p2 of ['intro', 1, 2, 3]) this.customBuf(p2); },
     // Toca a música da colocação a partir do segundo escolhido, com o volume subindo. Retorna false se não houver música pronta.
     playCustom(place, rise = 3) {
-      const m = (state.podiumMusic || {})[place], c = Sound.ctx;
+      const m = pmAll()[place], c = Sound.ctx;
       const ready = m && m.id && this.bufs[m.id];
       if (!Sound.on || !ready || !c) return false;
       const go = buf => {
@@ -4712,7 +4720,7 @@ Content-Type: application/json</pre>
       if (ui.pmTest === place) { ui.pmTest = null; Music.stop(); el.innerHTML = `${icon('play')} Ouvir`; return; }
       document.querySelectorAll('[data-action="pmTest"]').forEach(b => { b.innerHTML = `${icon('play')} Ouvir`; });
       Music.stop(); ui.pmTest = place; el.innerHTML = `${icon('x')} Parar`;
-      const m = (state.podiumMusic || {})[place];
+      const m = pmAll()[place];
       if (m) {
         el.disabled = true; const buf = await Music.customBuf(place); el.disabled = false;
         if (!buf) { toast('Não foi possível carregar a música. Tente enviar de novo.'); ui.pmTest = null; el.innerHTML = `${icon('play')} Ouvir`; return; }
@@ -5502,6 +5510,9 @@ Content-Type: application/json</pre>
     const pm = new URLSearchParams(location.search).get('marca');
     if (BRANDS[pm]) DB.pref.set('brand', pm);
     applyBrand(DB.demo || DB.pref.get('brand', '') || 'barber');
+  }
+  if (DEMO_ON && Cloud.demoMusic) {
+    Cloud.demoMusic.load().then(m => { if (m && Object.keys(m).length) { ui.acctMusic = m; if (location.hash === '#fechamento') render(); } }).catch(() => { /* sem conta: só as músicas deste aparelho */ });
   }
   if (Cloud.enabled) {
     const wait = new Promise(r => setTimeout(r, 1900));
