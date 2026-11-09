@@ -749,7 +749,7 @@ textarea.input.pop-ta { min-height: 72px; font-family: var(--font-body); font-si
 .fx-stage { position: relative; display: grid; place-items: center; min-height: 0; overflow-y: auto; padding: calc(18px + env(safe-area-inset-top, 0px)) var(--gutter-r) 8px var(--gutter-l); }
 .fx-slide { width: 100%; max-width: 760px; display: grid; justify-items: center; text-align: center; gap: 12px; animation: fx-slide-in 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 @keyframes fx-slide-in { from { opacity: 0; transform: translateY(30px) scale(0.97); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
-.fx-title { margin: 0; font-family: var(--fx-serif); font-weight: 700; font-size: clamp(2.3rem, 10.5vw, 6.5rem); line-height: 0.95; letter-spacing: 0.06em; max-width: 100%; overflow-wrap: anywhere; text-transform: uppercase;
+.fx-title { margin: 0; font-family: var(--fx-serif); font-weight: 700; font-size: min(clamp(2.3rem, 10.5vw, 6.5rem), calc(min(760px, 100vw - 40px) / 7.8)); line-height: 0.95; letter-spacing: 0.06em; max-width: 100%; overflow-wrap: normal; word-break: keep-all; hyphens: none; text-transform: uppercase;
   background: linear-gradient(180deg, #fff 10%, #c9b8ff 60%, #8f7cf0); -webkit-background-clip: text; background-clip: text; color: transparent; text-wrap: balance;
   animation: fx-title-in 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) 0.2s both; }
 .fx-title.gold { background-image: linear-gradient(180deg, #fff6d8 5%, #f6d77b 45%, #d9a53a); text-transform: none; letter-spacing: 0.04em; filter: drop-shadow(0 0 22px rgba(246, 200, 90, 0.35)); }
@@ -1953,3 +1953,33 @@ html[data-brand="salao"] .rp-board { --rpg: #f0b8a8; --rpg2: #b26e78; --rpl: rgb
 .fx-lsum { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; margin: 6px 0 0; font-size: 0.9rem; color: rgba(255, 255, 255, 0.78); }
 .fx-lsum b { color: #fff; }
 @media (max-width: 560px) { .fx-lgrid { gap: 8px; } .fx-lgrid .fx-lcard { width: calc(50% - 4px); } .fx-lppl .fx-photo { width: 52px; } .fx-lcard { padding: 10px 8px; } }
+/* Músicas do pódio */
+.pm-list { display: grid; gap: 10px; }
+.pm-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px; border-radius: 16px; background: var(--surface-2); border: 1px solid var(--line); }
+.pm-place { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; font-family: var(--font-display); font-weight: 800; font-size: 1.1rem; color: #1a1408; }
+.pm-place.p1 { background: linear-gradient(135deg, #fff3c4, #e2b23c); }
+.pm-place.p2 { background: linear-gradient(135deg, #ffffff, #aab3c4); }
+.pm-place.p3 { background: linear-gradient(135deg, #ffd9b0, #c9782f); }
+.pm-info { display: grid; gap: 2px; min-width: 0; }
+.pm-info b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-info small { color: var(--fg-soft); display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.pm-start { display: inline-flex; align-items: center; gap: 4px; }
+.pm-start .input { width: 72px; min-height: 0; padding: 4px 8px; }
+.pm-btns { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.pm-note { display: flex; gap: 8px; align-items: flex-start; margin: 12px 0 0; font-size: 0.85rem; color: var(--fg-soft); }
+.pm-note .ico { flex: none; width: 18px; height: 18px; color: var(--accent); }
+@media (max-width: 560px) { .pm-row { grid-template-columns: auto minmax(0, 1fr); } .pm-btns { grid-column: 1 / -1; justify-content: flex-start; } }
+.pm-place.pintro { background: linear-gradient(135deg, #c9b8ff, #6c4fd6); color: #fff; }
+.pm-place .ico { width: 22px; height: 22px; }
+.pm-sub { margin: 6px 0 0; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+/* Abertura do fechamento cabe inteira em telas baixas (TV deitada, notebook) */
+@media (max-height: 760px) {
+  .fx-intro { gap: 6px; }
+  .fx-intro .fx-emblem { width: min(150px, 20vh); height: min(150px, 20vh); margin-bottom: 0; }
+  .fx-intro .fx-logo { width: min(118px, 15.5vh); height: min(118px, 15.5vh); }
+  .fx-intro .fx-title { font-size: min(clamp(2.3rem, 10.5vw, 6.5rem), calc(min(760px, 100vw - 40px) / 7.8), 13vh); }
+  .fx-intro .fx-month { font-size: min(2rem, 5vh); }
+  .fx-intro .fx-tag { font-size: min(2.2rem, 5.4vh); }
+  .fx-intro .fx-count { margin: 0; font-size: min(1.3rem, 3.6vh); }
+  .fx-intro .fx-hint { margin-top: 8px; }
+}

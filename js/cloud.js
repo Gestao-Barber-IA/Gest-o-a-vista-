@@ -108,6 +108,12 @@
     if (error) throw error;
     return path;
   };
+  // Arquivo qualquer (ex.: músicas do pódio), com o tipo do próprio arquivo.
+  Cloud.uploadBlob = async (bucket, path, blob) => {
+    const { error } = await c.storage.from(bucket).upload(path, blob, { contentType: blob.type || 'application/octet-stream', upsert: false });
+    if (error) throw error;
+    return path;
+  };
   Cloud.fileUrl = async (bucket, path) => {
     const key = bucket + '|' + path, hit = urlCache[key];
     if (hit && hit.exp > Date.now()) return hit.url;
@@ -144,7 +150,7 @@
       out.tables[t] = map;
     }
     const co = s.company;
-    out.company = JSON.stringify({ name: co.name, cnpj: co.cnpj || '', phone: co.phone || '', email: co.email || '', logo: co.logo || null, settings: { weights: s.weights, goals: s.goals, hidden: s.hidden, org: s.org || null, pop: s.popCfg || null, reveal: s.reveal || null, ocup: s.ocupCfg || null, pops: s.pops || null, brand: s.brand || null, theme: s.theme || null, houseGoals: s.houseGoals || null, houseGoalsM: s.houseGoalsM || null } });
+    out.company = JSON.stringify({ name: co.name, cnpj: co.cnpj || '', phone: co.phone || '', email: co.email || '', logo: co.logo || null, settings: { weights: s.weights, goals: s.goals, hidden: s.hidden, org: s.org || null, pop: s.popCfg || null, reveal: s.reveal || null, ocup: s.ocupCfg || null, pops: s.pops || null, brand: s.brand || null, theme: s.theme || null, houseGoals: s.houseGoals || null, houseGoalsM: s.houseGoalsM || null, music: s.podiumMusic || null } });
     for (const u of s.users) out.users[u.id] = JSON.stringify({ name: u.name, phone: u.phone || '', status: u.status });
     return out;
   }
@@ -220,6 +226,7 @@
       theme: st.theme || null,
       houseGoals: st.houseGoals || null,
       houseGoalsM: st.houseGoalsM || null,
+      podiumMusic: st.music || null,
       ocupCfg: st.ocup || null,
       pop: pop.map(r => ({ barberId: r.barber_id, day: r.day, ...(r.data || {}) })),
       apiKey: key ? key.key : '',
