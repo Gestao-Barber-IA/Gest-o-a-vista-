@@ -4067,9 +4067,8 @@ Content-Type: application/json</pre>
     });
   }
   async function drawCongrats(ym, bid, withPhoto) {
-    const R = monthR(ym), tt = R.title.barberId === bid ? R.title.type : null;
     const mon = cap(MONTH_NAMES[Number(ym.slice(5, 7)) - 1]) + ' ' + ym.slice(0, 4);
-    return drawCelebration(bid, { photo: withPhoto, title: tt === 'mvp' ? 'MVP do mês' : 'Destaque do mês', when: mon.toUpperCase(), cheer: 'Parabéns!', py: 915, decor: drawCrown,
+    return drawCelebration(bid, { photo: withPhoto, title: 'Destaque do mês', when: mon.toUpperCase(), cheer: 'Parabéns!', py: 915, decor: drawCrown,
       msg: 'Obrigado pela dedicação e pela entrega em cada atendimento. Você é inspiração para toda a equipe!', foot: 'ORGULHO DA EQUIPE ' + (state.company.name || '').toUpperCase() });
   }
   async function drawBirthday(bid, withPhoto) {
