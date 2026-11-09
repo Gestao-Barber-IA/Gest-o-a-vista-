@@ -1983,3 +1983,34 @@ html[data-brand="salao"] .rp-board { --rpg: #f0b8a8; --rpg2: #b26e78; --rpl: rgb
   .fx-intro .fx-count { margin: 0; font-size: min(1.3rem, 3.6vh); }
   .fx-intro .fx-hint { margin-top: 8px; }
 }
+/* Abertura do fechamento: "É hora do FECHAMENTO" (cerca de 3 s) e depois a tela de abertura */
+.fx-open { position: fixed; inset: 0; z-index: 3; display: grid; place-content: center; justify-items: center; gap: 1.5vh; pointer-events: none; text-align: center;
+  background: radial-gradient(60% 50% at 50% 50%, rgba(40, 28, 80, 0.55), rgba(5, 5, 12, 0.92)); animation: fx-open-out 0.9s cubic-bezier(0.4, 0, 0.2, 1) 3s forwards; }
+.fx-open-a { margin: 0; font-family: var(--fx-serif); font-style: italic; font-size: clamp(1.6rem, min(5vw, 7vh), 3.4rem); letter-spacing: 0.22em; color: #efe7ff;
+  animation: fx-open-a 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) 0.25s both; }
+.fx-open-b { margin: 0; display: flex; font-family: var(--fx-serif); font-weight: 700; font-size: min(15vw, 22vh); line-height: 1; letter-spacing: 0.03em;
+  transform: scale(calc(1 + var(--beat, 0) * 0.07)); filter: drop-shadow(0 0 calc(14px + var(--beat, 0) * 46px) rgba(246, 200, 90, calc(0.35 + var(--beat, 0) * 0.5))); transition: transform 0.08s linear; }
+.fx-open-b i { display: inline-block; font-style: normal; background-image: linear-gradient(180deg, #fffaf0 8%, #f6d77b 48%, #c98f24); -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: fx-letter 0.7s cubic-bezier(0.2, 1.4, 0.4, 1) calc(0.85s + var(--i) * 0.075s) both; }
+.fx-open-flash { position: absolute; left: 50%; top: 50%; width: 160vmax; height: 160vmax; margin: -80vmax 0 0 -80vmax; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 240, 200, 0.9), rgba(255, 210, 120, 0.25) 30%, transparent 60%); opacity: 0; animation: fx-flash 1.2s ease-out 1.65s both; }
+.fx-open-rays { position: absolute; left: 50%; top: 50%; width: 140vmax; height: 140vmax; margin: -70vmax 0 0 -70vmax; opacity: 0;
+  background: repeating-conic-gradient(rgba(255, 220, 140, 0.16) 0 6deg, transparent 6deg 18deg); mask: radial-gradient(closest-side, #000, transparent 70%); -webkit-mask: radial-gradient(closest-side, #000, transparent 70%);
+  animation: fx-rays-in 1s ease-out 1.6s both, fx-spin 30s linear 1.6s infinite; }
+@keyframes fx-open-a { from { opacity: 0; transform: translateY(18px); filter: blur(8px); letter-spacing: 0.6em; } }
+@keyframes fx-letter { from { opacity: 0; transform: translateY(45%) scale(1.8); filter: blur(10px); } }
+@keyframes fx-flash { 0% { opacity: 0; transform: scale(0.2); } 25% { opacity: 1; } 100% { opacity: 0; transform: scale(1); } }
+@keyframes fx-rays-in { to { opacity: calc(0.6 + var(--beat, 0) * 0.4); } }
+@keyframes fx-open-out { to { opacity: 0; transform: scale(1.18); filter: blur(8px); visibility: hidden; } }
+/* A tela de abertura aparece depois da frase */
+.fx-intro.has-open .fx-emblem { animation-delay: 3.2s; }
+.fx-intro.has-open .fx-kicker { animation-delay: 3.4s; }
+.fx-intro.has-open .fx-title { animation-delay: 3.3s; }
+.fx-intro.has-open .fx-month { animation-delay: 3.6s; }
+.fx-intro.has-open .fx-tag { animation-delay: 3.8s; }
+.fx-intro.has-open .fx-count { animation-delay: 4s; }
+.fx-intro.has-open .fx-hint { animation-delay: 4.6s, 5.4s; }
+/* Tudo pulsa com a música */
+.fx-logo { box-shadow: 0 0 calc(60px + var(--beat, 0) * 70px) rgba(214, 180, 106, calc(0.45 + var(--beat, 0) * 0.4)); transform: scale(calc(1 + var(--beat, 0) * 0.06)); }
+.fx-bg { opacity: calc(0.85 + var(--beat, 0) * 0.15); }
+.fx-intro .fx-title { filter: drop-shadow(0 0 calc(var(--beat, 0) * 28px) rgba(201, 184, 255, 0.7)); }

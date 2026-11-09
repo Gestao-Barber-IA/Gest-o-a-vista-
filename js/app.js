@@ -2584,14 +2584,17 @@ Content-Type: application/json</pre>
 
   function fxSlideHtml(R, sl, ym) {
     const n = R.rows.length, month = esc(ymLabel(ym).replace(' de ', '/'));
-    if (sl.k === 'intro') return `<div class="fx-slide fx-intro">
+    if (sl.k === 'intro') return `<div class="fx-slide fx-intro has-open">
         <div class="fx-emblem"><span class="fx-orbit"></span><span class="fx-orbit o2"></span>${logo('fx-logo')}</div>
         <p class="fx-kicker">${esc(state.company.name)}</p>
         <h1 class="fx-title">Fechamento</h1>
         <p class="fx-month">${month}</p>
         <p class="fx-tag">Cada atendimento conta.</p>
         <p class="fx-count"><b data-count="${n}">0</b> barbeiros</p>
-        <p class="fx-hint">Toque, deslize ou use as setas</p></div>`;
+        <p class="fx-hint">Toque, deslize ou use as setas</p></div>
+      <div class="fx-open" aria-hidden="true"><span class="fx-open-flash"></span><span class="fx-open-rays"></span>
+        <p class="fx-open-a">É hora do</p>
+        <p class="fx-open-b">${'FECHAMENTO'.split('').map((ch, i) => `<i style="--i:${i}">${ch}</i>`).join('')}</p></div>`;
     if (sl.k === 'podium') {
       const t1 = fxTier(R, R.rows[0], 1);
       return `<div class="fx-slide fx-pintro">
@@ -2677,6 +2680,16 @@ Content-Type: application/json</pre>
   function fxRender() {
     const fx = ui.fx; if (!fx) return;
     Music.fadeCustom(1.5); // a música da tela anterior sai suave ao passar de tela
+    if (!ui.beatRaf) { // a apresentação pulsa no ritmo da música (variável --beat de 0 a 1)
+      const loop = () => {
+        const ov2 = document.getElementById('fx');
+        if (!ov2 || !ui.fx) { ui.beatRaf = null; ui.beatV = 0; return; }
+        const v = Music.level(); ui.beatV = v > (ui.beatV || 0) ? v : (ui.beatV || 0) * 0.9;
+        ov2.style.setProperty('--beat', ui.beatV.toFixed(3));
+        ui.beatRaf = requestAnimationFrame(loop);
+      };
+      ui.beatRaf = requestAnimationFrame(loop);
+    }
     if (fxSlides(fx.ym).s[fx.i]?.k === 'intro' && (state.podiumMusic || {}).intro) {
       // Abertura: a música da empresa entra assim que estiver carregada, enquanto a abertura estiver na tela.
       Music.customBuf('intro').then(b => { const now = ui.fx && fxSlides(ui.fx.ym).s[ui.fx.i]; if (b && now && now.k === 'intro' && !Music.cur) Music.playCustom('intro', 2.5); });
@@ -4088,6 +4101,7 @@ Content-Type: application/json</pre>
     out(c) {
       if (!this.bus || this.bus.context !== c) {
         const comp = c.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 6; comp.connect(c.destination);
+        this.busAn = c.createAnalyser(); this.busAn.fftSize = 256; this.busAn.smoothingTimeConstant = 0.6; comp.connect(this.busAn);
         this.bus = c.createGain(); this.bus.gain.value = 0.6; this.bus.connect(comp);
       }
       return this.bus;
@@ -4138,6 +4152,15 @@ Content-Type: application/json</pre>
         return await new Promise((res, rej) => c.decodeAudioData(ab, res, rej));
       })().then(b => { if (b) this.bufs[m.id] = b; else delete this.bufs[m.id]; return b; }).catch(() => (delete this.bufs[m.id], null)));
     },
+    // Energia dos graves da música tocando agora (0 a 1): faz a tela pulsar no ritmo.
+    level() {
+      const an = (this.cur && this.cur.an) || this.busAn;
+      if (!an) return 0;
+      const a = this.fq && this.fq.length === an.frequencyBinCount ? this.fq : (this.fq = new Uint8Array(an.frequencyBinCount));
+      an.getByteFrequencyData(a);
+      let sum = 0; for (let i = 1; i < 9; i++) sum += a[i];
+      return Math.max(0, Math.min(1, (sum / 8 / 255 - 0.2) / 0.55));
+    },
     preload() { for (const p2 of ['intro', 1, 2, 3]) this.customBuf(p2); },
     // Toca a música da colocação a partir do segundo escolhido, com o volume subindo. Retorna false se não houver música pronta.
     playCustom(place, rise = 3) {
@@ -4149,8 +4172,9 @@ Content-Type: application/json</pre>
         this.fadeCustom(0.2);
         const src = c.createBufferSource(), g = c.createGain(), t = c.currentTime + 0.02;
         src.buffer = buf; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35, t + 0.3); g.gain.linearRampToValueAtTime(1, t + rise);
-        src.connect(g).connect(c.destination); src.start(t, Math.min(Math.max(0, Number(m.start) || 0), Math.max(0, buf.duration - 1)));
-        this.cur = { src, g };
+        const an = c.createAnalyser(); an.fftSize = 256; an.smoothingTimeConstant = 0.6;
+        src.connect(g); g.connect(an); an.connect(c.destination); src.start(t, Math.min(Math.max(0, Number(m.start) || 0), Math.max(0, buf.duration - 1)));
+        this.cur = { src, g, an };
         return true;
       };
       return ready instanceof AudioBuffer ? go(ready) : false; // ainda carregando: usa a trilha do app
