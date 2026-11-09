@@ -3876,6 +3876,20 @@ Content-Type: application/json</pre>
   // ---------- Card do mês do profissional (imagem PNG no formato stories, 1080×1920) ----------
   const CARD_TIERS = { 'fx-mvp': ['#7fd4ff', '#1b5fd6'], 'fx-gold': ['#f8d06c', '#a97a22'], 'fx-silver': ['#eef1f7', '#7f899c'], 'fx-bronze': ['#f4a95c', '#8a4a1c'], 'fx-plain': ['#9b8cff', '#5b46c9'] };
   const cardCache = {};
+  // Na nuvem, a imagem vai para o armazenamento e o cadastro guarda só o endereço; sem armazenamento, segue dentro do cadastro.
+  async function storeImage(dataUrl, kind, old) {
+    if (!Cloud.enabled || !dataUrl || !/^data:/.test(dataUrl)) return dataUrl;
+    try { const url = await Cloud.uploadPhoto(`${kind}-${uid('')}`, dataUrl); if (old) Cloud.removePhoto(old); return url; } catch (e) { return dataUrl; }
+  }
+  // Fotos antigas guardadas dentro do cadastro: o gestor leva para o armazenamento uma vez, sem travar a tela.
+  let photosMoved = false;
+  async function movePhotos() {
+    if (photosMoved || !Cloud.enabled || !isGestor(currentUser())) return; photosMoved = true;
+    let n = 0;
+    for (const b of state.barbers) if (/^data:/.test(b.photo || '')) { const u = await storeImage(b.photo, 'foto'); if (u !== b.photo) { b.photo = u; n++; } else return; }
+    if (/^data:/.test(state.company.logo || '')) { const u = await storeImage(state.company.logo, 'logo'); if (u !== state.company.logo) { state.company.logo = u; n++; } }
+    if (n) save();
+  }
   function loadImg(src) {
     return new Promise(res => {
       if (!src) return res(null);
@@ -5593,7 +5607,7 @@ Content-Type: application/json</pre>
       const file = f.elements.photo.files[0];
       const lim = billing() && billing().max_barbers;
       if (lim && activeBarbers() >= lim) return setMsg(f, `Seu plano permite até ${lim} barbeiros ativos. Troque de plano em Assinatura para cadastrar mais.`);
-      if (file) { try { photo = await readImage(file, 640); } catch (e) { return setMsg(f, e.message); } }
+      if (file) { try { photo = await storeImage(await readImage(file, 640), 'foto'); } catch (e) { return setMsg(f, e.message); } }
       const id = uid('b_'), access = val(f, 'access');
       state.barbers.push({ id, name, photo, active: true, role: val(f, 'role') || B().role, instagram: '' });
       const birth = val(f, 'birth'); if (/^\d{4}-\d{2}-\d{2}$/.test(birth)) state.births = { ...(state.births || {}), [id]: birth };
@@ -5800,12 +5814,12 @@ Content-Type: application/json</pre>
     orgLevelName(el) { const l = org().levels.find(x => x.id === el.dataset.id); if (l && el.value.trim()) { l.name = el.value.trim(); save(); render(); } },
     async barberPhoto(el) {
       const b = barberById(el.dataset.id);
-      try { b.photo = await readImage(el.files[0], 640); save(); toast('Foto atualizada.'); render(); } catch (e) { toast(e.message); }
+      try { b.photo = await storeImage(await readImage(el.files[0], 640), 'foto', b.photo); save(); toast('Foto atualizada.'); render(); } catch (e) { toast(e.message); }
     },
     async myPhoto(el) {
       const b = barberById(currentUser()?.barberId);
       if (!b) { toast('Seu cadastro não está ligado a um barbeiro.'); return; }
-      try { b.photo = await readImage(el.files[0], 640); save(); toast('Foto atualizada.'); render(); } catch (e) { toast(e.message); }
+      try { b.photo = await storeImage(await readImage(el.files[0], 640), 'foto', b.photo); save(); toast('Foto atualizada.'); render(); } catch (e) { toast(e.message); }
     },
     async pmFile(el) {
       const place = pmKey(el.dataset.p), f = el.files && el.files[0];
@@ -5839,7 +5853,7 @@ Content-Type: application/json</pre>
       }
     },
     async companyLogo(el) {
-      try { state.company.logo = await readImage(el.files[0]); save(); toast('Logo atualizado.'); render(); } catch (e) { toast(e.message); }
+      try { state.company.logo = await storeImage(await readImage(el.files[0], 512, 0.9), 'logo', state.company.logo); save(); toast('Logo atualizado.'); render(); } catch (e) { toast(e.message); }
     },
   };
 
@@ -5924,7 +5938,7 @@ Content-Type: application/json</pre>
   async function loadCloud() {
     try {
       const r = await Cloud.load();
-      if (r.status === 'ativo') { state = r.state; rkCache = {}; Cloud.subscribe(); ui.authMode = 'entrar'; clearInterval(ui.blockPoll); return true; }
+      if (r.status === 'ativo') { state = r.state; rkCache = {}; Cloud.subscribe(); ui.authMode = 'entrar'; clearInterval(ui.blockPoll); setTimeout(movePhotos, 4000); return true; }
       state = blankState();
       if (r.status === 'bloqueado') ui.blockInfo = r;
       ui.authMode = r.status === 'bloqueado' ? 'bloqueado' : r.status === 'pendente' ? 'pendente' : r.status === 'recusado' ? 'recusado' : r.status === 'sem-perfil' ? 'semPerfil' : 'entrar';

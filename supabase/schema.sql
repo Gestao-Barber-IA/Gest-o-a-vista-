@@ -323,6 +323,17 @@ do $$ begin
       with check (bucket_id = 'musicas' and (storage.foldername(name))[1] = my_company()::text and is_gestor());
     create policy musicas_delete on storage.objects for delete to authenticated
       using (bucket_id = 'musicas' and (storage.foldername(name))[1] = my_company()::text and is_gestor());
+    -- Fotos dos profissionais e logo da empresa (pasta: empresa/arquivo.jpg). Leitura pública pelo endereço
+    -- (nome do arquivo aleatório), para os cards e a TV abrirem rápido; só a equipe da empresa envia e apaga. Até 2 MB.
+    insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+    values ('fotos', 'fotos', true, 2097152, array['image/jpeg', 'image/png', 'image/webp'])
+    on conflict (id) do update set public = true, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+    drop policy if exists fotos_insert on storage.objects;
+    drop policy if exists fotos_delete on storage.objects;
+    create policy fotos_insert on storage.objects for insert to authenticated
+      with check (bucket_id = 'fotos' and (storage.foldername(name))[1] = my_company()::text);
+    create policy fotos_delete on storage.objects for delete to authenticated
+      using (bucket_id = 'fotos' and (storage.foldername(name))[1] = my_company()::text);
   end if;
 end $$;
 
