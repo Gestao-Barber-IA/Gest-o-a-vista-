@@ -94,6 +94,17 @@
       set('link[rel="manifest"]', 'href', b.manifest); set('link[rel="icon"]', 'href', b.icon); set('link[rel="apple-touch-icon"]', 'href', b.apple);
       set('meta[name="apple-mobile-web-app-title"]', 'content', b.name); set('meta[name="application-name"]', 'content', b.name);
     }
+    // O endereço guarda a marca: no iPhone, o atalho da tela de início abre com o endereço do momento
+    // e não enxerga o que ficou salvo no Safari, então já abre com a marca certa (ícone, cores e login).
+    try {
+      const u = new URL(location.href);
+      if (!u.searchParams.has('demo')) {
+        const cur = u.searchParams.get('marca');
+        if (k === 'salao' && cur !== 'salao') u.searchParams.set('marca', 'salao');
+        else if (k === 'barber' && cur) u.searchParams.delete('marca');
+        if (u.search !== location.search) history.replaceState(history.state, '', u.pathname + u.search + u.hash);
+      }
+    } catch (e) { /* opcional */ }
     applyTheme(getTheme());
   }
   let rkCache = {};
