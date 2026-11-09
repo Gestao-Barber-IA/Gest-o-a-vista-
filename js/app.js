@@ -2761,6 +2761,7 @@ Content-Type: application/json</pre>
 
   // ---------- Fechamento do mês (apresentação para a equipe) ----------
   function pageFechamento() {
+    setTimeout(() => { try { if (pmAll().intro || pmAll()[1] || pmAll()[2] || pmAll()[3]) { Sound.ensure(); Music.preload(); } } catch (e) { /* segue */ } }, 600);
     const amNote = isGestor(currentUser()) ? '' : '<p class="section-note">O fechamento mostra só as pessoas da sua área.</p>';
     const ym = ui.teamMonth || curYm();
     const R = scopedR(ym);
@@ -2938,8 +2939,12 @@ Content-Type: application/json</pre>
       const loop = () => {
         const ov2 = document.getElementById('fx');
         if (!ov2 || !ui.fx) { ui.beatRaf = null; ui.beatV = 0; return; }
-        const v = Music.level(); ui.beatV = v > (ui.beatV || 0) ? v : (ui.beatV || 0) * 0.9;
-        ov2.style.setProperty('--beat', ui.beatV.toFixed(3));
+        ui.beatTick = !ui.beatTick;
+        if (ui.beatTick) { // metade dos quadros: a tela pulsa igual e o computador respira (importante ao espelhar na TV)
+          const v = Music.level(), nv = v > (ui.beatV || 0) ? v : (ui.beatV || 0) * 0.82;
+          if (Math.abs(nv - (ui.beatShown || 0)) > 0.015) { ov2.style.setProperty('--beat', nv.toFixed(2)); ui.beatShown = nv; }
+          ui.beatV = nv;
+        }
         ui.beatRaf = requestAnimationFrame(loop);
       };
       ui.beatRaf = requestAnimationFrame(loop);
@@ -3006,9 +3011,10 @@ Content-Type: application/json</pre>
     if (slide.classList.contains('is-drum')) { clearTimeout(fx.timer); fxReveal(slide, Number(slide.dataset.place)); return; }
     slide.classList.add('is-drum');
     const pl = Number(slide.dataset.place);
-    Music.build(pl);
+    const c0 = Sound.ctx, lat = c0 ? (c0.baseLatency || 0) + (c0.outputLatency || 0) : 0; // o som sai um pouco depois no alto-falante
+    const wait = (Music.build(pl) || Music.buildDur[pl] || 2.6) + Math.min(0.3, lat); // a revelação cai no ápice da música
     if (fx.live) revealSend({ t: 'drum', place: pl });
-    fx.timer = setTimeout(() => fxReveal(slide, pl), (Music.buildDur[pl] || 2.6) * 1000);
+    fx.timer = setTimeout(() => fxReveal(slide, pl), wait * 1000);
   }
   function fxGo(d) {
     const fx = ui.fx; if (!fx || fx.mode) return; // no celular da equipe, quem conduz é o gestor
@@ -4728,7 +4734,7 @@ Content-Type: application/json</pre>
     };
     return `<section class="section card pm-card">
       <h2 class="section-title">Músicas do fechamento</h2>
-      <p class="section-note"><b>Abertura:</b> a música começa assim que você inicia o fechamento e sai suave ao passar de tela. <b>Pódio:</b> escolha uma música para cada colocação. Ao tocar em Revelar, ela começa no segundo que você escolher, com o volume subindo, e continua na revelação. Sem música enviada, toca a trilha do app. Aceita MP3, MP4 (inclusive vídeo: o app separa só o áudio), M4A e WAV.</p>
+      <p class="section-note"><b>Abertura:</b> a música começa assim que você inicia o fechamento e sai suave ao passar de tela. <b>Pódio:</b> escolha uma música para cada colocação. Ao tocar em Revelar, ela começa no segundo que você escolher, com o volume subindo, e a colocação aparece no <b>ápice da música</b> (o momento em que ela explode). Sem música enviada, toca a trilha do app. Aceita MP3, MP4 (inclusive vídeo: o app separa só o áudio), M4A e WAV.</p>
       ${DEMO_ON ? `<p class="pm-note pm-demo">${icon('cloud')}<span>${ui.acctMusic ? '<b>Modo apresentação:</b> as músicas marcadas "da sua conta" estão salvas no servidor e tocam aqui sem precisar enviar de novo. Para trocar de vez, troque na sua conta. O que você enviar aqui vale só para este aparelho.' : '<b>Modo apresentação:</b> o que você enviar aqui fica só neste aparelho. Para salvar no servidor, envie as músicas na sua conta (Fechamento do mês) e abra o modo apresentação a partir dela: as mesmas músicas tocam aqui.'}</span></p>` : ''}
       <div class="pm-list">${row('intro')}<p class="pm-sub">Pódio</p>${[3, 2, 1].map(row).join('')}</div>
       <p class="pm-note">${icon('help')}<span>Tocar música comercial (artistas, rádio, streaming) no estabelecimento pode exigir licença do ECAD. Músicas livres de direitos, como as da Biblioteca de Áudio do YouTube e da Pixabay Music, evitam isso.</span></p>
@@ -4804,7 +4810,31 @@ Content-Type: application/json</pre>
       let sum = 0; for (let i = 1; i < 9; i++) sum += a[i];
       return Math.max(0, Math.min(1, (sum / 8 / 255 - 0.2) / 0.55));
     },
-    preload() { for (const p2 of ['intro', 1, 2, 3]) this.customBuf(p2); },
+    // Carrega uma música por vez (abertura primeiro): decodificar várias juntas trava o áudio em computador mais fraco.
+    preload() {
+      if (this.preloading) return this.preloading;
+      const all = pmAll();
+      if (!['intro', 1, 2, 3].some(p2 => all[p2] && all[p2].id && !(this.bufs[all[p2].id] instanceof AudioBuffer))) return Promise.resolve();
+      return (this.preloading = (async () => { for (const p2 of ['intro', 3, 2, 1]) { try { await this.customBuf(p2); } catch (e) { /* segue */ } } })().finally(() => { this.preloading = null; }));
+    },
+    ready(place) { const m = pmAll()[place]; return !m || !m.id || this.bufs[m.id] instanceof AudioBuffer; },
+    // Segundos, a partir do começo do recorte, até o ápice (a "explosão") da música da colocação.
+    dropIn(place) {
+      const m = pmAll()[place], buf = m && m.id && this.bufs[m.id];
+      if (!(buf instanceof AudioBuffer)) return null;
+      const st = Math.min(Math.max(0, Number(m.start) || 0), Math.max(0, buf.duration - 1));
+      if (m.drop != null && m.drop - st >= 1.5 && m.drop - st <= 25) return m.drop - st;
+      const env = pmEnv(m.id, buf), i0 = Math.round(st / 0.25), n = env.length;
+      const sm = env.map((_, i) => { let a = 0, c = 0; for (let k = Math.max(0, i - 2); k <= Math.min(n - 1, i + 2); k++) { a += env[k]; c++; } return a / c; });
+      const avg = (a, b) => { a = Math.max(0, a); b = Math.min(n, b); if (b <= a) return 0; let t = 0; for (let k = a; k < b; k++) t += sm[k]; return t / (b - a); };
+      let best = -1, bi = -1;
+      for (let i = i0 + 6; i < Math.min(n - 4, i0 + 80); i++) { // de 1,5 s a 20 s depois do começo
+        const before = avg(Math.max(i0, i - 24), i), after = avg(i, i + 12), jump = avg(i, i + 3) - avg(i - 3, i);
+        const sc = (after - before) * 1.4 + jump * 1.6 + after * 0.3 - (i - i0) * 0.0015; // empate: o ápice mais cedo
+        if (sc > best) { best = sc; bi = i; }
+      }
+      return bi < 0 ? null : Math.max(1.5, (bi - i0) * 0.25);
+    },
     // Toca a música da colocação a partir do segundo escolhido, com o volume subindo. Retorna false se não houver música pronta.
     playCustom(place, rise = 3, ov = null) {
       const m0 = pmAll()[place], m = m0 && ov ? { ...m0, ...ov } : m0, c = Sound.ctx;
@@ -4834,8 +4864,9 @@ Content-Type: application/json</pre>
     },
     // Subida antes da revelação.
     build(level) {
-      if (!Sound.on) return; const c = Sound.ensure(); if (!c) return; this.stop();
-      if (this.playCustom(level, this.buildDur[level])) return;
+      if (!Sound.on) return this.buildDur[level]; const c = Sound.ensure(); if (!c) return this.buildDur[level]; this.stop();
+      const drop = this.dropIn(level);
+      if (drop && this.playCustom(level, Math.min(drop, 6))) return drop;
       const lv = 4 - level, t0 = c.currentTime + 0.05, dur = this.buildDur[level], R = this.ROOT[level];
       this.riser(c, t0, dur, 0.18 + lv * 0.06, 2500 + lv * 1500);
       // Rufar acelerando.
@@ -4847,6 +4878,7 @@ Content-Type: application/json</pre>
       arp.forEach((s2, i) => this.brass(c, R / 2 * Math.pow(2, s2 / 12), t0 + step * (i + 1) - 0.05, step * 0.9, 0.06 + i * 0.012 + lv * 0.02));
       // Nota longa crescendo por baixo (1º lugar).
       if (lv === 3) { const o = this.track(c.createOscillator()), g = c.createGain(); o.type = 'sawtooth'; o.frequency.value = R / 4; g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.12, t0 + dur); g.gain.linearRampToValueAtTime(0.0001, t0 + dur + 0.05); o.connect(g).connect(this.out(c)); o.start(t0); o.stop(t0 + dur + 0.1); }
+      return dur;
     },
     // Vinheta de vitória na revelação.
     win(level) {
@@ -4901,7 +4933,7 @@ Content-Type: application/json</pre>
     KINDS: { sino: 'Sino', moeda: 'Moeda', fanfarra: 'Fanfarra', aplausos: 'Aplausos' },
     ensure() {
       try {
-        if (!this.ctx) { const C = window.AudioContext || window.webkitAudioContext; if (!C) return null; this.ctx = new C(); }
+        if (!this.ctx) { const C = window.AudioContext || window.webkitAudioContext; if (!C) return null; try { this.ctx = new C({ latencyHint: 'playback' }); } catch (e) { this.ctx = new C(); } }
         if (this.ctx.state === 'suspended') this.ctx.resume();
         return this.ctx;
       } catch (e) { return null; }
@@ -5388,7 +5420,7 @@ Content-Type: application/json</pre>
     pmTrimSave(el) {
       const place = pmKey(el.dataset.p), pm = { ...(state.podiumMusic || {}) }, sel = ui.pmSel;
       if (!pm[place] || !sel) return;
-      pm[place] = { ...pm[place], start: sel.start, end: sel.len ? Math.min(pm[place].dur || 9999, sel.start + sel.len) : null };
+      pm[place] = { ...pm[place], start: sel.start, end: sel.len ? Math.min(pm[place].dur || 9999, sel.start + sel.len) : null, drop: sel.drop != null && sel.drop > sel.start ? sel.drop : null };
       state.podiumMusic = pm; ui.pmTrim = null; ui.pmSel = null; Music.stop(); save();
       toast(`Recorte salvo: ${fmtSec(pm[place].start)}${pm[place].end ? ' a ' + fmtSec(pm[place].end) : ' até o fim'}.`); render();
     },
@@ -5403,7 +5435,8 @@ Content-Type: application/json</pre>
       if (m) {
         el.disabled = true; const buf = await Music.customBuf(place); el.disabled = false;
         if (!buf) { toast('Não foi possível carregar a música. Tente enviar de novo.'); ui.pmTest = null; el.innerHTML = `${icon('play')} Ouvir`; return; }
-        Music.playCustom(place, 1.5);
+        if (place === 'intro') Music.playCustom(place, 1.5);
+        else { const w = Music.build(place); toast(`A revelação cai no ápice da música, ${nf1.format(w)} s depois de tocar em Revelar.`, 4000); }
       } else if (place === 'intro') { ui.pmTest = null; el.innerHTML = `${icon('play')} Ouvir`; toast('A abertura ainda não tem música. Envie uma para ouvir.'); return; }
       else { Music.build(place); setTimeout(() => { if (ui.pmTest === place) Music.win(place); }, Music.buildDur[place] * 1000); }
       clearTimeout(ui.pmTimer);
@@ -5510,10 +5543,16 @@ Content-Type: application/json</pre>
       ui.fcPeek = false;
       // Revelação de verdade (mês encerrado e em segredo): os celulares da equipe acompanham ao vivo.
       ui.fx = { ym, i: 0, live: isGestor(currentUser()) && !!inSuspense(monthRange(ym)) && iso(new Date()) > monthRange(ym).end };
-      Sound.ensure(); Music.preload(); keepAwake();
+      Sound.ensure(); keepAwake();
       const d = document.documentElement;
       if (d.requestFullscreen) d.requestFullscreen().catch(() => {});
-      fxRender();
+      // A abertura só começa com a música da abertura pronta, para música e animação saírem juntas.
+      if (Sound.on && !Music.ready('intro')) {
+        const fx = ui.fx, btn = document.querySelector('.fc-start'); if (btn) { btn.disabled = true; btn.innerHTML = `${icon('clock')} Preparando a música…`; }
+        Promise.race([Music.customBuf('intro'), new Promise(r => setTimeout(r, 12000))]).then(() => { if (ui.fx === fx) { fxRender(); Music.preload(); } if (btn && btn.isConnected) { btn.disabled = false; btn.innerHTML = `${icon('monitor')} Iniciar fechamento`; } });
+        return;
+      }
+      fxRender(); Music.preload();
     },
     apiUnlock(el) { ui.confirm = 'unlock' + el.dataset.id + el.dataset.k; refreshEditorFields(); },
     apiUnlockCancel() { ui.confirm = null; refreshEditorFields(); },
