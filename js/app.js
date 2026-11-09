@@ -2004,9 +2004,9 @@
   // Visão da barbearia inteira (gestor): totais do mês, detalhe por profissional e radar.
   // ---------- Metas da empresa ----------
   // Padrão (state.houseGoals) para todos os meses; um mês pode ter metas próprias (state.houseGoalsM[ym]).
-  const HG_KEYS = ['fat', 'agend', 'cli', 'serv', 'prod', 'planos', 'ticket', 'ocup'];
-  const HG_LABEL = { fat: 'Faturamento total', agend: 'Agendamentos', cli: 'Clientes atendidos', serv: 'Serviços realizados', prod: 'Produtos vendidos', planos: 'Planos mensais', ticket: 'Ticket médio da casa', ocup: 'Ocupação média' };
-  const hgFmt = (k, v) => k === 'fat' || k === 'ticket' ? money0(v) : k === 'ocup' ? nf1.format(v) + '%' : nf0.format(v);
+  const HG_KEYS = ['fat', 'agend', 'cli', 'serv', 'prod', 'planos', 'ticket', 'ocup', 'fid'];
+  const HG_LABEL = { fat: 'Faturamento total', agend: 'Agendamentos', cli: 'Clientes atendidos', serv: 'Serviços realizados', prod: 'Produtos vendidos', planos: 'Planos mensais', ticket: 'Ticket médio da casa', ocup: 'Ocupação média', fid: 'Fidelização da casa' };
+  const hgFmt = (k, v) => k === 'fat' || k === 'ticket' ? money0(v) : k === 'ocup' || k === 'fid' ? nf1.format(v) + '%' : nf0.format(v);
   function houseGoalsFor(ym) {
     const m = (state.houseGoalsM || {})[ym];
     const g = m && Object.keys(m).length ? m : (state.houseGoals || {});
@@ -2029,6 +2029,9 @@
     const ocups = rows.map(r => r.values.ocup).filter(v => v != null);
     const vals = { fat, agend, cli, serv: sum('serv'), prod: vis('prod') ? sum('prod') : null, planos: vis('planos') ? sum('planos') : null,
       ticket: cli > 0 ? fat / cli : null, ocup: vis('ocup') && ocups.length ? ocups.reduce((a, v) => a + v, 0) / ocups.length : null };
+    // Fidelização da casa: clientes que voltaram ÷ clientes atendidos, só de quem lançou a fidelização.
+    const fr = all.filter(r => r.sums.n.ret), fCli = fr.reduce((a, r) => a + (r.sums.cli || 0), 0);
+    vals.fid = fr.length && fCli > 0 ? (fr.reduce((a, r) => a + (r.sums.ret || 0), 0) / fCli) * 100 : null;
     return { rows, gone, all, has, sum, agend, fat, cli, ocups, vals };
   }
 
@@ -2084,6 +2087,91 @@
     try { Sound.play(allHit ? 'aplausos' : 'fanfarra'); } catch (e) { /* som é opcional */ }
   }
 
+  // Faturamento mês a mês (até 12 meses), com a meta de cada mês e a projeção do mês em andamento.
+  function houseTrend(ym, scope) {
+    const months = [];
+    for (let k = ym, i = 0; i < 12 && k >= firstYm(); i++, k = addMonths(k, -1)) months.unshift(k);
+    if (months.length < 2) return '';
+    const data = months.map(m => { const T = houseTotals(m, scope); return { m, v: T.vals.fat || 0, g: !scope ? houseGoalsFor(m).fat || null : null }; });
+    const now = new Date(), cm = curYm();
+    const last = data[data.length - 1];
+    if (last.m === cm) { const dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(), f = now.getDate() / dim; if (f < 1 && last.v > 0) last.p = last.v / f; }
+    const max = Math.max(1, ...data.map(d => Math.max(d.v, d.g || 0, d.p || 0))) * 1.12;
+    const W = 640, H = 230, L = 66, B = 26, T = 18, n = data.length, slot = (W - L - 6) / n, bw = Math.min(34, slot * 0.56);
+    const y = v => T + (H - T - B) * (1 - v / max);
+    const kfmt = v => v >= 1000 ? 'R$ ' + nf0.format(v / 1000) + ' mil' : money0(v);
+    const ticks = [0, 0.5, 1].map(t => max / 1.12 * t);
+    const grid = ticks.map(v => `<line x1="${L}" x2="${W - 4}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" class="tr-grid"/><text x="${L - 6}" y="${(y(v) + 4).toFixed(1)}" class="tr-ax" text-anchor="end">${kfmt(v)}</text>`).join('');
+    const bars = data.map((d, i) => {
+      const cx = L + slot * i + slot / 2, x = cx - bw / 2, top = y(d.v), sel = d.m === ym;
+      const lbl = ymLabel(d.m).replace(' de ', '/');
+      const short = monthRange(d.m).label.slice(0, 3);
+      const tipTxt = `${lbl}: ${money0(d.v)}${d.g ? ` · meta ${money0(d.g)} (${nf0.format((d.v / d.g) * 100)}%)` : ''}${d.p ? ` · no ritmo atual: ${money0(d.p)}` : ''}`;
+      const r = Math.min(4, bw / 2), h = Math.max(0, y(0) - top);
+      const path = h > r ? `M${x} ${y(0)}V${top + r}Q${x} ${top} ${x + r} ${top}H${x + bw - r}Q${x + bw} ${top} ${x + bw} ${top + r}V${y(0)}Z` : `M${x} ${y(0)}h${bw}v${-h}h${-bw}Z`;
+      return `<g class="tr-bar ${sel ? 'sel' : ''} ${d.g && d.v >= d.g ? 'hit' : ''}" data-action="pcMonth" data-ym="${d.m}" tabindex="0" role="button" aria-label="${esc(tipTxt)}"><title>${esc(tipTxt)}</title>
+        <rect x="${(cx - slot / 2).toFixed(1)}" y="${T}" width="${slot.toFixed(1)}" height="${H - T - B + 20}" class="tr-hit"/>
+        ${d.p ? `<rect x="${x.toFixed(1)}" y="${y(d.p).toFixed(1)}" width="${bw.toFixed(1)}" height="${(y(0) - y(d.p)).toFixed(1)}" rx="4" class="tr-proj"/>` : ''}
+        <path d="${path}" class="tr-fill"/>
+        ${d.g ? `<line x1="${(x - 4).toFixed(1)}" x2="${(x + bw + 4).toFixed(1)}" y1="${y(d.g).toFixed(1)}" y2="${y(d.g).toFixed(1)}" class="tr-goal"/>` : ''}
+        ${sel ? `<text x="${cx.toFixed(1)}" y="${(Math.min(top, d.p ? y(d.p) : top, d.g ? y(d.g) : top) - 6).toFixed(1)}" class="tr-val" text-anchor="middle">${kfmt(d.v)}</text>` : ''}
+        <text x="${cx.toFixed(1)}" y="${H - 8}" class="tr-ax ${sel ? 'on' : ''}" text-anchor="middle">${short}</text></g>`;
+    }).join('');
+    const vals = data.filter(d => d.v > 0 && d.m !== cm);
+    const avg = vals.length ? vals.reduce((a, d) => a + d.v, 0) / vals.length : 0;
+    const best = vals.reduce((a, d) => (!a || d.v > a.v ? d : a), null);
+    const first = data.find(d => d.v > 0), lastFull = [...vals].pop();
+    const growth = first && lastFull && first !== lastFull && first.v > 0 ? ((lastFull.v - first.v) / first.v) * 100 : null;
+    return `<section class="section card pc-trend">
+      <h2 class="section-title">Faturamento mês a mês</h2>
+      <div class="tr-wrap"><svg viewBox="0 0 ${W} ${H}" class="tr-svg" role="img" aria-label="Faturamento dos últimos ${n} meses">${grid}${bars}</svg></div>
+      <div class="tr-legend"><span><i class="lg-bar"></i>Faturamento</span>${data.some(d => d.g) ? '<span><i class="lg-goal"></i>Meta do mês</span>' : ''}${data.some(d => d.p) ? '<span><i class="lg-proj"></i>Projeção do mês em andamento</span>' : ''}</div>
+      ${vals.length ? `<div class="tr-facts">
+        <div><span>Média por mês</span><b class="num">${money0(avg)}</b></div>
+        ${best ? `<div><span>Melhor mês</span><b class="num">${esc(ymLabel(best.m).replace(' de ', '/'))}</b><small class="num">${money0(best.v)}</small></div>` : ''}
+        ${growth != null ? `<div><span>Crescimento no período</span><b class="num ${growth >= 0 ? 'up' : 'down'}">${growth >= 0 ? '▲ +' : '▼ −'}${nf0.format(Math.abs(growth))}%</b><small>${esc(monthRange(first.m).label.slice(0, 3))} → ${esc(monthRange(lastFull.m).label.slice(0, 3))}</small></div>` : ''}
+      </div>` : ''}
+      <p class="section-note">Toque numa barra para abrir aquele mês.</p>
+    </section>`;
+  }
+  // Participação de cada profissional no faturamento do mês.
+  function houseShare(all) {
+    const list = all.filter(r => r.sums.fat > 0).sort((a, b) => b.sums.fat - a.sums.fat);
+    const tot = list.reduce((a, r) => a + r.sums.fat, 0);
+    if (!list.length || tot <= 0) return '';
+    const top = list.slice(0, 10), rest = list.slice(10), restV = rest.reduce((a, r) => a + r.sums.fat, 0);
+    const lead = list[0], leadPct = (lead.sums.fat / tot) * 100, even = 100 / list.length;
+    const row = (b, v, extra) => { const pc = (v / tot) * 100; return `<li class="sh-row"><span class="sh-who">${b ? avatar(b, 30) : ''}<span>${esc(b ? b.name : extra)}${b && b.active === false ? ' <small class="muted">(desligado)</small>' : ''}</span></span>
+      <span class="sh-bar"><i style="width:${Math.max(1.5, (pc / ((list[0].sums.fat / tot) * 100)) * 100).toFixed(1)}%"></i></span><span class="sh-v num"><b>${nf1.format(pc)}%</b><small>${money0(v)}</small></span></li>`; };
+    return `<section class="section card pc-share">
+      <h2 class="section-title">Participação no faturamento</h2>
+      ${list.length > 2 && leadPct >= Math.max(35, even * 1.8) ? `<p class="sh-alert">${icon('help')}<span><b>${first(lead.barber.name)} responde por ${nf0.format(leadPct)}% do faturamento.</b> A empresa depende muito de uma pessoa: vale treinar e dar agenda para os outros crescerem.</span></p>` : ''}
+      <ol class="sh-list">${top.map(r => row(r.barber, r.sums.fat)).join('')}${rest.length ? row(null, restV, `Outros (${rest.length})`) : ''}</ol>
+      <p class="section-note">Se todos tivessem a mesma fatia, cada um teria ${nf1.format(even)}%.</p>
+    </section>`;
+  }
+  // Quantos profissionais bateram a meta individual de cada indicador.
+  function indivGoals(rows) {
+    const inds = GB.visibleInds(state).filter(i => i.key !== 'check');
+    const items = inds.map(i => {
+      const withV = rows.filter(r => r.values[i.key] != null);
+      const hit = withV.filter(r => r.values[i.key] >= GB.goalFor(state, r.barber.id, i.key));
+      return { i, n: withV.length, hit };
+    }).filter(x => x.n);
+    if (!items.length) return '';
+    return `<section class="section card pc-indiv">
+      <h2 class="section-title">Metas individuais</h2>
+      <p class="section-note">Quantos profissionais já bateram a própria meta em cada indicador.</p>
+      <ul class="ig-list">${items.map(({ i, n, hit }) => `<li class="ig-row ${hit.length === n ? 'all' : ''}">
+        <span class="ig-l">${esc(i.label)}</span>
+        <span class="ig-bar" role="img" aria-label="${hit.length} de ${n}"><i style="width:${((hit.length / n) * 100).toFixed(1)}%"></i></span>
+        <span class="ig-n num"><b>${hit.length}</b> de ${n}</span>
+        <span class="ig-who">${hit.slice(0, 6).map(r => `<span title="${esc(r.barber.name)}">${avatar(r.barber, 24)}</span>`).join('')}${hit.length > 6 ? `<small>+${hit.length - 6}</small>` : ''}</span>
+      </li>`).join('')}</ul>
+      <p class="section-note">As metas individuais ficam em Configurações (equipe) e em Lançamentos (de cada profissional).</p>
+    </section>`;
+  }
+
   function pagePerfCasa(scope) {
     const ym = ui.teamMonth || curYm();
     const R = monthR(ym);
@@ -2099,28 +2187,33 @@
     const tgtOpts = [...new Set([ym, curYm(), addMonths(curYm(), 1)])].sort();
     const cur = ym === curYm(), now = new Date(), dim = new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0).getDate();
     const frac = cur ? Math.min(1, now.getDate() / dim) : 1;
-    const HG_FMT = { fat: money0, ticket: money0, ocup: v => nf1.format(v) + '%' };
+    const HG_FMT = { fat: money0, ticket: money0, ocup: v => nf1.format(v) + '%', fid: v => nf1.format(v) + '%' };
+    // Dias úteis que faltam no mês (sem domingos), contando hoje.
+    let restDays = 0;
+    if (cur) for (let d = now.getDate(); d <= dim; d++) if (new Date(now.getFullYear(), now.getMonth(), d).getDay() !== 0) restDays++;
     const fmtG = (k, v) => (HG_FMT[k] || (x => nf0.format(x)))(v);
     const SUMK = ['fat', 'agend', 'cli', 'serv', 'prod', 'planos'];
     const stat = (label, value, k, raw) => {
       const g = k && hg[k];
       if (!isNum(g) || g <= 0 || raw == null) return `<div class="pc-stat"><span>${label}</span><b class="num">${value}</b></div>`;
       const pct = (raw / g) * 100, done = raw >= g;
-      const gap = k === 'ocup' ? nf1.format(Math.abs(g - raw)) + ' p.p.' : fmtG(k, Math.abs(g - raw));
+      const gap = k === 'ocup' || k === 'fid' ? nf1.format(Math.abs(g - raw)) + ' p.p.' : fmtG(k, Math.abs(g - raw));
+      const perDay = cur && !done && SUMK.includes(k) && restDays > 0 ? (k === 'fat' ? (g - raw) / restDays : Math.ceil((g - raw) / restDays)) : null;
       const proj = cur && frac < 1 && SUMK.includes(k) && raw > 0 ? raw / frac : null;
       return `<div class="pc-stat has-goal ${done ? 'done' : ''}"><span>${label}</span><b class="num">${value}</b>
         <div class="pc-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(Math.min(pct, 100))}" aria-label="${esc(label)}: ${nf0.format(pct)}% da meta"><i style="width:${Math.min(100, pct).toFixed(1)}%"></i></div>
         <div class="pc-goal num"><span>Meta ${fmtG(k, g)}</span><em>${nf0.format(pct)}%</em></div>
         <small class="pc-left num">${done ? `${icon('check')} Meta batida${raw > g ? ` · ${gap} acima` : ''}` : `Faltam <b>${gap}</b>`}</small>
+        ${perDay != null ? `<small class="pc-day num">Para bater: <b>${fmtG(k, perDay)} por dia</b> ${restDays === 1 ? 'hoje, último dia útil' : `nos ${restDays} dias úteis que faltam`}</small>` : ''}
         ${proj != null && !done ? `<small class="pc-proj num ${proj >= g ? 'ok' : 'low'}">No ritmo atual: ${fmtG(k, proj)} no fim do mês</small>` : ''}
       </div>`;
     };
     // Sugestão: soma das metas individuais dos profissionais ativos.
     const act = state.barbers.filter(b => b.active !== false);
-    const sugg = k => k === 'agend' ? null : ['ticket', 'ocup'].includes(k) ? GB.goalFor(state, '', k) : act.reduce((a, b) => a + GB.goalFor(state, b.id, k), 0);
+    const sugg = k => k === 'agend' ? null : ['ticket', 'ocup', 'fid'].includes(k) ? GB.goalFor(state, '', k) : act.reduce((a, b) => a + GB.goalFor(state, b.id, k), 0);
     const HG_FIELDS = [['fat', 'Faturamento total (R$)', '0.01'], ['agend', 'Agendamentos', '1'], ['cli', 'Clientes atendidos', '1'], ['serv', 'Serviços realizados', '1'],
       ...(vis('prod') ? [['prod', 'Produtos vendidos', '1']] : []), ...(vis('planos') ? [['planos', 'Planos mensais', '1']] : []),
-      ['ticket', 'Ticket médio da casa (R$)', '0.01'], ...(vis('ocup') ? [['ocup', 'Ocupação média (%)', '0.1']] : [])];
+      ['ticket', 'Ticket médio da casa (R$)', '0.01'], ...(vis('ocup') ? [['ocup', 'Ocupação média (%)', '0.1']] : []), ...(vis('fid') || T.vals.fid != null ? [['fid', 'Fidelização da casa (%)', '0.1']] : [])];
     const goalForm = own && ui.hgEdit ? `<section class="section card">
         <h2 class="section-title">Metas mensais da empresa</h2>
         <p class="section-note">Deixe em branco o indicador que não tiver meta. A sugestão em cinza é a soma das metas individuais da equipe.</p>
@@ -2137,7 +2230,9 @@
         <select class="input" id="pc-month" data-change="teamMonth">${monthOptions(ym)}</select></label>
         ${own && !ui.hgEdit ? (Object.keys(hg).length || Object.keys(state.houseGoals || {}).length || Object.keys(state.houseGoalsM || {}).length
           ? `<button class="btn btn-sm pc-goal-btn" data-action="hgEdit">${icon('target')} Editar metas da empresa</button>`
-          : `<button class="pc-goal-cta" data-action="hgEdit"><span class="pc-goal-ico">${icon('target')}</span><span><b>Cadastrar metas da empresa</b><small>Defina a meta de cada indicador e acompanhe o progresso, quanto falta e a conquista quando bater.</small></span>${icon('right')}</button>`) : ''}</div>
+          : `<button class="pc-goal-cta" data-action="hgEdit"><span class="pc-goal-ico">${icon('target')}</span><span><b>Cadastrar metas da empresa</b><small>Defina a meta de cada indicador e acompanhe o progresso, quanto falta e a conquista quando bater.</small></span>${icon('right')}</button>`) : ''}
+        ${has ? `<button class="btn btn-sm pc-print-btn" data-action="pcPrint">${icon('download')} Baixar relatório do mês (PDF)</button>` : ''}</div>
+      <div class="pc-print-head"><b>${esc(state.company.name || '')}</b><span>Relatório de performance ${scope ? 'da área' : 'da empresa'} · ${esc(cap(monthRange(ym).label))}</span><small>Gerado em ${new Date().toLocaleDateString('pt-BR')}</small></div>
       ${goalForm}
       ${has ? '' : `<div class="pc-empty">Nenhum dado lançado ainda. Assim que você cadastrar profissionais e lançar as métricas do mês, os totais e o comparativo aparecem aqui automaticamente.</div>`}
       <section class="section card pc-totals">
@@ -2150,9 +2245,13 @@
         ${stat('Ticket médio da casa', cli > 0 ? money0(fat / cli) : '—', 'ticket', cli > 0 ? fat / cli : null)}
         ${all.some(r => r.sums.n.comanda) ? stat('Maior comanda do mês', money2(Math.max(...all.map(r => r.sums.n.comanda ? r.sums.comanda : 0)))) : ''}
         ${vis('ocup') ? stat('Ocupação média', ocups.length ? nf1.format(ocups.reduce((a, v) => a + v, 0) / ocups.length) + '%' : '—', 'ocup', ocups.length ? ocups.reduce((a, v) => a + v, 0) / ocups.length : null) : ''}
+        ${T.vals.fid != null || vis('fid') ? stat('Fidelização da casa', T.vals.fid != null ? nf1.format(T.vals.fid) + '%' : '—', 'fid', T.vals.fid) : ''}
         ${stat('Profissionais', nf0.format(all.length))}
       </section>
       ${all.length ? `<p class="section-note">Cada número acima é a soma dos ${nf0.format(all.length)} profissionais ${scope ? 'da sua área' : 'da equipe'} no mês${gone.length ? `, incluindo ${gone.length === 1 ? '1 profissional desligado que tem' : `${gone.length} profissionais desligados que têm`} resultados lançados nesse mês` : ''}. O ticket médio da casa é o faturamento total dividido pelo total de clientes, e a ocupação é a média dos profissionais.</p>` : ''}
+      ${has ? houseTrend(ym, scope) : ''}
+      ${has ? houseShare(all) : ''}
+      ${has ? indivGoals(rows) : ''}
       ${has ? evoHouse(ym, scope) : ''}
 ${rows.length ? '' : emptyBarbers()}
       <p class="section-note">O detalhado por profissional, o ranking e o radar estão em Performance da equipe.</p>`;
@@ -4081,6 +4180,13 @@ Content-Type: application/json</pre>
       c.items.splice(i, 1); ui.confirm = null; save(); render();
     },
     popItemMove(el) { const c = popCfgW(), i = Number(el.dataset.i), j = i + Number(el.dataset.d); if (j < 0 || j >= c.items.length) return; [c.items[i], c.items[j]] = [c.items[j], c.items[i]]; save(); render(); },
+    pcMonth(el) { ui.teamMonth = el.dataset.ym; render(); },
+    pcPrint() {
+      const t = document.title, ym = ui.teamMonth || curYm();
+      document.title = `Relatório ${state.company.name || ''} - ${cap(monthRange(ym).label)}`.trim();
+      document.body.classList.add('printing', 'printing-pc');
+      setTimeout(() => { window.print(); document.body.classList.remove('printing', 'printing-pc'); document.title = t; }, 80);
+    },
     gcClose() { const o = $('.gc-ov'); if (o) o.remove(); },
     gcNext(el) {
       const o = $('.gc-ov'); if (o) o.remove();
