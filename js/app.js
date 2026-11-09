@@ -144,6 +144,7 @@
     api: ['Integração por API', 'Outro sistema envia os resultados de cada barbeiro por dia. Os campos vindos da API ficam com cadeado em Lançamentos; só o dono destrava para um ajuste manual.'],
     proof: ['Provas do checklist', 'Cada ação precisa de uma foto ou print como prova. A gestão confere e aprova ou recusa; só ação aprovada pontua. Ninguém confere a própria prova.'],
     compare: ['Comparar profissionais', 'Mostra os números de dois profissionais lado a lado no mês. Verde com ▲ é quem está à frente em cada indicador; vermelho com ▼, quem está atrás; "=" é empate. No meio aparece a diferença. O barbeiro compara os próprios números com o líder de cada indicador; o dono e o gestor de área comparam quem podem ver.'],
+    evoCasa: ['Evolução da empresa', 'Compara a soma de toda a equipe com ela mesma em outro período. Verde com ▲ é onde a empresa melhorou; vermelho com ▼, onde caiu. Ticket médio, ocupação e fidelização são calculados sobre os totais da equipe. Com o mês em andamento, compara o mesmo número de dias, a não ser que você marque o mês anterior inteiro.'],
     evo: ['Evolução', 'Compara o profissional com ele mesmo em outro período. Verde com ▲ é onde melhorou; vermelho com ▼, onde caiu. Com o mês em andamento, compara o mesmo número de dias (ex.: 1 a 7 deste mês × 1 a 7 do mês anterior), a não ser que você marque o mês anterior inteiro. Em períodos que não são o mês inteiro, entram os lançamentos por dia.'],
     access_lv: ['Nível de acesso', () => ACCESS_TIP()],
     leads: ['Interessados', 'Cadastros feitos na página de vendas (gest-o-a-vista.vercel.app/oferta) antes do quiz: nome, celular, e-mail e as respostas do quiz. Use a situação para organizar o contato: Novo, Contatado, Virou cliente ou Descartado. Só o dono do SaaS vê esta lista.'],
@@ -1565,8 +1566,8 @@
     o._score = row && R.active.length ? row.overall : null; o._leads = row && R.active.length ? row.leads.length : null;
     return o;
   };
-  function cmpList(va, vb, subs) {
-    const inds = [...GB.visibleInds(state), ...CMP_EXTRA];
+  function cmpList(va, vb, subs, extra = CMP_EXTRA) {
+    const inds = [...GB.visibleInds(state), ...extra];
     let wa = 0, wb = 0;
     for (const i of GB.visibleInds(state)) { const a = va[i.key], b = vb[i.key]; if (a != null && b != null) { if (a > b) wa++; else if (b > a) wb++; } }
     return { html: `<div class="cmp-list">${inds.map(i => cmpRow(i, va[i.key], vb[i.key], subs && subs.a && subs.a[i.key], subs && subs.b && subs.b[i.key])).join('')}</div>`, wa, wb };
@@ -1658,6 +1659,65 @@
   const dShort = d => d.slice(8, 10) + '/' + d.slice(5, 7) + (d.slice(0, 4) !== String(new Date().getFullYear()) ? '/' + d.slice(2, 4) : '');
   const rLabel = r => `${dShort(r.start)} a ${dShort(r.end)}`;
   const evoRefresh = () => { if ($('#tm-insights')) refreshTeam(); else render(); };
+  // Controles do comparativo (modo, datas livres, mês em andamento), usados na evolução do profissional e da empresa.
+  function evoControls(ym, ra, rb) {
+    const ev = ui.evo || {}, mode = ev.mode || 'mes';
+    const modes = [['mes', 'Mês × mês anterior'], ['ano', 'Mês × ano passado'], ['semana', 'Semana × anterior'], ['livre', 'Escolher datas']];
+    const running = mode !== 'livre' && mode !== 'semana' && monthRange(ym).start <= iso(new Date()) && iso(new Date()) <= monthRange(ym).end;
+    return `<div class="seg evo-seg" role="group" aria-label="Comparar períodos">${modes.map(([k, l]) => `<button type="button" class="${mode === k ? 'on' : ''}" aria-pressed="${mode === k}" data-action="evoMode" data-m="${k}">${l}</button>`).join('')}</div>
+      ${mode === 'livre' ? `<div class="evo-dates">
+        <label class="field"><span>Período A</span><span class="evo-dd"><input class="input" type="date" data-change="evoDate" data-k="a1" value="${ra.start}"><input class="input" type="date" data-change="evoDate" data-k="a2" value="${ra.end}"></span></label>
+        <label class="field"><span>Período B</span><span class="evo-dd"><input class="input" type="date" data-change="evoDate" data-k="b1" value="${rb.start}"><input class="input" type="date" data-change="evoDate" data-k="b2" value="${rb.end}"></span></label></div>` : ''}
+      ${running ? `<label class="ind-on evo-full"><input type="checkbox" data-change="evoFull" ${ev.full ? 'checked' : ''}> Comparar com o mês anterior inteiro</label>
+        <p class="section-note">${ev.full ? 'O mês atual ainda não acabou: a comparação com o mês inteiro tende a ficar abaixo.' : 'Mês em andamento: compara o mesmo número de dias nos dois períodos.'}</p>` : ''}`;
+  }
+
+  // Evolução da empresa: a soma de todos os profissionais comparada com ela mesma em outro período.
+  function houseSums(range, scope) {
+    const S = { fat: 0, serv: 0, cli: 0, check: 0, hDisp: 0, hOcup: 0, planos: 0, ret: 0, prod: 0, comanda: 0, agend: 0, n: {} };
+    for (const b of state.barbers) {
+      if (scope && !scope.has(b.id)) continue;
+      const a = GB.aggregate(state, b.id, range);
+      if (!Object.keys(a.n).length) continue;
+      for (const k of Object.keys(a.n)) {
+        if (k === 'comanda') S.comanda = Math.max(S.comanda, a.comanda); else S[k] = (S[k] || 0) + (a[k] || 0);
+        S.n[k] = (S.n[k] || 0) + a.n[k];
+      }
+      // Agendamentos: lançados por mês, entram quando o mês inteiro está dentro do período.
+      for (const m of state.monthly || []) {
+        if (m.barberId !== b.id || !isNum(m.agend)) continue;
+        const mr = monthRange(m.month);
+        if (mr.start >= range.start && mr.end <= range.end) { S.agend += Number(m.agend); S.n.agend = (S.n.agend || 0) + 1; }
+      }
+    }
+    return S;
+  }
+  const HOUSE_EXTRA = [{ key: 'agend', label: 'Agendamentos', fmt: 'int' }, { key: 'comanda', label: 'Maior comanda do mês', fmt: 'money2' }];
+  function houseVals(S) {
+    const o = {};
+    for (const ind of GB.visibleInds(state)) o[ind.key] = ind.calc(S);
+    o.agend = S.n.agend ? S.agend : null;
+    o.comanda = S.n.comanda ? S.comanda : null;
+    return o;
+  }
+  function evoHouse(ym, scope) {
+    const [ra, rb] = evoRanges(ym);
+    const SA = houseSums(ra, scope), SB = houseSums(rb, scope);
+    const va = houseVals(SA), vb = houseVals(SB);
+    const L = cmpList(va, vb, null, HOUSE_EXTRA);
+    const n = GB.visibleInds(state).filter(i => va[i.key] != null && vb[i.key] != null).length;
+    const info = S => Object.keys(S.n).length ? `Faturamento ${money0(S.fat)}` : 'sem dados';
+    return `<section class="section card evo">
+      <h2 class="section-title">Evolução ${scope ? 'da área' : 'da empresa'} ${tip('evoCasa')}</h2>
+      ${evoControls(ym, ra, rb)}
+      <div class="cmp-sum">
+        <div class="cmp-who a"><b>${rLabel(ra)}</b><small class="num">${info(SA)}</small><span class="cmp-wins num">Melhor em ${L.wa} de ${n}</span></div>
+        <div class="cmp-who b"><b>${rLabel(rb)}</b><small class="num">${info(SB)}</small><span class="cmp-wins num">Melhor em ${L.wb} de ${n}</span></div>
+      </div>
+      ${L.html}
+    </section>`;
+  }
+
   function evoBlock(bid, ym) {
     const b = barberById(bid); if (!b) return '';
     const ev = ui.evo || {}, mode = ev.mode || 'mes';
@@ -1667,17 +1727,10 @@
     const va = cmpVals(A, rowA), vb = cmpVals(B, rowB);
     const L = cmpList(va, vb);
     const n = GB.visibleInds(state).filter(i => va[i.key] != null && vb[i.key] != null).length;
-    const modes = [['mes', 'Mês × mês anterior'], ['ano', 'Mês × ano passado'], ['semana', 'Semana × anterior'], ['livre', 'Escolher datas']];
-    const running = mode !== 'livre' && mode !== 'semana' && monthRange(ym).start <= iso(new Date()) && iso(new Date()) <= monthRange(ym).end;
     const pos = (R, row) => row && R.active.length ? `${ord(row.pos)} de ${R.rows.length} · ${score(row.overall)} pts` : 'sem dados';
     return `<section class="section card evo">
       <h2 class="section-title">Evolução de ${first(b.name)} ${tip('evo')}</h2>
-      <div class="seg evo-seg" role="group" aria-label="Comparar períodos">${modes.map(([k, l]) => `<button type="button" class="${mode === k ? 'on' : ''}" aria-pressed="${mode === k}" data-action="evoMode" data-m="${k}">${l}</button>`).join('')}</div>
-      ${mode === 'livre' ? `<div class="evo-dates">
-        <label class="field"><span>Período A</span><span class="evo-dd"><input class="input" type="date" data-change="evoDate" data-k="a1" value="${ra.start}"><input class="input" type="date" data-change="evoDate" data-k="a2" value="${ra.end}"></span></label>
-        <label class="field"><span>Período B</span><span class="evo-dd"><input class="input" type="date" data-change="evoDate" data-k="b1" value="${rb.start}"><input class="input" type="date" data-change="evoDate" data-k="b2" value="${rb.end}"></span></label></div>` : ''}
-      ${running ? `<label class="ind-on evo-full"><input type="checkbox" data-change="evoFull" ${ev.full ? 'checked' : ''}> Comparar com o mês anterior inteiro</label>
-        <p class="section-note">${ev.full ? 'O mês atual ainda não acabou: a comparação com o mês inteiro tende a ficar abaixo.' : 'Mês em andamento: compara o mesmo número de dias nos dois períodos.'}</p>` : ''}
+      ${evoControls(ym, ra, rb)}
       <div class="cmp-sum">
         <div class="cmp-who a"><b>${rLabel(ra)}</b><small class="num">${pos(A, rowA)}</small><span class="cmp-wins num">Melhor em ${L.wa} de ${n}</span></div>
         <div class="cmp-who b"><b>${rLabel(rb)}</b><small class="num">${pos(B, rowB)}</small><span class="cmp-wins num">Melhor em ${L.wb} de ${n}</span></div>
@@ -1949,6 +2002,88 @@
   }
 
   // Visão da barbearia inteira (gestor): totais do mês, detalhe por profissional e radar.
+  // ---------- Metas da empresa ----------
+  // Padrão (state.houseGoals) para todos os meses; um mês pode ter metas próprias (state.houseGoalsM[ym]).
+  const HG_KEYS = ['fat', 'agend', 'cli', 'serv', 'prod', 'planos', 'ticket', 'ocup'];
+  const HG_LABEL = { fat: 'Faturamento total', agend: 'Agendamentos', cli: 'Clientes atendidos', serv: 'Serviços realizados', prod: 'Produtos vendidos', planos: 'Planos mensais', ticket: 'Ticket médio da casa', ocup: 'Ocupação média' };
+  const hgFmt = (k, v) => k === 'fat' || k === 'ticket' ? money0(v) : k === 'ocup' ? nf1.format(v) + '%' : nf0.format(v);
+  function houseGoalsFor(ym) {
+    const m = (state.houseGoalsM || {})[ym];
+    const g = m && Object.keys(m).length ? m : (state.houseGoals || {});
+    const vis = k => !['prod', 'planos', 'ocup'].includes(k) || GB.visibleInds(state).some(i => i.key === k);
+    return Object.fromEntries(Object.entries(g).filter(([k, v]) => HG_KEYS.includes(k) && vis(k) && isNum(v) && v > 0));
+  }
+  // Totais do mês: soma de todos os profissionais (inclusive desligados com resultados no mês).
+  function houseTotals(ym, scope) {
+    const R = monthR(ym);
+    const vis = k => GB.visibleInds(state).some(i => i.key === k);
+    const rows = [...R.rows].filter(r => !scope || scope.has(r.barber.id)).sort((a, b) => b.sums.fat - a.sums.fat);
+    const gone = state.barbers.filter(b => b.active === false && (!scope || scope.has(b.id)))
+      .map(b => ({ barber: b, sums: GB.aggregate(state, b.id, monthRange(ym)), values: {} })).filter(r => Object.keys(r.sums.n).length);
+    const all = rows.concat(gone);
+    const has = all.some(r => Object.keys(r.sums.n).length);
+    const sum = k => all.reduce((a, r) => a + (r.sums[k] || 0), 0);
+    const ids = new Set(all.map(r => r.barber.id));
+    const agend = (state.monthly || []).filter(m => m.month === ym && ids.has(m.barberId) && isNum(m.agend)).reduce((a, m) => a + Number(m.agend), 0);
+    const fat = sum('fat'), cli = sum('cli');
+    const ocups = rows.map(r => r.values.ocup).filter(v => v != null);
+    const vals = { fat, agend, cli, serv: sum('serv'), prod: vis('prod') ? sum('prod') : null, planos: vis('planos') ? sum('planos') : null,
+      ticket: cli > 0 ? fat / cli : null, ocup: vis('ocup') && ocups.length ? ocups.reduce((a, v) => a + v, 0) / ocups.length : null };
+    return { rows, gone, all, has, sum, agend, fat, cli, ocups, vals };
+  }
+
+  // Conquista: quando uma meta da empresa é batida, aparece um card de parabéns (uma vez por meta e por mês, em cada aparelho).
+  function maybeGoalCelebrate(user) {
+    if (!user || !isGestor(user) || location.hash === '#apresentacao' || document.querySelector('.gc-ov')) return;
+    const seen = readJSON('hgSeen', {});
+    // Mês atual; o mês anterior só nos primeiros dias do mês novo (metas batidas no fechamento).
+    const months = [curYm(), ...(new Date().getDate() <= 7 ? [addMonths(curYm(), -1)] : [])];
+    for (const ym of months) {
+      const g = houseGoalsFor(ym), keys = Object.keys(g);
+      if (!keys.length) continue;
+      const T = houseTotals(ym);
+      const hit = keys.filter(k => T.vals[k] != null && T.vals[k] >= g[k]);
+      const was = seen[ym] || [], fresh = hit.filter(k => !was.includes(k));
+      if (!fresh.length) continue;
+      seen[ym] = [...new Set([...was, ...hit])];
+      for (const k of Object.keys(seen)) if (k < addMonths(curYm(), -3)) delete seen[k];
+      DB.pref.set('hgSeen', JSON.stringify(seen));
+      showGoalCelebrate(ym, keys, hit, fresh, T.vals, g);
+      return;
+    }
+  }
+  function showGoalCelebrate(ym, keys, hit, fresh, vals, g) {
+    const allHit = hit.length === keys.length;
+    const next = addMonths(ym, 1), nextName = monthRange(next).label.split(' de ')[0];
+    const title = allHit ? (keys.length > 1 ? 'Todas as metas batidas!' : 'Meta batida!') : fresh.length > 1 ? `${fresh.length} metas batidas!` : 'Meta batida!';
+    const colors = ['#ffd66b', '#3ee07a', '#6cc0ff', '#ff8fc7', '#ffffff', '#ff9a2e'];
+    const conf = Array.from({ length: 36 }, (_, i) => `<span style="left:${(i * 29 + 5) % 100}%;--c:${colors[i % colors.length]};--dl:${((i * 0.37) % 2.4).toFixed(2)}s;--dur:${(3 + (i % 5) * 0.5).toFixed(1)}s;--sz:${(0.7 + (i % 4) * 0.2).toFixed(1)}"></span>`).join('');
+    const el = document.createElement('div');
+    el.className = 'gc-ov' + (allHit ? ' gc-all' : '');
+    el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-labelledby', 'gc-t');
+    el.innerHTML = `<div class="gc-conf" aria-hidden="true">${conf}</div>
+      <div class="gc-card">
+        <div class="gc-rays" aria-hidden="true"></div>
+        <div class="gc-trophy" aria-hidden="true">${icon('trophy')}</div>
+        <p class="gc-eyebrow">Conquista desbloqueada · ${esc(cap(monthRange(ym).label))}</p>
+        <h2 id="gc-t">${title}</h2>
+        <p class="gc-sub">Parabéns${state.company.name ? ', ' + esc(state.company.name) : ''}! ${allHit ? `A equipe bateu ${keys.length > 1 ? `as ${keys.length} metas` : 'a meta'} do mês.` : `A equipe já bateu ${hit.length} de ${keys.length} metas do mês.`}</p>
+        <ul class="gc-list">${fresh.map(k => `<li><span class="gc-ck">${icon('check')}</span><span><b>${HG_LABEL[k]}</b><small class="num">${hgFmt(k, vals[k])} de ${hgFmt(k, g[k])} · ${nf0.format((vals[k] / g[k]) * 100)}%</small></span></li>`).join('')}</ul>
+        <p class="gc-next">${allHit ? 'Hora de subir a régua:' : 'Já pensando no próximo passo?'} configure as metas de ${esc(nextName)}.</p>
+        <div class="gc-btns"><button class="btn btn-primary" data-action="gcNext" data-ym="${next}">${icon('target')} Configurar metas de ${esc(nextName)}</button>
+        <button class="btn" data-action="gcClose">Agora não</button></div>
+      </div>`;
+    // Fica fora do #root (não some quando a tela redesenha), então trata os próprios cliques.
+    el.addEventListener('click', e => {
+      const b = e.target.closest('[data-action]');
+      if (b && ACTIONS[b.dataset.action]) ACTIONS[b.dataset.action](b, e);
+      else if (e.target === el) el.remove();
+    });
+    document.body.appendChild(el);
+    setTimeout(() => { const b = el.querySelector('.btn-primary'); if (b) b.focus(); }, 400);
+    try { Sound.play(allHit ? 'aplausos' : 'fanfarra'); } catch (e) { /* som é opcional */ }
+  }
+
   function pagePerfCasa(scope) {
     const ym = ui.teamMonth || curYm();
     const R = monthR(ym);
@@ -1956,30 +2091,67 @@
     if (dk) return `<div class="card tm-month"><label class="field"><span class="tm-eyebrow">Mês</span>
         <select class="input" id="pc-month" data-change="teamMonth">${monthOptions(ym)}</select></label></div>${suspenseCard(dk)}${ownNumbers(R, (currentUser() || {}).barberId, ym)}`;
     const vis = k => GB.visibleInds(state).some(i => i.key === k);
-    const rows = [...R.rows].filter(r => !scope || scope.has(r.barber.id)).sort((a, b) => b.sums.fat - a.sums.fat);
-    const has = rows.some(r => Object.keys(r.sums.n).length);
-    const sum = k => rows.reduce((a, r) => a + (r.sums[k] || 0), 0);
-    const ids = new Set(rows.map(r => r.barber.id));
-    const agend = (state.monthly || []).filter(m => m.month === ym && ids.has(m.barberId) && isNum(m.agend)).reduce((a, m) => a + Number(m.agend), 0);
-    const fat = sum('fat'), cli = sum('cli');
-    const ocups = rows.map(r => r.values.ocup).filter(v => v != null);
-    const stat = (label, value) => `<div class="pc-stat"><span>${label}</span><b class="num">${value}</b></div>`;
+    const T = houseTotals(ym, scope), { rows, gone, all, has, sum, agend, fat, cli, ocups } = T;
+    // Metas da empresa (só o dono define; valem para todos os meses).
+    const user = currentUser(), own = !scope && isGestor(user);
+    const hg = !scope ? houseGoalsFor(ym) : {};
+    const tgt = ui.hgYm || ym, tg = houseGoalsFor(tgt);
+    const tgtOpts = [...new Set([ym, curYm(), addMonths(curYm(), 1)])].sort();
+    const cur = ym === curYm(), now = new Date(), dim = new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0).getDate();
+    const frac = cur ? Math.min(1, now.getDate() / dim) : 1;
+    const HG_FMT = { fat: money0, ticket: money0, ocup: v => nf1.format(v) + '%' };
+    const fmtG = (k, v) => (HG_FMT[k] || (x => nf0.format(x)))(v);
+    const SUMK = ['fat', 'agend', 'cli', 'serv', 'prod', 'planos'];
+    const stat = (label, value, k, raw) => {
+      const g = k && hg[k];
+      if (!isNum(g) || g <= 0 || raw == null) return `<div class="pc-stat"><span>${label}</span><b class="num">${value}</b></div>`;
+      const pct = (raw / g) * 100, done = raw >= g;
+      const gap = k === 'ocup' ? nf1.format(Math.abs(g - raw)) + ' p.p.' : fmtG(k, Math.abs(g - raw));
+      const proj = cur && frac < 1 && SUMK.includes(k) && raw > 0 ? raw / frac : null;
+      return `<div class="pc-stat has-goal ${done ? 'done' : ''}"><span>${label}</span><b class="num">${value}</b>
+        <div class="pc-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(Math.min(pct, 100))}" aria-label="${esc(label)}: ${nf0.format(pct)}% da meta"><i style="width:${Math.min(100, pct).toFixed(1)}%"></i></div>
+        <div class="pc-goal num"><span>Meta ${fmtG(k, g)}</span><em>${nf0.format(pct)}%</em></div>
+        <small class="pc-left num">${done ? `${icon('check')} Meta batida${raw > g ? ` · ${gap} acima` : ''}` : `Faltam <b>${gap}</b>`}</small>
+        ${proj != null && !done ? `<small class="pc-proj num ${proj >= g ? 'ok' : 'low'}">No ritmo atual: ${fmtG(k, proj)} no fim do mês</small>` : ''}
+      </div>`;
+    };
+    // Sugestão: soma das metas individuais dos profissionais ativos.
+    const act = state.barbers.filter(b => b.active !== false);
+    const sugg = k => k === 'agend' ? null : ['ticket', 'ocup'].includes(k) ? GB.goalFor(state, '', k) : act.reduce((a, b) => a + GB.goalFor(state, b.id, k), 0);
+    const HG_FIELDS = [['fat', 'Faturamento total (R$)', '0.01'], ['agend', 'Agendamentos', '1'], ['cli', 'Clientes atendidos', '1'], ['serv', 'Serviços realizados', '1'],
+      ...(vis('prod') ? [['prod', 'Produtos vendidos', '1']] : []), ...(vis('planos') ? [['planos', 'Planos mensais', '1']] : []),
+      ['ticket', 'Ticket médio da casa (R$)', '0.01'], ...(vis('ocup') ? [['ocup', 'Ocupação média (%)', '0.1']] : [])];
+    const goalForm = own && ui.hgEdit ? `<section class="section card">
+        <h2 class="section-title">Metas mensais da empresa</h2>
+        <p class="section-note">Deixe em branco o indicador que não tiver meta. A sugestão em cinza é a soma das metas individuais da equipe.</p>
+        <form class="form" data-form="houseGoals" novalidate>
+          <label class="field hg-month"><span>Mês das metas</span><select class="input" name="hgYm" data-change="hgYm">${tgtOpts.map(o => `<option value="${o}" ${o === tgt ? 'selected' : ''}>${ymLabel(o).replace(' de ', '/')}</option>`).join('')}</select></label>
+          <div class="grid-2">${HG_FIELDS.map(([k, l, st]) => { const sg = sugg(k); return `<label class="field"><span>${l}</span><input class="input num" type="number" min="0" step="${st}" name="${k}" id="hg-${k}" value="${isNum(tg[k]) ? tg[k] : ''}" placeholder="${sg ? 'Sugestão: ' + (st === '1' ? Math.round(sg) : Math.round(sg * 100) / 100) : ''}"></label>`; }).join('')}</div>
+          <label class="ind-on"><input type="checkbox" name="dflt" checked> Usar estas metas também nos meses seguintes</label>
+          <p class="form-msg" data-msg></p>
+          <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar metas</button><button class="btn" type="button" data-action="hgEdit">Cancelar</button></div>
+        </form>
+      </section>` : '';
     return `
       <div class="card tm-month"><label class="field"><span class="tm-eyebrow">Mês</span>
-        <select class="input" id="pc-month" data-change="teamMonth">${monthOptions(ym)}</select></label></div>
+        <select class="input" id="pc-month" data-change="teamMonth">${monthOptions(ym)}</select></label>
+        ${own && !ui.hgEdit ? `<button class="btn btn-sm pc-goal-btn" data-action="hgEdit">${icon('target')} ${Object.keys(hg).length ? 'Editar metas da empresa' : 'Cadastrar metas da empresa'}</button>` : ''}</div>
+      ${goalForm}
       ${has ? '' : `<div class="pc-empty">Nenhum dado lançado ainda. Assim que você cadastrar profissionais e lançar as métricas do mês, os totais e o comparativo aparecem aqui automaticamente.</div>`}
       <section class="section card pc-totals">
-        ${stat('Faturamento total', money0(fat))}
-        ${stat('Agendamentos', nf0.format(agend))}
-        ${stat('Clientes atendidos', nf0.format(cli))}
-        ${stat('Serviços realizados', nf0.format(sum('serv')))}
-        ${vis('prod') ? stat('Produtos vendidos', nf0.format(sum('prod'))) : ''}
-        ${vis('planos') ? stat('Planos mensais', nf0.format(sum('planos'))) : ''}
-        ${stat('Ticket médio da casa', cli > 0 ? money0(fat / cli) : '—')}
-        ${rows.some(r => r.sums.n.comanda) ? stat('Maior comanda do mês', money2(Math.max(...rows.map(r => r.sums.n.comanda ? r.sums.comanda : 0)))) : ''}
-        ${vis('ocup') ? stat('Ocupação média', ocups.length ? nf1.format(ocups.reduce((a, v) => a + v, 0) / ocups.length) + '%' : '—') : ''}
-        ${stat('Profissionais', nf0.format(rows.length))}
+        ${stat('Faturamento total', money0(fat), 'fat', fat)}
+        ${stat('Agendamentos', nf0.format(agend), 'agend', agend)}
+        ${stat('Clientes atendidos', nf0.format(cli), 'cli', cli)}
+        ${stat('Serviços realizados', nf0.format(sum('serv')), 'serv', sum('serv'))}
+        ${vis('prod') ? stat('Produtos vendidos', nf0.format(sum('prod')), 'prod', sum('prod')) : ''}
+        ${vis('planos') ? stat('Planos mensais', nf0.format(sum('planos')), 'planos', sum('planos')) : ''}
+        ${stat('Ticket médio da casa', cli > 0 ? money0(fat / cli) : '—', 'ticket', cli > 0 ? fat / cli : null)}
+        ${all.some(r => r.sums.n.comanda) ? stat('Maior comanda do mês', money2(Math.max(...all.map(r => r.sums.n.comanda ? r.sums.comanda : 0)))) : ''}
+        ${vis('ocup') ? stat('Ocupação média', ocups.length ? nf1.format(ocups.reduce((a, v) => a + v, 0) / ocups.length) + '%' : '—', 'ocup', ocups.length ? ocups.reduce((a, v) => a + v, 0) / ocups.length : null) : ''}
+        ${stat('Profissionais', nf0.format(all.length))}
       </section>
+      ${all.length ? `<p class="section-note">Cada número acima é a soma dos ${nf0.format(all.length)} profissionais ${scope ? 'da sua área' : 'da equipe'} no mês${gone.length ? `, incluindo ${gone.length === 1 ? '1 profissional desligado que tem' : `${gone.length} profissionais desligados que têm`} resultados lançados nesse mês` : ''}. O ticket médio da casa é o faturamento total dividido pelo total de clientes, e a ocupação é a média dos profissionais.</p>` : ''}
+      ${has ? evoHouse(ym, scope) : ''}
 ${rows.length ? '' : emptyBarbers()}
       <p class="section-note">O detalhado por profissional, o ranking e o radar estão em Performance da equipe.</p>`;
   }
@@ -3760,6 +3932,7 @@ Content-Type: application/json</pre>
     maybeOvertakeToast();
     hydrateProofs();
     setTimeout(maybeAutoReveal, 700);
+    setTimeout(() => maybeGoalCelebrate(user), 1200);
   }
 
   // Lembrete do checklist: uma vez por dia, enquanto a meta do dia não foi batida.
@@ -3906,6 +4079,14 @@ Content-Type: application/json</pre>
       c.items.splice(i, 1); ui.confirm = null; save(); render();
     },
     popItemMove(el) { const c = popCfgW(), i = Number(el.dataset.i), j = i + Number(el.dataset.d); if (j < 0 || j >= c.items.length) return; [c.items[i], c.items[j]] = [c.items[j], c.items[i]]; save(); render(); },
+    gcClose() { const o = $('.gc-ov'); if (o) o.remove(); },
+    gcNext(el) {
+      const o = $('.gc-ov'); if (o) o.remove();
+      ui.teamMonth = curYm(); ui.hgEdit = true; ui.hgYm = el.dataset.ym;
+      if (location.hash !== '#performance') location.hash = 'performance'; else render();
+      setTimeout(() => { const f = $('#hg-fat'); if (f) { f.focus(); f.scrollIntoView({ block: 'center' }); } }, 150);
+    },
+    hgEdit() { ui.hgEdit = !ui.hgEdit; ui.hgYm = null; render(); if (ui.hgEdit) setTimeout(() => { const f = $('#hg-fat'); if (f) { f.focus(); f.scrollIntoView({ block: 'center' }); } }, 50); },
     cfgTab(el) { ui.cfgTab = el.dataset.t; ui.confirm = null; render(); },
     pdLayout(el) { state.theme = { ...pdTheme(), layout: el.dataset.v }; save(); render(); toast('Formato do escudo: ' + (PD_LAYOUTS.find(l => l.k === el.dataset.v) || {}).n + '.'); },
     pdAutoToggle(el) {
@@ -4336,6 +4517,28 @@ Content-Type: application/json</pre>
       Object.assign(p, { name: name.slice(0, 80), desc: desc.slice(0, 400), video, steps: [...(p.steps || []), ...more], at: Date.now() });
       save(); toast('POP salvo.'); render();
     },
+    houseGoals(f) {
+      const g = {};
+      for (const el of f.querySelectorAll('input[type=number][name]')) {
+        const v = el.value.trim().replace(',', '.');
+        if (v === '') continue;
+        const n = Number(v);
+        if (!isFinite(n) || n < 0) { setMsg(f, 'Confira os valores: use só números positivos.'); el.focus(); return; }
+        if (n > 0) g[el.name] = n;
+      }
+      const tgt = f.elements.hgYm.value, dflt = f.elements.dflt.checked;
+      const M = { ...(state.houseGoalsM || {}) };
+      if (dflt) {
+        // Os meses anteriores guardam as metas que valiam neles.
+        const old = state.houseGoals || {};
+        if (Object.keys(old).length) for (let k = firstYm(); k < tgt; k = addMonths(k, 1)) if (!M[k]) M[k] = { ...old };
+        for (const k of Object.keys(M)) if (k >= tgt) delete M[k];
+        state.houseGoals = g;
+      } else M[tgt] = g;
+      state.houseGoalsM = M;
+      ui.hgEdit = false; ui.hgYm = null; save(); render();
+      toast(Object.keys(g).length ? `Metas de ${monthRange(tgt).label.split(' de ')[0]} salvas${dflt ? ' (valem também para os meses seguintes)' : ''}.` : 'Metas removidas.');
+    },
     pdBday(f) {
       const v = val(f, 'bday');
       if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) { setMsg(f, 'Data inválida.'); return; }
@@ -4401,6 +4604,7 @@ Content-Type: application/json</pre>
     tvSoundKind(el) { Sound.kind = el.value; Sound.play(el.value, true); },
     perfBarber(el) { ui.perfBarber = el.value; location.hash = 'perfil-' + el.value; },
     teamMonth(el) { ui.teamMonth = el.value; ui.fcPeek = false; render(); },
+    hgYm(el) { ui.hgYm = el.value; render(); },
     lanDate(el) { ui.lanDate = el.value; },
     async leadStatus(el) {
       const l = ui.leadsData && ui.leadsData.list && ui.leadsData.list.find(x => x.id === el.dataset.id); if (!l) return;
@@ -4512,6 +4716,7 @@ Content-Type: application/json</pre>
   });
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && document.getElementById('install-sheet')) { closeInstall(); return; }
+    if (e.key === 'Escape' && $('.gc-ov')) { $('.gc-ov').remove(); return; }
     if (e.key === 'Escape' && ui.orgSheet) { ui.orgSheet = null; render(); return; }
     if (e.key === 'Escape' && ui.popView) { ui.popView = null; render(); return; }
     if (e.key === 'Escape') {
