@@ -585,7 +585,7 @@
     { group: 'Apresentações', items: [
       { r: 'apresentacao', t: 'Tela da loja', i: 'monitor' },
       { r: 'fechamento', t: 'Fechamento do mês', i: 'clipboard', g: 1, a: 1 },
-      { r: 'relatorios', t: 'Relatórios mensais', i: 'file', g: 1 },
+      { r: 'relatorios', t: 'Relatórios mensais', i: 'file' },
       { r: 'temas', t: 'Temas', i: 'palette', g: 1 },
     ] },
     { group: 'GP · Gestão de pessoas', items: [
@@ -3656,7 +3656,137 @@ Content-Type: application/json</pre>
       </footer>
     </article></div></div>`;
   }
-  function pageRelatorios() {
+  // ---------- Card do mês do profissional (imagem PNG no formato stories, 1080×1920) ----------
+  const CARD_TIERS = { 'fx-mvp': ['#7fd4ff', '#1b5fd6'], 'fx-gold': ['#f8d06c', '#a97a22'], 'fx-silver': ['#eef1f7', '#7f899c'], 'fx-bronze': ['#f4a95c', '#8a4a1c'], 'fx-plain': ['#9b8cff', '#5b46c9'] };
+  const cardCache = {};
+  function loadImg(src) {
+    return new Promise(res => {
+      if (!src) return res(null);
+      const im = new Image();
+      if (!/^data:|^blob:/.test(src) && !src.startsWith(location.origin) && /^https?:/.test(src)) im.crossOrigin = 'anonymous';
+      im.onload = () => res(im); im.onerror = () => res(null); im.src = src;
+    });
+  }
+  function mixHex(a, b, t) { const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)); const A = p(a), B2 = p(b); return '#' + A.map((v, i) => Math.round(v + (B2[i] - v) * t).toString(16).padStart(2, '0')).join(''); }
+  function rrect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+  function fitFont(c, text, weight, size, family, maxW) { let f = size; do { c.font = `${weight} ${f}px ${family}`; f -= 2; } while (c.measureText(text).width > maxW && f > 20); }
+  async function drawCard(ym, bid, withPhoto = true) {
+    const R = monthR(ym), r = R.rows.find(x => x.barber.id === bid);
+    if (!r) return null;
+    const n = R.rows.length, place = r.pos <= 3 ? r.pos : 0;
+    const tier = place ? fxTier(R, r, place) : { cls: 'fx-plain', label: ord(r.pos) };
+    const [c1, c2] = CARD_TIERS[tier.cls] || CARD_TIERS['fx-plain'];
+    const D = "'Archivo', 'Arial Black', sans-serif", T = "'Hind', 'Helvetica Neue', Arial, sans-serif";
+    try { await Promise.all([document.fonts.load(`800 80px Archivo`), document.fonts.load(`600 40px Hind`), document.fonts.load(`500 40px Hind`)]); } catch (e) { /* usa a fonte do sistema */ }
+    const W = 1080, H = 1920, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const sp = v => { try { c.letterSpacing = v; } catch (e) { /* opcional */ } };
+    // Fundo
+    let g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#191536'); g.addColorStop(0.5, '#0c0b18'); g.addColorStop(1, '#090812'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+    g = c.createRadialGradient(W / 2, 360, 40, W / 2, 360, 760); g.addColorStop(0, c2 + '66'); g.addColorStop(1, 'transparent'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+    for (let i = 0; i < 40; i++) { c.fillStyle = `rgba(255,255,255,${0.15 + ((i * 37) % 10) / 30})`; c.beginPath(); c.arc((i * 263) % W, (i * 577) % H, 1.5 + (i % 3), 0, 7); c.fill(); }
+    // Cabeçalho
+    c.textAlign = 'center'; c.fillStyle = '#ffffff'; sp('4px'); fitFont(c, (state.company.name || '').toUpperCase(), 700, 34, T, 900); c.fillText((state.company.name || '').toUpperCase(), W / 2, 92);
+    sp('2px'); c.font = `500 30px ${T}`; c.fillStyle = c1; c.fillText(`Resultados de ${ymLabel(ym).replace(' de ', '/')}`, W / 2, 138); sp('0px');
+    // Card com borda e brilho
+    const X = 56, Y = 176, CW = W - 112, CH = 1630;
+    c.save(); c.shadowColor = c1 + 'aa'; c.shadowBlur = 70; rrect(c, X, Y, CW, CH, 64); g = c.createLinearGradient(X, Y, X + CW, Y + CH); g.addColorStop(0, c1); g.addColorStop(0.5, c2); g.addColorStop(1, c1); c.fillStyle = g; c.fill(); c.restore();
+    rrect(c, X + 4, Y + 4, CW - 8, CH - 8, 60); g = c.createLinearGradient(0, Y, 0, Y + CH); g.addColorStop(0, '#1b1832'); g.addColorStop(0.45, '#100f1e'); g.addColorStop(1, '#0a0912'); c.fillStyle = g; c.fill();
+    c.save(); rrect(c, X + 4, Y + 4, CW - 8, CH - 8, 60); c.clip(); g = c.createLinearGradient(X, Y, X + CW, Y + 700); g.addColorStop(0, 'rgba(255,255,255,0.07)'); g.addColorStop(0.45, 'rgba(255,255,255,0.02)'); g.addColorStop(0.46, 'transparent'); c.fillStyle = g; c.fillRect(X, Y, CW, CH); c.restore();
+    // Foto
+    const PX = W / 2, PY = Y + 180, PR = 130;
+    c.save(); c.shadowColor = c1; c.shadowBlur = 40; c.beginPath(); c.arc(PX, PY, PR + 10, 0, 7); g = c.createLinearGradient(PX - PR, PY - PR, PX + PR, PY + PR); g.addColorStop(0, c1); g.addColorStop(1, c2); c.fillStyle = g; c.fill(); c.restore();
+    c.save(); c.beginPath(); c.arc(PX, PY, PR, 0, 7); c.clip(); c.fillStyle = '#15161f'; c.fillRect(PX - PR, PY - PR, PR * 2, PR * 2);
+    const im = withPhoto ? await loadImg(r.barber.photo) : null;
+    if (im) { const k = Math.max((PR * 2) / im.width, (PR * 2) / im.height), iw = im.width * k, ih = im.height * k; c.drawImage(im, PX - iw / 2, PY - ih * 0.42, iw, ih); }
+    else { c.fillStyle = c1; c.font = `800 120px ${D}`; c.textBaseline = 'middle'; c.fillText(r.barber.name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase(), PX, PY + 6); c.textBaseline = 'alphabetic'; }
+    c.restore();
+    // Selo (posição ou título)
+    let y = PY + PR + 66;
+    c.save(); c.shadowColor = c1; c.shadowBlur = 30; rrect(c, PX - 120, y - 52, 240, 76, 38); g = c.createLinearGradient(PX - 120, 0, PX + 120, 0); g.addColorStop(0, '#ffffff'); g.addColorStop(1, c1); c.fillStyle = g; c.fill(); c.restore();
+    c.fillStyle = '#16122e'; c.font = `800 44px ${D}`; c.fillText(tier.label, PX, y + 2);
+    // Nome, função e posição
+    y += 100; c.fillStyle = '#ffffff'; fitFont(c, r.barber.name, 800, 78, D, CW - 120); c.fillText(r.barber.name, PX, y);
+    y += 52; c.fillStyle = '#d8d4e8'; c.font = `500 40px ${T}`; c.fillText(r.barber.role || (MARCA === 'salao' ? 'Profissional' : 'Barbeiro'), PX, y);
+    y += 68; const pos = `${ord(r.pos)} de ${n}`; c.font = `600 40px ${T}`; const pw = c.measureText(pos).width + 70;
+    rrect(c, PX - pw / 2, y - 46, pw, 66, 33); c.strokeStyle = c1 + 'aa'; c.lineWidth = 3; c.stroke(); c.fillStyle = '#ffffff'; c.fillText(pos, PX, y);
+    // Pontuação
+    y += 142; c.textAlign = 'right'; sp('8px'); c.font = `500 34px ${T}`; c.fillStyle = '#e9e6f5'; c.fillText('PONTUAÇÃO', PX - 40, y - 6); sp('0px');
+    c.textAlign = 'left'; c.save(); c.shadowColor = c1; c.shadowBlur = 40; c.fillStyle = mixHex(c1, '#ffffff', 0.55); c.font = `800 136px ${D}`; c.fillText(score(r.overall), PX - 10, y + 6); c.restore();
+    // Categorias lideradas
+    y += 40; const bx = PX - 330, bw = 660, bh = 180;
+    rrect(c, bx, y, bw, bh, 44); c.fillStyle = 'rgba(0,0,0,0.35)'; c.fill(); c.strokeStyle = c1 + '99'; c.lineWidth = 3; c.stroke();
+    c.textAlign = 'center'; c.font = `800 96px ${D}`; const a = String(r.leads.length), sl = '/', b = String(R.N);
+    const wa = c.measureText(a).width, ws = c.measureText(sl).width, wb = c.measureText(b).width, sx = PX - (wa + ws + wb) / 2;
+    c.textAlign = 'left'; c.fillStyle = '#ffffff'; c.fillText(a, sx, y + 100); c.fillStyle = '#6d6a80'; c.fillText(sl, sx + wa, y + 100); c.fillStyle = '#ffffff'; c.fillText(b, sx + wa + ws, y + 100);
+    c.textAlign = 'center'; sp('8px'); c.font = `500 30px ${T}`; c.fillStyle = '#e9e6f5'; c.fillText('CATEGORIAS LIDERADAS', PX, y + 140); sp('0px');
+    rrect(c, bx + 56, y + 156, bw - 112, 12, 6); c.fillStyle = 'rgba(255,255,255,0.1)'; c.fill();
+    if (R.N && r.leads.length) { rrect(c, bx + 56, y + 156, Math.max(12, (bw - 112) * r.leads.length / R.N), 12, 6); g = c.createLinearGradient(bx, 0, bx + bw, 0); g.addColorStop(0, c2); g.addColorStop(1, c1); c.fillStyle = g; c.fill(); }
+    // Indicadores
+    const inds = R.active, cols = inds.length <= 4 ? 2 : 3, rowsN = Math.ceil(inds.length / cols);
+    const gx = X + 44, gy = y + bh + 32, gw = CW - 88, gap = 20, cw = (gw - gap * (cols - 1)) / cols, ch = Math.min(200, (Y + CH - 40 - gy - gap * (rowsN - 1)) / rowsN);
+    inds.forEach((ind, i) => {
+      const cx = gx + (i % cols) * (cw + gap), cy = gy + Math.floor(i / cols) * (ch + gap), lead = ind.leaders.includes(bid);
+      c.save(); if (lead) { c.shadowColor = c1; c.shadowBlur = 26; } rrect(c, cx, cy, cw, ch, 30); c.fillStyle = lead ? c2 + '44' : 'rgba(255,255,255,0.05)'; c.fill(); c.lineWidth = lead ? 3 : 2; c.strokeStyle = lead ? c1 : 'rgba(255,255,255,0.12)'; c.stroke(); c.restore();
+      c.textAlign = 'left'; c.fillStyle = '#e4e1ef'; fitFont(c, ind.label, 500, 28, T, cw - 44); c.fillText(ind.label, cx + 22, cy + 42);
+      const v = fmt(ind, r.values[ind.key]) + (ind.key === 'check' ? ' pts' : ''); c.fillStyle = '#ffffff'; fitFont(c, v, 800, 46, D, cw - 44); c.fillText(v, cx + 22, cy + 100);
+      c.fillStyle = c1; c.font = `600 28px ${T}`; c.fillText(`${ord(r.ranks[ind.key])} de ${n}${lead ? '  ★' : ''}`, cx + 22, cy + 142);
+      rrect(c, cx + 22, cy + ch - 26, cw - 44, 10, 5); c.fillStyle = 'rgba(255,255,255,0.1)'; c.fill();
+      rrect(c, cx + 22, cy + ch - 26, Math.max(10, (cw - 44) * Math.max(3, r.scores[ind.key]) / 100), 10, 5); g = c.createLinearGradient(cx, 0, cx + cw, 0); g.addColorStop(0, c2); g.addColorStop(1, c1); c.fillStyle = g; c.fill();
+    });
+    // Rodapé
+    c.textAlign = 'center'; sp('3px'); c.font = `600 28px ${T}`; c.fillStyle = 'rgba(255,255,255,0.7)'; c.fillText(`${B().name.toUpperCase()} · CADA ATENDIMENTO CONTA`, W / 2, H - 54); sp('0px');
+    return cv;
+  }
+  async function cardBlob(ym, bid) {
+    const key = ym + '|' + bid;
+    if (cardCache[key]) return cardCache[key];
+    let cv = await drawCard(ym, bid);
+    if (!cv) return null;
+    let blob = await new Promise(res => { try { cv.toBlob(res, 'image/png'); } catch (e) { res(null); } });
+    if (!blob) { cv = await drawCard(ym, bid, false); blob = await new Promise(res => cv.toBlob(res, 'image/png')); } // foto sem permissão: card com as iniciais
+    cardCache[key] = blob;
+    return blob;
+  }
+  const cardName = (ym, bid) => `card-${(barberById(bid)?.name || 'profissional').toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${ym}.png`;
+  async function hydrateCards() {
+    for (const img of document.querySelectorAll('img[data-card]')) {
+      if (img.dataset.done) continue;
+      img.dataset.done = '1';
+      const [ym, bid] = img.dataset.card.split('|');
+      const blob = await cardBlob(ym, bid);
+      if (blob && img.isConnected) img.src = URL.createObjectURL(blob);
+    }
+  }
+  const cardDlLog = () => readJSON('cardDl', {});
+  // Lista de cards de um profissional (o próprio profissional vê só os dele).
+  function cardsFor(bid) {
+    const log = cardDlLog();
+    const items = repMonths().map(ym => {
+      const R = monthR(ym), r = R.rows.find(x => x.barber.id === bid);
+      if (!r || !Object.keys(r.sums.n).length || darkFor(monthRange(ym))) return '';
+      const k = ym + '|' + bid, dl = log[k];
+      return `<div class="cd-item">
+        <img class="cd-thumb" data-card="${k}" alt="Card de ${esc(ymLabel(ym))}" width="270" height="480">
+        <div class="cd-info"><b>${esc(ymLabel(ym))}</b><span class="num">${ord(r.pos)} de ${R.rows.length} · ${score(r.overall)} pts</span>
+          ${dl ? `<span class="chip chip-ok">${icon('check')} Baixado em ${esc(dl.split('-').reverse().slice(0, 2).join('/'))}</span>` : ym === curYm() ? '<span class="chip chip-soft">mês em andamento</span>' : ''}
+          <button class="btn btn-sm btn-primary" data-action="cardDl" data-k="${k}">${icon('download')} ${dl ? 'Baixar de novo' : 'Baixar card'}</button></div>
+      </div>`;
+    }).join('');
+    return items || '<p class="muted">Ainda não há meses com resultados para gerar o card.</p>';
+  }
+  function pageMeusCards(user) {
+    const bid = user.barberId;
+    if (!bid) return `<div class="card muted">Seu cadastro ainda não está ligado a um profissional. Fale com o gestor.</div>`;
+    const sel = ui.cardsOf && ui.cardsOf !== bid ? ui.cardsOf : bid;
+    return `<section class="section card">
+      <h2 class="section-title">Meus cards do mês</h2>
+      <p class="section-note">Seu card com a colocação, a pontuação e os indicadores de cada mês, no tamanho dos stories. Toque em Baixar card para salvar no celular ou postar. Os cards ficam guardados aqui, mês a mês.</p>
+      <div class="cd-list">${cardsFor(sel)}</div>
+    </section>`;
+  }
+  function pageRelatorios(user) {
+    if (!isGestor(user)) return pageMeusCards(user);
     if (ui.repYm) {
       const ym = ui.repYm;
       return `<div class="card rp-bar">
@@ -3666,6 +3796,12 @@ Content-Type: application/json</pre>
           ${state.company.logo ? '' : `<p class="rp-hint">${icon('upload')}<span>Para o painel sair com o logo da sua empresa, envie o logo em <a href="#empresa">Configurações → Empresa</a>.</span></p>`}
         </div>
         ${repBoard(ym)}
+        ${(() => { const rows = monthR(ym).rows.filter(r => Object.keys(r.sums.n).length); return rows.length ? `<section class="section card">
+          <h2 class="section-title">Cards individuais</h2>
+          <p class="section-note">O card de cada profissional neste mês, no tamanho dos stories. Cada profissional também encontra o próprio card em Relatórios mensais.</p>
+          <div class="cd-list">${rows.map(r => { const k = ym + '|' + r.barber.id; return `<div class="cd-item"><img class="cd-thumb" data-card="${k}" alt="Card de ${esc(r.barber.name)}" width="270" height="480">
+            <div class="cd-info"><b>${esc(r.barber.name)}</b><span class="num">${ord(r.pos)} de ${rows.length} · ${score(r.overall)} pts</span><button class="btn btn-sm btn-primary" data-action="cardDl" data-k="${k}">${icon('download')} Baixar card</button></div></div>`; }).join('')}</div>
+        </section>` : ''; })()}
         <p class="section-note">No PDF, o painel sai em uma folha A4 deitada. No celular, toque em Baixar PDF e escolha "Salvar como PDF" ou compartilhe direto no WhatsApp.</p>`;
     }
     const list = repMonths().map(ym => {
@@ -3742,7 +3878,7 @@ Content-Type: application/json</pre>
     inicio: { t: 'Início', r: pageInicio },
     fechamento: { t: 'Fechamento do mês', r: pageFechamento, g: 1, a: 1 },
     temas: { t: 'Temas', r: pageTemas, g: 1 },
-    relatorios: { t: 'Relatórios mensais', r: pageRelatorios, g: 1 },
+    relatorios: { t: 'Relatórios mensais', r: pageRelatorios },
     organograma: { t: 'Organograma', r: pageOrganograma, g: 1 },
     checklist: { t: 'Checklist Agenda Cheia', r: pageChecklist },
     pops: { t: 'POPs · Guia do Sucesso', r: pagePops },
@@ -4149,6 +4285,7 @@ Content-Type: application/json</pre>
     maybeRemindPop(user);
     maybeOvertakeToast();
     hydrateProofs();
+    if (document.querySelector('img[data-card]')) hydrateCards();
     setTimeout(maybeAutoReveal, 700);
     setTimeout(() => maybeGoalCelebrate(user), 1200);
   }
@@ -4297,6 +4434,17 @@ Content-Type: application/json</pre>
       c.items.splice(i, 1); ui.confirm = null; save(); render();
     },
     popItemMove(el) { const c = popCfgW(), i = Number(el.dataset.i), j = i + Number(el.dataset.d); if (j < 0 || j >= c.items.length) return; [c.items[i], c.items[j]] = [c.items[j], c.items[i]]; save(); render(); },
+    async cardDl(el) {
+      const k = el.dataset.k, [ym, bid] = k.split('|');
+      const blob = await cardBlob(ym, bid);
+      if (!blob) { toast('Não foi possível gerar o card.'); return; }
+      const name = cardName(ym, bid), file = new File([blob], name, { type: 'image/png' });
+      let done = false;
+      try { if (navigator.canShare && navigator.canShare({ files: [file] }) && /Android|iPhone|iPad/i.test(navigator.userAgent)) { await navigator.share({ files: [file], title: 'Meu card do mês' }); done = true; } } catch (e) { if (e && e.name === 'AbortError') return; }
+      if (!done) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
+      const log = cardDlLog(); log[k] = todayIso(); DB.pref.set('cardDl', JSON.stringify(log));
+      toast('Card salvo.'); render();
+    },
     repOpen(el) { ui.repYm = el.dataset.ym; if (location.hash !== '#relatorios') location.hash = 'relatorios'; else render(); window.scrollTo(0, 0); },
     repBack() { ui.repYm = null; render(); },
     repPrint() {
