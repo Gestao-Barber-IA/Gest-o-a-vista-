@@ -4008,9 +4008,10 @@ Content-Type: application/json</pre>
     const W = 1080, H = 1920, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
     const c = cv.getContext('2d'), sp = v => { try { c.letterSpacing = v; } catch (e) { /* opcional */ } };
     let g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, mixHex(Bc, '#000000', 0.72)); g.addColorStop(0.55, mixHex(A, '#000000', 0.88)); g.addColorStop(1, '#050507'); c.fillStyle = g; c.fillRect(0, 0, W, H);
-    g = c.createRadialGradient(W / 2, 860, 60, W / 2, 860, 900); g.addColorStop(0, A + '55'); g.addColorStop(1, 'transparent'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+    const PY = opt.py || 860;
+    g = c.createRadialGradient(W / 2, PY, 60, W / 2, PY, 900); g.addColorStop(0, A + '55'); g.addColorStop(1, 'transparent'); c.fillStyle = g; c.fillRect(0, 0, W, H);
     // raios de luz atrás da foto
-    c.save(); c.translate(W / 2, 860); for (let i = 0; i < 24; i++) { c.rotate(Math.PI / 12); c.fillStyle = `rgba(255,255,255,${i % 2 ? 0.035 : 0.06})`; c.beginPath(); c.moveTo(0, 0); c.lineTo(-60, -1100); c.lineTo(60, -1100); c.closePath(); c.fill(); } c.restore();
+    c.save(); c.translate(W / 2, PY); for (let i = 0; i < 24; i++) { c.rotate(Math.PI / 12); c.fillStyle = `rgba(255,255,255,${i % 2 ? 0.035 : 0.06})`; c.beginPath(); c.moveTo(0, 0); c.lineTo(-60, -1100); c.lineTo(60, -1100); c.closePath(); c.fill(); } c.restore();
     const conf = [A, Bc, '#ffffff', mixHex(A, '#ffffff', 0.5)];
     for (let i = 0; i < 90; i++) { const x = (i * 197) % W, y = (i * 331) % H; if ((y > 520 && y < 1320 && x > 220 && x < 860) || (y > 90 && y < 450 && x > 100 && x < 980) || (y > 1150 && y < 1780 && x > 40 && x < 1040)) continue; c.save(); c.translate(x, y); c.rotate(i * 0.7); c.globalAlpha = 0.75; c.fillStyle = conf[i % 4]; if (i % 3) c.fillRect(-6, -11, 12, 22); else { c.beginPath(); c.arc(0, 0, 7, 0, 7); c.fill(); } c.restore(); }
     // logo e empresa
@@ -4019,9 +4020,10 @@ Content-Type: application/json</pre>
     c.textAlign = 'center'; c.fillStyle = '#ffffff'; sp('5px'); fitFont(c, (state.company.name || '').toUpperCase(), 700, 32, T, 900); c.fillText((state.company.name || '').toUpperCase(), W / 2, 276); sp('0px');
     // título
     c.save(); c.shadowColor = A; c.shadowBlur = 40; g = c.createLinearGradient(0, 300, 0, 420); g.addColorStop(0, '#ffffff'); g.addColorStop(1, mixHex(A, '#ffffff', 0.25)); c.fillStyle = g;
-    sp('4px'); fitFont(c, opt.title, 700, 120, S, 980); c.fillText(opt.title, W / 2, 410); sp('0px'); c.restore();
+    sp('4px'); fitFont(c, opt.title, 700, 120, S, 980); c.fillText(opt.title, W / 2, opt.when ? 392 : 410); sp('0px'); c.restore();
+    if (opt.when) { sp('10px'); c.font = `700 38px ${T}`; c.fillStyle = A; c.fillText(opt.when, W / 2, 452); sp('0px'); }
     // foto
-    const PX = W / 2, PY = 860, PR = 290;
+    const PX = W / 2, PR = 290;
     c.save(); c.shadowColor = A; c.shadowBlur = 70; c.beginPath(); c.arc(PX, PY, PR + 18, 0, 7); g = c.createLinearGradient(PX - PR, PY - PR, PX + PR, PY + PR); g.addColorStop(0, mixHex(A, '#ffffff', 0.4)); g.addColorStop(0.5, A); g.addColorStop(1, Bc); c.fillStyle = g; c.fill(); c.restore();
     c.save(); c.beginPath(); c.arc(PX, PY, PR, 0, 7); c.clip(); c.fillStyle = '#15161f'; c.fillRect(PX - PR, PY - PR, PR * 2, PR * 2);
     const im = opt.photo !== false ? await loadImg(b.photo) : null;
@@ -4032,7 +4034,8 @@ Content-Type: application/json</pre>
     // nome e textos
     let y = PY + PR + 130;
     c.save(); c.shadowColor = 'rgba(0,0,0,0.6)'; c.shadowBlur = 20; c.fillStyle = '#ffffff'; fitFont(c, b.name, 800, 96, D, 960); c.fillText(b.name, W / 2, y); c.restore();
-    y += 78; sp('8px'); c.font = `700 40px ${T}`; c.fillStyle = A; fitFont(c, opt.sub, 700, 40, T, 960); c.fillText(opt.sub, W / 2, y); sp('0px');
+    if (opt.cheer) { y += 104; c.save(); c.shadowColor = A; c.shadowBlur = 30; c.fillStyle = mixHex(A, '#ffffff', 0.35); c.font = `700 96px ${S}`; c.fillText(opt.cheer, W / 2, y); c.restore(); }
+    else { y += 78; sp('8px'); c.font = `700 40px ${T}`; c.fillStyle = A; fitFont(c, opt.sub, 700, 40, T, 960); c.fillText(opt.sub, W / 2, y); sp('0px'); }
     y += 90; c.font = `italic 600 46px ${S}`; c.fillStyle = 'rgba(255,255,255,0.92)';
     const words = opt.msg.split(' '); let line = '', lines = [];
     for (const w of words) { const t = line ? line + ' ' + w : w; if (c.measureText(t).width > 880) { lines.push(line); line = w; } else line = t; } if (line) lines.push(line);
@@ -4064,9 +4067,8 @@ Content-Type: application/json</pre>
     });
   }
   async function drawCongrats(ym, bid, withPhoto) {
-    const R = monthR(ym), tt = R.title.barberId === bid ? R.title.type : null;
     const mon = cap(MONTH_NAMES[Number(ym.slice(5, 7)) - 1]) + ' ' + ym.slice(0, 4);
-    return drawCelebration(bid, { photo: withPhoto, title: 'Parabéns!', sub: (tt === 'mvp' ? 'MVP DO MÊS' : 'DESTAQUE DO MÊS') + ' · ' + mon.toUpperCase(), decor: drawCrown,
+    return drawCelebration(bid, { photo: withPhoto, title: 'Destaque do mês', when: mon.toUpperCase(), cheer: 'Parabéns!', py: 915, decor: drawCrown,
       msg: 'Obrigado pela dedicação e pela entrega em cada atendimento. Você é inspiração para toda a equipe!', foot: 'ORGULHO DA EQUIPE ' + (state.company.name || '').toUpperCase() });
   }
   async function drawBirthday(bid, withPhoto) {
