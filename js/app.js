@@ -1233,15 +1233,144 @@
       ${howLink()}`;
   }
 
+  // ---------- Tutoriais: "Como usar esta tela", Central de ajuda e Primeiros passos ----------
+  // Vídeos curtos de cada tela: cole aqui o link (YouTube, Instagram, Drive…) quando gravar. Ex.: lancamentos: 'https://youtu.be/...'
+  const HELP_VIDEOS = {};
+  const HELP = {
+    inicio: { t: 'Início', ic: 'grid', steps: [
+      'Escolha o período no topo: Semana, Mês ou Trimestre. As setas mudam para o período anterior ou o seguinte.',
+      'O Pódio mostra os 3 primeiros. O Ranking em tempo real mostra todos, com a pontuação de 0 a 100 e quantos indicadores cada um lidera.',
+      'Quando alguém ultrapassa outra pessoa, aparece um aviso no topo e no sino de notificações.',
+      'Toque em qualquer {pro} do ranking para abrir a performance completa dele.',
+      'Para o gestor, o Início também mostra os Primeiros passos (conta nova) e as Pendências do dia.',
+    ], tips: ['Os ícones de interrogação (?) explicam cada parte da tela.', 'Lançamentos feitos à mão como total do mês não aparecem na visão por Semana; use o Mês.'] },
+    lancamentos: { t: 'Lançamentos', ic: 'wallet', gestor: 1, steps: [
+      'Abra Lançamentos no menu e escolha o mês no topo.',
+      'Toque no {pro} e preencha os totais do mês: faturamento, clientes, serviços, planos, produtos e os demais indicadores ativos.',
+      'Não precisa apertar Salvar: cada campo salva sozinho e mostra "Salvo automaticamente".',
+      'Campos com cadeado vêm da integração com o seu sistema de agenda. Se precisar corrigir um deles, toque no cadeado para destravar.',
+      'O ranking, o pódio e a Tela da loja se atualizam na hora, em todos os aparelhos.',
+    ], tips: ['Lance pelo menos uma vez por semana: o ranking ao vivo é o que motiva a equipe.', 'Ticket médio é calculado sozinho (faturamento ÷ clientes).', 'Com a integração ligada (plano pago), os números chegam sozinhos.'] },
+    barbeiros: { t: 'Adicionar profissional', ic: 'users', gestor: 1, steps: [
+      'Em Adicionar profissional, preencha o nome, a função e, se quiser, a foto e a data de nascimento.',
+      'Escolha o nível de acesso: Profissional (vê o próprio desempenho), Líder (ajuda a conferir e lançar) ou Gestor (acesso total).',
+      'Toque em Adicionar. A pessoa entra na Equipe, logo abaixo.',
+      'Para ela entrar no app pelo próprio celular, envie o convite pelo botão WhatsApp, E-mail ou Copiar link.',
+      'Quando ela criar a senha pelo convite, aparece em Aguardando aprovação: toque em Aprovar.',
+    ], tips: ['Com a data de nascimento, o card de aniversário fica pronto sozinho em Relatórios mensais.', 'Foto de rosto, de frente e com boa luz deixa os cards e a TV muito mais bonitos.', 'Quem saiu da equipe pode ser desligado: some do ranking, mas o histórico continua.'] },
+    performance: { t: 'Performance', ic: 'chart', steps: [
+      'Para o gestor, é a Performance da empresa: faturamento do mês, quanto falta para a meta e quanto precisa vender por dia.',
+      'Em Metas da empresa, defina as metas do mês (faturamento, clientes, ticket…). A barra mostra o progresso e, ao bater a meta, aparece o card de conquista.',
+      'Mais abaixo ficam a evolução mês a mês, a participação de cada {pro} e o relatório em PDF.',
+      'Para o {pro}, é a Minha performance: pontuação, posição, indicadores, metas individuais e evolução.',
+    ], tips: ['As metas podem valer para todos os meses ou só para um mês específico.', 'Metas individuais de cada {pro} ficam em Configurações › Indicadores e metas e em Lançamentos.'] },
+    apresentacao: { t: 'Tela da loja (TV)', ic: 'monitor', steps: [
+      'No computador ou na TV com navegador, entre no app com a conta do gestor.',
+      'Toque no ícone da TV no topo (ou em Tela da loja, no menu).',
+      'Deixe em tela cheia (tecla F11 no computador). A tela se ajusta sozinha a qualquer tamanho de TV.',
+      'O ranking, o pódio e as ultrapassagens atualizam sozinhos sempre que alguém lança resultados.',
+    ], tips: ['Use um cabo HDMI do notebook para a TV, ou o navegador da própria Smart TV.', 'Deixe a TV ligada onde a equipe passa: o placar à vista é o que gera a competição saudável.'] },
+    fechamento: { t: 'Fechamento do mês', ic: 'crown', gestor: 1, steps: [
+      'No início do mês, abra Fechamento do mês e confira o Mês do fechamento (o mês que terminou).',
+      'Se quiser, envie as músicas da abertura e de cada colocação do pódio, e escolha o trecho que vai tocar.',
+      'Reúna a equipe na frente da TV, coloque em tela cheia e toque em Iniciar fechamento.',
+      'Avance com as setas ou com o toque. Cada lugar do pódio, do 3º ao 1º, só aparece quando você tocar em Revelar.',
+      'No fim vêm os Líderes do mês e o Parabéns ao pódio. A revelação aparece também no celular da equipe.',
+    ], tips: ['Com o Pódio surpresa ligado (Configurações), as colocações ficam escondidas nos últimos dias do mês até a revelação.', 'Transforme em ritual: mesmo dia, mesmo horário, todo mês.'] },
+    relatorios: { t: 'Relatórios mensais', ic: 'file', steps: [
+      'Escolha o mês na lista de Relatórios mensais.',
+      'Abrir painel mostra o infográfico do mês; Baixar PDF guarda ou envia para quem quiser.',
+      'Em Cards individuais, baixe o card de cada {pro} para os stories. O 1º lugar ganha o card especial do MVP ou do Destaque, e também o Card de parabéns.',
+      'Em Aniversariantes, baixe o card de aniversário de quem faz aniversário no mês.',
+    ], tips: ['Os cards usam a foto e o logo cadastrados: quanto melhor a foto, mais bonito o card.', 'Peça para a equipe repostar o card: divulga {acasa} e valoriza o profissional.'] },
+    temas: { t: 'Temas', ic: 'palette', gestor: 1, steps: [
+      'Em Tema da temporada, escolha um tema (Copa, Natal, aniversário {dacasa}…) ou deixe no automático pelo calendário.',
+      'No automático, marque quais temas podem entrar sozinhos nas datas.',
+      'Em Formato do escudo, escolha o desenho do pódio. A Prévia do pódio mostra como vai ficar.',
+      'Informe a data de inauguração para o tema de aniversário {dacasa} entrar sozinho.',
+    ], tips: ['O tema muda o visual do pódio no app e na TV.'] },
+    time: { t: 'Performance da equipe', ic: 'trophy', steps: [
+      'Escolha o mês no topo. O Detalhado por profissional mostra a pontuação e os indicadores de cada um.',
+      'Toque em um {pro} para ver onde ele é forte e onde precisa melhorar.',
+      'Use os Comparativos para comparar dois {pros}, ou o {pro} com ele mesmo em outro mês.',
+      'Use esses dados na conversa de feedback: objetiva e em poucos minutos.',
+    ], tips: ['Os níveis de carreira (Bronze, Prata, Ouro e Diamante) usam a média das pontuações mensais.'] },
+    checklist: { t: 'Checklist Agenda Cheia', ic: 'checksq', steps: [
+      'O {pro} abre o Checklist todos os dias e registra as ações feitas: stories, posts, abordagens, convites…',
+      'Em cada ação, toque em Tirar foto (ou envie um print) como prova.',
+      'O gestor ou o líder confere as provas e toca em Aprovar ou Recusar. Só as ações aprovadas pontuam.',
+      'Os pontos entram no ranking, no indicador Checklist Agenda Cheia.',
+      'Ligue os Lembretes de posts para o app avisar enquanto a meta do dia não for batida.',
+    ], tips: ['As fotos das provas são apagadas em 7 dias; os pontos continuam.', 'O gestor configura as ações, os pontos e as metas do checklist na própria tela.', 'Para o gestor, as provas pendentes também aparecem em Pendências, no Início.'] },
+    pops: { t: 'POPs · Guia do Sucesso', ic: 'book', steps: [
+      'POP é o passo a passo de cada processo {dacasa}: recepção, atendimento, limpeza, fechamento de caixa…',
+      'O gestor toca em Novo POP, dá um nome, escreve a descrição e envia as fotos do passo a passo, na ordem.',
+      'Se tiver vídeo, cole o link em Link do vídeo.',
+      'A equipe abre o POP, passa as fotos e assiste ao vídeo sempre que tiver dúvida.',
+    ], tips: ['Use a busca para achar um POP pelo nome.', 'Comece pelos 3 processos que mais geram erro ou reclamação.'] },
+    organograma: { t: 'Organograma', ic: 'org', gestor: 1, steps: [
+      'Monte a estrutura: níveis (ex.: Gestor, Líder, Profissional) e quem fica em cada área.',
+      'Defina quem vê o quê: o líder pode conferir o checklist e lançar métricas específicas da área dele.',
+      'Os pedidos de acesso aparecem para aprovar ou recusar.',
+    ], tips: ['Delegar para líderes tira o dono da operação do dia a dia.'] },
+    configuracoes: { t: 'Configurações', ic: 'gear', gestor: 1, steps: [
+      'Empresa: nome, CNPJ, telefone, e-mail, logo e o tipo de negócio. Ali também fica a Cópia dos seus dados.',
+      'Indicadores e metas: ligue ou desligue indicadores, mude os pesos, defina as metas mensais da equipe, a regra da taxa de ocupação e o Pódio surpresa.',
+      'Integração & API: a chave para o seu sistema de agenda mandar os números sozinho e o teste de importação.',
+      'Dados: onde os dados ficam salvos e a situação da nuvem.',
+    ], tips: ['Mudou um peso? O ranking recalcula na hora.', 'Baixe a Cópia dos seus dados uma vez por mês e guarde num lugar seguro.'] },
+    assinatura: { t: 'Assinatura', ic: 'card', gestor: 1, steps: [
+      'Veja o seu plano, a situação e a próxima cobrança.',
+      'Para mudar, toque em Trocar plano e escolha o plano pelo tamanho da equipe.',
+      'Para pagar uma fatura em aberto, toque em Pagar fatura (PIX, boleto ou cartão). Depois, toque em Já paguei, atualizar.',
+    ], tips: ['Se o acesso for suspenso por falta de pagamento, os dados continuam guardados e voltam assim que o pagamento é confirmado.'] },
+    cadastro: { t: 'Meu cadastro', ic: 'idcard', steps: [
+      'Troque a foto, o nome e o e-mail.',
+      'Para mudar a senha, preencha Nova senha e Confirmar nova senha. Deixe em branco para manter a atual.',
+      'Toque em Salvar.',
+    ], tips: ['Esqueceu a senha? Na tela de entrada, use Esqueci minha senha para receber o link por e-mail.'] },
+  };
+  const helpTxt = s => s.replace(/\{pros\}/g, MARCA === 'salao' ? 'profissionais' : 'barbeiros').replace(/\{pro\}/g, MARCA === 'salao' ? 'profissional' : 'barbeiro')
+    .replace(/\{acasa\}/g, MARCA === 'salao' ? 'o salão' : 'a barbearia').replace(/\{dacasa\}/g, MARCA === 'salao' ? 'do salão' : 'da barbearia');
+  const helpFor = (k, user) => { const h = HELP[k]; return h && (!h.gestor || isGestor(user) || isAreaMgr(user)) ? h : null; };
+  function helpBody(k) {
+    const h = HELP[k], v = HELP_VIDEOS[k];
+    return `<ol class="hp-steps">${h.steps.map(s => `<li>${esc(helpTxt(s))}</li>`).join('')}</ol>
+      ${h.tips && h.tips.length ? `<div class="hp-tips"><b>${icon('sparkle')} Dicas</b><ul>${h.tips.map(s => `<li>${esc(helpTxt(s))}</li>`).join('')}</ul></div>` : ''}
+      ${v ? `<a class="btn btn-sm" href="${esc(v)}" target="_blank" rel="noopener">${icon('play')} Assistir vídeo</a>` : ''}`;
+  }
+  // Botão no topo de cada tela.
+  const helpBtn = (route, user) => helpFor(route, user) ? `<div class="hp-bar"><button type="button" class="hp-open" data-action="helpOpen" data-k="${route}">${icon('help')} Como usar esta tela</button></div>` : '';
+  // Janela com o tutorial.
+  function helpSheet() {
+    const k = ui.help; if (!k || !HELP[k]) return '';
+    return `<div class="hp-ov" data-action="helpClose" role="presentation"><div class="hp-card card" role="dialog" aria-modal="true" aria-label="${esc('Como usar: ' + HELP[k].t)}">
+      <div class="hp-head"><h2>${icon(HELP[k].ic || 'help')} ${esc(HELP[k].t)}</h2><button class="icon-btn" data-action="helpClose" aria-label="Fechar">${icon('x')}</button></div>
+      ${helpBody(k)}
+      <a class="link-btn hp-all" href="#ajuda" data-action="helpClose">Ver todos os tutoriais na Central de ajuda</a></div></div>`;
+  }
+  // Lista na Central de ajuda, com busca.
+  function helpCenter(user) {
+    const keys = Object.keys(HELP).filter(k => helpFor(k, user));
+    return `<section class="section card">
+      <h2 class="section-title">Tutoriais do sistema</h2>
+      <p class="muted">Passo a passo de cada tela. Toque no assunto para abrir.</p>
+      <input class="input hp-q" id="help-q" type="search" placeholder="Buscar: lançar, convite, fechamento, card…" aria-label="Buscar nos tutoriais">
+      <div class="hp-list">${keys.map(k => { const h = HELP[k], txt = helpTxt([h.t, ...h.steps, ...(h.tips || [])].join(' ')).toLowerCase();
+        return `<details class="hp-item" data-txt="${esc(txt.normalize('NFD').replace(/[̀-ͯ]/g, ''))}" ${ui.helpTopic === k ? 'open' : ''}><summary>${icon(h.ic || 'help')}<span>${esc(h.t)}</span></summary><div class="hp-in">${helpBody(k)}${k !== 'inicio' ? `<a class="btn btn-sm" href="#${k === 'configuracoes' ? 'empresa' : k}">Abrir a tela</a>` : ''}</div></details>`; }).join('')}</div>
+      <p class="muted hp-none" hidden>Nada encontrado. Tente outra palavra.</p>
+    </section>`;
+  }
+
   // ---------- Primeiros passos e pendências do gestor (Início) ----------
   function guideSteps() {
     const hg = state.houseGoals || {}, hm = (state.houseGoalsM || {})[curYm()] || {};
     return [
-      { ok: !!state.company.logo, t: 'Coloque o logo e os dados da empresa', h: 'empresa', b: 'Abrir dados' },
-      { ok: state.barbers.filter(b => b.active !== false).length >= 2, t: 'Cadastre a equipe (com foto e aniversário)', h: 'barbeiros', b: 'Adicionar' },
-      { ok: Object.keys(hg).length > 0 || Object.keys(hm).length > 0, t: 'Defina as metas do mês', h: 'performance', b: 'Definir metas' },
-      { ok: (state.entries || []).length > 0 || (state.monthly || []).length > 0, t: 'Lance os primeiros resultados (ou ligue a integração)', h: 'lancamentos', b: 'Lançar' },
-      { ok: DB.pref.get('tvSeen', '') === '1', t: 'Ligue a Tela da loja na TV', h: 'apresentacao', b: 'Abrir a TV' },
+      { ok: !!state.company.logo, t: 'Coloque o logo e os dados da empresa', h: 'empresa', b: 'Abrir dados', k: 'configuracoes' },
+      { ok: state.barbers.filter(b => b.active !== false).length >= 2, t: 'Cadastre a equipe (com foto e aniversário)', h: 'barbeiros', b: 'Adicionar', k: 'barbeiros' },
+      { ok: Object.keys(hg).length > 0 || Object.keys(hm).length > 0, t: 'Defina as metas do mês', h: 'performance', b: 'Definir metas', k: 'performance' },
+      { ok: (state.entries || []).length > 0 || (state.monthly || []).length > 0, t: 'Lance os primeiros resultados (ou ligue a integração)', h: 'lancamentos', b: 'Lançar', k: 'lancamentos' },
+      { ok: DB.pref.get('tvSeen', '') === '1', t: 'Ligue a Tela da loja na TV', h: 'apresentacao', b: 'Abrir a TV', k: 'apresentacao' },
     ];
   }
   function gestorPending() {
@@ -1268,7 +1397,7 @@
   function gestorGuide() {
     if (DB.demo) return '';
     const steps = guideSteps(), done = steps.filter(x => x.ok).length;
-    const row = (x, i) => `<li class="gd-row ${x.ok ? 'ok' : ''}"><span class="gd-dot">${x.ok ? icon('check') : (i === undefined ? icon(x.bday ? 'gift' : 'bell') : i + 1)}</span><span class="gd-t">${esc(x.t)}</span>${x.ok ? '' : `<a class="btn btn-sm" href="#${x.h}">${esc(x.b)}</a>`}</li>`;
+    const row = (x, i) => `<li class="gd-row ${x.ok ? 'ok' : ''}"><span class="gd-dot">${x.ok ? icon('check') : (i === undefined ? icon(x.bday ? 'gift' : 'bell') : i + 1)}</span><span class="gd-t">${esc(x.t)}${x.k && !x.ok ? `<button type="button" class="link-btn gd-how" data-action="helpOpen" data-k="${x.k}">Ver como</button>` : ''}</span>${x.ok ? '' : `<a class="btn btn-sm" href="#${x.h}">${esc(x.b)}</a>`}</li>`;
     if (done < steps.length && DB.pref.get('guideHide', '') !== '1') {
       return `<section class="card gd-card"><div class="gd-head"><h2 class="section-title">Primeiros passos · ${done} de ${steps.length}</h2><button class="link-btn" data-action="guideHide">Ocultar</button></div>
         <div class="gd-bar"><i style="width:${Math.round(done / steps.length * 100)}%"></i></div>
@@ -2604,10 +2733,10 @@ Content-Type: application/json</pre>
       </form></section>`;
   }
 
-  function pageAjuda() {
+  function pageAjuda(user) {
     const R = computeRanking(state, range());
     const w = state.weights;
-    return `<section class="section card prose">
+    return `${helpCenter(user)}<section class="section card prose">
       <h2 class="section-title">Como a pontuação funciona</h2>
       <h3>1. Indicadores e pesos</h3>
       <p>Cada indicador vale um peso. Só entram no cálculo os indicadores que têm dados no período.</p>
@@ -3091,6 +3220,7 @@ Content-Type: application/json</pre>
   document.addEventListener('focusin', e => { if (e.target.classList && e.target.classList.contains('tip') && !tipPinned) tipShow(e.target, false); });
   document.addEventListener('focusout', e => { if (e.target === tipBtn && !tipPinned) tipHide(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && tipBtn) tipHide(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && ui.help) { ui.help = null; render(); } });
   window.addEventListener('scroll', () => { if (tipBtn) tipHide(); }, true);
   window.addEventListener('resize', () => { if (tipBtn) tipHide(); });
   window.addEventListener('hashchange', tipHide);
@@ -5051,7 +5181,8 @@ Content-Type: application/json</pre>
       </header>
       ${demoBar(user)}
       ${trialBanner(user)}
-      <main class="main" id="main">${page.r(user)}</main>
+      <main class="main" id="main">${route === 'ajuda' ? '' : helpBtn(route, user)}${page.r(user)}</main>
+      ${helpSheet()}
       <button class="fab" data-action="openDrawer" aria-label="Abrir menu">${icon('menu')}</button>
       ${drawer(user, route)}
       ${popover(user)}
@@ -5196,6 +5327,8 @@ Content-Type: application/json</pre>
     popRevMore() { ui.popRevAll = true; render(); },
     popCsv() { popCsv(); },
     exportJson() { exportJson(); },
+    helpOpen(el) { ui.help = el.dataset.k; render(); setTimeout(() => { const c = $('.hp-card .icon-btn'); if (c) c.focus(); }, 30); },
+    helpClose(el, e) { if (el.classList.contains('hp-ov') && e.target.closest('.hp-card')) return; ui.help = null; render(); },
     guideHide() { DB.pref.set('guideHide', '1'); render(); },
     exportCsv() { exportCsv(); },
     popPrint() { document.body.classList.add('printing'); setTimeout(() => { window.print(); document.body.classList.remove('printing'); }, 50); },
@@ -5956,6 +6089,12 @@ Content-Type: application/json</pre>
     FORMS[f.dataset.form]?.(f);
   });
   root.addEventListener('input', e => {
+    if (e.target.id === 'help-q') {
+      const q = e.target.value.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); let n = 0;
+      document.querySelectorAll('.hp-item').forEach(d => { const ok = !q || q.split(/\s+/).every(w => d.dataset.txt.includes(w)); d.hidden = !ok; if (ok) n++; if (q && ok && n <= 1) d.open = true; });
+      const none = $('.hp-none'); if (none) none.hidden = n > 0;
+      return;
+    }
     if (e.target.id === 'pops-q') {
       const q = e.target.value.trim().toLowerCase(); let n = 0;
       document.querySelectorAll('.pops-card').forEach(c => { const ok = !q || c.dataset.name.includes(q); c.hidden = !ok; if (ok) n++; });
