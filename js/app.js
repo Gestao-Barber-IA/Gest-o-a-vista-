@@ -4063,93 +4063,57 @@ Content-Type: application/json</pre>
     return drawCelebration(bid, { photo: withPhoto, title: 'Destaque do mês', when: mon.toUpperCase(), cheer: 'Parabéns!', py: 915, decor: drawCrown,
       msg: 'Obrigado pela dedicação e pela entrega em cada atendimento. Você é inspiração para toda a equipe!', foot: 'ORGULHO DA EQUIPE ' + (state.company.name || '').toUpperCase() });
   }
-  // Card de aniversário: letreiro neon, foto em moldura tipo polaroid, bandeirinhas e balões nas cores vivas do logo.
-  function hexHsl(hex) {
-    const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255), mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
-    if (!d) return [0, 0, l];
-    const h = mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
-    return [h * 60, d / (1 - Math.abs(2 * l - 1)), l];
-  }
-  function hslHex(h, s, l) { const f = n => { const k = (n + h / 30) % 12, a = s * Math.min(l, 1 - l); return Math.round((l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))) * 255).toString(16).padStart(2, '0'); }; return '#' + f(0) + f(8) + f(4); }
+  // Card de aniversário: foto grande num painel, letras vazadas ao fundo e balões com o logo, nas cores da marca.
   async function drawBirthday(bid, withPhoto) {
     const bd = (state.births || {})[bid]; if (!bd) return null;
     const [, m, d] = bd.split('-').map(Number), b = barberById(bid); if (!b) return null;
     const pal = await brandPalette();
-    // Cores vivas a partir do logo (um logo cinza cai no dourado).
-    const ha = hexHsl(pal.a), hb = hexHsl(pal.b), hueA = ha[1] < 0.12 ? 45 : ha[0];
-    let hueB = hb[1] < 0.12 ? hueA + 200 : hb[0]; if (Math.min(Math.abs(hueA - hueB), 360 - Math.abs(hueA - hueB)) < 30) hueB = hueA + 200;
-    const viv = (h, l = 0.56) => hslHex(((h % 360) + 360) % 360, 0.95, l);
-    const A = viv(hueA), Bc = viv(hueB, 0.58), C = viv(hueA + 35, 0.6), A2 = viv(hueA, 0.74);
     const lum = h => { const [r, g2, b2] = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)); return (r * 299 + g2 * 587 + b2 * 114) / 255000; };
-    const ink = lum(A) > 0.55 ? '#141414' : '#ffffff';
+    const A = lum(pal.a) < 0.42 ? mixHex(pal.a, '#ffffff', 0.4) : pal.a, ink = lum(A) > 0.6 ? '#111111' : '#ffffff';
     const D = "'Archivo', 'Arial Black', sans-serif", T = "'Hind', 'Helvetica Neue', Arial, sans-serif", SC = "'Kaushan Script', 'Brush Script MT', cursive";
     try { await Promise.all([document.fonts.load('800 80px Archivo'), document.fonts.load('400 80px "Kaushan Script"'), document.fonts.load('600 40px Hind')]); } catch (e) { /* fonte do sistema */ }
     const W = 1080, H = 1920, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
     const c = cv.getContext('2d'), sp = v => { try { c.letterSpacing = v; } catch (e) { /* opcional */ } };
-    // parede escura de tijolos, iluminada pelo letreiro
-    c.fillStyle = '#0c0b10'; c.fillRect(0, 0, W, H);
-    c.strokeStyle = 'rgba(255,255,255,0.045)'; c.lineWidth = 3;
-    for (let r = 0, y = 0; y < H; y += 64, r++) { c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke(); for (let x = r % 2 ? 80 : 0; x < W; x += 160) { c.beginPath(); c.moveTo(x, y); c.lineTo(x, y + 64); c.stroke(); } }
-    let g = c.createRadialGradient(W / 2, 540, 40, W / 2, 540, 900); g.addColorStop(0, A + '70'); g.addColorStop(0.45, A + '22'); g.addColorStop(1, 'transparent'); c.fillStyle = g; c.fillRect(0, 0, W, H);
-    g = c.createRadialGradient(W / 2, 1900, 40, W / 2, 1900, 900); g.addColorStop(0, Bc + '40'); g.addColorStop(1, 'transparent'); c.fillStyle = g; c.fillRect(0, 0, W, H);
-    g = c.createRadialGradient(W / 2, H / 2, 600, W / 2, H / 2, 1150); g.addColorStop(0, 'transparent'); g.addColorStop(1, 'rgba(0,0,0,0.7)'); c.fillStyle = g; c.fillRect(0, 0, W, H);
-    const cols = [A, Bc, C, '#ffffff', A2];
-    // bandeirinhas
-    const by0 = t => 40 + 150 * Math.sin(Math.PI * t);
-    c.strokeStyle = 'rgba(255,255,255,0.8)'; c.lineWidth = 4; c.beginPath(); for (let i = 0; i <= 40; i++) { const t = i / 40; i ? c.lineTo(-20 + 1120 * t, by0(t)) : c.moveTo(-20, by0(0)); } c.stroke();
-    for (let i = 0; i < 12; i++) { const t0 = (i + 0.08) / 12, t1 = (i + 0.92) / 12, x0 = -20 + 1120 * t0, x1 = -20 + 1120 * t1, y0 = by0(t0), y1 = by0(t1), col = cols[[0, 1, 2, 4][i % 4]];
-      c.save(); c.shadowColor = 'rgba(0,0,0,0.5)'; c.shadowBlur = 14; g = c.createLinearGradient(0, y0, 0, y0 + 110); g.addColorStop(0, mixHex(col, '#ffffff', 0.25)); g.addColorStop(1, mixHex(col, '#000000', 0.15)); c.fillStyle = g;
-      c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.lineTo((x0 + x1) / 2 + 4, (y0 + y1) / 2 + 108); c.closePath(); c.fill(); c.restore(); }
-    // letreiro neon
-    const neon = (t, x, y, size, col, maxW) => { c.save(); c.textAlign = 'center'; c.lineJoin = 'round'; fitFont(c, t, 400, size, SC, maxW);
-      c.strokeStyle = col; c.shadowColor = col; c.lineWidth = 18; c.shadowBlur = 80; c.globalAlpha = 0.55; c.strokeText(t, x, y); c.lineWidth = 10; c.shadowBlur = 40; c.globalAlpha = 0.9; c.strokeText(t, x, y);
-      c.globalAlpha = 1; c.shadowBlur = 14; c.fillStyle = mixHex(col, '#ffffff', 0.88); c.fillText(t, x, y); c.restore(); };
-    c.save(); c.translate(W / 2, 540); c.rotate(-0.05); neon('Feliz', -150, -70, 210, Bc, 600); neon('Aniversário', 20, 130, 190, A, 960); c.restore();
-    const logoIm = await loadImg(state.company.logo || B().logo);
-    const balloon = (bx, by, s, tilt, col, withLogo, sx, sy) => {
-      const rx = 122 * s, ry = 152 * s;
-      c.save(); c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = 3; c.beginPath(); c.moveTo(bx, by + ry + 14 * s); c.quadraticCurveTo(bx + 40 * (tilt < 0 ? -1 : 1), by + ry + 150, sx, sy); c.stroke(); c.restore();
-      c.save(); c.translate(bx, by); c.rotate(tilt); c.shadowColor = col; c.shadowBlur = 40;
-      const bg = c.createRadialGradient(-rx * 0.36, -ry * 0.42, 6, 0, 0, ry * 1.12); bg.addColorStop(0, mixHex(col, '#ffffff', 0.7)); bg.addColorStop(0.28, mixHex(col, '#ffffff', 0.12)); bg.addColorStop(0.7, col); bg.addColorStop(1, mixHex(col, '#000000', 0.4));
-      c.fillStyle = bg; c.beginPath(); c.ellipse(0, 0, rx, ry, 0, 0, 7); c.fill(); c.shadowBlur = 0;
-      c.fillStyle = mixHex(col, '#000000', 0.25); c.beginPath(); c.moveTo(-13 * s, ry - 2); c.lineTo(13 * s, ry - 2); c.lineTo(0, ry + 20 * s); c.closePath(); c.fill();
-      if (withLogo && logoIm) { c.save(); c.globalAlpha = 0.95; c.beginPath(); c.arc(0, 6, rx * 0.56, 0, 7); c.clip(); const k = Math.max(rx * 1.12 / logoIm.width, rx * 1.12 / logoIm.height); c.drawImage(logoIm, -logoIm.width * k / 2, 6 - logoIm.height * k / 2, logoIm.width * k, logoIm.height * k); c.restore(); }
-      c.fillStyle = 'rgba(255,255,255,0.6)'; c.beginPath(); c.ellipse(-rx * 0.5, -ry * 0.52, rx * 0.12, ry * 0.2, -0.5, 0, 7); c.fill();
-      c.restore();
-    };
-    // balões atrás da foto
-    balloon(70, 1200, 0.8, -0.3, Bc, false, 300, 1700); balloon(150, 960, 0.95, -0.16, A, false, 300, 1700); balloon(1010, 1180, 0.8, 0.3, C, false, 800, 1700); balloon(945, 940, 0.95, 0.16, Bc, false, 800, 1700);
-    // foto em moldura tipo polaroid
-    c.save(); c.translate(W / 2, 1215); c.rotate(0.04);
-    c.save(); c.shadowColor = 'rgba(0,0,0,0.75)'; c.shadowBlur = 70; c.shadowOffsetY = 26; c.fillStyle = '#fbfaf6'; rrect(c, -360, -450, 720, 900, 12); c.fill(); c.restore();
-    c.save(); c.beginPath(); c.rect(-320, -410, 640, 640); c.clip(); c.fillStyle = '#16161c'; c.fillRect(-320, -410, 640, 640);
+    c.fillStyle = '#08080a'; c.fillRect(0, 0, W, H);
+    // letras vazadas ao fundo
+    c.save(); c.textAlign = 'center'; c.lineWidth = 3; c.strokeStyle = A; c.globalAlpha = 0.6; c.font = `800 560px ${D}`;
+    ['ANI', 'VER', 'SÁR', 'IO!'].forEach((t, i) => c.strokeText(t, W / 2, 420 + i * 480)); c.restore();
+    // painel com a foto
+    const X = 56, Y = 176, PW = W - 112, PH = 1560, PHOTO = 1130;
+    c.save(); c.shadowColor = 'rgba(0,0,0,0.7)'; c.shadowBlur = 50; rrect(c, X, Y, PW, PH, 56); c.fillStyle = '#121214'; c.fill(); c.restore();
+    c.save(); rrect(c, X, Y, PW, PH, 56); c.clip();
     const im = withPhoto !== false ? await loadImg(b.photo) : null;
-    if (im) { const k = Math.max(640 / im.width, 640 / im.height), iw = im.width * k, ih = im.height * k; c.imageSmoothingQuality = 'high'; c.drawImage(im, -iw / 2, -410 + (640 - ih) * 0.3, iw, ih); }
-    else { g = c.createLinearGradient(-320, -410, 320, 230); g.addColorStop(0, A); g.addColorStop(1, Bc); c.fillStyle = g; c.fillRect(-320, -410, 640, 640); c.fillStyle = 'rgba(255,255,255,0.95)'; c.textAlign = 'center'; c.font = `800 260px ${D}`; c.fillText(b.name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase(), 0, 0); }
+    if (im) { const k = Math.max(PW / im.width, PHOTO / im.height), iw = im.width * k, ih = im.height * k; c.imageSmoothingQuality = 'high'; c.drawImage(im, X + (PW - iw) / 2, Y + (PHOTO - ih) * 0.3, iw, ih); }
+    else { let g0 = c.createRadialGradient(W / 2, Y + 520, 40, W / 2, Y + 520, 620); g0.addColorStop(0, A + '44'); g0.addColorStop(1, 'transparent'); c.fillStyle = g0; c.fillRect(X, Y, PW, PHOTO); c.fillStyle = A; c.textAlign = 'center'; c.font = `800 380px ${D}`; c.fillText(b.name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase(), W / 2, Y + 660); }
+    let g = c.createLinearGradient(0, Y + 620, 0, Y + PHOTO); g.addColorStop(0, 'rgba(13,13,15,0)'); g.addColorStop(0.75, 'rgba(13,13,15,0.92)'); g.addColorStop(1, '#0d0d0f'); c.fillStyle = g; c.fillRect(X, Y + 620, PW, PHOTO - 620);
+    c.fillStyle = '#0d0d0f'; c.fillRect(X, Y + PHOTO - 1, PW, PH - PHOTO + 1);
     c.restore();
-    const nm = b.name.trim(); c.textAlign = 'center'; c.fillStyle = '#1b1b22'; fitFont(c, nm, 400, 96, SC, 500); c.fillText(nm, 0, 364);
-    // fita adesiva
-    c.save(); c.translate(0, -452); c.rotate(-0.06); c.fillStyle = A2 + 'cc'; c.shadowColor = 'rgba(0,0,0,0.3)'; c.shadowBlur = 8; c.fillRect(-110, -30, 220, 60); c.restore();
-    c.restore();
-    // confete nas bordas
-    for (let i = 0; i < 110; i++) {
-      const x = (i * 197 + 31) % W, y = 300 + (i * 331 + 17) % 1460;
-      if ((x > 150 && x < 930 && y > 740 && y < 1700) || (x > 60 && x < 1020 && y < 720)) continue;
-      c.save(); c.translate(x, y); c.rotate(i * 0.9); c.globalAlpha = 0.9; c.fillStyle = cols[i % 5]; c.shadowColor = cols[i % 5]; c.shadowBlur = 8;
-      if (i % 3 === 0) { c.beginPath(); c.arc(0, 0, 8, 0, 7); c.fill(); } else if (i % 3 === 1) { c.fillRect(-7, -13, 14, 26); } else { c.fillRect(-13, -4, 26, 8); }
+    // logo da empresa
+    const logoIm = await loadImg(state.company.logo || B().logo);
+    const logoAt = (x, y, r) => { if (!logoIm) return; c.save(); c.beginPath(); c.arc(x, y, r, 0, 7); c.clip(); c.fillStyle = '#0b0b0f'; c.fill(); const k = Math.max(2 * r / logoIm.width, 2 * r / logoIm.height); c.drawImage(logoIm, x - logoIm.width * k / 2, y - logoIm.height * k / 2, logoIm.width * k, logoIm.height * k); c.restore(); };
+    logoAt(X + PW - 110, Y + 110, 66); if (logoIm) { c.lineWidth = 4; c.strokeStyle = A; c.beginPath(); c.arc(X + PW - 110, Y + 110, 68, 0, 7); c.stroke(); }
+    // balões com o logo
+    const balloon = (bx, by, s, tilt) => {
+      const rx = 128 * s, ry = 158 * s;
+      c.strokeStyle = mixHex(A, '#ffffff', 0.3); c.lineWidth = 3; c.beginPath(); c.moveTo(bx, by + ry + 14); c.quadraticCurveTo(bx + 30, by + ry + 120, 1040, H + 20); c.stroke();
+      c.save(); c.translate(bx, by); c.rotate(tilt); c.shadowColor = 'rgba(0,0,0,0.55)'; c.shadowBlur = 30;
+      const bg = c.createRadialGradient(-rx * 0.35, -ry * 0.4, 8, 0, 0, ry * 1.1); bg.addColorStop(0, mixHex(A, '#ffffff', 0.55)); bg.addColorStop(0.45, A); bg.addColorStop(1, mixHex(A, '#000000', 0.38));
+      c.fillStyle = bg; c.beginPath(); c.ellipse(0, 0, rx, ry, 0, 0, 7); c.fill(); c.shadowBlur = 0;
+      c.beginPath(); c.moveTo(-14 * s, ry - 2); c.lineTo(14 * s, ry - 2); c.lineTo(0, ry + 20 * s); c.closePath(); c.fill();
+      if (logoIm) { c.globalAlpha = 0.9; c.beginPath(); c.arc(0, 4, rx * 0.56, 0, 7); c.clip(); const k = Math.max(rx * 1.12 / logoIm.width, rx * 1.12 / logoIm.height); c.drawImage(logoIm, -logoIm.width * k / 2, 4 - logoIm.height * k / 2, logoIm.width * k, logoIm.height * k); }
       c.restore();
-    }
-    const spark = (x, y, r) => { c.save(); c.translate(x, y); c.fillStyle = '#ffffff'; c.shadowColor = '#ffffff'; c.shadowBlur = 24; c.beginPath(); for (let i = 0; i < 8; i++) { const rr = i % 2 ? r * 0.22 : r, an = i * Math.PI / 4; c.lineTo(Math.cos(an) * rr, Math.sin(an) * rr); } c.closePath(); c.fill(); c.restore(); };
-    spark(905, 330, 26); spark(130, 420, 20); spark(1000, 760, 18); spark(70, 800, 16); spark(560, 1760, 16);
-    // balão com o logo e selo da data, na frente da moldura
-    balloon(118, 1640, 0.98, -0.1, A, true, 90, H + 20);
-    c.save(); c.translate(934, 1660); c.rotate(0.14); c.shadowColor = 'rgba(0,0,0,0.6)'; c.shadowBlur = 30;
-    g = c.createLinearGradient(-110, -110, 110, 110); g.addColorStop(0, A2); g.addColorStop(1, A); c.fillStyle = g; c.beginPath(); for (let i = 0; i < 40; i++) { const rr = i % 2 ? 112 : 124, an = i * Math.PI / 20; c.lineTo(Math.cos(an) * rr, Math.sin(an) * rr); } c.closePath(); c.fill(); c.shadowBlur = 0;
-    c.strokeStyle = ink; c.globalAlpha = 0.5; c.lineWidth = 3; c.setLineDash([8, 8]); c.beginPath(); c.arc(0, 0, 96, 0, 7); c.stroke(); c.setLineDash([]); c.globalAlpha = 1;
-    c.fillStyle = ink; c.textAlign = 'center'; c.font = `800 104px ${D}`; c.fillText(String(d), 0, 22); sp('6px'); c.font = `800 34px ${D}`; c.fillText(MONTH_NAMES[m - 1].slice(0, 3).toUpperCase(), 3, 64); sp('0px'); c.restore();
+      c.save(); c.translate(bx, by); c.rotate(tilt); c.fillStyle = 'rgba(255,255,255,0.4)'; c.beginPath(); c.ellipse(-rx * 0.5, -ry * 0.52, rx * 0.13, ry * 0.2, -0.5, 0, 7); c.fill(); c.restore();
+    };
+    balloon(1050, 1560, 0.95, 0.2); balloon(770, 1590, 1, -0.16); balloon(900, 1400, 1.08, 0.06);
+    // textos
+    c.textAlign = 'left';
+    c.save(); c.translate(118, 1296); c.rotate(-0.1); c.shadowColor = 'rgba(0,0,0,0.6)'; c.shadowBlur = 18; c.fillStyle = A; c.font = `400 170px ${SC}`; c.fillText('Feliz', 0, 0); c.restore();
+    c.save(); c.shadowColor = 'rgba(0,0,0,0.7)'; c.shadowBlur = 24; c.fillStyle = '#ffffff'; c.font = `800 150px ${D}`; c.fillText('ANIVER', 108, 1430); c.fillText('SÁRIO', 108, 1566); c.restore();
+    const nm = b.name.trim().toUpperCase(); fitFont(c, nm, 800, 58, D, 520); const nw = c.measureText(nm).width;
+    c.fillStyle = A; c.fillRect(108, 1612, nw + 44, 88); c.fillStyle = ink; c.fillText(nm, 130, 1676);
     // rodapé
-    const foot = `COM CARINHO, EQUIPE ${(state.company.name || '').toUpperCase()}`;
-    c.textAlign = 'center'; sp('5px'); c.fillStyle = 'rgba(255,255,255,0.88)'; fitFont(c, foot, 600, 32, T, 900); c.fillText(foot, W / 2, H - 64); sp('0px');
+    const foot = `${d} DE ${MONTH_NAMES[m - 1].toUpperCase()} · COM CARINHO, EQUIPE ${(state.company.name || '').toUpperCase()}`;
+    c.textAlign = 'center'; sp('4px'); c.fillStyle = 'rgba(255,255,255,0.78)'; fitFont(c, foot, 600, 30, T, 980); c.fillText(foot, W / 2, H - 78); sp('0px');
     return cv;
   }
   async function cardBlob(ym, bid, v = '') {
