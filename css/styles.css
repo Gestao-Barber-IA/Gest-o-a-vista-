@@ -1536,19 +1536,26 @@ html[data-theme="light"] .tv { background: var(--bg); }
 @keyframes fx-flap { 0%, 100% { scale: 1 1; } 50% { scale: 1 0.45; } }
 
 /* Formato: Escudo (flâmula com ponta) */
-html[data-pdl="escudo"] .pd-frame { --shape: polygon(0 5%, 33% 5%, 39% 0, 61% 0, 67% 5%, 100% 5%, 100% 79%, 50% 100%, 0 79%); padding: 0.45cqw;
-  background: linear-gradient(180deg, #fff, var(--tc) 22%, var(--tc2) 70%, var(--tc)); }
-html[data-pdl="escudo"] .pd-inner { padding: 11cqw 2.2cqw 18cqw; gap: 1.3cqw;
-  background: radial-gradient(90% 45% at 50% 18%, color-mix(in srgb, var(--tc) 38%, transparent), transparent 75%),
-    linear-gradient(180deg, color-mix(in srgb, var(--tc2) 88%, #000) 0%, color-mix(in srgb, var(--tc2) 55%, #05060a) 55%, #06070b 100%); }
-html[data-pdl="escudo"] .pd-1 .pd-inner { padding-top: 12cqw; padding-bottom: 20cqw; }
-html[data-pdl="escudo"] .pd-badge { width: auto; aspect-ratio: auto; clip-path: none; padding: 0; background: none; transform: translate(-50%, 0.9cqw); }
+html[data-pdl="escudo"] .pd-frame { --shape: polygon(0 6%, 27% 6%, 41% 0, 59% 0, 73% 6%, 100% 6%, 100% 77%, 50% 100%, 0 77%); padding: 0.5cqw;
+  background: linear-gradient(180deg, #fff 0%, color-mix(in srgb, var(--tc) 55%, #fff) 30%, var(--tc) 75%, color-mix(in srgb, var(--tc) 60%, #fff) 100%); }
+html[data-pdl="escudo"] .pd-1 .pd-frame { background: linear-gradient(160deg, #bfe6ff 0%, #fff6d6 25%, var(--tc) 50%, #d7c2ff 78%, #9fd2ff 100%); }
+html[data-pdl="escudo"] .pd-inner { padding: 7.5cqw 2cqw 12cqw; gap: 1.1cqw;
+  background: linear-gradient(118deg, rgba(255, 255, 255, 0.16) 0 18%, transparent 18.5%),
+    radial-gradient(90% 40% at 50% 12%, color-mix(in srgb, var(--tc) 45%, transparent), transparent 75%),
+    linear-gradient(180deg, color-mix(in srgb, var(--tc2) 80%, var(--tc)) 0%, color-mix(in srgb, var(--tc2) 82%, #000) 45%, color-mix(in srgb, var(--tc2) 40%, #05060a) 100%); }
+html[data-pdl="escudo"] .pd-1 .pd-inner { padding-top: 8cqw; padding-bottom: 13cqw; }
+html[data-pdl="escudo"] .pd-photo { width: 74%; }
+html[data-pdl="escudo"] .pd-1 .pd-photo { width: 78%; }
+html[data-pdl="escudo"] .pd-pts { font-size: max(18px, 6cqw); }
+html[data-pdl="escudo"] .pd-1 .pd-pts { font-size: max(20px, 7cqw); }
+html[data-pdl="escudo"] .pd-badge { width: auto; aspect-ratio: auto; clip-path: none; padding: 0; background: none; transform: translate(-50%, 0.6cqw); }
 html[data-pdl="escudo"] .pd-badge span { background: none; font-size: max(9px, 2.3cqw); letter-spacing: 0.06em; color: #fff; text-shadow: 0 0 1cqw var(--glow); }
 html[data-pdl="escudo"] .pd-badge small { display: none; }
 html[data-pdl="escudo"] .pd-gem { display: block; position: absolute; top: 0; left: 50%; z-index: 4; width: 11cqw; transform: translate(-50%, -105%);
   filter: drop-shadow(0 0 1.5cqw var(--glow)); animation: pd-gem 3s ease-in-out infinite; }
 html[data-pdl="escudo"] .pd-gem svg { display: block; width: 100%; height: auto; }
-html[data-pdl="escudo"] .pd-name { font-family: var(--font-display); font-weight: 800; text-shadow: 0 0 1.4cqw var(--glow); }
+html[data-pdl="escudo"] .pd-name { font-family: var(--font-display); font-weight: 800; font-size: max(12px, 3.4cqw); text-shadow: 0 0 1.4cqw var(--glow); }
+html[data-pdl="escudo"] .pd-1 .pd-name { font-size: max(13px, 4cqw); }
 html[data-pdl="escudo"] .pd-line, html[data-pdl="escudo"] .pd-leads svg, html[data-pdl="escudo"] .pd-pts small { display: none; }
 html[data-pdl="escudo"] .pd-money { border-radius: 99px; border: 0.45cqw solid var(--tc); background: rgba(0, 0, 0, 0.35); }
 html[data-pdl="escudo"] .pd-coin { display: none; }
@@ -1623,7 +1630,7 @@ html[data-pdl="minimal"] .pd-fx { opacity: 0.5; }
 .th-shape { display: grid; place-items: center; width: 64px; height: 76px; border-radius: 12px; background: #0b0c12; }
 .th-shape i { display: block; width: 34px; height: 54px; background: linear-gradient(180deg, #ffe7a0, #d6a23a 50%, #6e4c10); }
 .th-padrao i { clip-path: polygon(13% 0, 87% 0, 100% 6%, 100% 83%, 72% 100%, 28% 100%, 0 83%, 0 6%); }
-.th-escudo i { clip-path: polygon(0 5%, 33% 5%, 39% 0, 61% 0, 67% 5%, 100% 5%, 100% 79%, 50% 100%, 0 79%); background: linear-gradient(180deg, #8ff0a8, #1f8a43 55%, #0b3a1c); }
+.th-escudo i { clip-path: polygon(0 6%, 27% 6%, 41% 0, 59% 0, 73% 6%, 100% 6%, 100% 77%, 50% 100%, 0 77%); background: linear-gradient(180deg, #8ff0a8, #1f8a43 55%, #0b3a1c); }
 .th-tech i { clip-path: polygon(15% 0, 85% 0, 100% 9%, 100% 91%, 85% 100%, 15% 100%, 0 91%, 0 9%); background: repeating-linear-gradient(0deg, transparent 0 5px, rgba(108, 200, 255, 0.35) 5px 6px), linear-gradient(180deg, #1b5fd6, #071228); }
 .th-minimal i { border-radius: 8px; background: #1a1c25; border: 1.5px solid #d6a23a; }
 .th-bday { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-top: 16px; }
