@@ -3575,9 +3575,9 @@ Content-Type: application/json</pre>
 
 
   // ---------- Relatórios mensais: painel do mês (para ver na tela e baixar em PDF) ----------
-  const RP_INDS = [['fat', 'Faturamento', 'wallet'], ['cli', 'Clientes atendidos', 'users'], ['serv', 'Serviços realizados', 'scissors'], ['ticket', 'Ticket médio', 'card'],
-    ['ocup', 'Taxa de ocupação', 'clock'], ['prod', 'Produtos vendidos', 'gift'], ['planos', 'Planos mensais', 'checksq'], ['fid', 'Fidelização', 'users']];
-  const rpVal = (k, v) => v == null ? '—' : k === 'fat' ? money0(v) : k === 'ticket' ? money2(v) : k === 'ocup' || k === 'fid' ? nf2.format(v) + '%' : nf0.format(v);
+  // Ícone de cada indicador no painel (os indicadores são os ativos da empresa, na mesma ordem do ranking).
+  const RP_ICON = { fat: 'wallet', check: 'checksq', ocup: 'clock', ticket: 'card', serv: 'scissors', cli: 'users', planos: 'idcard', fid: 'undo', prod: 'gift' };
+  const rpVal = (ind, v) => v == null ? '—' : ind.fmt === 'money' ? money0(v) : ind.fmt === 'money2' ? money2(v) : ind.fmt === 'pct' ? nf2.format(v) + '%' : nf0.format(v) + (ind.key === 'check' ? ' pts' : '');
   function repMonths() {
     const out = [];
     for (let k = curYm(); k >= firstYm() && out.length < 36; k = addMonths(k, -1)) out.push(k);
@@ -3592,8 +3592,8 @@ Content-Type: application/json</pre>
     const R = monthR(ym);
     const rows = R.rows.filter(r => Object.keys(r.sums.n).length);
     if (!rows.length) return `<div class="card empty">${icon('file')}<h2>Sem resultados em ${esc(monthRange(ym).label)}</h2><p>Lance os resultados da equipe para gerar o painel deste mês.</p></div>`;
-    const vis = new Set(GB.visibleInds(state).map(i => i.key));
-    const inds = RP_INDS.filter(([k]) => vis.has(k) && rows.some(r => (GB.INDICATORS.find(i => i.key === k) || {}).calc(r.sums) != null)).slice(0, 6);
+    // Só os indicadores cadastrados e ativos na empresa (Configurações → Indicadores e metas).
+    const inds = GB.visibleInds(state);
     const calc = (k, r) => GB.INDICATORS.find(i => i.key === k).calc(r.sums);
     const mr = monthRange(ym), [Y, M] = ym.split('-');
     const monthUp = mr.label.split(' de ')[0].toUpperCase() + ' ' + Y;
@@ -3608,7 +3608,7 @@ Content-Type: application/json</pre>
       ? `<b class="rp-bx-name">${esc(who.barber.name)}</b><ul>${leadList(who)}</ul><small>MVP por liderar ${who.leads.length} dos ${R.N} indicadores.</small>`
       : `<b class="rp-bx-name">Não houve MVP neste mês</b><small>Ninguém atingiu ${R.mvpNeed} ou mais indicadores em 1º lugar.<br>(Necessário: ${R.mvpNeed} de ${R.Nrule})</small>`;
     const leaderOf = k => { const vals = rows.map(r => calc(k, r)).filter(v => v != null); return vals.length ? Math.max(...vals) : null; };
-    const top = Object.fromEntries(inds.map(([k]) => [k, leaderOf(k)]));
+    const top = Object.fromEntries(inds.map(i => [i.key, leaderOf(i.key)]));
     const card = (r, i) => {
       const b = r.barber, parts = b.name.trim().split(/\s+/);
       const nm = parts.length > 1 ? `${esc(parts[0])}<br>${esc(parts.slice(1).join(' '))}` : esc(b.name);
@@ -3616,8 +3616,8 @@ Content-Type: application/json</pre>
         <div class="rp-pos"><span>${r.pos}º</span>${r.leads.length ? `<i class="rp-star" title="Líder em ${r.leads.length} indicador${r.leads.length > 1 ? 'es' : ''}">★</i>` : ''}</div>
         <div class="rp-photo">${b.photo ? `<img src="${esc(b.photo)}" alt="">` : `<b>${esc(parts.slice(0, 2).map(w => w[0]).join('').toUpperCase())}</b>`}</div>
         <div class="rp-name">${nm}<small>(${score(r.overall)} pts)</small></div>
-        <ul class="rp-inds">${inds.map(([k, l, ic]) => { const v = calc(k, r), lead = v != null && top[k] != null && v === top[k] && v > 0;
-          return `<li class="${lead ? 'lead' : ''}">${icon(ic)}<span><small>${l}</small><b>${rpVal(k, v)}</b></span></li>`; }).join('')}</ul>
+        <ul class="rp-inds">${inds.map(ind => { const k = ind.key, v = calc(k, r), lead = v != null && top[k] != null && v === top[k] && v > 0;
+          return `<li class="${lead ? 'lead' : ''}">${icon(RP_ICON[k] || 'chart')}<span><small>${esc(ind.label)}</small><b>${rpVal(ind, v)}</b></span></li>`; }).join('')}</ul>
       </div>`;
     };
     const T = houseTotals(ym);
@@ -3636,11 +3636,9 @@ Content-Type: application/json</pre>
       <section class="rp-cols" style="--cols:${cols}">${rows.map(card).join('')}</section>
       <footer class="rp-foot">
         <div class="rp-sum"><h2>RESUMO GERAL</h2><div class="rp-sum-row">
-          ${sumIt('wallet', 'Faturamento total', money0(T.vals.fat))}
-          ${sumIt('users', 'Clientes atendidos', nf0.format(T.vals.cli))}
-          ${sumIt('scissors', 'Serviços realizados', nf0.format(T.vals.serv))}
-          ${T.vals.prod != null ? sumIt('gift', 'Produtos vendidos', nf0.format(T.vals.prod)) : ''}
-          ${T.vals.ticket != null ? sumIt('card', 'Ticket médio da casa', money2(T.vals.ticket)) : ''}
+          ${[['fat', 'wallet', 'Faturamento total', v => money0(v)], ['cli', 'users', 'Clientes atendidos', v => nf0.format(v)], ['serv', 'scissors', 'Serviços realizados', v => nf0.format(v)],
+            ['prod', 'gift', 'Produtos vendidos', v => nf0.format(v)], ['planos', 'idcard', 'Planos mensais', v => nf0.format(v)], ['ticket', 'card', 'Ticket médio da casa', v => money2(v)]]
+            .filter(([k]) => inds.some(i => i.key === k) && T.vals[k] != null).slice(0, 5).map(([k, ic, l, f]) => sumIt(ic, l, f(T.vals[k]))).join('')}
         </div></div>
         <div class="rp-quote"><p><b>“</b>Grandes resultados são construídos com consistência e trabalho em equipe.</p><small>Seguimos elevando o padrão da ${esc(state.company.name || 'nossa equipe')}.</small></div>
         <div class="rp-brand sm">${rpLogo('6cqw')}</div>
@@ -3654,6 +3652,7 @@ Content-Type: application/json</pre>
           <button class="btn btn-sm" data-action="repBack">${icon('left')} Todos os meses</button>
           <label class="field"><span class="sr-only">Mês</span><select class="input" data-change="repYm">${repMonths().map(o => `<option value="${o}" ${o === ym ? 'selected' : ''}>${ymLabel(o).replace(' de ', '/')}</option>`).join('')}</select></label>
           <button class="btn btn-sm btn-primary" data-action="repPrint">${icon('download')} Baixar PDF</button>
+          ${state.company.logo ? '' : `<p class="rp-hint">${icon('upload')}<span>Para o painel sair com o logo da sua empresa, envie o logo em <a href="#empresa">Configurações → Empresa</a>.</span></p>`}
         </div>
         ${repBoard(ym)}
         <p class="section-note">No PDF, o painel sai em uma folha A4 deitada. No celular, toque em Baixar PDF e escolha "Salvar como PDF" ou compartilhe direto no WhatsApp.</p>`;
