@@ -2978,6 +2978,7 @@ Content-Type: application/json</pre>
       <button class="fx-btn sm" data-fx="close" aria-label="Fechar apresentação">${icon('x')}</button>`;
     clearTimeout(fx.timer);
     const slide = stage.firstElementChild;
+    fxFitSoon(slide);
     if (slide.classList.contains('is-suspense')) {
       // Espera o gestor tocar em Revelar (ou, depois, segue sozinho no celular da equipe).
       if (fx.mode === 'auto') fx.timer = setTimeout(() => fxDrum(slide), 1400);
@@ -2990,9 +2991,24 @@ Content-Type: application/json</pre>
     }
     if (fx.live && (sl.k === 'podium' || sl.k === 'leaders' || sl.k === 'final' || sl.place)) revealSend({ t: sl.place ? 'card' : sl.k, place: sl.place || 0 });
   }
+  // Encaixa a tela do fechamento no espaço disponível (notebook, TV, celular), sem rolagem.
+  function fxFit() {
+    const st = document.querySelector('#fx .fx-stage'), sl = st && st.firstElementChild;
+    if (!sl || sl.querySelector('.fx-open')) return; // a abertura já se ajusta sozinha
+    sl.style.zoom = '';
+    const cs = getComputedStyle(st);
+    const ah = st.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom), aw = st.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const z = Math.max(0.4, Math.min(1, ah / Math.max(1, sl.scrollHeight), aw / Math.max(1, sl.scrollWidth)));
+    if (z < 0.995) sl.style.zoom = z.toFixed(3);
+  }
+  function fxFitSoon(sl) {
+    fxFit(); requestAnimationFrame(fxFit); setTimeout(fxFit, 700);
+    if (sl) sl.querySelectorAll('img').forEach(im => { if (!im.complete) im.addEventListener('load', fxFit, { once: true }); });
+  }
+  window.addEventListener('resize', () => { if (ui.fx) fxFit(); });
   function fxReveal(slide, place) {
     if (!slide || !slide.classList.contains('is-suspense')) return;
-    slide.classList.remove('is-suspense', 'is-drum'); slide.classList.add('is-revealed');
+    slide.classList.remove('is-suspense', 'is-drum'); slide.classList.add('is-revealed'); fxFitSoon(slide);
     Music.win(place);
     fxCount(slide);
     const fx = ui.fx;
