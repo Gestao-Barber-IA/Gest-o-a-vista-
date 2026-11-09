@@ -12,6 +12,21 @@
   } catch (e) { /* opcional */ }
   const DEMO = (() => { try { const v = window.sessionStorage.getItem('gbia.demo'); return v === 'salao' || v === 'barber' ? v : ''; } catch (e) { return ''; } })();
   const KEY = DEMO ? 'gbia.demo.' + DEMO : 'gbia.v1';
+  // Na apresentação o mês aparece como fechado: o relógio do app (só nesta aba e só no modo
+  // apresentação) vai para o último dia útil do mês atual, mantendo a hora de agora.
+  if (DEMO) {
+    const Real = Date, now = new Real();
+    const end = new Real(now.getFullYear(), now.getMonth() + 1, 0, now.getHours(), now.getMinutes(), now.getSeconds());
+    if (end.getDay() === 0) end.setDate(end.getDate() - 1); // domingo fechado
+    const OFF = Math.max(0, end.getTime() - now.getTime());
+    if (OFF) {
+      const DemoDate = class extends Real {
+        constructor(...a) { if (a.length) super(...a); else super(Real.now() + OFF); }
+        static now() { return Real.now() + OFF; }
+      };
+      window.Date = DemoDate;
+    }
+  }
   const memory = {};
 
   function safeGet(storage, k) {
@@ -498,36 +513,59 @@
     const sal = brand === 'salao';
     const r = rng(sal ? 20261108 : 20261105);
     const people = sal ? [
-      ['Ana Beatriz', 1.25, 1.1, 0.9, 'Cabeleireira'], ['Camila Souza', 1.0, 1.2, 0.95, 'Manicure'], ['Juliana Prado', 1.05, 0.95, 1.0, 'Cabeleireira'],
+      ['Ana Beatriz', 1.25, 1.0, 0.9, 'Cabeleireira'], ['Camila Souza', 1.0, 1.2, 0.95, 'Manicure'], ['Juliana Prado', 1.05, 0.95, 1.0, 'Cabeleireira'],
       ['Larissa Melo', 0.85, 1.15, 0.7, 'Esteticista'], ['Fernanda Dias', 0.95, 0.9, 0.8, 'Manicure'], ['Patrícia Gomes', 0.8, 1.0, 0.75, 'Maquiadora'],
       ['Bianca Rocha', 0.65, 1.1, 0.6, 'Designer de sobrancelhas'],
     ] : [
-      ['Rafael Lima', 1.25, 1.05, 0.9, 'Barbeiro líder'], ['Diego Moura', 1.0, 1.2, 0.95, 'Barbeiro'], ['Thiago Alves', 1.05, 0.95, 1.0, 'Barbeiro'],
+      ['Rafael Lima', 1.25, 1.0, 0.9, 'Barbeiro líder'], ['Diego Moura', 1.0, 1.2, 0.95, 'Barbeiro'], ['Thiago Alves', 1.05, 0.95, 1.0, 'Barbeiro'],
       ['Bruno Rocha', 0.85, 1.15, 0.7, 'Barbeiro'], ['Caio Ferreira', 0.95, 0.9, 0.8, 'Barbeiro'], ['Mateus Pinto', 0.8, 1.0, 0.75, 'Barbeiro'],
       ['Júlia Ramos', 0.65, 1.1, 0.6, 'Aprendiz'],
     ];
     // Fotos de pessoas fictícias (geradas por IA), só para a demonstração.
     const slug = n => n.split(' ')[0].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     const barbers = people.map(([name, , , , role]) => ({ id: uid('b_'), name, photo: 'assets/demo/' + slug(name) + '.jpg', active: true, role, instagram: '' }));
-    const priceK = sal ? 1.45 : 1;
+    // Mês fechado de cada profissional: faturamento de R$ 11 a 21 mil e ticket médio de R$ 85 a 130.
+    // Clientes = faturamento ÷ ticket; serviços e horas em comandas seguem os clientes.
+    const vols = people.map(p => p[1]), prices = people.map(p => p[2]);
+    const lerp = (v, lo, hi, a, b) => a + (b - a) * (v - lo) / ((hi - lo) || 1);
+    const vMin = Math.min(...vols), vMax = Math.max(...vols), pMin = Math.min(...prices), pMax = Math.max(...prices);
+    const TARGET = vols.map(v => lerp(v, vMin, vMax, 12200, 20200));
+    const TICKET = prices.map(p => lerp(p, pMin, pMax, 88, 127));
+    const HPS = sal ? [0.62, 0.82] : [0.6, 0.8]; // horas por serviço
     const entries = [];
     const today = new Date();
-    for (let d = 100; d >= 0; d--) {
-      const day = new Date(today.getFullYear(), today.getMonth(), today.getDate() - d);
-      if (day.getDay() === 0) continue; // domingo fechado
-      people.forEach(([, vol, price, disc], i) => {
-        if (r() < 0.12) return; // folga
-        const cli = Math.max(1, Math.round((3 + r() * 4) * vol));
-        const serv = cli + Math.round(r() * 2 * vol);
-        const fat = Math.round(serv * (34 + r() * 18) * price * priceK * 100) / 100;
-        const hDisp = 8;
-        const hOcup = Math.min(hDisp, Math.round(serv * (0.45 + r() * 0.2) * 2) / 2);
-        entries.push({ id: uid('e_'), barberId: barbers[i].id, date: iso(day), fat, serv, cli, hDisp, hOcup });
+    const curYm = iso(today).slice(0, 7);
+    const GROW = [0.94, 0.96, 0.98, 1]; // evolução dos últimos meses até o atual
+    const cliMonth = {}; // clientes por mês e profissional (para os agendamentos)
+    for (let k = 3; k >= 0; k--) {
+      const ym = addMonths(curYm, -k), mr = monthRange(ym);
+      const last = k === 0 ? iso(today) : mr.end;
+      const days = [];
+      for (let d = fromIso(mr.start); iso(d) <= last; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) if (d.getDay() !== 0) days.push(new Date(d));
+      people.forEach((_, i) => {
+        const worked = days.filter(() => r() >= 0.12); // folgas
+        if (!worked.length) return;
+        const T = TARGET[i] * GROW[3 - k] * (0.97 + r() * 0.06);
+        const tk = TICKET[i] * (0.97 + r() * 0.06);
+        const total = Math.round(T / tk);
+        (cliMonth[ym] = cliMonth[ym] || {})[i] = total;
+        const w = worked.map(d => (0.7 + r() * 0.6) * (d.getDay() === 6 ? 1.35 : 1));
+        const sw = w.reduce((x, y) => x + y, 0);
+        const raw = w.map(x => total * x / sw), cliD = raw.map(Math.floor);
+        let rest = total - cliD.reduce((x, y) => x + y, 0);
+        raw.map((x, j) => [x - Math.floor(x), j]).sort((x, y) => y[0] - x[0]).forEach(([, j]) => { if (rest > 0) { cliD[j]++; rest--; } });
+        worked.forEach((day, j) => {
+          const cli = cliD[j];
+          if (!cli) return;
+          const serv = cli + Math.round(cli * (0.15 + r() * 0.25));
+          const fat = Math.round(cli * tk * (0.92 + r() * 0.16) * 100) / 100;
+          const hOcup = Math.round(serv * (HPS[0] + r() * (HPS[1] - HPS[0])) * 2) / 2;
+          entries.push({ id: uid('e_'), barberId: barbers[i].id, date: iso(day), fat, serv, cli, hDisp: 8, hOcup });
+        });
       });
     }
     // Lançamentos manuais do mês: Pontos POP, planos e venda de produtos.
     const monthly = [];
-    const curYm = iso(today).slice(0, 7);
     for (let k = 3; k >= 0; k--) {
       const ym = addMonths(curYm, -k);
       const r2 = monthRange(ym);
@@ -536,8 +574,9 @@
       people.forEach(([, vol, , disc], i) => {
         monthly.push({ barberId: barbers[i].id, month: ym,
           check: Math.round((10 + r() * 10 + disc * 8) * frac),
-          planos: Math.round(r() * 4 * vol * frac),
-          prod: Math.round((6 + r() * 18) * frac) });
+          agend: Math.round(((cliMonth[ym] || {})[i] || 0) * (1.06 + r() * 0.08)),
+          planos: Math.round((4 + r() * 2.5) * vol * vol * frac),
+          prod: Math.round((14 + r() * 22) * vol * frac) });
       });
     }
     // Checklist Agenda Cheia de exemplo no mês atual.
@@ -575,7 +614,8 @@
     return {
       version: 2,
       demo: true,
-      demoV: 3,
+      demoV: 4,
+      demoYm: curYm,
       presentation: !!DEMO,
       brand,
       pops: popsList,
@@ -585,7 +625,7 @@
       monthly,
       pop,
       hidden: ['fid'],
-      goals: { team: { ...DEFAULT_GOALS }, byBarber: {} },
+      goals: { team: { ...DEFAULT_GOALS, fat: 16000, ticket: 105, serv: 175, cli: 145, ocup: 65, planos: 7, prod: 28 }, byBarber: {} },
       company: { name: sal ? 'Studio Bella · Demonstração' : 'Barbearia Demonstração', cnpj: '00.000.000/0001-00', phone: '(11) 90000-0000', email: 'gestor@demo.com', logo: null },
       users: [
         { id: gestorId, name: sal ? 'Dona do Studio' : 'Gestor Demo', email: 'gestor@demo.com', pass: passHash('gestor@demo.com', 'demo123'), role: 'gestor', status: 'ativo', barberId: null },
@@ -624,7 +664,7 @@
           }
           if (!Array.isArray(st.hidden)) { st.hidden = ['fid']; DB.save(st); } // fidelização começa oculta
           // Demonstração antiga (sem fotos dos profissionais): recria com a versão nova.
-          if (st.demo && st.demoV !== 3) { const d = demoState(DEMO || 'barber'); DB.save(d); return d; }
+          if (st.demo && (st.demoV !== 4 || st.demoYm !== iso(new Date()).slice(0, 7))) { const d = demoState(DEMO || 'barber'); DB.save(d); return d; }
           // Na apresentação, a marca é sempre a escolhida (Barber ou Salão).
           if (DEMO && st.brand !== DEMO) { st.brand = DEMO; DB.save(st); }
           return st;
