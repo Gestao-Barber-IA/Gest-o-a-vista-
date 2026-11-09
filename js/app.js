@@ -204,7 +204,7 @@
     ? `<span class="brand ${cls}">${logo()}</span>`
     : `<span class="brand ${cls}">${logo()}
       <span class="brand-text"><span class="brand-name">Gestão ${B().word} <span class="brand-ia-word">IA</span></span>
-      <span class="brand-sub">Sistema de gestão</span></span>
+      <span class="brand-sub">Sistema de performance</span></span>
     </span>`;
 
   function toast(msg, ms = 2800, ic = '') {
@@ -2839,7 +2839,7 @@ Content-Type: application/json</pre>
     if (sl.k === 'intro') return `<div class="fx-slide fx-intro has-open">
         <div class="fx-emblem"><span class="fx-orbit"></span><span class="fx-orbit o2"></span>${logo('fx-logo')}</div>
         <p class="fx-kicker">${esc(state.company.name)}</p>
-        <h1 class="fx-title">Fechamento</h1>
+        <h1 class="fx-title"><span>Fechamento</span></h1>
         <p class="fx-month">${month}</p>
         <p class="fx-tag">Cada atendimento conta.</p>
         <p class="fx-count"><b data-count="${n}">0</b> barbeiros</p>
@@ -2852,7 +2852,7 @@ Content-Type: application/json</pre>
     if (sl.k === 'podium') {
       const t1 = fxTier(R, R.rows[0], 1);
       return `<div class="fx-slide fx-pintro">
-        <h1 class="fx-title gold">É hora do pódio</h1>
+        <h1 class="fx-title gold"><span>É hora do pódio</span></h1>
         <p class="fx-month">Os três melhores de ${month}</p>
         <div class="fx-chips"><span class="c-bronze">Bronze</span><span class="c-silver">Prata</span><span class="${t1.cls === 'fx-mvp' ? 'c-mvp' : 'c-gold'}">${t1.label}</span></div>
         <div class="fx-spot"></div><div class="fx-spot s2"></div><div class="fx-spot s3"></div></div>`;
@@ -2875,7 +2875,7 @@ Content-Type: application/json</pre>
       const count = {}; for (const a of R.active) for (const id of a.leaders) count[id] = (count[id] || 0) + 1;
       const ranking = Object.entries(count).sort((a, b) => b[1] - a[1]).map(([id, n2]) => byId(id) && `<span><b>${esc(first(byId(id).barber.name))}</b> ${n2} indicador${n2 > 1 ? 'es' : ''}</span>`).filter(Boolean).join('');
       return `<div class="fx-slide fx-leaders">
-        <h1 class="fx-title gold">Líderes do mês</h1>
+        <h1 class="fx-title gold"><span>Líderes do mês</span></h1>
         <p class="fx-month">Quem ficou em 1º lugar em cada indicador de ${month}</p>
         <div class="fx-lgrid">${items.map(card).join('')}</div>
         ${ranking ? `<p class="fx-lsum">${ranking}</p>` : ''}
@@ -2884,7 +2884,7 @@ Content-Type: application/json</pre>
     if (sl.k === 'final') {
       const top = R.rows.slice(0, 3);
       return `<div class="fx-slide fx-final">
-        <h1 class="fx-title gold">Parabéns ao pódio</h1>
+        <h1 class="fx-title gold"><span>Parabéns ao pódio</span></h1>
         <div class="fx-fgrid">${top.map((r, i) => { const t = fxTier(R, r, i + 1); return `<div class="fx-fcard ${t.cls}" style="--d:${0.4 + i * 0.25}s">
           ${fxPhoto(r.barber)}<b class="num">${ord(i + 1)}</b><span>${esc(r.barber.name)}</span><strong class="num">${t.label === 'MVP' || t.label === 'Destaque' ? `${r.leads.length}/${R.N}` : score(r.overall)}</strong><small>${t.label}</small></div>`; }).join('')}</div>
         <p class="fx-tag gold">Cada atendimento conta.</p>
@@ -3044,7 +3044,7 @@ Content-Type: application/json</pre>
     return [
       { html: `<div class="pt-slide pt-cover">
         <div class="fx-emblem"><span class="fx-orbit"></span><span class="fx-orbit o2"></span>${logo('fx-logo')}</div>
-        <h1 class="pt-brand">${brand}</h1>
+        <h1 class="pt-brand"><span>${brand}</span></h1>
         <p class="pt-lead"><b>Clareza para o dono.</b> <b>Performance para a equipe.</b></p>
         <p class="fx-tag">Cada atendimento conta.</p></div>`,
         note: `Abra com calma. "Hoje eu quero te mostrar como ${w.sal ? 'salões' : 'barbearias'} estão saindo do achismo e multiplicando o resultado da equipe. Em poucos minutos você vai entender por que o ${w.brand} é sobre duas coisas: clareza para quem é dono e performance para quem atende."` },
