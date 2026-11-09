@@ -574,6 +574,7 @@
     { group: 'Apresentações', items: [
       { r: 'apresentacao', t: 'Tela da loja', i: 'monitor' },
       { r: 'fechamento', t: 'Fechamento do mês', i: 'clipboard', g: 1, a: 1 },
+      { r: 'relatorios', t: 'Relatórios mensais', i: 'file', g: 1 },
       { r: 'temas', t: 'Temas', i: 'palette', g: 1 },
     ] },
     { group: 'GP · Gestão de pessoas', items: [
@@ -2231,7 +2232,8 @@
         ${own && !ui.hgEdit ? (Object.keys(hg).length || Object.keys(state.houseGoals || {}).length || Object.keys(state.houseGoalsM || {}).length
           ? `<button class="btn btn-sm pc-goal-btn" data-action="hgEdit">${icon('target')} Editar metas da empresa</button>`
           : `<button class="pc-goal-cta" data-action="hgEdit"><span class="pc-goal-ico">${icon('target')}</span><span><b>Cadastrar metas da empresa</b><small>Defina a meta de cada indicador e acompanhe o progresso, quanto falta e a conquista quando bater.</small></span>${icon('right')}</button>`) : ''}
-        ${has ? `<button class="btn btn-sm pc-print-btn" data-action="pcPrint">${icon('download')} Baixar relatório do mês (PDF)</button>` : ''}</div>
+        ${has ? `<button class="btn btn-sm pc-print-btn" data-action="pcPrint">${icon('download')} Baixar relatório do mês (PDF)</button>` : ''}
+        ${has && !scope ? `<button class="btn btn-sm pc-print-btn" data-action="repOpen" data-ym="${ym}">${icon('file')} Painel do mês</button>` : ''}</div>
       <div class="pc-print-head"><b>${esc(state.company.name || '')}</b><span>Relatório de performance ${scope ? 'da área' : 'da empresa'} · ${esc(cap(monthRange(ym).label))}</span><small>Gerado em ${new Date().toLocaleDateString('pt-BR')}</small></div>
       ${goalForm}
       ${has ? '' : `<div class="pc-empty">Nenhum dado lançado ainda. Assim que você cadastrar profissionais e lançar as métricas do mês, os totais e o comparativo aparecem aqui automaticamente.</div>`}
@@ -3571,6 +3573,110 @@ Content-Type: application/json</pre>
   }
 
 
+
+  // ---------- Relatórios mensais: painel do mês (para ver na tela e baixar em PDF) ----------
+  const RP_INDS = [['fat', 'Faturamento', 'wallet'], ['cli', 'Clientes atendidos', 'users'], ['serv', 'Serviços realizados', 'scissors'], ['ticket', 'Ticket médio', 'card'],
+    ['ocup', 'Taxa de ocupação', 'clock'], ['prod', 'Produtos vendidos', 'gift'], ['planos', 'Planos mensais', 'checksq'], ['fid', 'Fidelização', 'users']];
+  const rpVal = (k, v) => v == null ? '—' : k === 'fat' ? money0(v) : k === 'ticket' ? money2(v) : k === 'ocup' || k === 'fid' ? nf2.format(v) + '%' : nf0.format(v);
+  function repMonths() {
+    const out = [];
+    for (let k = curYm(); k >= firstYm() && out.length < 36; k = addMonths(k, -1)) out.push(k);
+    return out;
+  }
+  function rpLogo(size) {
+    const c = state.company;
+    const ini = (c.name || 'GB').split(/\s+/).filter(w => w.length > 2 || /^[A-Z]/.test(w)).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+    return c.logo ? `<img class="rp-logo-img" src="${esc(c.logo)}" alt="" style="width:${size}">` : `<span class="rp-shield" style="width:${size}"><b>${esc(ini)}</b></span>`;
+  }
+  function repBoard(ym) {
+    const R = monthR(ym);
+    const rows = R.rows.filter(r => Object.keys(r.sums.n).length);
+    if (!rows.length) return `<div class="card empty">${icon('file')}<h2>Sem resultados em ${esc(monthRange(ym).label)}</h2><p>Lance os resultados da equipe para gerar o painel deste mês.</p></div>`;
+    const vis = new Set(GB.visibleInds(state).map(i => i.key));
+    const inds = RP_INDS.filter(([k]) => vis.has(k) && rows.some(r => (GB.INDICATORS.find(i => i.key === k) || {}).calc(r.sums) != null)).slice(0, 6);
+    const calc = (k, r) => GB.INDICATORS.find(i => i.key === k).calc(r.sums);
+    const mr = monthRange(ym), [Y, M] = ym.split('-');
+    const monthUp = mr.label.split(' de ')[0].toUpperCase() + ' ' + Y;
+    const t = R.title, who = t.barberId ? R.rows.find(r => r.barber.id === t.barberId) : null;
+    const indName = k => (GB.INDICATORS.find(i => i.key === k) || {}).label || k;
+    const leadList = r => r.leads.slice(0, 5).map(k => `<li>Líder em ${esc(indName(k).toLowerCase())}</li>`).join('');
+    const boxD = t.type === 'destaque' && who
+      ? `<b class="rp-bx-name">${esc(who.barber.name)}</b><ul>${leadList(who)}</ul><small>Destaque do mês por ter liderado ${who.leads.length} dos ${R.N} indicadores.</small>`
+      : t.type === 'mvp' && who ? `<b class="rp-bx-name">${esc(who.barber.name)}</b><small>Foi além do destaque e se tornou o MVP do mês.</small>`
+      : `<b class="rp-bx-name">Não houve destaque</b><small>Ninguém liderou ${R.half} ou mais indicadores.<br>(Necessário: ${R.half} de ${R.Nrule} em 1º lugar)</small>`;
+    const boxM = t.type === 'mvp' && who
+      ? `<b class="rp-bx-name">${esc(who.barber.name)}</b><ul>${leadList(who)}</ul><small>MVP por liderar ${who.leads.length} dos ${R.N} indicadores.</small>`
+      : `<b class="rp-bx-name">Não houve MVP neste mês</b><small>Ninguém atingiu ${R.mvpNeed} ou mais indicadores em 1º lugar.<br>(Necessário: ${R.mvpNeed} de ${R.Nrule})</small>`;
+    const leaderOf = k => { const vals = rows.map(r => calc(k, r)).filter(v => v != null); return vals.length ? Math.max(...vals) : null; };
+    const top = Object.fromEntries(inds.map(([k]) => [k, leaderOf(k)]));
+    const card = (r, i) => {
+      const b = r.barber, parts = b.name.trim().split(/\s+/);
+      const nm = parts.length > 1 ? `${esc(parts[0])}<br>${esc(parts.slice(1).join(' '))}` : esc(b.name);
+      return `<div class="rp-card ${i === 0 ? 'first' : ''}">
+        <div class="rp-pos"><span>${r.pos}º</span>${r.leads.length ? `<i class="rp-star" title="Líder em ${r.leads.length} indicador${r.leads.length > 1 ? 'es' : ''}">★</i>` : ''}</div>
+        <div class="rp-photo">${b.photo ? `<img src="${esc(b.photo)}" alt="">` : `<b>${esc(parts.slice(0, 2).map(w => w[0]).join('').toUpperCase())}</b>`}</div>
+        <div class="rp-name">${nm}<small>(${score(r.overall)} pts)</small></div>
+        <ul class="rp-inds">${inds.map(([k, l, ic]) => { const v = calc(k, r), lead = v != null && top[k] != null && v === top[k] && v > 0;
+          return `<li class="${lead ? 'lead' : ''}">${icon(ic)}<span><small>${l}</small><b>${rpVal(k, v)}</b></span></li>`; }).join('')}</ul>
+      </div>`;
+    };
+    const T = houseTotals(ym);
+    const sumIt = (ic, l, v) => `<div class="rp-sum-it">${icon(ic)}<span><small>${l}</small><b>${v}</b></span></div>`;
+    const cols = rows.length > 10 ? Math.ceil(rows.length / 2) : rows.length;
+    return `<div class="rp-wrap"><div class="rp-in"><article class="rp-board" aria-label="Painel de performance de ${esc(mr.label)}">
+      <header class="rp-head">
+        <div class="rp-brand">${rpLogo('9cqw')}<b>${esc(state.company.name || '')}</b></div>
+        <div class="rp-title"><h1>${icon('scissors')}<span><span class="g">ANÁLISE DE PERFORMANCE</span><span class="s">${esc(monthUp)}</span></span></h1>
+          <p><i></i>RESULTADOS DE ${mr.start.slice(8)}/${M} A ${(ym === curYm() ? iso(new Date()) : mr.end).slice(8)}/${M}${ym === curYm() ? ' (PARCIAL)' : ''}<i></i></p></div>
+        <div class="rp-boxes">
+          <div class="rp-box"><h2><span>★</span> DESTAQUE DO MÊS</h2>${boxD}</div>
+          <div class="rp-box"><h2>${icon('trophy')} MVP DO MÊS</h2>${boxM}</div>
+        </div>
+      </header>
+      <section class="rp-cols" style="--cols:${cols}">${rows.map(card).join('')}</section>
+      <footer class="rp-foot">
+        <div class="rp-sum"><h2>RESUMO GERAL</h2><div class="rp-sum-row">
+          ${sumIt('wallet', 'Faturamento total', money0(T.vals.fat))}
+          ${sumIt('users', 'Clientes atendidos', nf0.format(T.vals.cli))}
+          ${sumIt('scissors', 'Serviços realizados', nf0.format(T.vals.serv))}
+          ${T.vals.prod != null ? sumIt('gift', 'Produtos vendidos', nf0.format(T.vals.prod)) : ''}
+          ${T.vals.ticket != null ? sumIt('card', 'Ticket médio da casa', money2(T.vals.ticket)) : ''}
+        </div></div>
+        <div class="rp-quote"><p><b>“</b>Grandes resultados são construídos com consistência e trabalho em equipe.</p><small>Seguimos elevando o padrão da ${esc(state.company.name || 'nossa equipe')}.</small></div>
+        <div class="rp-brand sm">${rpLogo('6cqw')}</div>
+      </footer>
+    </article></div></div>`;
+  }
+  function pageRelatorios() {
+    if (ui.repYm) {
+      const ym = ui.repYm;
+      return `<div class="card rp-bar">
+          <button class="btn btn-sm" data-action="repBack">${icon('left')} Todos os meses</button>
+          <label class="field"><span class="sr-only">Mês</span><select class="input" data-change="repYm">${repMonths().map(o => `<option value="${o}" ${o === ym ? 'selected' : ''}>${ymLabel(o).replace(' de ', '/')}</option>`).join('')}</select></label>
+          <button class="btn btn-sm btn-primary" data-action="repPrint">${icon('download')} Baixar PDF</button>
+        </div>
+        ${repBoard(ym)}
+        <p class="section-note">No PDF, o painel sai em uma folha A4 deitada. No celular, toque em Baixar PDF e escolha "Salvar como PDF" ou compartilhe direto no WhatsApp.</p>`;
+    }
+    const list = repMonths().map(ym => {
+      const R = monthR(ym), rows = R.rows.filter(r => Object.keys(r.sums.n).length);
+      if (!rows.length) return '';
+      const T = houseTotals(ym), who = R.title.barberId ? R.rows.find(r => r.barber.id === R.title.barberId) : rows[0];
+      const cur = ym === curYm();
+      return `<button type="button" class="rp-item" data-action="repOpen" data-ym="${ym}">
+        <span class="rp-item-top"><b>${esc(ymLabel(ym))}</b>${cur ? '<span class="chip chip-soft">parcial</span>' : ''}</span>
+        <span class="rp-item-fat num">${money0(T.vals.fat)}</span>
+        <span class="rp-item-who">${avatar(who.barber, 28)}<span>${R.title.type === 'mvp' ? 'MVP: ' : R.title.type === 'destaque' ? 'Destaque: ' : '1º lugar: '}<b>${esc(who.barber.name)}</b></span></span>
+        <span class="rp-item-go">${icon('file')} Abrir painel</span>
+      </button>`;
+    }).join('');
+    return `<section class="section card">
+        <h2 class="section-title">Relatórios mensais</h2>
+        <p class="section-note">Cada mês fica guardado aqui com o painel completo da equipe: ranking, números de cada profissional, destaque, MVP e resumo geral. Abra para ver ou baixar em PDF quando quiser.</p>
+        ${list ? `<div class="rp-list">${list}</div>` : `<p class="muted">Ainda não há meses com resultados lançados.</p>`}
+      </section>`;
+  }
+
   // ---------- Temas ----------
   function sampleRanking() {
     const names = MARCA === 'salao' ? ['Ana Beatriz', 'Carla Nunes', 'Paula Reis'] : ['Rafael Lima', 'Diego Moura', 'Thiago Alves'];
@@ -3626,6 +3732,7 @@ Content-Type: application/json</pre>
     inicio: { t: 'Início', r: pageInicio },
     fechamento: { t: 'Fechamento do mês', r: pageFechamento, g: 1, a: 1 },
     temas: { t: 'Temas', r: pageTemas, g: 1 },
+    relatorios: { t: 'Relatórios mensais', r: pageRelatorios, g: 1 },
     organograma: { t: 'Organograma', r: pageOrganograma, g: 1 },
     checklist: { t: 'Checklist Agenda Cheia', r: pageChecklist },
     pops: { t: 'POPs · Guia do Sucesso', r: pagePops },
@@ -4180,6 +4287,14 @@ Content-Type: application/json</pre>
       c.items.splice(i, 1); ui.confirm = null; save(); render();
     },
     popItemMove(el) { const c = popCfgW(), i = Number(el.dataset.i), j = i + Number(el.dataset.d); if (j < 0 || j >= c.items.length) return; [c.items[i], c.items[j]] = [c.items[j], c.items[i]]; save(); render(); },
+    repOpen(el) { ui.repYm = el.dataset.ym; if (location.hash !== '#relatorios') location.hash = 'relatorios'; else render(); window.scrollTo(0, 0); },
+    repBack() { ui.repYm = null; render(); },
+    repPrint() {
+      const t = document.title;
+      document.title = `Análise de performance ${state.company.name || ''} - ${cap(monthRange(ui.repYm).label)}`.replace(/\s+/g, ' ');
+      document.body.classList.add('printing', 'printing-rp');
+      setTimeout(() => { window.print(); document.body.classList.remove('printing', 'printing-rp'); document.title = t; }, 120);
+    },
     pcMonth(el) { ui.teamMonth = el.dataset.ym; render(); },
     pcPrint() {
       const t = document.title, ym = ui.teamMonth || curYm();
@@ -4713,6 +4828,7 @@ Content-Type: application/json</pre>
     perfBarber(el) { ui.perfBarber = el.value; location.hash = 'perfil-' + el.value; },
     teamMonth(el) { ui.teamMonth = el.value; ui.fcPeek = false; render(); },
     hgYm(el) { ui.hgYm = el.value; render(); },
+    repYm(el) { ui.repYm = el.value; render(); },
     lanDate(el) { ui.lanDate = el.value; },
     async leadStatus(el) {
       const l = ui.leadsData && ui.leadsData.list && ui.leadsData.list.find(x => x.id === el.dataset.id); if (!l) return;
