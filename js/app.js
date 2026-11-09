@@ -2135,7 +2135,9 @@
     return `
       <div class="card tm-month"><label class="field"><span class="tm-eyebrow">Mês</span>
         <select class="input" id="pc-month" data-change="teamMonth">${monthOptions(ym)}</select></label>
-        ${own && !ui.hgEdit ? `<button class="btn btn-sm pc-goal-btn" data-action="hgEdit">${icon('target')} ${Object.keys(hg).length ? 'Editar metas da empresa' : 'Cadastrar metas da empresa'}</button>` : ''}</div>
+        ${own && !ui.hgEdit ? (Object.keys(hg).length || Object.keys(state.houseGoals || {}).length || Object.keys(state.houseGoalsM || {}).length
+          ? `<button class="btn btn-sm pc-goal-btn" data-action="hgEdit">${icon('target')} Editar metas da empresa</button>`
+          : `<button class="pc-goal-cta" data-action="hgEdit"><span class="pc-goal-ico">${icon('target')}</span><span><b>Cadastrar metas da empresa</b><small>Defina a meta de cada indicador e acompanhe o progresso, quanto falta e a conquista quando bater.</small></span>${icon('right')}</button>`) : ''}</div>
       ${goalForm}
       ${has ? '' : `<div class="pc-empty">Nenhum dado lançado ainda. Assim que você cadastrar profissionais e lançar as métricas do mês, os totais e o comparativo aparecem aqui automaticamente.</div>`}
       <section class="section card pc-totals">
