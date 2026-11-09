@@ -391,7 +391,7 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .rank-row { display: flex; align-items: center; gap: 14px; padding: 10px 16px; border-radius: 20px; background: var(--surface); border: 1px solid var(--line); color: var(--fg); text-decoration: none; }
 .rank-row:hover { border-color: var(--line-accent); }
 .rank-row.top { border-color: rgba(214, 180, 106, 0.55); background: linear-gradient(90deg, rgba(214, 180, 106, 0.13), var(--surface) 70%); }
-.rank-row.low { border-color: rgba(255, 107, 107, 0.45); background: linear-gradient(90deg, rgba(255, 107, 107, 0.1), var(--surface) 70%); }
+.rank-row.low { border-color: rgba(255, 74, 50, 0.5); background: linear-gradient(90deg, rgba(255, 74, 50, 0.1), var(--surface) 70%); }
 .rank-pos { width: 2.2ch; font-weight: 700; font-size: 1.05rem; }
 .rank-who { flex: 1; min-width: 0; display: grid; gap: 1px; }
 .rank-who b { display: flex; gap: 8px; align-items: baseline; min-width: 0; font-weight: 600; font-size: 1.05rem; white-space: nowrap; }
@@ -1128,7 +1128,7 @@ textarea.input.pop-ta { min-height: 72px; font-family: var(--font-body); font-si
 
 .tv-eyebrow { margin: 0; display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 800; letter-spacing: 0.28em; text-transform: uppercase; font-size: 0.9rem; }
 .tv-eyebrow.gold { color: var(--accent); }
-.tv-eyebrow.red { color: #ff7b7b; }
+.tv-eyebrow.red { color: #ff5a3c; }
 .tv-h { margin: -8px 0 4px; font-family: var(--font-display); font-weight: 800; font-size: clamp(1.7rem, 4vw, 2.6rem); line-height: 1.1; text-wrap: balance; }
 
 .gd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 170px), 1fr)); gap: 14px; }
@@ -1157,7 +1157,7 @@ textarea.input.pop-ta { min-height: 72px; font-family: var(--font-body); font-si
 .al-leader { --c: #f2c14e; }
 .al-chase { --c: var(--blue-light); }
 .al-middle { --c: #9a8cff; }
-.al-low { --c: #ff6b6b; }
+.al-low { --c: #ff4a32; }
 .al-av { position: relative; flex: none; align-self: flex-start; }
 .al-av .avatar { box-shadow: 0 0 0 3px var(--c); }
 .al-pos { position: absolute; right: -8px; bottom: -6px; display: grid; place-items: center; min-width: 32px; height: 32px; padding: 0 6px; border-radius: 999px; background: var(--c); color: #0c0c0e; font-weight: 800; font-size: 0.9rem; box-shadow: 0 0 0 3px var(--surface); }
