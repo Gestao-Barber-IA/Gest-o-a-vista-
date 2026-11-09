@@ -70,7 +70,13 @@ img { max-width: 100%; }
 .brand { display: inline-flex; align-items: center; gap: 12px; }
 .brand-mark { width: 52px; height: 52px; flex: none; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 1px rgba(214, 180, 106, 0.35); }
 .brand-text { display: flex; flex-direction: column; line-height: 1; }
-.brand-name { font-family: var(--font-display); font-weight: 800; font-size: 1.25rem; letter-spacing: 0.01em; color: var(--accent); }
+.brand-name { font-family: var(--font-display); font-weight: 800; font-size: 1.25rem; letter-spacing: 0.01em; color: var(--accent); white-space: nowrap; }
+.brand-text { min-width: 0; }
+/* No menu, o nome da marca não cresce com o tamanho da letra: fica sempre numa linha. */
+.drawer .brand-name { font-size: 18px; letter-spacing: 0; }
+.drawer .brand-sub { font-size: 11.5px; }
+.drawer .brand-mark { width: 46px; height: 46px; }
+.drawer .brand { gap: 10px; }
 .brand-ia-word { color: var(--blue-light); }
 .brand-sub { display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
 .brand-ia { font-family: var(--font-display); font-weight: 800; font-size: 0.7rem; letter-spacing: 0.12em; padding: 2px 7px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); }
