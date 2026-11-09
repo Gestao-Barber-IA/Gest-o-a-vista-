@@ -7,7 +7,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 const FIELDS: Record<string, string> = {
   faturamento: "fat", servicos: "serv", clientes: "cli", checklist_pop: "check",
   horas_disponiveis: "hDisp", horas_ocupadas: "hOcup", planos_mensais: "planos",
-  clientes_retorno: "ret", venda_produtos: "prod",
+  clientes_retorno: "ret", venda_produtos: "prod", maior_comanda: "comanda",
 };
 
 const cors = {

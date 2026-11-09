@@ -127,6 +127,7 @@
     cli: ['Clientes atendidos', 'Quantidade de clientes atendidos pelo barbeiro no período.'],
     planos: ['Planos mensais', 'Quantidade de planos mensais (assinaturas) vendidos pelo barbeiro no período.'],
     fid: ['Taxa de fidelização', 'Clientes que voltaram ÷ clientes atendidos no período.'],
+    comanda: ['Maior comanda do mês', 'O maior valor de uma única comanda (um atendimento, com serviços e produtos) do profissional no mês. É só um destaque: não entra na pontuação, no MVP nem no Destaque.'],
     prod: ['Venda de produtos', 'Quantidade de produtos (pomadas, shampoos, óleos…) vendidos pelo barbeiro no período.'],
     agend: ['Agendamentos', 'Quantidade de agendamentos do barbeiro no mês. Aparece nos totais da Performance; não entra na pontuação.'],
     aus: ['Dias de ausência', 'Dias em que o barbeiro não trabalhou por férias, atestado ou folga extra. Cada dia desconta um dia da capacidade da taxa de ocupação.'],
@@ -161,7 +162,7 @@
   }
   const ACCESS_TIP = () => ACCESS.map(([, l, d]) => `${l}: ${d}`).join(' ');
   const tip = key => TIPS[key] ? `<button type="button" class="tip" data-tip="${key}" aria-label="Explicação: ${esc(TIPS[key][0])}">?</button>` : '';
-  const FIELD_TIP = { fat: 'fat', cli: 'cli', serv: 'serv', ticket: 'ticket', ocupPct: 'ocup', fidPct: 'fid', prod: 'prod', check: 'check', planos: 'planos', agend: 'agend', aus: 'aus' };
+  const FIELD_TIP = { fat: 'fat', cli: 'cli', serv: 'serv', ticket: 'ticket', ocupPct: 'ocup', fidPct: 'fid', prod: 'prod', check: 'check', planos: 'planos', agend: 'agend', aus: 'aus', comanda: 'comanda' };
   const ord = n => n + 'º';
   const dateBR = s => { const d = fromIso(s); return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }); };
 
@@ -797,6 +798,14 @@
         <div class="hl-val num">${fmt(ind, row.values[ind.key])}</div>
         ${leaders.length > 1 ? '<span><span class="chip chip-tie">Empate na liderança</span></span>' : ''}
       </div>`;
+    }).join('')}${(R.bonus || []).map(ind => {
+      const leaders = ind.leaders.map(barberById).filter(Boolean);
+      if (!leaders.length) return '';
+      return `<div class="card card-glow hl hl-bonus">
+        <div class="hl-head">${icon('trophy')}<span>${esc(ind.label)} · não pontua</span>${tip(ind.key)}</div>
+        <div class="hl-who"><span class="avatar-stack">${leaders.slice(0, 3).map(b => avatar(b, 44)).join('')}</span><span>${leaders.map(b => esc(b.name)).join(' + ')}</span></div>
+        <div class="hl-val num">${money2(ind.max)}</div>
+      </div>`;
     }).join('')}</div>`;
   }
 
@@ -1351,12 +1360,13 @@
       ['Ocupação', r => r.values.ocup != null ? nf1.format(r.values.ocup) + '%' : '—', vis('ocup')],
       ['Produtos', r => nf0.format(r.sums.prod || 0), vis('prod')],
       ['Planos', r => nf0.format(r.sums.planos), vis('planos')],
+      ['Maior comanda', r => r.sums.n.comanda ? money0(r.sums.comanda) : '—', true],
     ].filter(c => c[2]);
     const all = rows.length === R.rows.length;
     return `<section class="section card">
         <h2 class="section-title">Detalhado por profissional</h2>
         <p class="section-note">Toque num profissional para ver o resumo dele; o faturamento por mês, a evolução e os pontos fortes e a melhorar ficam na performance completa.${all ? '' : ' Aparecem só os profissionais cujos números detalhados você pode ver.'}</p>
-        <div class="table-wrap"><table class="pc-table"><thead><tr><th>Profissional</th>${cols.map(c => `<th>${c[0]}${tip({ Faturamento: 'fat', Clientes: 'cli', Serviços: 'serv', 'Ticket médio': 'ticket', Ocupação: 'ocup', Produtos: 'prod', Planos: 'planos' }[c[0]])}</th>`).join('')}<th>Pontos${tip('score')}</th></tr></thead><tbody>
+        <div class="table-wrap"><table class="pc-table"><thead><tr><th>Profissional</th>${cols.map(c => `<th>${c[0]}${tip({ Faturamento: 'fat', Clientes: 'cli', Serviços: 'serv', 'Ticket médio': 'ticket', Ocupação: 'ocup', Produtos: 'prod', Planos: 'planos', 'Maior comanda': 'comanda' }[c[0]])}</th>`).join('')}<th>Pontos${tip('score')}</th></tr></thead><tbody>
           ${rows.map(r => `<tr class="${ui.profSel === r.barber.id ? 'on' : ''}" data-action="profPick" data-id="${esc(r.barber.id)}"><td><button type="button" class="td-who" data-action="profPick" data-id="${esc(r.barber.id)}" aria-expanded="${ui.profSel === r.barber.id}">${avatar(r.barber, 36)}<span>${esc(r.barber.name)}</span></button></td>
             ${cols.map(c => `<td>${c[1](r)}</td>`).join('')}<td class="td-score">${score(r.overall)}</td></tr>`).join('')}
         </tbody></table></div>
@@ -1805,6 +1815,7 @@
         ${vis('prod') ? stat('Produtos vendidos', nf0.format(sum('prod'))) : ''}
         ${vis('planos') ? stat('Planos mensais', nf0.format(sum('planos'))) : ''}
         ${stat('Ticket médio da casa', cli > 0 ? money0(fat / cli) : '—')}
+        ${rows.some(r => r.sums.n.comanda) ? stat('Maior comanda do mês', money2(Math.max(...rows.map(r => r.sums.n.comanda ? r.sums.comanda : 0)))) : ''}
         ${vis('ocup') ? stat('Ocupação média', ocups.length ? nf1.format(ocups.reduce((a, v) => a + v, 0) / ocups.length) + '%' : '—') : ''}
         ${stat('Profissionais', nf0.format(rows.length))}
       </section>
@@ -3335,9 +3346,22 @@ Content-Type: application/json</pre>
         ${leaders.length > 1 ? '<span class="chip chip-destaque">Empate na liderança</span>' : ''}
       </div>`;
     }).join('');
+    const extra = (R.bonus || []).map(ind => {
+      const leaders = ind.leaders.map(barberById).filter(Boolean);
+      if (!leaders.length) return '';
+      const names = leaders.length > 1 ? leaders.map(b => first(b.name)).join(' + ') : esc(leaders[0].name);
+      return `<div class="gd gd-bonus ${leaders.length > 1 ? 'gd-tie' : ''}">
+        <span class="gd-label">${esc(ind.label)}</span>
+        <div class="gd-photos"><span class="gd-crown">${crownSvg('tier-gold')}</span>${leaders.slice(0, 3).map(b => `<span class="gd-photo">${pdPhoto(b).replace('pd-photo', 'gd-ring')}</span>`).join('')}</div>
+        <b class="gd-name">${names}</b>
+        <span class="gd-val num">${money2(ind.max)}</span>
+        <span class="chip chip-soft">Não pontua</span>
+      </div>`;
+    }).join('');
+    const nCards = R.active.length + (R.bonus || []).filter(i => i.leaders.length).length;
     return `<p class="tv-eyebrow gold">${icon('crown')} Líderes do período</p>
       <h2 class="tv-h">Quem está puxando cada resultado</h2>
-      ${cards ? `<div class="gd-grid" style="--gd-cols:${Math.min(5, Math.max(3, Math.ceil(R.active.length / 2)))}">${cards}</div>` : '<div class="card muted">Ainda não há lançamentos neste período.</div>'}`;
+      ${cards ? `<div class="gd-grid" style="--gd-cols:${Math.min(5, Math.max(3, Math.ceil(nCards / 2)))}">${cards}${extra}</div>` : '<div class="card muted">Ainda não há lançamentos neste período.</div>'}`;
   }
 
   function tvAlerts(R) {
@@ -3413,7 +3437,8 @@ Content-Type: application/json</pre>
     </div>`;
     fitTV();
     root.querySelectorAll('.tv img').forEach(im => { if (!im.complete) im.addEventListener('load', fitTV, { once: true }); });
-    setTimeout(fitTV, 800);
+    [300, 900, 2000, 4000].forEach(ms => setTimeout(fitTV, ms));
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitTV);
     applyLive();
     clearTimeout(ui.tvTimer);
     ui.tvTimer = setTimeout(() => { ui.tvIndex = i + 1; if (location.hash === '#apresentacao') { renderTV(); window.scrollTo(0, 0); } }, TV_SECONDS * 1000);
@@ -3427,23 +3452,31 @@ Content-Type: application/json</pre>
     const W = window.innerWidth, H = window.innerHeight;
     const on = W >= 900 && W > H;
     tv.classList.toggle('tv-fitted', on);
-    box.style.zoom = '';
+    box.style.width = box.style.transform = box.style.left = box.style.top = '';
     if (!on) return;
     const cs = getComputedStyle(tv);
-    const availH = H - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-    const maxZ = Math.min(2.4, W / 1150); // mantém pelo menos ~1150px de largura de layout
-    let z = 1;
-    for (let k = 0; k < 4; k++) {
-      box.style.zoom = String(z);
-      const h = box.getBoundingClientRect().height;
-      if (!h) break;
-      const nz = Math.max(0.4, Math.min(maxZ, z * availH / h));
-      if (Math.abs(nz - z) < 0.01) break;
+    const pt = parseFloat(cs.paddingTop), pb = parseFloat(cs.paddingBottom), pl = parseFloat(cs.paddingLeft), pr = parseFloat(cs.paddingRight);
+    const availW = W - pl - pr, availH = H - pt - pb;
+    // Escala por transform (funciona em qualquer navegador, inclusive de Smart TV).
+    // O layout é montado numa largura "virtual" e depois reduzido/ampliado para caber na tela.
+    const maxZ = Math.min(2.4, availW / 1100);
+    let z = Math.min(1, maxZ), h = 0;
+    for (let k = 0; k < 5; k++) {
+      box.style.width = (availW / z) + 'px';
+      h = box.offsetHeight;
+      if (!h) return;
+      const nz = Math.max(0.35, Math.min(maxZ, availH / h));
+      if (Math.abs(nz - z) < 0.005) { z = Math.min(z, availH / h); break; }
       z = nz;
     }
-    box.style.zoom = String(z);
-    // Se ainda sobrar um pouquinho (arredondamento), reduz mais um passo.
-    if (box.getBoundingClientRect().height > availH + 1) box.style.zoom = String(z * availH / box.getBoundingClientRect().height);
+    box.style.width = (availW / z) + 'px';
+    h = box.offsetHeight;
+    if (h * z > availH) z = availH / h;
+    box.style.width = (availW / z) + 'px';
+    h = box.offsetHeight;
+    box.style.left = pl + 'px';
+    box.style.top = (pt + Math.max(0, (availH - h * z) / 2)) + 'px';
+    box.style.transform = `scale(${z})`;
   }
   window.addEventListener('resize', () => { if (location.hash === '#apresentacao') fitTV(); });
 

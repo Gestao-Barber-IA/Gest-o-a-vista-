@@ -82,6 +82,12 @@
       calc: s => s.n.prod ? s.prod : null },
   ];
 
+  // Indicadores de destaque que NÃO entram na pontuação, no MVP nem no Destaque.
+  const BONUS_INDS = [
+    { key: 'comanda', label: 'Maior comanda do mês', short: 'Maior comanda', fmt: 'money2', noScore: true,
+      calc: s => s.n.comanda ? s.comanda : null },
+  ];
+
   // Campos que o gestor (ou a API) lança por barbeiro e por dia.
   const FIELDS = [
     { key: 'fat', label: 'Faturamento (R$)', api: 'faturamento', step: '0.01' },
@@ -94,6 +100,7 @@
     { key: 'planos', label: 'Planos mensais vendidos', api: 'planos_mensais', step: '1' },
     { key: 'ret', label: 'Clientes que voltaram', api: 'clientes_retorno', step: '1' },
     { key: 'prod', label: 'Produtos vendidos (quantidade)', api: 'venda_produtos', step: '1' },
+    { key: 'comanda', label: 'Maior comanda do dia (R$)', api: 'maior_comanda', step: '0.01' },
   ];
 
   // ---------- períodos ----------
@@ -135,6 +142,7 @@
     { key: 'prod', label: 'Produtos vendidos (quantidade)', step: '1', daily: 'prod' },
     { key: 'check', label: 'Pontos Checklist Agenda Cheia', step: '1', daily: 'check' },
     { key: 'planos', label: 'Planos mensais vendidos', step: '1', daily: 'planos' },
+    { key: 'comanda', label: 'Maior comanda do mês (R$)', step: '0.01', daily: 'comanda' },
   ];
 
   const monthKey = d => d.slice(0, 7);
@@ -193,8 +201,11 @@
   const isNum = v => v !== null && v !== undefined && v !== '' && !Number.isNaN(Number(v));
 
   function aggregate(state, barberId, range) {
-    const s = { fat: 0, serv: 0, cli: 0, check: 0, hDisp: 0, hOcup: 0, planos: 0, ret: 0, prod: 0, n: {} };
-    const add = (k, v) => { s[k] += Number(v); s.n[k] = (s.n[k] || 0) + 1; };
+    const s = { fat: 0, serv: 0, cli: 0, check: 0, hDisp: 0, hOcup: 0, planos: 0, ret: 0, prod: 0, comanda: 0, n: {} };
+    const add = (k, v) => {
+      if (k === 'comanda') { s.comanda = Math.max(s.comanda, Number(v)); s.n.comanda = (s.n.comanda || 0) + 1; return; } // maior valor, não soma
+      s[k] += Number(v); s.n[k] = (s.n[k] || 0) + 1;
+    };
     const months = fullMonths(range);
     const recs = Object.fromEntries((state.monthly || []).filter(m => m.barberId === barberId && months.includes(m.month)).map(m => [m.month, m]));
     // Somas diárias por mês, para combinar com o total mensal.
@@ -225,7 +236,7 @@
     for (const ym of months) {
       const rec = recs[ym];
       if (!rec) continue;
-      for (const k of ['fat', 'cli', 'serv', 'prod', 'check', 'planos']) if (isNum(rec[k]) && !(k === 'check' && popMonths.has(ym))) add(k, rec[k]);
+      for (const k of ['fat', 'cli', 'serv', 'prod', 'check', 'planos', 'comanda']) if (isNum(rec[k]) && !(k === 'check' && popMonths.has(ym))) add(k, rec[k]);
       if (isNum(rec.fidPct)) {
         const cli = isNum(rec.cli) ? Number(rec.cli) : (dailyCli[ym] || 0);
         if (cli > 0) add('ret', (Number(rec.fidPct) / 100) * cli);
@@ -258,6 +269,7 @@
     for (const e of state.entries) {
       if (e.source === 'manual' || e.barberId !== barberId || e.date < r.start || e.date > r.end) continue;
       for (const k of ['fat', 'cli', 'serv', 'prod', 'check', 'planos']) if (isNum(e[k])) out[k] = (out[k] || 0) + Number(e[k]);
+      if (isNum(e.comanda)) out.comanda = Math.max(out.comanda || 0, Number(e.comanda));
       if (isNum(e.hOcup)) { hO += Number(e.hOcup); hasO = true; }
       if (isNum(e.cli)) cli += Number(e.cli);
       if (isNum(e.ret)) ret += Number(e.ret);
@@ -419,6 +431,18 @@
       active.push({ ...ind, weight: w, leaders, max });
     }
 
+    // Destaques que não pontuam (ex.: maior comanda do mês).
+    const bonus = [];
+    for (const ind of BONUS_INDS) {
+      if (hidden.includes(ind.key)) continue;
+      const vals = rows.map(r => ind.calc(r.sums));
+      if (vals.every(v => v === null)) continue;
+      const max = Math.max(...vals.map(v => v ?? 0));
+      const leaders = [];
+      rows.forEach((r, i) => { r.values[ind.key] = vals[i]; if (vals[i] !== null && vals[i] === max && max > 0) leaders.push(r.barber.id); });
+      bonus.push({ ...ind, weight: 0, leaders, max });
+    }
+
     const totalW = active.reduce((a, i) => a + i.weight, 0);
     for (const r of rows) {
       r.overall = totalW ? active.reduce((a, i) => a + i.weight * r.scores[i.key], 0) / totalW : 0;
@@ -443,7 +467,7 @@
     });
     rows.forEach((r, i) => { r.pos = i + 1; });
 
-    return { rows, active, inactive, N, Nrule, half, mvpNeed, title, range };
+    return { rows, active, bonus, inactive, N, Nrule, half, mvpNeed, title, range };
   }
 
 
@@ -560,7 +584,8 @@
           const serv = cli + Math.round(cli * (0.15 + r() * 0.25));
           const fat = Math.round(cli * tk * (0.92 + r() * 0.16) * 100) / 100;
           const hOcup = Math.round(serv * (HPS[0] + r() * (HPS[1] - HPS[0])) * 2) / 2;
-          entries.push({ id: uid('e_'), barberId: barbers[i].id, date: iso(day), fat, serv, cli, hDisp: 8, hOcup });
+          const comanda = Math.round(tk * (1.4 + r() * (r() < 0.08 ? 2.6 : 1.1)) * 100) / 100; // maior comanda do dia
+          entries.push({ id: uid('e_'), barberId: barbers[i].id, date: iso(day), fat, serv, cli, hDisp: 8, hOcup, comanda });
         });
       });
     }
@@ -614,7 +639,7 @@
     return {
       version: 2,
       demo: true,
-      demoV: 4,
+      demoV: 5,
       demoYm: curYm,
       presentation: !!DEMO,
       brand,
@@ -664,7 +689,7 @@
           }
           if (!Array.isArray(st.hidden)) { st.hidden = ['fid']; DB.save(st); } // fidelização começa oculta
           // Demonstração antiga (sem fotos dos profissionais): recria com a versão nova.
-          if (st.demo && (st.demoV !== 4 || st.demoYm !== iso(new Date()).slice(0, 7))) { const d = demoState(DEMO || 'barber'); DB.save(d); return d; }
+          if (st.demo && (st.demoV !== 5 || st.demoYm !== iso(new Date()).slice(0, 7))) { const d = demoState(DEMO || 'barber'); DB.save(d); return d; }
           // Na apresentação, a marca é sempre a escolhida (Barber ou Salão).
           if (DEMO && st.brand !== DEMO) { st.brand = DEMO; DB.save(st); }
           return st;
@@ -728,5 +753,5 @@
   const visibleInds = state => INDICATORS.filter(i => !(state.hidden || []).includes(i.key));
   const FIELD_IND = { fidPct: 'fid', ocupPct: 'ocup', aus: 'ocup' };
 
-  window.GB = Object.assign(window.GB || {}, { OCUP_DEFAULT, ocupCfgOf, hoursPerDay, ocupCapacity, SUM_KEYS, manualEntries, manualTotal, applyManualTotal, evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
+  window.GB = Object.assign(window.GB || {}, { BONUS_INDS, OCUP_DEFAULT, ocupCfgOf, hoursPerDay, ocupCapacity, SUM_KEYS, manualEntries, manualTotal, applyManualTotal, evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
 })();
