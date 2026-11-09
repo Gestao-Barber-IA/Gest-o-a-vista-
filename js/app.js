@@ -4058,26 +4058,66 @@ Content-Type: application/json</pre>
     c.fillStyle = Bc; for (const cx of [PX - 80, PX, PX + 80]) { c.beginPath(); c.arc(cx, y + h - 20, cx === PX ? 11 : 8, 0, 7); c.fill(); }
     c.restore();
   }
-  // Balões nas cores da marca, ao lado da foto.
-  function drawBalloons(c, { PX, PY, PR, A, Bc }) {
-    const cols = [A, Bc, mixHex(A, '#ffffff', 0.45), mixHex(Bc, '#ffffff', 0.3)];
-    [[PX - PR - 120, PY - 260, 0], [PX - PR - 30, PY - 350, 1], [PX + PR + 40, PY - 335, 2], [PX + PR + 130, PY - 220, 3]].forEach(([bx, by, i]) => {
-      c.strokeStyle = 'rgba(255,255,255,0.6)'; c.lineWidth = 2; c.beginPath(); c.moveTo(bx, by + 90); c.quadraticCurveTo(bx + (i % 2 ? 30 : -30), by + 220, bx + (PX - bx) * 0.25, by + 360); c.stroke();
-      c.save(); c.shadowColor = cols[i]; c.shadowBlur = 30; c.fillStyle = cols[i]; c.beginPath(); c.ellipse(bx, by, 66, 84, 0, 0, 7); c.fill(); c.restore();
-      c.fillStyle = 'rgba(255,255,255,0.35)'; c.beginPath(); c.ellipse(bx - 22, by - 30, 14, 24, -0.4, 0, 7); c.fill();
-      c.fillStyle = cols[i]; c.beginPath(); c.moveTo(bx - 10, by + 86); c.lineTo(bx + 10, by + 86); c.lineTo(bx, by + 100); c.closePath(); c.fill();
-    });
-  }
   async function drawCongrats(ym, bid, withPhoto) {
     const mon = cap(MONTH_NAMES[Number(ym.slice(5, 7)) - 1]) + ' ' + ym.slice(0, 4);
     return drawCelebration(bid, { photo: withPhoto, title: 'Destaque do mês', when: mon.toUpperCase(), cheer: 'Parabéns!', py: 915, decor: drawCrown,
       msg: 'Obrigado pela dedicação e pela entrega em cada atendimento. Você é inspiração para toda a equipe!', foot: 'ORGULHO DA EQUIPE ' + (state.company.name || '').toUpperCase() });
   }
+  // Card de aniversário: foto grande num painel, letras vazadas ao fundo, faixa diagonal e balões com o logo, nas cores da marca.
   async function drawBirthday(bid, withPhoto) {
     const bd = (state.births || {})[bid]; if (!bd) return null;
-    const [, m, d] = bd.split('-').map(Number), b = barberById(bid);
-    return drawCelebration(bid, { photo: withPhoto, title: 'Feliz aniversário!', sub: `${d} DE ${MONTH_NAMES[m - 1].toUpperCase()}`, py: 915, decor: drawBalloons,
-      msg: `Hoje o dia é todo seu, ${b.name.trim().split(/\s+/)[0]}! Que o seu novo ciclo seja cheio de saúde, alegria e conquistas.`, foot: 'COM CARINHO, EQUIPE ' + (state.company.name || '').toUpperCase() });
+    const [, m, d] = bd.split('-').map(Number), b = barberById(bid); if (!b) return null;
+    const pal = await brandPalette();
+    const lum = h => { const [r, g2, b2] = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)); return (r * 299 + g2 * 587 + b2 * 114) / 255000; };
+    const A = lum(pal.a) < 0.42 ? mixHex(pal.a, '#ffffff', 0.4) : pal.a, ink = lum(A) > 0.6 ? '#111111' : '#ffffff';
+    const D = "'Archivo', 'Arial Black', sans-serif", T = "'Hind', 'Helvetica Neue', Arial, sans-serif", SC = "'Kaushan Script', 'Brush Script MT', cursive";
+    try { await Promise.all([document.fonts.load('800 80px Archivo'), document.fonts.load('400 80px "Kaushan Script"'), document.fonts.load('600 40px Hind')]); } catch (e) { /* fonte do sistema */ }
+    const W = 1080, H = 1920, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d'), sp = v => { try { c.letterSpacing = v; } catch (e) { /* opcional */ } };
+    c.fillStyle = '#08080a'; c.fillRect(0, 0, W, H);
+    // letras vazadas ao fundo
+    c.save(); c.textAlign = 'center'; c.lineWidth = 3; c.strokeStyle = A; c.globalAlpha = 0.6; c.font = `800 560px ${D}`;
+    ['ANI', 'VER', 'SÁR', 'IO!'].forEach((t, i) => c.strokeText(t, W / 2, 420 + i * 480)); c.restore();
+    // painel com a foto
+    const X = 56, Y = 176, PW = W - 112, PH = 1560, PHOTO = 1130;
+    c.save(); c.shadowColor = 'rgba(0,0,0,0.7)'; c.shadowBlur = 50; rrect(c, X, Y, PW, PH, 56); c.fillStyle = '#121214'; c.fill(); c.restore();
+    c.save(); rrect(c, X, Y, PW, PH, 56); c.clip();
+    const im = withPhoto !== false ? await loadImg(b.photo) : null;
+    if (im) { const k = Math.max(PW / im.width, PHOTO / im.height), iw = im.width * k, ih = im.height * k; c.imageSmoothingQuality = 'high'; c.drawImage(im, X + (PW - iw) / 2, Y + (PHOTO - ih) * 0.3, iw, ih); }
+    else { let g0 = c.createRadialGradient(W / 2, Y + 520, 40, W / 2, Y + 520, 620); g0.addColorStop(0, A + '44'); g0.addColorStop(1, 'transparent'); c.fillStyle = g0; c.fillRect(X, Y, PW, PHOTO); c.fillStyle = A; c.textAlign = 'center'; c.font = `800 380px ${D}`; c.fillText(b.name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase(), W / 2, Y + 660); }
+    let g = c.createLinearGradient(0, Y + 620, 0, Y + PHOTO); g.addColorStop(0, 'rgba(13,13,15,0)'); g.addColorStop(0.75, 'rgba(13,13,15,0.92)'); g.addColorStop(1, '#0d0d0f'); c.fillStyle = g; c.fillRect(X, Y + 620, PW, PHOTO - 620);
+    c.fillStyle = '#0d0d0f'; c.fillRect(X, Y + PHOTO - 1, PW, PH - PHOTO + 1);
+    c.restore();
+    // faixa diagonal com fivela
+    c.save(); c.shadowColor = 'rgba(0,0,0,0.5)'; c.shadowBlur = 24; c.fillStyle = A; c.beginPath(); c.moveTo(270, 0); c.lineTo(420, 0); c.lineTo(0, 760); c.lineTo(0, 490); c.closePath(); c.fill(); c.restore();
+    c.save(); c.translate(150, 470); c.rotate(-1.07); c.lineWidth = 6; c.strokeStyle = 'rgba(235,235,240,0.9)'; rrect(c, -34, -80, 68, 160, 14); c.stroke(); c.restore();
+    // logo da empresa
+    const logoIm = await loadImg(state.company.logo || B().logo);
+    const logoAt = (x, y, r) => { if (!logoIm) return; c.save(); c.beginPath(); c.arc(x, y, r, 0, 7); c.clip(); c.fillStyle = '#0b0b0f'; c.fill(); const k = Math.max(2 * r / logoIm.width, 2 * r / logoIm.height); c.drawImage(logoIm, x - logoIm.width * k / 2, y - logoIm.height * k / 2, logoIm.width * k, logoIm.height * k); c.restore(); };
+    logoAt(X + PW - 110, Y + 110, 66); if (logoIm) { c.lineWidth = 4; c.strokeStyle = A; c.beginPath(); c.arc(X + PW - 110, Y + 110, 68, 0, 7); c.stroke(); }
+    // balões com o logo
+    const balloon = (bx, by, s, tilt) => {
+      const rx = 128 * s, ry = 158 * s;
+      c.strokeStyle = mixHex(A, '#ffffff', 0.3); c.lineWidth = 3; c.beginPath(); c.moveTo(bx, by + ry + 14); c.quadraticCurveTo(bx + 30, by + ry + 120, 1040, H + 20); c.stroke();
+      c.save(); c.translate(bx, by); c.rotate(tilt); c.shadowColor = 'rgba(0,0,0,0.55)'; c.shadowBlur = 30;
+      const bg = c.createRadialGradient(-rx * 0.35, -ry * 0.4, 8, 0, 0, ry * 1.1); bg.addColorStop(0, mixHex(A, '#ffffff', 0.55)); bg.addColorStop(0.45, A); bg.addColorStop(1, mixHex(A, '#000000', 0.38));
+      c.fillStyle = bg; c.beginPath(); c.ellipse(0, 0, rx, ry, 0, 0, 7); c.fill(); c.shadowBlur = 0;
+      c.beginPath(); c.moveTo(-14 * s, ry - 2); c.lineTo(14 * s, ry - 2); c.lineTo(0, ry + 20 * s); c.closePath(); c.fill();
+      if (logoIm) { c.globalAlpha = 0.9; c.beginPath(); c.arc(0, 4, rx * 0.56, 0, 7); c.clip(); const k = Math.max(rx * 1.12 / logoIm.width, rx * 1.12 / logoIm.height); c.drawImage(logoIm, -logoIm.width * k / 2, 4 - logoIm.height * k / 2, logoIm.width * k, logoIm.height * k); }
+      c.restore();
+      c.save(); c.translate(bx, by); c.rotate(tilt); c.fillStyle = 'rgba(255,255,255,0.4)'; c.beginPath(); c.ellipse(-rx * 0.5, -ry * 0.52, rx * 0.13, ry * 0.2, -0.5, 0, 7); c.fill(); c.restore();
+    };
+    balloon(1050, 1560, 0.95, 0.2); balloon(770, 1590, 1, -0.16); balloon(900, 1400, 1.08, 0.06);
+    // textos
+    c.textAlign = 'left';
+    c.save(); c.translate(118, 1296); c.rotate(-0.1); c.shadowColor = 'rgba(0,0,0,0.6)'; c.shadowBlur = 18; c.fillStyle = A; c.font = `400 170px ${SC}`; c.fillText('Feliz', 0, 0); c.restore();
+    c.save(); c.shadowColor = 'rgba(0,0,0,0.7)'; c.shadowBlur = 24; c.fillStyle = '#ffffff'; c.font = `800 150px ${D}`; c.fillText('ANIVER', 108, 1430); c.fillText('SÁRIO', 108, 1566); c.restore();
+    const nm = b.name.trim().toUpperCase(); fitFont(c, nm, 800, 58, D, 520); const nw = c.measureText(nm).width;
+    c.fillStyle = A; c.fillRect(108, 1612, nw + 44, 88); c.fillStyle = ink; c.fillText(nm, 130, 1676);
+    // rodapé
+    const foot = `${d} DE ${MONTH_NAMES[m - 1].toUpperCase()} · COM CARINHO, EQUIPE ${(state.company.name || '').toUpperCase()}`;
+    c.textAlign = 'center'; sp('4px'); c.fillStyle = 'rgba(255,255,255,0.78)'; fitFont(c, foot, 600, 30, T, 980); c.fillText(foot, W / 2, H - 78); sp('0px');
+    return cv;
   }
   async function cardBlob(ym, bid, v = '') {
     const key = ym + '|' + bid + '|' + v;
@@ -5556,7 +5596,7 @@ Content-Type: application/json</pre>
       const file = f.elements.photo.files[0];
       const lim = billing() && billing().max_barbers;
       if (lim && activeBarbers() >= lim) return setMsg(f, `Seu plano permite até ${lim} barbeiros ativos. Troque de plano em Assinatura para cadastrar mais.`);
-      if (file) { try { photo = await readImage(file); } catch (e) { return setMsg(f, e.message); } }
+      if (file) { try { photo = await readImage(file, 640); } catch (e) { return setMsg(f, e.message); } }
       const id = uid('b_'), access = val(f, 'access');
       state.barbers.push({ id, name, photo, active: true, role: val(f, 'role') || B().role, instagram: '' });
       const birth = val(f, 'birth'); if (/^\d{4}-\d{2}-\d{2}$/.test(birth)) state.births = { ...(state.births || {}), [id]: birth };
@@ -5763,12 +5803,12 @@ Content-Type: application/json</pre>
     orgLevelName(el) { const l = org().levels.find(x => x.id === el.dataset.id); if (l && el.value.trim()) { l.name = el.value.trim(); save(); render(); } },
     async barberPhoto(el) {
       const b = barberById(el.dataset.id);
-      try { b.photo = await readImage(el.files[0]); save(); toast('Foto atualizada.'); render(); } catch (e) { toast(e.message); }
+      try { b.photo = await readImage(el.files[0], 640); save(); toast('Foto atualizada.'); render(); } catch (e) { toast(e.message); }
     },
     async myPhoto(el) {
       const b = barberById(currentUser()?.barberId);
       if (!b) { toast('Seu cadastro não está ligado a um barbeiro.'); return; }
-      try { b.photo = await readImage(el.files[0]); save(); toast('Foto atualizada.'); render(); } catch (e) { toast(e.message); }
+      try { b.photo = await readImage(el.files[0], 640); save(); toast('Foto atualizada.'); render(); } catch (e) { toast(e.message); }
     },
     async pmFile(el) {
       const place = pmKey(el.dataset.p), f = el.files && el.files[0];
