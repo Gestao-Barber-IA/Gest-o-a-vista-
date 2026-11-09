@@ -2592,9 +2592,11 @@ Content-Type: application/json</pre>
         <p class="fx-tag">Cada atendimento conta.</p>
         <p class="fx-count"><b data-count="${n}">0</b> barbeiros</p>
         <p class="fx-hint">Toque, deslize ou use as setas</p></div>
-      <div class="fx-open" aria-hidden="true"><span class="fx-open-flash"></span><span class="fx-open-rays"></span>
-        <p class="fx-open-a">É hora do</p>
-        <p class="fx-open-b">${'FECHAMENTO'.split('').map((ch, i) => `<i style="--i:${i}">${ch}</i>`).join('')}</p></div>`;
+      <div class="fx-open" aria-hidden="true"><span class="fx-open-flash"></span><span class="fx-open-flash f2"></span><span class="fx-open-rays"></span>
+        <div class="fx-open-p1"><p class="fx-open-a">É hora do</p>
+          <p class="fx-open-b">${'FECHAMENTO'.split('').map((ch, i) => `<i style="--i:${i}">${ch}</i>`).join('')}</p></div>
+        <div class="fx-open-p2"><p class="fx-open-c">${['Aumente', 'as'].map((w, i) => `<span style="--i:${i}">${w}</span>`).join(' ')}</p>
+          <p class="fx-open-d">${'EXPECTATIVAS'.split('').map((ch, i) => `<i style="--i:${i}">${ch}</i>`).join('')}</p></div></div>`;
     if (sl.k === 'podium') {
       const t1 = fxTier(R, R.rows[0], 1);
       return `<div class="fx-slide fx-pintro">
