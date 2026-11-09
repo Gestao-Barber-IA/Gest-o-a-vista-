@@ -2150,3 +2150,49 @@ html[data-brand="salao"] .pt-ask b { background-image: linear-gradient(180deg, #
 .demo-kit-row .grow { flex: 1; min-width: 0; }
 .demo-acts .btn.on { border-color: var(--accent); }
 @media (max-width: 560px) { .demo-kit-row { flex-direction: column; align-items: stretch; } .demo-kit-logo { align-self: center; } }
+
+/* Primeiros passos e pendências do gestor (Início) */
+.gd-card { margin-bottom: 16px; border-color: var(--line-accent); }
+.gd-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.gd-bar { height: 6px; border-radius: 6px; background: var(--line); overflow: hidden; margin: 4px 0 12px; }
+.gd-bar i { display: block; height: 100%; background: var(--accent); border-radius: 6px; }
+.gd-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.gd-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.gd-row.ok { opacity: 0.6; }
+.gd-row.ok .gd-t { text-decoration: line-through; }
+.gd-dot { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 0.85rem; background: var(--line); color: var(--fg); }
+.gd-row.ok .gd-dot { background: var(--accent); color: #111; }
+.gd-dot .ico { width: 16px; height: 16px; }
+.gd-t { flex: 1; min-width: 0; }
+.gd-row .btn { flex: none; }
+@media (max-width: 420px) { .gd-row { flex-wrap: wrap; } .gd-row .btn { margin-left: 40px; } }
+
+/* Tutoriais: botão "Como usar esta tela", janela e Central de ajuda */
+.hp-bar { display: flex; justify-content: flex-end; margin: -4px 0 10px; }
+.hp-open { display: inline-flex; align-items: center; gap: 6px; background: none; border: 1px solid var(--line); color: var(--fg-soft); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 0.85rem; cursor: pointer; }
+.hp-open:hover, .hp-open:focus-visible { color: var(--accent); border-color: var(--line-accent); }
+.hp-open .ico { width: 16px; height: 16px; }
+.hp-ov { position: fixed; inset: 0; z-index: 210; display: grid; place-items: center; padding: 16px; background: rgba(5, 6, 10, 0.72); }
+.hp-card { width: min(520px, 100%); max-height: calc(100dvh - 32px); overflow: auto; display: grid; gap: 14px; }
+.hp-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.hp-head h2 { margin: 0; font-size: 1.15rem; display: flex; align-items: center; gap: 8px; }
+.hp-head h2 .ico { color: var(--accent); }
+.hp-steps { margin: 0; padding-left: 0; list-style: none; counter-reset: hp; display: grid; gap: 10px; }
+.hp-steps li { counter-increment: hp; display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; line-height: 1.45; }
+.hp-steps li::before { content: counter(hp); width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 0.85rem; background: var(--accent); color: #111; }
+.hp-tips { border: 1px solid var(--line-accent); border-radius: 12px; padding: 10px 14px; }
+.hp-tips b { display: flex; align-items: center; gap: 6px; color: var(--accent); }
+.hp-tips b .ico { width: 16px; height: 16px; }
+.hp-tips ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; color: var(--fg-soft); }
+.hp-all { justify-self: start; }
+.hp-q { margin: 12px 0; }
+.hp-list { display: grid; gap: 8px; }
+.hp-item { border: 1px solid var(--line); border-radius: 12px; }
+.hp-item summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 12px 14px; font-weight: 600; }
+.hp-item summary::-webkit-details-marker { display: none; }
+.hp-item summary::after { content: '+'; margin-left: auto; color: var(--fg-soft); font-weight: 400; font-size: 1.2rem; }
+.hp-item[open] summary::after { content: '–'; }
+.hp-item summary .ico { color: var(--accent); width: 18px; height: 18px; }
+.hp-in { padding: 0 14px 14px; display: grid; gap: 12px; }
+.hp-in .btn { justify-self: start; }
+.gd-how { display: block; margin-top: 2px; font-size: 0.85rem; }

@@ -1,0 +1,17 @@
+name: Testes
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Sintaxe dos arquivos do app
+        run: for f in js/*.js sw.js; do node --check "$f"; done
+      - name: Regras de pontuação
+        run: node --test tests/*.test.js

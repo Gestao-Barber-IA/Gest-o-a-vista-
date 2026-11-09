@@ -141,6 +141,19 @@
     return data.signedUrl;
   };
   Cloud.removeFile = async (bucket, path) => { try { await c.storage.from(bucket).remove([path]); } catch (e) { /* segue */ } };
+  // Fotos dos profissionais e logo (pasta pública "fotos"): o banco guarda só o endereço da imagem.
+  const PHOTOS = 'fotos';
+  Cloud.uploadPhoto = async (name, dataUrl) => {
+    const blob = await (await fetch(dataUrl)).blob(), path = `${Cloud.companyId}/${name}.jpg`;
+    const { error } = await c.storage.from(PHOTOS).upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: false });
+    if (error) throw error;
+    return c.storage.from(PHOTOS).getPublicUrl(path).data.publicUrl;
+  };
+  Cloud.removePhoto = async url => {
+    const mark = `/object/public/${PHOTOS}/`, i = typeof url === 'string' ? url.indexOf(mark) : -1;
+    if (i < 0 || !url.startsWith(CFG.supabaseUrl.replace(/\/$/, ''))) return;
+    try { await c.storage.from(PHOTOS).remove([decodeURIComponent(url.slice(i + mark.length))]); } catch (e) { /* segue */ }
+  };
   Cloud.rotateKey = async () => { const { data, error } = await c.rpc('rotate_api_key'); if (error) throw error; return data; };
 
   // ---------- conversão entre o app e as tabelas ----------
