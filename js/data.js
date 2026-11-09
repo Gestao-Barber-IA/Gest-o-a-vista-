@@ -542,7 +542,7 @@
       ['Bianca Rocha', 0.65, 1.1, 0.6, 'Designer de sobrancelhas'],
     ] : [
       ['Rafael Lima', 1.25, 1.0, 0.9, 'Barbeiro líder'], ['Diego Moura', 1.0, 1.15, 0.95, 'Barbeiro'], ['Thiago Alves', 1.05, 0.95, 1.0, 'Barbeiro'],
-      ['Bruno Rocha', 0.85, 1.15, 0.7, 'Barbeiro'], ['Caio Ferreira', 0.95, 0.9, 0.8, 'Barbeiro'], ['Mateus Pinto', 0.8, 1.0, 0.75, 'Barbeiro'],
+      ['Bruno Rocha', 0.85, 1.15, 0.7, 'Barbeiro'], ['Caio Ferreira', 0.95, 0.9, 0.8, 'Barbeiro'], ['Matheus Santos', 0.8, 1.0, 0.75, 'Barbeiro'],
       ['Júlia Ramos', 0.65, 1.25, 0.6, 'Barbeira'],
     ];
     // Fotos de pessoas fictícias (geradas por IA), só para a demonstração.
@@ -639,7 +639,7 @@
     return {
       version: 2,
       demo: true,
-      demoV: 8,
+      demoV: 9,
       demoYm: curYm,
       presentation: !!DEMO,
       brand,
@@ -695,7 +695,7 @@
           }
           if (!Array.isArray(st.hidden)) { st.hidden = ['fid']; DB.save(st); } // fidelização começa oculta
           // Demonstração antiga (sem fotos dos profissionais): recria com a versão nova.
-          if (st.demo && (st.demoV !== 8 || st.demoYm !== iso(new Date()).slice(0, 7))) { const d = demoState(DEMO || 'barber'); DB.save(d); return d; }
+          if (st.demo && (st.demoV !== 9 || st.demoYm !== iso(new Date()).slice(0, 7))) { const d = demoState(DEMO || 'barber'); DB.save(d); return d; }
           // Na apresentação, a marca é sempre a escolhida (Barber ou Salão).
           if (DEMO && st.brand !== DEMO) { st.brand = DEMO; DB.save(st); }
           return st;
