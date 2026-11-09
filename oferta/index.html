@@ -514,9 +514,13 @@
   // ---------- quiz ----------
   const quiz = $('#quiz');
   const show = id => ['q0', 'q1', 'q2', 'q3'].forEach(k => { $('#' + k).hidden = k !== id; });
+  // ?ir=planos (vindo da Apresentação do sistema): ao terminar o quiz, abre direto na parte dos planos.
+  const goPlans = () => new URLSearchParams(location.search).get('ir') === 'planos' || location.hash === '#planos';
+  function toPlans() { const go = () => { const el = document.getElementById('planos'); if (el) el.scrollIntoView({ block: 'start' }); }; requestAnimationFrame(go); setTimeout(go, 450); }
   function finish() {
+    const plans = goPlans();
     show('q3');
-    setTimeout(() => { quiz.hidden = true; document.body.classList.remove('locked'); render(); window.scrollTo(0, 0); }, 1100);
+    setTimeout(() => { quiz.hidden = true; document.body.classList.remove('locked'); render(); if (plans) toPlans(); else window.scrollTo(0, 0); }, 1100);
   }
   qs('[data-q1]').forEach(b => b.addEventListener('click', () => {
     seg = b.dataset.q1; const S = SEG[seg];
@@ -573,7 +577,7 @@
 
   // Quem já se cadastrou (neste aparelho ou pelo formulário do Instagram: ?cadastro=ok) vai direto ao quiz.
   const done = hasLead();
-  if (SEG[sp.get('tipo')] && SIZE[sp.get('equipe')] && done) { seg = sp.get('tipo'); size = Number(sp.get('equipe')); quiz.hidden = true; document.body.classList.remove('locked'); render(); }
+  if (SEG[sp.get('tipo')] && SIZE[sp.get('equipe')] && done) { const pl = goPlans(); seg = sp.get('tipo'); size = Number(sp.get('equipe')); quiz.hidden = true; document.body.classList.remove('locked'); render(); if (pl) toPlans(); }
   else startQuiz();
   prefill();
 

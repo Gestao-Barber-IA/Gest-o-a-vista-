@@ -2851,7 +2851,7 @@ Content-Type: application/json</pre>
         <p class="fx-kicker">E para você…</p>
         <h1 class="pt-ask">Quanto você estaria disposto a pagar por um sistema que faça ${w.sal ? 'seu salão' : 'sua barbearia'} <b>rodar no automático</b>, mesmo sem você estar presente?</h1>
         <div class="pt-ask-list"><span>${icon('rocket')} Colaboradores em alta performance</span><span>${icon('bolt')} Equipe proativa</span><span>${icon('checksq')} Tudo limpo e organizado</span></div>
-        <a class="btn btn-primary pt-cta" href="oferta/" target="_blank" rel="noopener">${icon('rocket')} Conhecer os planos</a>
+        <a class="btn btn-primary pt-cta" href="oferta/?tipo=${w.sal ? 'salao' : 'barbearia'}&utm_source=apresentacao&ir=planos" target="_blank" rel="noopener">${icon('rocket')} Conhecer os planos</a>
         <p class="pt-lead sm">${brand} · Cada atendimento conta.</p></div>`,
         note: `Leia a pergunta devagar e fique em silêncio até a pessoa responder um valor. Depois: "Faz sentido começarmos pela sua equipe ainda este mês?" e abra os planos ali mesmo — o investimento costuma ficar bem abaixo do valor que ela disse. Se houver dúvida, volte ao slide de dores e pergunte qual delas mais pesa.` },
     ];
