@@ -1143,7 +1143,7 @@
     }
     if (m.t === 'close') { if (!seenReveal()[m.ym]) fxClose(); return; }
     const { s } = fxSlides(m.ym);
-    const idx = m.t === 'podium' ? 0 : m.t === 'final' ? s.length - 1 : s.findIndex(x => x.place === Number(m.place));
+    const idx = m.t === 'podium' ? 0 : m.t === 'final' ? s.length - 1 : m.t === 'leaders' ? s.findIndex(x => x.k === 'leaders') : s.findIndex(x => x.place === Number(m.place));
     if (idx < 0) return;
     if (fx.i !== idx) { fx.i = idx; fxRender(); }
     const slide = document.querySelector('#fx .fx-slide');
@@ -2562,6 +2562,8 @@ Content-Type: application/json</pre>
     const rows = R.rows, s = mode ? [] : [{ k: 'intro' }];
     s.push({ k: 'podium' });
     for (const p of [3, 2, 1]) if (rows[p - 1]) s.push({ k: 'card', row: rows[p - 1], place: p });
+    // Líderes de cada indicador (e o recorde da maior comanda), antes do Parabéns ao pódio.
+    if (R.active.some(a => a.leaders.length) || (R.bonus || []).some(a => a.leaders.length)) s.push({ k: 'leaders' });
     s.push({ k: 'final' });
     return { R, s };
   }
@@ -2596,6 +2598,30 @@ Content-Type: application/json</pre>
         <p class="fx-month">Os três melhores de ${month}</p>
         <div class="fx-chips"><span class="c-bronze">Bronze</span><span class="c-silver">Prata</span><span class="${t1.cls === 'fx-mvp' ? 'c-mvp' : 'c-gold'}">${t1.label}</span></div>
         <div class="fx-spot"></div><div class="fx-spot s2"></div><div class="fx-spot s3"></div></div>`;
+    }
+    if (sl.k === 'leaders') {
+      const byId = id => R.rows.find(r => r.barber.id === id);
+      const items = [...R.active.filter(a => a.leaders.length).map(a => ({ ind: a, rec: false })), ...(R.bonus || []).filter(a => a.leaders.length).map(a => ({ ind: a, rec: true }))];
+      const card = ({ ind, rec }, i) => {
+        const ppl = ind.leaders.map(byId).filter(Boolean);
+        const val = rec ? money2(ind.max) : fmt(ind, ind.max) + (ind.key === 'check' ? ' pts' : '');
+        return `<div class="fx-lcard ${rec ? 'rec' : ''}" style="--d:${(0.25 + i * 0.12).toFixed(2)}s">
+          <small class="fx-lind">${rec ? `${icon('trophy')} Recorde do mês` : esc(ind.label)}</small>
+          ${rec ? `<b class="fx-lrec">${esc(ind.label)}</b>` : ''}
+          <div class="fx-lppl">${ppl.slice(0, 3).map(r => fxPhoto(r.barber)).join('')}</div>
+          <span class="fx-lname">${ppl.map(r => esc(first(r.barber.name))).join(' e ')}${ppl.length > 1 ? ' <i>(empate)</i>' : ''}</span>
+          <strong class="num">${val}</strong>
+        </div>`;
+      };
+      // Quantos indicadores cada profissional liderou (resumo no rodapé).
+      const count = {}; for (const a of R.active) for (const id of a.leaders) count[id] = (count[id] || 0) + 1;
+      const ranking = Object.entries(count).sort((a, b) => b[1] - a[1]).map(([id, n2]) => byId(id) && `<span><b>${esc(first(byId(id).barber.name))}</b> ${n2} indicador${n2 > 1 ? 'es' : ''}</span>`).filter(Boolean).join('');
+      return `<div class="fx-slide fx-leaders">
+        <h1 class="fx-title gold">Líderes do mês</h1>
+        <p class="fx-month">Quem ficou em 1º lugar em cada indicador de ${month}</p>
+        <div class="fx-lgrid">${items.map(card).join('')}</div>
+        ${ranking ? `<p class="fx-lsum">${ranking}</p>` : ''}
+      </div>`;
     }
     if (sl.k === 'final') {
       const top = R.rows.slice(0, 3);
@@ -2681,9 +2707,10 @@ Content-Type: application/json</pre>
       fxCount(slide);
       if (sl.k === 'podium') Sound.play('sino');
       if (sl.k === 'final') Sound.play('aplausos');
-      if (fx.mode === 'auto' && sl.k !== 'final') fx.timer = setTimeout(() => fxStep(1), 3400);
+      if (sl.k === 'leaders') Sound.play('fanfarra');
+      if (fx.mode === 'auto' && sl.k !== 'final') fx.timer = setTimeout(() => fxStep(1), sl.k === 'leaders' ? 8000 : 3400);
     }
-    if (fx.live && (sl.k === 'podium' || sl.k === 'final' || sl.place)) revealSend({ t: sl.place ? 'card' : sl.k, place: sl.place || 0 });
+    if (fx.live && (sl.k === 'podium' || sl.k === 'leaders' || sl.k === 'final' || sl.place)) revealSend({ t: sl.place ? 'card' : sl.k, place: sl.place || 0 });
   }
   function fxReveal(slide, place) {
     if (!slide || !slide.classList.contains('is-suspense')) return;
