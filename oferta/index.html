@@ -66,6 +66,18 @@
   .q-opts .ic { font-size: 2rem; line-height: 1; }
   .q-opts b { font-family: var(--font-d); font-size: 1.05rem; }
   .q-opts small { color: #a8a094; font-size: 0.84rem; }
+  .lead { width: 100%; display: grid; gap: 12px; text-align: left; }
+  .lead-row { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (max-width: 380px) { .lead-row { grid-template-columns: 1fr; } }
+  .lead label { display: grid; gap: 6px; font-weight: 600; font-size: 0.92rem; color: #e9e3d8; }
+  .lead input[type=text], .lead input:not([type]), .lead input[type=tel], .lead input[type=email] { width: 100%; padding: 13px 14px; border-radius: 14px; border: 1px solid #3a3336; background: #171416; color: #f6f2e8; font: 1rem var(--font-b); }
+  .lead input:focus { outline: 2px solid #d6b46a; outline-offset: 1px; }
+  .lead-ok { display: flex !important; gap: 10px; align-items: flex-start; font-weight: 500 !important; color: #c9c2b6 !important; font-size: 0.86rem !important; }
+  .lead-ok input { width: 20px; height: 20px; flex: none; margin-top: 1px; accent-color: #d6b46a; }
+  .lead-ok a { color: #d6b46a; }
+  .lead-msg { margin: 0; min-height: 1.2em; color: #ff8a8a; font-weight: 600; font-size: 0.92rem; }
+  .q-go { padding: 16px 20px; border-radius: 16px; border: 0; background: linear-gradient(90deg, #d6b46a, #eaa59f); color: #1d1607; font: 800 1.05rem var(--font-b); cursor: pointer; }
+  .q-go:disabled { opacity: .7; }
   .q-back { background: none; border: 0; color: #a8a094; text-decoration: underline; cursor: pointer; font: inherit; }
   .q-load { display: grid; gap: 14px; justify-items: center; }
   .spin { width: 46px; height: 46px; border-radius: 50%; border: 4px solid #2f2a2d; border-top-color: #d6b46a; animation: sp 0.9s linear infinite; }
@@ -223,7 +235,24 @@
 
 <!-- Quiz: duas perguntas antes da página -->
 <div class="quiz" id="quiz" role="dialog" aria-modal="true" aria-labelledby="q-h">
-  <div class="q-in" id="q1">
+  <div class="q-in" id="q0">
+    <div class="q-logos"><img src="../assets/logo.jpg" alt="Gestão Barber IA"><img src="../assets/logo-salao.jpg" alt="Gestão Salão IA"></div>
+    <span class="q-step">Antes de começar</span>
+    <h1 id="q0-h">Descubra o plano ideal para a sua equipe</h1>
+    <p>Leva menos de 1 minuto. Preencha seus dados e responda 2 perguntas rápidas.</p>
+    <form class="lead" id="lead" novalidate>
+      <div class="lead-row">
+        <label>Nome *<input name="nome" autocomplete="given-name" required maxlength="80"></label>
+        <label>Sobrenome *<input name="sobrenome" autocomplete="family-name" required maxlength="80"></label>
+      </div>
+      <label>Celular (WhatsApp) *<input name="celular" type="tel" inputmode="tel" autocomplete="tel" placeholder="(19) 99999-9999" required maxlength="20"></label>
+      <label>E-mail *<input name="email" type="email" inputmode="email" autocomplete="email" placeholder="voce@email.com" required maxlength="120"></label>
+      <label class="lead-ok"><input type="checkbox" name="ok" required><span>Autorizo o contato por WhatsApp, telefone ou e-mail sobre o sistema. Veja a <a href="../privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a>.</span></label>
+      <p class="lead-msg" data-lmsg></p>
+      <button class="q-go" type="submit">Continuar para o quiz →</button>
+    </form>
+  </div>
+  <div class="q-in" id="q1" hidden>
     <div class="q-logos"><img src="../assets/logo.jpg" alt="Gestão Barber IA"><img src="../assets/logo-salao.jpg" alt="Gestão Salão IA"></div>
     <div class="q-bar" aria-hidden="true"><i style="width:50%"></i></div>
     <span class="q-step">Pergunta 1 de 2</span>
@@ -391,6 +420,7 @@
 <footer><div class="wrap"><p><span data-t="name">Gestão Barber IA</span> · <a href="../termos.html">Termos de uso</a> · <a href="../privacidade.html">Privacidade</a></p></div></footer>
 <div class="float" id="float" aria-hidden="true"><a class="btn btn-primary btn-block btn-glow" href="#planos" tabindex="-1">Ver planos e preços <span class="arr" aria-hidden="true">→</span></a></div>
 
+<script src="../js/config.js"></script>
 <script>
 (function () {
   // ---------- Configuração ----------
@@ -481,7 +511,7 @@
 
   // ---------- quiz ----------
   const quiz = $('#quiz');
-  const show = id => ['q1', 'q2', 'q3'].forEach(k => { $('#' + k).hidden = k !== id; });
+  const show = id => ['q0', 'q1', 'q2', 'q3'].forEach(k => { $('#' + k).hidden = k !== id; });
   function finish() {
     show('q3');
     setTimeout(() => { quiz.hidden = true; document.body.classList.remove('locked'); render(); window.scrollTo(0, 0); }, 1100);
@@ -494,11 +524,55 @@
   }));
   qs('[data-q2]').forEach(b => b.addEventListener('click', () => { size = Number(b.dataset.q2); finish(); }));
   $('[data-back]').addEventListener('click', () => show('q1'));
-  // Link já respondido (ex.: ?tipo=salao&equipe=10) pula o quiz.
+  // ---------- cadastro do interessado (salvo no banco; só o dono do SaaS vê) ----------
+  const CFG = window.GB_CONFIG || {};
   const sp = new URLSearchParams(location.search);
-  if (SEG[sp.get('tipo')] && SIZE[sp.get('equipe')]) { seg = sp.get('tipo'); size = Number(sp.get('equipe')); quiz.hidden = true; document.body.classList.remove('locked'); render(); }
-  // Só o tipo de negócio no link (?tipo=salao): o quiz já começa na pergunta 2.
-  else if (SEG[sp.get('tipo')]) { const btn = document.querySelector(`[data-q1="${sp.get('tipo')}"]`); if (btn) btn.click(); }
+  const LKEY = 'gbia.lead';
+  const getLead = () => { try { return JSON.parse(localStorage.getItem(LKEY) || 'null'); } catch (e) { return null; } };
+  const origem = ['utm_source', 'utm_medium', 'utm_campaign'].map(k => sp.get(k)).filter(Boolean).join(' / ') || (sp.has('fbclid') ? 'instagram/facebook' : (document.referrer ? new URL(document.referrer).hostname : 'direto'));
+  async function api(path, body) {
+    if (!CFG.supabaseUrl || !CFG.supabaseAnonKey) throw new Error('sem servidor');
+    const r = await fetch(CFG.supabaseUrl.replace(/\/$/, '') + '/rest/v1/' + path, { method: 'POST',
+      headers: { apikey: CFG.supabaseAnonKey, Authorization: 'Bearer ' + CFG.supabaseAnonKey, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error('falhou ' + r.status);
+  }
+  const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
+  function startQuiz() {
+    // Só o tipo de negócio no link (?tipo=salao): o quiz já começa na pergunta 2.
+    if (SEG[sp.get('tipo')]) { const btn = document.querySelector(`[data-q1="${sp.get('tipo')}"]`); if (btn) { btn.click(); return; } }
+    show('q1');
+  }
+  $('#lead').addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = e.target, m = f.querySelector('[data-lmsg]');
+    const nome = f.nome.value.trim(), sobrenome = f.sobrenome.value.trim(), cel = f.celular.value.replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, ''), email = f.email.value.trim();
+    if (!nome) { m.textContent = 'Digite o seu nome.'; return f.nome.focus(); }
+    if (!sobrenome) { m.textContent = 'Digite o seu sobrenome.'; return f.sobrenome.focus(); }
+    if (cel.length < 10 || cel.length > 11) { m.textContent = 'Digite o celular com DDD.'; return f.celular.focus(); }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { m.textContent = 'Digite um e-mail válido.'; return f.email.focus(); }
+    if (!f.ok.checked) { m.textContent = 'Marque a autorização de contato para continuar.'; return; }
+    m.textContent = ''; const btn = f.querySelector('button'); btn.disabled = true; btn.textContent = 'Salvando…';
+    const id = uuid();
+    try { await api('leads', { id, nome, sobrenome, celular: cel, email, origem: origem.slice(0, 200), consentimento: true }); } catch (x) { /* segue para o quiz mesmo sem conexão */ }
+    try { localStorage.setItem(LKEY, JSON.stringify({ id, nome, sobrenome, celular: f.celular.value.trim(), email, at: Date.now() })); } catch (x) { /* opcional */ }
+    prefill(); startQuiz();
+  });
+  // Preenche o agendamento com os dados do cadastro.
+  function prefill() {
+    const l = getLead(), b = $('#book'); if (!l || !b) return;
+    if (!b.nome.value) b.nome.value = (l.nome + ' ' + (l.sobrenome || '')).trim();
+    if (!b.tel.value) b.tel.value = l.celular || '';
+  }
+  // Respostas do quiz vão junto do cadastro.
+  const sendQuiz = () => { const l = getLead(); if (l && l.id && !l.quiz) { api('rpc/lead_quiz', { p_id: l.id, p_tipo: seg, p_equipe: size }).then(() => { l.quiz = true; try { localStorage.setItem(LKEY, JSON.stringify(l)); } catch (x) { /* opcional */ } }).catch(() => {}); } };
+  qs('[data-q2]').forEach(b => b.addEventListener('click', sendQuiz));
+
+  // Quem já se cadastrou (neste aparelho ou pelo formulário do Instagram: ?cadastro=ok) vai direto ao quiz.
+  const done = !!getLead() || sp.get('cadastro') === 'ok';
+  if (SEG[sp.get('tipo')] && SIZE[sp.get('equipe')] && done) { seg = sp.get('tipo'); size = Number(sp.get('equipe')); quiz.hidden = true; document.body.classList.remove('locked'); render(); }
+  else if (done) startQuiz();
+  else show('q0');
+  prefill();
 
   qs('[data-buy]').forEach(a => a.addEventListener('click', () => {
     const f = $('#book'); f.dataset.plano = a.dataset.buy;

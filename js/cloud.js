@@ -80,6 +80,8 @@
     update: async (id, patch) => { const { error } = await c.rpc('admin_update_company', { p_id: id, p_patch: patch }); if (error) throw error; },
     plans: async () => { const { data, error } = await c.from('plans').select('*').order('sort'); if (error) throw error; return data; },
     savePlan: async (id, patch) => { const { error } = await c.from('plans').update(patch).eq('id', id); if (error) throw error; },
+    leads: async () => { const { data, error } = await c.from('leads').select('*').order('created_at', { ascending: false }).limit(500); if (error) throw error; return data || []; },
+    leadUpdate: async (id, patch) => { const { error } = await c.from('leads').update(patch).eq('id', id); if (error) throw error; },
   };
   // Provas do checklist (fotos) no armazenamento do Supabase, pasta da barbearia.
   const PROOFS = 'provas';

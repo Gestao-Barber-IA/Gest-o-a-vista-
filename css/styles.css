@@ -1496,3 +1496,5 @@ html[data-theme="light"] .tv { background: var(--bg); }
   .demo-tag small { display: none; }
   .demo-acts .btn-sm, .demo-seg button { padding: 5px 10px; font-size: 0.8rem; }
 }
+.lead-st { width: auto; padding: 7px 10px; min-height: 0; font-size: 0.9rem; }
+.lead-list .muted { display: block; font-size: 0.88rem; }
