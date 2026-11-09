@@ -36,7 +36,7 @@ O formulário instantâneo abre **dentro do Instagram**, já preenchido com os d
 - Texto do botão: **Ver meu plano ideal**
 - Link do site: `https://gest-o-a-vista.vercel.app/oferta/?cadastro=ok&utm_source=instagram&utm_medium=formulario`
 
-> O `?cadastro=ok` faz a página pular o cadastro (a pessoa já preencheu no Instagram) e ir direto para o quiz.
+> O `?cadastro=ok` faz a página abrir o quiz e, no final, pular o cadastro (a pessoa já preencheu no Instagram).
 > Para anúncios de um público só, acrescente o tipo: `&tipo=barbearia`, `&tipo=salao`, `&tipo=esmalteria` ou `&tipo=estetica` (o quiz já começa na pergunta do tamanho da equipe).
 
 ## 3. Onde ficam os contatos
@@ -45,7 +45,7 @@ O formulário instantâneo abre **dentro do Instagram**, já preenchido com os d
 - Os formulários do Meta guardam os cadastros por 90 dias: baixe a planilha com frequência.
 
 ## 4. Cadastros feitos direto na página
-Quem entra pelo link da bio, stories ou WhatsApp (sem o formulário do Instagram) preenche o cadastro na própria página antes do quiz. Esses contatos ficam no app em **Painel do SaaS → Interessados**, com botão de WhatsApp, situação (Novo, Contatado, Virou cliente, Descartado) e opção de baixar a planilha.
+Quem entra pelo link da bio, stories ou WhatsApp (sem o formulário do Instagram) responde o quiz e, no final, preenche o cadastro na própria página para ver o plano ideal. Esses contatos ficam no app em **Painel do SaaS → Interessados**, com botão de WhatsApp, situação (Novo, Contatado, Virou cliente, Descartado) e opção de baixar a planilha.
 
 ## 5. Links prontos
 | Uso | Link |
