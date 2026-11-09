@@ -866,7 +866,7 @@
         : '';
       const sn = activeSeason();
       const tierLbl = place === 2 ? 'Prata' : place === 3 ? 'Bronze' : t === 'mvp' ? 'MVP' : t === 'destaque' ? 'Destaque' : 'Ouro';
-      return `<div class="pd pd-${place} ${tier}" data-id="${esc(b.id)}" data-pos="${place}" style="--in:${delay};--fd:${place === 1 ? '0s' : place === 2 ? '-2s' : '-4s'}${seasonVars(place)}">
+      return `<div class="pd pd-${place} ${tier}${t ? ' has-title' : ''}" data-id="${esc(b.id)}" data-pos="${place}" style="--in:${delay};--fd:${place === 1 ? '0s' : place === 2 ? '-2s' : '-4s'}${seasonVars(place)}">
         <div class="pd-beam"></div>
         ${place === 1 ? `<div class="pd-sparks">${sparks}</div>` : ''}
         <div class="pd-float">
@@ -878,14 +878,17 @@
               <hr class="pd-line">
               ${place === 1 ? middle : ''}
               <div class="pd-pts">${score(row.overall)}<small>pts</small></div>
+              ${t ? `<div class="pd-bigleads">${leadsTxt}</div>` : ''}
               <div class="pd-money"><span class="pd-coin">$</span>${money0(row.sums.fat)}</div>
               ${t ? '' : `<div class="pd-leads" title="1º lugar em ${row.leads.length} de ${R.N} indicadores">${barsSvg}<span>${leadsTxt}</span></div>`}
-              <div class="pd-tierlbl">${tierLbl}</div>
+              ${t ? `<div class="pd-chip pd-chip-${t}">${t === 'mvp' ? 'MVP' : 'DESTAQUE'}</div>` : ''}
+              <div class="pd-tierlbl">${t ? icon(t === 'mvp' ? 'diamond' : 'crown') : ''}${tierLbl}</div>
             </div></div>
             <div class="pd-badge"><span>${ord(place)}<small>LUGAR</small></span></div>
             <a class="pd-link" href="#perfil-${esc(b.id)}" aria-label="Ver perfil de ${esc(b.name)}, ${ord(place)} lugar"></a>
           </div>
         </div>
+        <div class="pd-ped"></div>
         <div class="pd-base"><i></i><i></i></div>
       </div>`;
     };
