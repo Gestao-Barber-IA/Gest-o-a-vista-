@@ -3892,14 +3892,16 @@ Content-Type: application/json</pre>
     if (!r) return null;
     const n = R.rows.length, place = r.pos <= 3 ? r.pos : 0;
     const tier = place ? fxTier(R, r, place) : { cls: 'fx-plain', label: ord(r.pos) };
-    const [c1, c2] = CARD_TIERS[tier.cls] || CARD_TIERS['fx-plain'];
+    // No Gestão Salão IA, o card do MVP é rosé gold (no Barber, azul diamante).
+    const rose = MARCA === 'salao' && tier.cls === 'fx-mvp';
+    const [c1, c2] = rose ? ['#f2b8ac', '#b76e79'] : CARD_TIERS[tier.cls] || CARD_TIERS['fx-plain'];
     const D = "'Archivo', 'Arial Black', sans-serif", T = "'Hind', 'Helvetica Neue', Arial, sans-serif";
     try { await Promise.all([document.fonts.load(`800 80px Archivo`), document.fonts.load(`600 40px Hind`), document.fonts.load(`500 40px Hind`)]); } catch (e) { /* usa a fonte do sistema */ }
     const W = 1080, H = 1920, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
     const c = cv.getContext('2d');
     const sp = v => { try { c.letterSpacing = v; } catch (e) { /* opcional */ } };
     // Fundo
-    let g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#191536'); g.addColorStop(0.5, '#0c0b18'); g.addColorStop(1, '#090812'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+    let g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, rose ? '#3a1820' : '#191536'); g.addColorStop(0.5, rose ? '#180b10' : '#0c0b18'); g.addColorStop(1, rose ? '#10070b' : '#090812'); c.fillStyle = g; c.fillRect(0, 0, W, H);
     g = c.createRadialGradient(W / 2, 360, 40, W / 2, 360, 760); g.addColorStop(0, c2 + '66'); g.addColorStop(1, 'transparent'); c.fillStyle = g; c.fillRect(0, 0, W, H);
     for (let i = 0; i < 40; i++) { c.fillStyle = `rgba(255,255,255,${0.15 + ((i * 37) % 10) / 30})`; c.beginPath(); c.arc((i * 263) % W, (i * 577) % H, 1.5 + (i % 3), 0, 7); c.fill(); }
     // Card especial do MVP / Destaque do mês: título grande no topo, confete e parabéns no rodapé.
@@ -3919,7 +3921,7 @@ Content-Type: application/json</pre>
     // Card com borda e brilho
     const X = 56, Y = TOP, CW = W - 112, CH = 1806 - TOP;
     c.save(); c.shadowColor = c1 + 'aa'; c.shadowBlur = 70; rrect(c, X, Y, CW, CH, 64); g = c.createLinearGradient(X, Y, X + CW, Y + CH); g.addColorStop(0, c1); g.addColorStop(0.5, c2); g.addColorStop(1, c1); c.fillStyle = g; c.fill(); c.restore();
-    rrect(c, X + 4, Y + 4, CW - 8, CH - 8, 60); g = c.createLinearGradient(0, Y, 0, Y + CH); g.addColorStop(0, '#1b1832'); g.addColorStop(0.45, '#100f1e'); g.addColorStop(1, '#0a0912'); c.fillStyle = g; c.fill();
+    rrect(c, X + 4, Y + 4, CW - 8, CH - 8, 60); g = c.createLinearGradient(0, Y, 0, Y + CH); g.addColorStop(0, rose ? '#33181f' : '#1b1832'); g.addColorStop(0.45, rose ? '#1c0e13' : '#100f1e'); g.addColorStop(1, rose ? '#11080b' : '#0a0912'); c.fillStyle = g; c.fill();
     c.save(); rrect(c, X + 4, Y + 4, CW - 8, CH - 8, 60); c.clip(); g = c.createLinearGradient(X, Y, X + CW, Y + 700); g.addColorStop(0, 'rgba(255,255,255,0.07)'); g.addColorStop(0.45, 'rgba(255,255,255,0.02)'); g.addColorStop(0.46, 'transparent'); c.fillStyle = g; c.fillRect(X, Y, CW, CH); c.restore();
     // Foto
     const PX = W / 2, PR = tt ? 112 : 130, PY = Y + PR + 50;
@@ -3932,7 +3934,7 @@ Content-Type: application/json</pre>
     // Selo (posição ou título)
     let y = PY + PR + 66;
     c.save(); c.shadowColor = c1; c.shadowBlur = 30; rrect(c, PX - 120, y - 52, 240, 76, 38); g = c.createLinearGradient(PX - 120, 0, PX + 120, 0); g.addColorStop(0, '#ffffff'); g.addColorStop(1, c1); c.fillStyle = g; c.fill(); c.restore();
-    c.fillStyle = '#16122e'; c.font = `800 44px ${D}`; c.fillText(tier.label, PX, y + 2);
+    c.fillStyle = rose ? '#3a1520' : '#16122e'; c.font = `800 44px ${D}`; c.fillText(tier.label, PX, y + 2);
     // Nome, função e posição
     y += 100; c.fillStyle = '#ffffff'; fitFont(c, r.barber.name, 800, 78, D, CW - 120); c.fillText(r.barber.name, PX, y);
     y += 52; c.fillStyle = '#d8d4e8'; c.font = `500 40px ${T}`; c.fillText(r.barber.role || (MARCA === 'salao' ? 'Profissional' : 'Barbeiro'), PX, y);
