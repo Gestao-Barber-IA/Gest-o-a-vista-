@@ -354,7 +354,7 @@
 </div></section>
 </main>
 
-<footer><div class="wrap"><p><span data-t="name">Gestão Barber IA</span> · <a href="../vendas/">Ver a página completa</a> · <a href="../termos.html">Termos de uso</a> · <a href="../privacidade.html">Privacidade</a></p></div></footer>
+<footer><div class="wrap"><p><span data-t="name">Gestão Barber IA</span> · <a href="../termos.html">Termos de uso</a> · <a href="../privacidade.html">Privacidade</a></p></div></footer>
 <div class="float"><a class="btn btn-primary btn-block" href="#planos">💳 Contratar plano</a></div>
 
 <script>
@@ -410,7 +410,7 @@
     // formulário já preenchido com as respostas
     const f = $('#book'); f.tipo.value = seg; f.equipe.value = String(size);
     const ag = $('[data-agenda]'); if (AGENDA) { ag.hidden = false; ag.href = AGENDA; }
-    try { history.replaceState(null, '', `?tipo=${seg}&equipe=${size}${location.hash}`); } catch (e) { /* opcional */ }
+    if (document.getElementById('quiz').hidden) { try { history.replaceState(null, '', `?tipo=${seg}&equipe=${size}${location.hash}`); } catch (e) { /* opcional */ } }
   }
 
   // ---------- depoimentos (só os que forem cadastrados acima) ----------
@@ -449,6 +449,8 @@
   // Link já respondido (ex.: ?tipo=salao&equipe=10) pula o quiz.
   const sp = new URLSearchParams(location.search);
   if (SEG[sp.get('tipo')] && SIZE[sp.get('equipe')]) { seg = sp.get('tipo'); size = Number(sp.get('equipe')); quiz.hidden = true; document.body.classList.remove('locked'); render(); }
+  // Só o tipo de negócio no link (?tipo=salao): o quiz já começa na pergunta 2.
+  else if (SEG[sp.get('tipo')]) { const btn = document.querySelector(`[data-q1="${sp.get('tipo')}"]`); if (btn) btn.click(); }
 
   qs('[data-buy]').forEach(a => a.addEventListener('click', () => {
     const f = $('#book'); f.dataset.plano = a.dataset.buy;
