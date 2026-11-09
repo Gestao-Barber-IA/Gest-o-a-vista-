@@ -2772,50 +2772,87 @@ Content-Type: application/json</pre>
     return { sal, brand: B().name, pro: sal ? 'profissional' : 'barbeiro', pros: sal ? 'profissionais' : 'barbeiros', Pros: sal ? 'Profissionais' : 'Barbeiros',
       place: sal ? 'salão' : 'barbearia', places: sal ? 'salões' : 'barbearias', da: sal ? 'do salão' : 'da barbearia', sua: sal ? 'seu salão' : 'sua barbearia' };
   }
+  // Roteiro estratégico: gancho → dores → custo → virada → 4 pilares → decisões → ritual → antes x depois → como começar → chamada.
+  // Cada slide tem a fala sugerida (botão Roteiro ou tecla R).
   function pitchSlides() {
-    const w = pitchWords(), ym = curYm(), R = monthR(ym), has = R.rows.length >= 3;
+    const w = pitchWords(), ym = curYm(), R = monthR(ym), has = R.rows.length >= 3, n = R.rows.length;
     const feat = (ic, t, d) => `<div class="pt-feat">${icon(ic)}<b>${t}</b><small>${d}</small></div>`;
+    const li = (ic, t) => `<span>${icon(ic)} ${t}</span>`;
     const T = houseTotals(ym), g = houseGoalsFor(ym);
     const goalCard = (k, label, f) => { const v = T.vals[k], gg = g[k]; if (v == null) return ''; const pct = gg ? Math.min(100, (v / gg) * 100) : 0;
       return `<div class="pt-goal ${gg && v >= gg ? 'done' : ''}"><small>${label}</small><b class="num">${f(v)}</b>${gg ? `<span class="pt-bar"><i style="width:${pct.toFixed(1)}%"></i></span><em class="num">${v >= gg ? 'Meta batida ✓' : `Meta ${f(gg)} · faltam ${f(gg - v)}`}</em>` : ''}</div>`; };
     const mvp = R.title.barberId && R.rows.find(r => r.barber.id === R.title.barberId);
+    // Exemplo real de feedback com dados: o 2º colocado, com pontos fortes e o que melhorar.
+    const fb = R.rows[1] || R.rows[0];
+    const inds = R.active.filter(i => fb && fb.ranks[i.key]);
+    const strong = fb ? [...inds].sort((x, y) => fb.ranks[x.key] - fb.ranks[y.key]).slice(0, 2) : [];
+    const weak = fb ? [...inds].sort((x, y) => fb.ranks[y.key] - fb.ranks[x.key]).slice(0, 1) : [];
+    const fbCard = fb ? `<div class="pt-fb">${avatar(fb.barber, 64)}<b>${esc(fb.barber.name)}</b><small>${ord(fb.pos)} de ${n} · ${score(fb.overall)} pts</small>
+      <div class="pt-fb-row ok">${icon('trophy')}<span><em>Pontos fortes</em>${strong.map(i => `${esc(i.label)} (${ord(fb.ranks[i.key])})`).join(' · ')}</span></div>
+      <div class="pt-fb-row low">${icon('target')}<span><em>Foco do mês</em>${weak.map(i => `${esc(i.label)} (${ord(fb.ranks[i.key])} de ${n})`).join('')}</span></div></div>` : '';
+    const brand = esc(w.brand);
     return [
-      `<div class="pt-slide pt-cover">
+      { html: `<div class="pt-slide pt-cover">
         <div class="fx-emblem"><span class="fx-orbit"></span><span class="fx-orbit o2"></span>${logo('fx-logo')}</div>
-        <p class="fx-kicker">Apresentação</p>
-        <h1 class="pt-brand">${esc(w.brand)}</h1>
-        <p class="pt-lead">A gestão que transforma resultado em motivação para a equipe ${esc(w.da)}.</p>
+        <h1 class="pt-brand">${brand}</h1>
+        <p class="pt-lead"><b>Clareza para o dono.</b> <b>Performance para a equipe.</b></p>
         <p class="fx-tag">Cada atendimento conta.</p></div>`,
-      `<div class="pt-slide"><p class="fx-kicker">O desafio</p><h2 class="pt-h">O dia a dia de quem gerencia ${w.sal ? 'um salão' : 'uma barbearia'}</h2>
-        <div class="pt-grid g4">${feat('target', 'Metas que ninguém acompanha', `A equipe não sabe se está perto ou longe da meta.`)}${feat('clock', 'Resultado só no fim do mês', 'Quando aparece o problema, o mês já acabou.')}
-        ${feat('users', 'Equipe sem reconhecimento', `Quem se destaca não é celebrado e perde a motivação.`)}${feat('help', 'Decisões no achismo', `Sem números claros por ${w.pro}, a gestão vira palpite.`)}</div></div>`,
-      `<div class="pt-slide"><p class="fx-kicker">A solução</p><h2 class="pt-h">Tudo em um só lugar</h2>
-        <div class="pt-grid g3">${feat('trophy', 'Ranking em tempo real', `Pontuação de cada ${w.pro} em ${R.N || GB.visibleInds(state).length} indicadores.`)}${feat('monitor', 'Tela da loja na TV', 'Pódio animado e ultrapassagens ao vivo.')}${feat('target', 'Metas e conquistas', 'Quanto falta, ritmo por dia e comemoração.')}
-        ${feat('crown', 'Fechamento do mês', 'Revelação do pódio com suspense e música.')}${feat('file', 'Relatórios e cards', 'Painel do mês e cards prontos para stories.')}${feat('checksq', 'Checklist e POPs', 'Rotina da equipe padronizada, todo dia.')}</div></div>`,
-      `<div class="pt-slide pt-wide"><p class="fx-kicker">Ranking</p><h2 class="pt-h">Quem está na frente, em cada indicador</h2>
-        <div class="pt-split"><div class="pt-list">${GB.visibleInds(state).map(i => `<span>${icon('check')} ${esc(i.label)}</span>`).join('')}
-          <p class="pt-note"><b>MVP</b> lidera a maioria dos indicadores. <b>Destaque</b> lidera metade. O resto é por pontos.</p></div>
+        note: `Abra com calma. "Hoje eu quero te mostrar como ${w.sal ? 'salões' : 'barbearias'} estão saindo do achismo e multiplicando o resultado da equipe. Em poucos minutos você vai entender por que o ${w.brand} é sobre duas coisas: clareza para quem é dono e performance para quem atende."` },
+      { html: `<div class="pt-slide"><p class="fx-kicker">Uma pergunta</p>
+        <h2 class="pt-h">Quem é o melhor ${w.pro} ${esc(w.da)} em ticket médio?<br>Quanto falta para bater a meta deste mês?</h2>
+        <p class="pt-lead">Se a resposta demorou, você não tem um problema de equipe.<br><b>Você tem um problema de clareza.</b></p></div>`,
+        note: `Faça a pergunta e espere a resposta. Quase ninguém sabe na hora. "Repara: você conhece sua equipe, mas os números estão espalhados. Sem clareza, ninguém sabe onde está nem para onde ir — nem você, nem eles."` },
+      { html: `<div class="pt-slide pt-wide"><p class="fx-kicker">As dores</p><h2 class="pt-h">O que trava o crescimento ${w.sal ? 'do salão' : 'da barbearia'}</h2>
+        <div class="pt-grid g3">${feat('file', 'Informação bagunçada', 'Agenda, caixa, planilha, caderno e WhatsApp. Cada número num lugar.')}${feat('help', 'Decisão no achismo', 'Promover, cobrar, premiar ou contratar… sem dados, no feeling.')}${feat('target', 'Equipe sem direção', `O ${w.pro} não sabe se está perto ou longe da meta.`)}
+        ${feat('award', 'Bônus sem critério', 'Reconhecimento por opinião gera injustiça e desmotiva.')}${feat('users', 'Líder sem ferramenta', 'Feedback genérico, sem saber onde cada um precisa melhorar.')}${feat('lock', 'Dono preso na loja', 'Para saber como está, precisa estar lá.')}</div></div>`,
+        note: `Passe por cada dor e pergunte: "Qual dessas você mais vive hoje?". Deixe a pessoa escolher — é a dor que você vai resolver no resto da apresentação. Fale pouco aqui, ouça muito.` },
+      { html: `<div class="pt-slide"><p class="fx-kicker">O custo invisível</p><h2 class="pt-h">Sem clareza, o talento se perde</h2>
+        <div class="pt-grid g3">${feat('chart', 'Faturamento que escapa', 'Horário vago, ticket baixo e venda que não acontece — todo dia.')}${feat('rocket', 'Talento desperdiçado', `Quem pode crescer não sabe o caminho; quem se destaca não é visto.`)}${feat('undo', 'Rotatividade', 'Profissional desmotivado vai embora — e leva clientes.')}</div>
+        <p class="pt-lead sm">O problema não é falta de esforço. É falta de um placar.</p></div>`,
+        note: `"Isso não aparece no caixa, mas custa caro: o horário que ficou vago, o produto que não foi oferecido, o profissional bom que foi embora porque ninguém viu o esforço dele. A equipe se esforça — só não tem um placar."` },
+      { html: `<div class="pt-slide pt-wide"><p class="fx-kicker">A virada</p><h2 class="pt-h">Da bagunça à clareza</h2>
+        <div class="pt-flow"><div class="pt-mess">${['Agenda', 'Caixa', 'Planilha', 'Caderno', 'WhatsApp', 'Sistema'].map((t, i) => `<span style="--i:${i}">${t}</span>`).join('')}</div>
+          <div class="pt-arrow">${icon('right')}</div><div class="pt-core">${logo('pt-core-logo')}<b>${brand}</b></div><div class="pt-arrow">${icon('right')}</div>
+          <div class="pt-clear">${li('trophy', 'Ranking')}${li('target', 'Metas')}${li('chart', 'Evolução')}${li('file', 'Relatórios')}</div></div>
+        <p class="pt-lead sm">Os números que já existem — lançados ou vindos do seu sistema — organizados em um placar que todo mundo entende.</p></div>`,
+        note: `"O ${w.brand} pega o que já existe — o que você lança ou o que vem do seu sistema de agenda e caixa — e transforma num placar claro. Não é mais trabalho: é o mesmo dado, finalmente organizado."` },
+      { html: `<div class="pt-slide pt-wide"><p class="fx-kicker">Pilar 1 · Clareza para o dono</p><h2 class="pt-h">Tudo na palma da mão</h2>
+        <div class="pt-grid g3">${goalCard('fat', 'Faturamento total', money0)}${goalCard('cli', 'Clientes atendidos', v => nf0.format(v))}${goalCard('ticket', 'Ticket médio da casa', money0)}</div>
+        <p class="pt-lead sm">Metas com <b>quanto falta e quanto vender por dia</b>, faturamento mês a mês, participação de cada ${w.pro} e evolução da empresa — no celular, de onde estiver.</p></div>`,
+        note: `Mostre os números como se fossem da casa dele. "Esse é o seu ${w.place} em um olhar: quanto faturou, quanto falta e quanto precisa vender por dia para bater a meta. Você acompanha do celular, sem precisar estar na loja."` },
+      { html: `<div class="pt-slide pt-wide"><p class="fx-kicker">Pilar 2 · Clareza para a equipe</p><h2 class="pt-h">Cada um sabe onde está e o que falta</h2>
+        <div class="pt-split"><div class="pt-list">${GB.visibleInds(state).map(i => li('check', esc(i.label))).join('')}</div>
           ${has ? `<div class="pt-podium">${podium(R)}</div>` : ''}</div></div>`,
-      `<div class="pt-slide pt-wide"><p class="fx-kicker">Tela da loja</p><h2 class="pt-h">A TV ${esc(w.da)} motiva a equipe o dia inteiro</h2>
-        <div class="pt-split"><div class="pt-list"><span>${icon('trophy')} Pódio animado com coroa, MVP e Destaque</span><span>${icon('bolt')} Ultrapassagens ao vivo com som</span><span>${icon('palette')} Temas: Natal, Copa, Outubro Rosa e mais</span><span>${icon('target')} Alertas de quem precisa de ajuda</span></div>
+        note: `"Cada ${w.pro} é avaliado em ${R.N || GB.visibleInds(state).length} indicadores, com pesos que você define. Ninguém precisa perguntar como está: o ranking mostra, ao vivo. Quando todo mundo vê o placar, todo mundo joga melhor."` },
+      { html: `<div class="pt-slide pt-wide"><p class="fx-kicker">Pilar 3 · Gamificação e bonificação</p><h2 class="pt-h">Competição saudável que multiplica a performance</h2>
+        <div class="pt-split"><div class="pt-list">${li('crown', 'MVP e Destaque do mês por critério claro')}${li('monitor', 'Tela da loja na TV com pódio e ultrapassagens ao vivo')}${li('target', 'Metas com conquista quando a equipe bate')}${li('award', 'Base justa para bônus e premiações')}${li('palette', 'Temas: Natal, Copa, Outubro Rosa e mais')}</div>
           ${has ? `<div class="pt-rank">${rankingList(R, 5)}</div>` : ''}</div></div>`,
-      `<div class="pt-slide pt-wide"><p class="fx-kicker">Metas</p><h2 class="pt-h">Metas da empresa com o caminho para bater</h2>
-        <div class="pt-grid g3">${goalCard('fat', 'Faturamento total', money0)}${goalCard('cli', 'Clientes atendidos', v => nf0.format(v))}${goalCard('ticket', 'Ticket médio', money0)}</div>
-        <p class="pt-lead sm">Barra de progresso, quanto falta, <b>quanto vender por dia</b> e um card de conquista quando a equipe bate a meta.</p></div>`,
-      `<div class="pt-slide"><p class="fx-kicker">Fechamento do mês</p><h2 class="pt-h">O fim do mês vira um evento</h2>
-        <div class="pt-grid g3">${feat('sparkle', 'Abertura de cinema', '“É hora do fechamento” com a música da casa.')}${feat('crown', 'Pódio com suspense', '3º, 2º e 1º revelados com trilha que cresce.')}${feat('award', 'Líderes do mês', 'Quem ficou em 1º em cada indicador e o recorde da maior comanda.')}</div></div>`,
-      `<div class="pt-slide pt-wide"><p class="fx-kicker">Relatórios</p><h2 class="pt-h">Cards prontos para postar</h2>
-        <div class="pt-split"><div class="pt-list"><span>${icon('file')} Painel do mês em PDF, com o logo ${esc(w.da)}</span><span>${icon('download')} Card de cada ${w.pro} no tamanho dos stories</span><span>${icon('diamond')} Card especial do MVP e do Destaque</span><span>${icon('chart')} Evolução mês a mês e participação no faturamento</span></div>
+        note: `"Aqui o jogo vira. A TV mostra o pódio e as ultrapassagens na hora — a equipe se cobra sozinha. E o bônus deixa de ser opinião: você premia quem liderou os indicadores. É justo, transparente e motiva."` },
+      { html: `<div class="pt-slide pt-wide"><p class="fx-kicker">Pilar 4 · Liderança que multiplica talentos</p><h2 class="pt-h">Feedback com dados, não com opinião</h2>
+        <div class="pt-split"><div class="pt-list">${li('trophy', 'Pontos fortes e o foco do mês de cada um')}${li('undo', 'Evolução comparada com o mês anterior')}${li('checksq', 'Checklist Agenda Cheia: a rotina que enche a agenda')}${li('book', 'POPs: o padrão da casa com fotos e vídeo')}${li('users', 'Líderes e gestores de área com a visão da sua equipe')}</div>
+          ${fbCard}</div></div>`,
+        note: `Use o exemplo da tela. "Olha esse ${w.pro}: ele é forte em ${strong.map(i => i.label.toLowerCase()).join(' e ') || 'alguns indicadores'} e o foco do mês é ${weak.map(i => i.label.toLowerCase()).join('') || 'um indicador específico'}. A conversa de feedback fica objetiva, em 5 minutos. É assim que o líder lidera melhor e multiplica talentos."` },
+      { html: `<div class="pt-slide pt-wide"><p class="fx-kicker">Decisões fáceis</p><h2 class="pt-h">Decidir em minutos, com segurança</h2>
+        <div class="pt-split"><div class="pt-list">${li('file', 'Relatório mensal pronto, com o logo da sua empresa')}${li('chart', 'Faturamento mês a mês e crescimento')}${li('users', 'Quem carrega o resultado e onde há risco')}${li('target', 'Quem bateu a meta individual')}</div>
           ${mvp ? `<img class="pt-card" data-card="${ym}|${mvp.barber.id}|title" alt="Card do ${R.title.type === 'mvp' ? 'MVP' : 'Destaque'} do mês">` : ''}</div></div>`,
-      `<div class="pt-slide"><p class="fx-kicker">Para a equipe</p><h2 class="pt-h">Cada ${w.pro} acompanha tudo no celular</h2>
-        <div class="pt-grid g4">${feat('chart', 'Minha performance', 'Posição, pontos e o que falta em cada indicador.')}${feat('undo', 'Evolução', 'Comparação com o mês anterior.')}${feat('checksq', 'Checklist Agenda Cheia', 'A rotina que enche a agenda, todo dia.')}${feat('book', 'POPs', 'O padrão da casa com fotos e vídeo.')}</div></div>`,
-      `<div class="pt-slide"><p class="fx-kicker">Como começar</p><h2 class="pt-h">Simples de colocar para rodar</h2>
-        <div class="pt-steps"><div><b>1</b><span>Cadastre a equipe e convide cada ${w.pro} pelo link</span></div><div><b>2</b><span>Lance os resultados ou conecte o sistema que você já usa</span></div><div><b>3</b><span>Ligue a Tela da loja na TV e acompanhe</span></div></div></div>`,
-      `<div class="pt-slide pt-cover"><div class="fx-emblem"><span class="fx-orbit"></span><span class="fx-orbit o2"></span>${logo('fx-logo')}</div>
-        <h1 class="pt-brand sm">Vamos levar ${esc(w.sua)} para o próximo nível?</h1>
-        <p class="fx-tag">Cada atendimento conta.</p>
+        note: `"Promover, premiar, contratar, ajustar meta: tudo com o relatório do mês na mão. E ainda sai o card de cada profissional e do MVP pronto para os stories — a equipe divulga o próprio resultado."` },
+      { html: `<div class="pt-slide"><p class="fx-kicker">O ritual</p><h2 class="pt-h">O fechamento do mês vira um evento</h2>
+        <div class="pt-grid g3">${feat('sparkle', 'Abertura de cinema', '“É hora do fechamento” com a música da casa.')}${feat('crown', 'Pódio com suspense', '3º, 2º e 1º revelados com trilha que cresce.')}${feat('award', 'Líderes do mês', 'O 1º de cada indicador e o recorde da maior comanda.')}</div>
+        <p class="pt-lead sm">Reconhecimento público, todo mês. É isso que segura talento.</p></div>`,
+        note: `Se der, mostre a revelação ao vivo na demonstração. "Uma vez por mês, a equipe para e celebra. Quem se destacou é reconhecido na frente de todos. Isso cria cultura — e cultura segura talento."` },
+      { html: `<div class="pt-slide pt-wide"><p class="fx-kicker">A transformação</p><h2 class="pt-h">Antes e depois do ${brand}</h2>
+        <div class="pt-ba">${[['Informação espalhada em vários lugares', 'Tudo organizado em um só painel'], ['Meta no achismo', 'Meta com quanto falta por dia'], ['Equipe sem saber onde está', 'Ranking ao vivo, todos sabem o caminho'], ['Bônus por opinião', 'Reconhecimento por resultado'], ['Feedback genérico', 'Feedback com dados de cada um'], ['Dono preso na loja', 'Tudo na palma da mão']]
+          .map(([a2, b2], i) => `<div class="pt-ba-row" style="--i:${i}"><span class="bef">${a2}</span>${icon('right')}<span class="aft">${b2}</span></div>`).join('')}</div></div>`,
+        note: `Leia devagar, linha por linha, olhando para a pessoa. Termine com: "Qual dessas mudanças faria mais diferença no seu ${w.place} hoje?"` },
+      { html: `<div class="pt-slide"><p class="fx-kicker">Como começar</p><h2 class="pt-h">Rodando em poucos dias</h2>
+        <div class="pt-steps"><div><b>1</b><span>Cadastre a equipe e convide cada ${w.pro} pelo link</span></div><div><b>2</b><span>Lance os resultados ou conecte o sistema que você já usa</span></div><div><b>3</b><span>Ligue a Tela da loja e faça o primeiro fechamento</span></div></div></div>`,
+        note: `"Não precisa mudar seu sistema de agenda nem treinar ninguém por semanas. Cadastra a equipe, lança os números e liga a TV. No primeiro fechamento a equipe já sente a diferença."` },
+      { html: `<div class="pt-slide pt-cover"><div class="fx-emblem"><span class="fx-orbit"></span><span class="fx-orbit o2"></span>${logo('fx-logo')}</div>
+        <h1 class="pt-brand sm">Vamos multiplicar a performance ${w.sal ? 'do seu salão' : 'da sua barbearia'}?</h1>
+        <p class="pt-lead">Clareza para você. Performance para a equipe. Tudo na palma da mão.</p>
         <a class="btn btn-primary pt-cta" href="oferta/" target="_blank" rel="noopener">${icon('rocket')} Conhecer os planos</a>
-        <p class="pt-lead sm">${esc(w.brand)} · gest-o-a-vista.vercel.app</p></div>`,
+        <p class="pt-lead sm">${brand} · Cada atendimento conta.</p></div>`,
+        note: `Chamada direta: "Faz sentido começarmos pela sua equipe ainda este mês?" Se sim, abra os planos ali mesmo. Se houver dúvida, volte ao slide de dores e pergunte qual delas mais pesa.` },
     ];
   }
   function pitchOpen() {
@@ -2824,7 +2861,7 @@ Content-Type: application/json</pre>
     if (!ov) {
       ov = document.createElement('div'); ov.id = 'pt'; ov.className = 'fx pt'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Apresentação do ' + B().name);
       ov.innerHTML = `<div class="fx-bg">${fxDots(34)}</div><div class="fx-stage pt-stage" aria-live="polite"></div><nav class="fx-ctrl"></nav>`;
-      ov.addEventListener('click', e => { const b = e.target.closest('[data-pt]'); if (b) { const a = b.dataset.pt; if (a === 'next') pitchGo(1); else if (a === 'prev') pitchGo(-1); else if (a === 'close') pitchClose(); else if (a === 'full') { const d = document.documentElement; if (!document.fullscreenElement && d.requestFullscreen) d.requestFullscreen().catch(() => {}); else if (document.exitFullscreen) document.exitFullscreen().catch(() => {}); } } });
+      ov.addEventListener('click', e => { const b = e.target.closest('[data-pt]'); if (b) { const a = b.dataset.pt; if (a === 'next') pitchGo(1); else if (a === 'prev') pitchGo(-1); else if (a === 'close') pitchClose(); else if (a === 'notes') { ui.pitch.notes = !ui.pitch.notes; pitchRender(); } else if (a === 'full') { const d = document.documentElement; if (!document.fullscreenElement && d.requestFullscreen) d.requestFullscreen().catch(() => {}); else if (document.exitFullscreen) document.exitFullscreen().catch(() => {}); } } });
       let x0 = null; ov.addEventListener('pointerdown', e => { x0 = e.clientX; }); ov.addEventListener('pointerup', e => { if (x0 != null && Math.abs(e.clientX - x0) > 60 && !e.target.closest('a,button')) pitchGo(e.clientX < x0 ? 1 : -1); x0 = null; });
       document.body.appendChild(ov);
     }
@@ -2833,10 +2870,11 @@ Content-Type: application/json</pre>
   function pitchRender() {
     const ov = document.getElementById('pt'), pt = ui.pitch; if (!ov || !pt) return;
     const sl = pitchSlides(), n = sl.length; pt.i = Math.max(0, Math.min(n - 1, pt.i));
-    ov.querySelector('.pt-stage').innerHTML = sl[pt.i];
+    ov.querySelector('.pt-stage').innerHTML = sl[pt.i].html + (pt.notes ? `<aside class="pt-notes">${icon('book')}<span><b>Roteiro · slide ${pt.i + 1} de ${n}</b>${esc(sl[pt.i].note)}</span></aside>` : '');
     ov.querySelector('.fx-ctrl').innerHTML = `<button class="fx-btn" data-pt="prev" aria-label="Anterior" ${pt.i === 0 ? 'disabled' : ''}>${icon('left')}</button>
       <span class="fx-pages" aria-label="Slide ${pt.i + 1} de ${n}">${sl.map((_, k) => `<i class="${k === pt.i ? 'on' : k < pt.i ? 'done' : ''}"></i>`).join('')}</span>
       <button class="fx-btn" data-pt="next" aria-label="Próximo" ${pt.i === n - 1 ? 'disabled' : ''}>${icon('right')}</button>
+      <button class="fx-btn sm ${pt.notes ? 'on' : ''}" data-pt="notes" aria-pressed="${!!pt.notes}" aria-label="Mostrar o roteiro (fala de cada slide)" title="Roteiro (R)">${icon('book')}</button>
       <button class="fx-btn sm" data-pt="full" aria-label="Tela cheia">${icon('expand')}</button>
       <button class="fx-btn sm" data-pt="close" aria-label="Fechar apresentação">${icon('x')}</button>`;
     ov.querySelector('.pt-stage').scrollTop = 0;
@@ -2849,6 +2887,7 @@ Content-Type: application/json</pre>
     if (['ArrowRight', 'PageDown', ' ', 'Enter'].includes(e.key)) { e.preventDefault(); pitchGo(1); }
     else if (['ArrowLeft', 'PageUp'].includes(e.key)) { e.preventDefault(); pitchGo(-1); }
     else if (e.key === 'Escape') pitchClose();
+    else if (e.key === 'r' || e.key === 'R') { ui.pitch.notes = !ui.pitch.notes; pitchRender(); }
   });
   function fxStep(d) {
     const fx = ui.fx; if (!fx) return;
