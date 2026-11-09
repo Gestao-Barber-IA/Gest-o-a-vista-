@@ -4061,7 +4061,7 @@ Content-Type: application/json</pre>
   // Balões nas cores da marca, ao lado da foto.
   function drawBalloons(c, { PX, PY, PR, A, Bc }) {
     const cols = [A, Bc, mixHex(A, '#ffffff', 0.45), mixHex(Bc, '#ffffff', 0.3)];
-    [[PX - PR - 120, PY - 260, 0], [PX - PR - 30, PY - 380, 1], [PX + PR + 40, PY - 360, 2], [PX + PR + 130, PY - 220, 3]].forEach(([bx, by, i]) => {
+    [[PX - PR - 120, PY - 260, 0], [PX - PR - 30, PY - 350, 1], [PX + PR + 40, PY - 335, 2], [PX + PR + 130, PY - 220, 3]].forEach(([bx, by, i]) => {
       c.strokeStyle = 'rgba(255,255,255,0.6)'; c.lineWidth = 2; c.beginPath(); c.moveTo(bx, by + 90); c.quadraticCurveTo(bx + (i % 2 ? 30 : -30), by + 220, bx + (PX - bx) * 0.25, by + 360); c.stroke();
       c.save(); c.shadowColor = cols[i]; c.shadowBlur = 30; c.fillStyle = cols[i]; c.beginPath(); c.ellipse(bx, by, 66, 84, 0, 0, 7); c.fill(); c.restore();
       c.fillStyle = 'rgba(255,255,255,0.35)'; c.beginPath(); c.ellipse(bx - 22, by - 30, 14, 24, -0.4, 0, 7); c.fill();
@@ -4076,7 +4076,7 @@ Content-Type: application/json</pre>
   async function drawBirthday(bid, withPhoto) {
     const bd = (state.births || {})[bid]; if (!bd) return null;
     const [, m, d] = bd.split('-').map(Number), b = barberById(bid);
-    return drawCelebration(bid, { photo: withPhoto, title: 'Feliz aniversário!', sub: `${d} DE ${MONTH_NAMES[m - 1].toUpperCase()}`, decor: drawBalloons,
+    return drawCelebration(bid, { photo: withPhoto, title: 'Feliz aniversário!', sub: `${d} DE ${MONTH_NAMES[m - 1].toUpperCase()}`, py: 915, decor: drawBalloons,
       msg: `Hoje o dia é todo seu, ${b.name.trim().split(/\s+/)[0]}! Que o seu novo ciclo seja cheio de saúde, alegria e conquistas.`, foot: 'COM CARINHO, EQUIPE ' + (state.company.name || '').toUpperCase() });
   }
   async function cardBlob(ym, bid, v = '') {
