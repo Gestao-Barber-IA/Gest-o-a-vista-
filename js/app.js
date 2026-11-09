@@ -161,7 +161,7 @@
     leads: ['Interessados', 'Cadastros feitos na página de vendas (gest-o-a-vista.vercel.app/oferta) antes do quiz: nome, celular, e-mail e as respostas do quiz. Use a situação para organizar o contato: Novo, Contatado, Virou cliente ou Descartado. Só o dono do SaaS vê esta lista.'],
     pops: ['POPs · Guia do Sucesso', 'POP é o Procedimento Operacional Padrão: o jeito certo de fazer cada processo da barbearia. Cada POP tem o passo a passo em fotos (toque para ampliar) e, se houver, o link do vídeo. Só o dono cadastra e edita; toda a equipe consulta.'],
     extras: ['Acessos extras do líder', 'Liberações opcionais que você dá a um líder: conferir e aprovar o checklist de toda a equipe e/ou lançar à mão os números de toda a equipe só nos indicadores marcados. Os outros campos ficam só para leitura para ele. Campos que vêm da integração continuam travados.'],
-    fechamento: ['Fechamento do mês', 'Apresentação para a equipe: mostra do último colocado ao 4º e depois o pódio, do 3º ao 1º. Cada lugar do pódio só aparece quando o gestor toca em Revelar. O resumo esconde o resultado para não estragar a surpresa se a tela estiver na TV.'],
+    fechamento: ['Fechamento do mês', 'Apresentação para a equipe: revela só os 3 primeiros colocados, do 3º ao 1º. Cada lugar do pódio só aparece quando o gestor toca em Revelar. O resumo esconde o resultado para não estragar a surpresa se a tela estiver na TV.'],
   };
   function leaderExtrasBox(b) {
     const x = extrasOf(b.id), n = (x.review ? 1 : 0) + x.fields.length;
@@ -1143,13 +1143,13 @@
     }
     if (m.t === 'close') { if (!seenReveal()[m.ym]) fxClose(); return; }
     const { s } = fxSlides(m.ym);
-    const idx = m.t === 'podium' ? 0 : m.t === 'final' ? s.length - 1 : s.findIndex(x => x.place === Number(m.place));
+    const idx = m.t === 'podium' ? 0 : m.t === 'final' ? s.length - 1 : m.t === 'leaders' ? s.findIndex(x => x.k === 'leaders') : s.findIndex(x => x.place === Number(m.place));
     if (idx < 0) return;
     if (fx.i !== idx) { fx.i = idx; fxRender(); }
     const slide = document.querySelector('#fx .fx-slide');
     if (!slide || !slide.classList.contains('is-suspense')) return;
     if (m.t === 'drum' && !slide.classList.contains('is-drum')) {
-      slide.classList.add('is-drum'); Sound.play('rufar');
+      slide.classList.add('is-drum'); Music.build(Number(m.place));
       clearTimeout(fx.timer); fx.timer = setTimeout(() => fxReveal(slide, Number(m.place)), 8000);
     }
     if (m.t === 'reveal') { clearTimeout(fx.timer); fxReveal(slide, Number(m.place)); }
@@ -2049,7 +2049,7 @@
 
   // Conquista: quando uma meta da empresa é batida, aparece um card de parabéns (uma vez por meta e por mês, em cada aparelho).
   function maybeGoalCelebrate(user) {
-    if (!user || !isGestor(user) || location.hash === '#apresentacao' || document.querySelector('.gc-ov')) return;
+    if (!user || !isGestor(user) || location.hash === '#apresentacao' || ui.fx || document.getElementById('fx') || document.querySelector('.gc-ov')) return;
     const seen = readJSON('hgSeen', {});
     // Mês atual; o mês anterior só nos primeiros dias do mês novo (metas batidas no fechamento).
     const months = [curYm(), ...(new Date().getDate() <= 7 ? [addMonths(curYm(), -1)] : [])];
@@ -2547,7 +2547,7 @@ Content-Type: application/json</pre>
         <div class="fc-peek"><p class="section-note">${hide ? 'O título e as colocações ficam escondidos aqui para não estragar a surpresa se a tela estiver espelhada na TV.' : 'Só você deveria estar vendo isto.'}</p>
           <button class="btn btn-sm" data-action="fcPeek">${icon(hide ? 'eye' : 'lock')} ${hide ? 'Ver o resultado (só para mim)' : 'Esconder de novo'}</button></div>
         ${hide ? '' : `<ol class="fc-top">${top.map(r => `<li>${avatar(r.barber, 40)}<span><b>${ord(r.pos)} ${esc(r.barber.name)}</b><small class="muted num">${score(r.overall)} pts · ${r.leads.length}/${R.N} lideradas</small></span></li>`).join('')}</ol>`}
-        <p class="section-note">A apresentação mostra cada barbeiro do último ao 4º colocado. Depois vem o pódio: cada lugar, do 3º ao 1º, só aparece quando você tocar em Revelar. Use em tela cheia na TV da loja.</p>
+        <p class="section-note">A apresentação revela só os 3 primeiros colocados: cada lugar, do 3º ao 1º, só aparece quando você tocar em Revelar, com música que cresce até o 1º lugar. Use em tela cheia na TV da loja.</p>
       </section>` : ''}`;
   }
 
@@ -2556,13 +2556,14 @@ Content-Type: application/json</pre>
     return `<div class="fx-photo"><span>${b.photo ? `<img src="${esc(b.photo)}" alt="">` : esc(ini)}</span></div>`;
   }
   function fxSlides(ym) {
-    // No celular da equipe (ao vivo ou depois), a revelação mostra só o pódio.
+    // A apresentação revela só os 3 primeiros colocados. No celular da equipe (ao vivo ou depois), começa direto no pódio.
     const mode = ui.fx && ui.fx.mode;
     const R = mode ? monthR(ym) : scopedR(ym);
     const rows = R.rows, s = mode ? [] : [{ k: 'intro' }];
-    if (!mode) for (let i = rows.length - 1; i >= 3; i--) s.push({ k: 'card', row: rows[i] });
     s.push({ k: 'podium' });
     for (const p of [3, 2, 1]) if (rows[p - 1]) s.push({ k: 'card', row: rows[p - 1], place: p });
+    // Líderes de cada indicador (e o recorde da maior comanda), antes do Parabéns ao pódio.
+    if (R.active.some(a => a.leaders.length) || (R.bonus || []).some(a => a.leaders.length)) s.push({ k: 'leaders' });
     s.push({ k: 'final' });
     return { R, s };
   }
@@ -2597,6 +2598,30 @@ Content-Type: application/json</pre>
         <p class="fx-month">Os três melhores de ${month}</p>
         <div class="fx-chips"><span class="c-bronze">Bronze</span><span class="c-silver">Prata</span><span class="${t1.cls === 'fx-mvp' ? 'c-mvp' : 'c-gold'}">${t1.label}</span></div>
         <div class="fx-spot"></div><div class="fx-spot s2"></div><div class="fx-spot s3"></div></div>`;
+    }
+    if (sl.k === 'leaders') {
+      const byId = id => R.rows.find(r => r.barber.id === id);
+      const items = [...R.active.filter(a => a.leaders.length).map(a => ({ ind: a, rec: false })), ...(R.bonus || []).filter(a => a.leaders.length).map(a => ({ ind: a, rec: true }))];
+      const card = ({ ind, rec }, i) => {
+        const ppl = ind.leaders.map(byId).filter(Boolean);
+        const val = rec ? money2(ind.max) : fmt(ind, ind.max) + (ind.key === 'check' ? ' pts' : '');
+        return `<div class="fx-lcard ${rec ? 'rec' : ''}" style="--d:${(0.25 + i * 0.12).toFixed(2)}s">
+          <small class="fx-lind">${rec ? `${icon('trophy')} Recorde do mês` : esc(ind.label)}</small>
+          ${rec ? `<b class="fx-lrec">${esc(ind.label)}</b>` : ''}
+          <div class="fx-lppl">${ppl.slice(0, 3).map(r => fxPhoto(r.barber)).join('')}</div>
+          <span class="fx-lname">${ppl.map(r => esc(first(r.barber.name))).join(' e ')}${ppl.length > 1 ? ' <i>(empate)</i>' : ''}</span>
+          <strong class="num">${val}</strong>
+        </div>`;
+      };
+      // Quantos indicadores cada profissional liderou (resumo no rodapé).
+      const count = {}; for (const a of R.active) for (const id of a.leaders) count[id] = (count[id] || 0) + 1;
+      const ranking = Object.entries(count).sort((a, b) => b[1] - a[1]).map(([id, n2]) => byId(id) && `<span><b>${esc(first(byId(id).barber.name))}</b> ${n2} indicador${n2 > 1 ? 'es' : ''}</span>`).filter(Boolean).join('');
+      return `<div class="fx-slide fx-leaders">
+        <h1 class="fx-title gold">Líderes do mês</h1>
+        <p class="fx-month">Quem ficou em 1º lugar em cada indicador de ${month}</p>
+        <div class="fx-lgrid">${items.map(card).join('')}</div>
+        ${ranking ? `<p class="fx-lsum">${ranking}</p>` : ''}
+      </div>`;
     }
     if (sl.k === 'final') {
       const top = R.rows.slice(0, 3);
@@ -2682,15 +2707,15 @@ Content-Type: application/json</pre>
       fxCount(slide);
       if (sl.k === 'podium') Sound.play('sino');
       if (sl.k === 'final') Sound.play('aplausos');
-      if (fx.mode === 'auto' && sl.k !== 'final') fx.timer = setTimeout(() => fxStep(1), 3400);
+      if (sl.k === 'leaders') Sound.play('fanfarra');
+      if (fx.mode === 'auto' && sl.k !== 'final') fx.timer = setTimeout(() => fxStep(1), sl.k === 'leaders' ? 8000 : 3400);
     }
-    if (fx.live && (sl.k === 'podium' || sl.k === 'final' || sl.place)) revealSend({ t: sl.place ? 'card' : sl.k, place: sl.place || 0 });
+    if (fx.live && (sl.k === 'podium' || sl.k === 'leaders' || sl.k === 'final' || sl.place)) revealSend({ t: sl.place ? 'card' : sl.k, place: sl.place || 0 });
   }
   function fxReveal(slide, place) {
     if (!slide || !slide.classList.contains('is-suspense')) return;
     slide.classList.remove('is-suspense', 'is-drum'); slide.classList.add('is-revealed');
-    Sound.play(place === 1 ? 'fanfarra' : 'moeda');
-    if (place === 1) setTimeout(() => Sound.play('aplausos'), 900);
+    Music.win(place);
     fxCount(slide);
     const fx = ui.fx;
     if (fx && fx.live) revealSend({ t: 'reveal', place });
@@ -2707,9 +2732,10 @@ Content-Type: application/json</pre>
     const fx = ui.fx;
     if (slide.classList.contains('is-drum')) { clearTimeout(fx.timer); fxReveal(slide, Number(slide.dataset.place)); return; }
     slide.classList.add('is-drum');
-    Sound.play('rufar');
-    if (fx.live) revealSend({ t: 'drum', place: Number(slide.dataset.place) });
-    fx.timer = setTimeout(() => fxReveal(slide, Number(slide.dataset.place)), 2600);
+    const pl = Number(slide.dataset.place);
+    Music.build(pl);
+    if (fx.live) revealSend({ t: 'drum', place: pl });
+    fx.timer = setTimeout(() => fxReveal(slide, pl), (Music.buildDur[pl] || 2.6) * 1000);
   }
   function fxGo(d) {
     const fx = ui.fx; if (!fx || fx.mode) return; // no celular da equipe, quem conduz é o gestor
@@ -2726,6 +2752,7 @@ Content-Type: application/json</pre>
   function fxClose() {
     const ov = document.getElementById('fx');
     if (ui.fx) clearTimeout(ui.fx.timer);
+    Music.stop();
     if (ui.fx && ui.fx.live) revealSend({ t: 'close' });
     ui.fx = null;
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
@@ -4010,6 +4037,106 @@ Content-Type: application/json</pre>
   }
 
   // ---------- sons (gerados no navegador, sem arquivos) ----------
+  // ---------- Trilha da revelação do pódio (sintetizada no navegador) ----------
+  // Antes de revelar: subida (rufar acelerando, varredura e arpejo subindo). Na revelação: vinheta de vitória.
+  // Quanto melhor a colocação, mais longa, mais alta e com mais camadas: 3º < 2º < 1º.
+  const Music = {
+    nodes: [],
+    out(c) {
+      if (!this.bus || this.bus.context !== c) {
+        const comp = c.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 6; comp.connect(c.destination);
+        this.bus = c.createGain(); this.bus.gain.value = 0.6; this.bus.connect(comp);
+      }
+      return this.bus;
+    },
+    noise(c) {
+      if (!this.nb || this.nb.sampleRate !== c.sampleRate) { const len = c.sampleRate * 2; this.nb = c.createBuffer(1, len, c.sampleRate); const d = this.nb.getChannelData(0); for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1; }
+      return this.nb;
+    },
+    track(n) { this.nodes.push(n); return n; },
+    stop() { for (const n of this.nodes) { try { n.stop(); } catch (e) { /* já parou */ } } this.nodes = []; },
+    env(c, g, t, a, peak, dur) { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); },
+    brass(c, f, t, dur, vol) { // metais: duas dentes de serra levemente desafinadas num filtro que abre
+      const o = this.out(c), g = c.createGain(), fl = c.createBiquadFilter();
+      fl.type = 'lowpass'; fl.Q.value = 2; fl.frequency.setValueAtTime(600, t); fl.frequency.exponentialRampToValueAtTime(Math.min(5200, f * 9), t + 0.08); fl.frequency.exponentialRampToValueAtTime(Math.max(900, f * 3), t + dur);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.04); g.gain.setValueAtTime(vol * 0.8, t + Math.max(0.06, dur - 0.12)); g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.18);
+      for (const det of [-7, 7]) { const os = this.track(c.createOscillator()); os.type = 'sawtooth'; os.frequency.value = f; os.detune.value = det; os.connect(fl); os.start(t); os.stop(t + dur + 0.25); }
+      fl.connect(g).connect(o);
+    },
+    chord(c, root, semis, t, dur, vol) { for (const s2 of semis) this.brass(c, root * Math.pow(2, s2 / 12), t, dur, vol / Math.sqrt(semis.length)); },
+    kick(c, t, vol) { const o = this.track(c.createOscillator()), g = c.createGain(); o.frequency.setValueAtTime(160, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.22); this.env(c, g, t, 0.005, vol, 0.42); o.connect(g).connect(this.out(c)); o.start(t); o.stop(t + 0.5); },
+    hit(c, t, vol, f0, f1, q, dur) { const src = this.track(c.createBufferSource()), fl = c.createBiquadFilter(), g = c.createGain(); src.buffer = this.noise(c); fl.type = f1 ? 'bandpass' : 'highpass'; fl.frequency.value = f0; if (q) fl.Q.value = q; this.env(c, g, t, 0.003, vol, dur); src.connect(fl).connect(g).connect(this.out(c)); src.start(t, Math.random()); src.stop(t + dur + 0.05); },
+    snare(c, t, vol) { this.hit(c, t, vol, 1800, 1, 0.7, 0.2); const o = this.track(c.createOscillator()), g = c.createGain(); o.type = 'triangle'; o.frequency.value = 190; this.env(c, g, t, 0.002, vol * 0.5, 0.12); o.connect(g).connect(this.out(c)); o.start(t); o.stop(t + 0.15); },
+    hat(c, t, vol) { this.hit(c, t, vol, 7500, 0, 0, 0.05); },
+    crash(c, t, vol, dur = 1.8) { this.hit(c, t, vol, 4200, 0, 0, dur); },
+    riser(c, t, dur, vol, top) {
+      const src = this.track(c.createBufferSource()), fl = c.createBiquadFilter(), g = c.createGain();
+      src.buffer = this.noise(c); src.loop = true; fl.type = 'bandpass'; fl.Q.value = 1.2; fl.frequency.setValueAtTime(300, t); fl.frequency.exponentialRampToValueAtTime(top, t + dur);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + dur); g.gain.linearRampToValueAtTime(0.0001, t + dur + 0.05);
+      src.connect(fl).connect(g).connect(this.out(c)); src.start(t); src.stop(t + dur + 0.1);
+      const o = this.track(c.createOscillator()), g2 = c.createGain(), f2 = c.createBiquadFilter(); o.type = 'sawtooth'; o.frequency.setValueAtTime(70, t); o.frequency.exponentialRampToValueAtTime(top / 6, t + dur);
+      f2.type = 'lowpass'; f2.frequency.setValueAtTime(400, t); f2.frequency.exponentialRampToValueAtTime(4000, t + dur);
+      g2.gain.setValueAtTime(0.0001, t); g2.gain.exponentialRampToValueAtTime(vol * 0.5, t + dur); g2.gain.linearRampToValueAtTime(0.0001, t + dur + 0.05);
+      o.connect(f2).connect(g2).connect(this.out(c)); o.start(t); o.stop(t + dur + 0.1);
+    },
+    ROOT: { 3: 261.63, 2: 293.66, 1: 329.63 }, // 3º em Dó, 2º em Ré, 1º em Mi: cada revelação um tom acima
+    buildDur: { 3: 3.2, 2: 4.2, 1: 5.4 },
+    // Subida antes da revelação.
+    build(level) {
+      if (!Sound.on) return; const c = Sound.ensure(); if (!c) return; this.stop();
+      const lv = 4 - level, t0 = c.currentTime + 0.05, dur = this.buildDur[level], R = this.ROOT[level];
+      this.riser(c, t0, dur, 0.18 + lv * 0.06, 2500 + lv * 1500);
+      // Rufar acelerando.
+      let tt = t0, k = 0; while (tt < t0 + dur - 0.05) { const p = (tt - t0) / dur; this.snare(c, tt, 0.08 + p * (0.22 + lv * 0.05)); tt += Math.max(0.035, 0.24 * Math.pow(1 - p, 1.6) + 0.035); k++; }
+      // Bumbo marcando, cada vez mais rápido (2º e 1º).
+      if (lv >= 2) { let kt = t0; while (kt < t0 + dur - 0.1) { const p = (kt - t0) / dur; this.kick(c, kt, 0.35 + p * 0.4); kt += p < 0.5 ? 0.5 : p < 0.8 ? 0.25 : 0.125; } }
+      // Arpejo subindo (acorde maior), mais notas e oitavas a cada nível.
+      const arp = [0, 4, 7, 12, 16, 19, 24, 28, 31, 36].slice(0, 4 + lv * 2), step = dur / (arp.length + 1);
+      arp.forEach((s2, i) => this.brass(c, R / 2 * Math.pow(2, s2 / 12), t0 + step * (i + 1) - 0.05, step * 0.9, 0.06 + i * 0.012 + lv * 0.02));
+      // Nota longa crescendo por baixo (1º lugar).
+      if (lv === 3) { const o = this.track(c.createOscillator()), g = c.createGain(); o.type = 'sawtooth'; o.frequency.value = R / 4; g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.12, t0 + dur); g.gain.linearRampToValueAtTime(0.0001, t0 + dur + 0.05); o.connect(g).connect(this.out(c)); o.start(t0); o.stop(t0 + dur + 0.1); }
+    },
+    // Vinheta de vitória na revelação.
+    win(level) {
+      if (!Sound.on) return; const c = Sound.ensure(); if (!c) return; this.stop();
+      const lv = 4 - level, t0 = c.currentTime + 0.03, R = this.ROOT[level], b = level === 1 ? 0.36 : 0.4; // tempo (segundos por tempo)
+      const I = [0, 4, 7], IV = [5, 9, 12], V = [7, 11, 14], vi = [9, 12, 16];
+      this.crash(c, t0, 0.35 + lv * 0.05, 1.6 + lv * 0.6); this.kick(c, t0, 0.9);
+      if (lv === 1) { // 3º lugar: fanfarra curta
+        this.chord(c, R, I, t0, b * 0.9, 0.3);
+        [7, 12, 16].forEach((s2, i) => this.brass(c, R * Math.pow(2, s2 / 12), t0 + b * (1 + i * 0.5), b * 0.45, 0.2));
+        this.chord(c, R, IV, t0 + b * 2.5, b * 0.9, 0.28); this.chord(c, R, V, t0 + b * 3.5, b * 0.9, 0.3);
+        this.chord(c, R * 2, I, t0 + b * 4.5, b * 3, 0.34); this.brass(c, R * 2, t0 + b * 4.5, b * 3, 0.2);
+        for (let i = 0; i < 5; i++) { this.kick(c, t0 + b * i, 0.6); if (i % 2) this.snare(c, t0 + b * i, 0.3); }
+        this.crash(c, t0 + b * 4.5, 0.4, 2);
+        return;
+      }
+      // 2º e 1º: progressão I–V–vi–IV com bateria, melodia de fanfarra e final em acorde grande.
+      const prog = lv === 2 ? [I, V, vi, IV, V, I] : [I, V, vi, IV, I, V, IV, V];
+      prog.forEach((ch, i) => {
+        const t = t0 + b * 2 * i, last = i === prog.length - 1;
+        this.chord(c, R, ch, t, b * (last && lv === 2 ? 4 : 1.9), 0.3 + lv * 0.03);
+        this.brass(c, R / 2 * Math.pow(2, ch[0] / 12), t, b * 1.9, 0.22); // baixo
+        for (let k = 0; k < 2; k++) { this.kick(c, t + b * k, 0.75); if (k) this.snare(c, t + b * k, 0.35); }
+        for (let h = 0; h < 4; h++) this.hat(c, t + b * h * 0.5, 0.06 + lv * 0.02);
+        if (i % 2 === 0 && i) this.crash(c, t, 0.22, 1.2);
+      });
+      // Melodia heroica (oitava acima).
+      const mel = lv === 2
+        ? [[7, 0.5], [7, 0.5], [7, 0.5], [12, 1.5], [11, 1], [9, 1], [7, 1], [9, 1], [11, 1], [12, 3]]
+        : [[7, 0.5], [7, 0.5], [7, 0.5], [12, 1.5], [14, 1], [16, 2], [14, 0.5], [12, 0.5], [11, 1], [12, 1], [14, 2], [16, 0.5], [16, 0.5], [16, 0.5], [19, 1.5], [19, 1], [21, 1]];
+      let mt = t0;
+      for (const [s2, d] of mel) { this.brass(c, R * 2 * Math.pow(2, s2 / 12), mt, b * d * 0.92, 0.2 + lv * 0.03); if (lv === 3) this.brass(c, R * Math.pow(2, s2 / 12), mt, b * d * 0.92, 0.1); mt += b * d; }
+      const end = t0 + b * 2 * prog.length;
+      if (lv === 3) { // final: sobe um tom e segura o acorde com tudo
+        const R2 = R * Math.pow(2, 2 / 12);
+        this.crash(c, end, 0.5, 3); this.kick(c, end, 1);
+        this.chord(c, R2, [0, 4, 7, 12], end, b * 7, 0.42); this.brass(c, R2 / 2, end, b * 7, 0.28); this.brass(c, R2 * 4, end, b * 7, 0.14);
+        for (let i = 0; i < 6; i++) this.snare(c, end - b + i * b / 6, 0.12 + i * 0.05);
+        setTimeout(() => Sound.play('aplausos'), Math.max(0, (end - c.currentTime) * 1000 + 300));
+      } else { this.crash(c, end - b * 2 * 2, 0.3, 2.2); }
+    },
+  };
   const Sound = {
     ctx: null,
     get on() { return DB.pref.get('sound', '1') === '1'; },
@@ -4055,6 +4182,7 @@ Content-Type: application/json</pre>
       } else { this.tone(c, 880, t, 1.4, 'sine', 0.25); this.tone(c, 1760, t, 0.8, 'sine', 0.07); this.tone(c, 1318, t + 0.12, 1.1, 'sine', 0.1); }
     },
   };
+  window.GB.Music = Music; window.GB.Sound = Sound; // usados nos testes da trilha
 
   // ---------- tela da loja (modo apresentação) ----------
   const TV_SECONDS = 30;
