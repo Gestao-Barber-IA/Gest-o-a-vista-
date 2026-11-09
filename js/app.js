@@ -717,7 +717,7 @@
   const seasonBy = k => SEASONS.find(s => s.k === k) || null;
   function pdTheme() {
     const t = state.theme || {};
-    return { layout: PD_LAYOUTS.some(l => l.k === t.layout) ? t.layout : 'padrao', season: t.season === 'auto' || seasonBy(t.season) ? t.season : 'off', bday: /^\d{4}-\d{2}-\d{2}$/.test(t.bday || '') ? t.bday : '' };
+    return { layout: PD_LAYOUTS.some(l => l.k === t.layout) ? t.layout : 'padrao', season: t.season === 'auto' || seasonBy(t.season) ? t.season : 'off', bday: /^\d{4}-\d{2}-\d{2}$/.test(t.bday || '') ? t.bday : '', autoOff: Array.isArray(t.autoOff) ? t.autoOff.filter(k => AUTO_KEYS.includes(k)) : [] };
   }
   // Tema automático pelo calendário.
   function easter(y) {
@@ -732,20 +732,27 @@
     const [, mm, dd] = bday.split('-').map(Number);
     return [-1, 0, 1].some(k => Math.abs(Math.round((new Date(d.getFullYear() + k, mm - 1, dd) - d) / 864e5)) <= 3);
   }
-  function seasonOn(dt, bday = pdTheme().bday) {
+  // Temas do calendário que valem na data, em ordem de prioridade (o 1º que estiver ligado no automático vence).
+  function seasonsOn(dt, bday) {
     const d = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()), y = d.getFullYear(), m = d.getMonth() + 1, day = d.getDate();
-    if (bdayNear(d, bday)) return 'aniversario';
+    const out = [];
+    if (bdayNear(d, bday)) out.push('aniversario');
     const tue = easter(y); tue.setDate(tue.getDate() - 47);
     const diff = Math.round((d - tue) / 864e5);
-    if (diff >= -12 && diff <= 1) return 'carnaval';
-    if (m === 12) return day <= 26 ? 'natal' : 'anonovo';
-    if (m === 1 && day <= 7) return 'anonovo';
-    if (m === 3) return 'mulheres';
-    if (m === 6 || m === 7) return 'junina';
-    if (m === 8) { const first = new Date(y, 7, 1).getDay(); const fathers = 1 + ((7 - first) % 7) + 7; return day <= fathers ? 'pais' : null; }
-    if (m === 10) return day >= 5 && day <= 12 ? 'criancas' : day >= 26 ? 'halloween' : 'outubrorosa';
-    if (m === 11) return 'novembroazul';
-    return null;
+    if (diff >= -12 && diff <= 1) out.push('carnaval');
+    if (m === 12) out.push(day <= 26 ? 'natal' : 'anonovo');
+    if (m === 1 && day <= 7) out.push('anonovo');
+    if (m === 3) out.push('mulheres');
+    if (m === 6 || m === 7) out.push('junina');
+    if (m === 8) { const first = new Date(y, 7, 1).getDay(); if (day <= 1 + ((7 - first) % 7) + 7) out.push('pais'); }
+    if (m === 10) { if (day >= 5 && day <= 12) out.push('criancas'); if (day >= 26) out.push('halloween'); out.push('outubrorosa'); }
+    if (m === 11) out.push('novembroazul');
+    return out;
+  }
+  const AUTO_KEYS = ['natal', 'anonovo', 'carnaval', 'mulheres', 'junina', 'pais', 'criancas', 'outubrorosa', 'halloween', 'novembroazul', 'aniversario'];
+  function seasonOn(dt) {
+    const th = pdTheme();
+    return seasonsOn(dt, th.bday).find(k => !th.autoOff.includes(k)) || null;
   }
   function activeSeason() {
     const s = pdTheme().season;
@@ -3324,7 +3331,14 @@ Content-Type: application/json</pre>
         <p class="section-note">Muda as cores do pódio, troca a coroa do 1º lugar por um enfeite do tema e coloca um efeito no fundo. No automático, o app escolhe o tema pela data.</p>
         <div class="th-grid th-seasons">
           ${opt(th.season === 'off', 'pdSeason', 'off', `<span class="th-ico th-plain">${icon('x')}</span><b>Sem tema</b><small>Cores normais: MVP, Destaque, prata e bronze.</small>`)}
-          ${opt(th.season === 'auto', 'pdSeason', 'auto', `<span class="th-ico th-plain">${icon('clock')}</span><b>Automático pelo calendário</b><small>${auto ? `Hoje: ${esc(auto.n)}.` : 'Hoje: sem tema (fora das datas).'}</small>`)}
+          ${opt(th.season === 'auto', 'pdSeason', 'auto', `<span class="th-ico th-plain">${icon('clock')}</span><b>Automático pelo calendário</b><small>${auto ? `Hoje: ${esc(auto.n)}.` : 'Hoje: sem tema.'}${th.season === 'auto' ? '' : ' Toque para escolher os temas.'}</small>`)}
+          ${th.season === 'auto' ? `<div class="th-auto">
+            <b>Temas que entram no automático</b>
+            <small>Toque para ligar ou desligar. Os desligados não aparecem sozinhos na data deles.</small>
+            <div class="th-auto-list">${AUTO_KEYS.map(k => { const s = seasonBy(k), on = !th.autoOff.includes(k);
+              return `<button type="button" class="th-auto-it ${on ? 'on' : ''}" role="switch" aria-checked="${on}" data-action="pdAutoToggle" data-v="${k}"><span class="th-ico">${seasonTopper(k)}</span><span><b>${esc(s.n)}</b><small>${esc(k === 'aniversario' ? bdayText(th.bday) : s.when)}</small></span><i class="th-tg" aria-hidden="true"></i></button>`; }).join('')}</div>
+            <small>Copa do Mundo fica fora do automático porque as datas mudam a cada Copa: escolha à mão.</small>
+          </div>` : ''}
           ${SEASONS.map(s => opt(th.season === s.k, 'pdSeason', s.k, `<span class="th-ico">${seasonTopper(s.k)}</span><b>${esc(s.n)}</b><small>${esc(s.k === 'aniversario' ? bdayText(th.bday) : s.when)}</small>${sw(s)}`)).join('')}
         </div>
         <form class="form th-bday" data-form="pdBday" novalidate>
@@ -3894,6 +3908,11 @@ Content-Type: application/json</pre>
     popItemMove(el) { const c = popCfgW(), i = Number(el.dataset.i), j = i + Number(el.dataset.d); if (j < 0 || j >= c.items.length) return; [c.items[i], c.items[j]] = [c.items[j], c.items[i]]; save(); render(); },
     cfgTab(el) { ui.cfgTab = el.dataset.t; ui.confirm = null; render(); },
     pdLayout(el) { state.theme = { ...pdTheme(), layout: el.dataset.v }; save(); render(); toast('Formato do escudo: ' + (PD_LAYOUTS.find(l => l.k === el.dataset.v) || {}).n + '.'); },
+    pdAutoToggle(el) {
+      const th = pdTheme(), k = el.dataset.v, off = th.autoOff.includes(k);
+      state.theme = { ...th, autoOff: off ? th.autoOff.filter(x => x !== k) : [...th.autoOff, k] }; save(); render();
+      toast(`${seasonBy(k).n} ${off ? 'entra' : 'saiu do'}${off ? ' no' : ''} automático.`);
+    },
     pdSeason(el) {
       const v = el.dataset.v;
       state.theme = { ...pdTheme(), season: v }; save(); render();
