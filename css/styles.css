@@ -1681,3 +1681,53 @@ html[data-pdl="minimal"] .pd-fx { opacity: 0.5; }
 .pc-proj { font-size: 0.8rem; }
 .pc-proj.ok { color: #3ee07a; }
 .pc-proj.low { color: #ffb347; }
+/* Conquista: meta da empresa batida */
+.hg-month { max-width: 260px; }
+.gc-ov { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 16px; overflow: hidden;
+  background: radial-gradient(60% 50% at 50% 40%, rgba(255, 200, 90, 0.22), transparent 70%), rgba(5, 6, 10, 0.78); backdrop-filter: blur(6px);
+  animation: gc-fade 0.35s ease-out both; }
+.gc-all { background: radial-gradient(60% 50% at 50% 40%, rgba(62, 224, 122, 0.22), transparent 70%), rgba(5, 6, 10, 0.8); }
+.gc-conf { position: absolute; inset: 0; pointer-events: none; }
+.gc-conf span { position: absolute; top: -6%; width: calc(8px * var(--sz)); height: calc(14px * var(--sz)); border-radius: 2px; background: var(--c);
+  animation: fx-fall-spin var(--dur) linear var(--dl) infinite; opacity: 0.9; }
+.gc-card { position: relative; width: min(440px, 100%); max-height: calc(100dvh - 32px); overflow: auto; display: grid; justify-items: center; gap: 10px; text-align: center;
+  padding: 28px 22px 22px; border-radius: 26px; color: #fff; isolation: isolate;
+  background: linear-gradient(180deg, #1d1a12, #0d0e14 60%); border: 1.5px solid rgba(255, 214, 107, 0.55);
+  box-shadow: 0 0 0 6px rgba(255, 214, 107, 0.08), 0 30px 80px rgba(0, 0, 0, 0.6), 0 0 60px rgba(255, 200, 90, 0.25);
+  animation: gc-pop 0.7s cubic-bezier(0.2, 1.4, 0.4, 1) 0.1s both; }
+.gc-all .gc-card { border-color: rgba(62, 224, 122, 0.6); box-shadow: 0 0 0 6px rgba(62, 224, 122, 0.08), 0 30px 80px rgba(0, 0, 0, 0.6), 0 0 60px rgba(62, 224, 122, 0.25); }
+.gc-rays { position: absolute; top: -70px; left: 50%; z-index: -1; width: 300px; height: 300px; margin-left: -150px; border-radius: 50%; pointer-events: none; opacity: 0.55;
+  background: repeating-conic-gradient(from 0deg, rgba(255, 214, 107, 0.35) 0 8deg, transparent 8deg 22deg);
+  mask: radial-gradient(closest-side, #000 30%, transparent); -webkit-mask: radial-gradient(closest-side, #000 30%, transparent); animation: gc-spin 14s linear infinite; }
+.gc-trophy { display: grid; place-items: center; width: 92px; height: 92px; border-radius: 50%; color: #2a1c00;
+  background: radial-gradient(circle at 35% 30%, #fff6d0, #ffd66b 45%, #b07c1c); box-shadow: 0 0 0 6px rgba(255, 214, 107, 0.18), 0 0 40px rgba(255, 200, 90, 0.7);
+  animation: gc-trophy 0.9s cubic-bezier(0.3, 1.6, 0.5, 1) 0.35s both, gc-glow 2.4s ease-in-out 1.3s infinite; }
+.gc-trophy .ico { width: 50px; height: 50px; stroke-width: 2; }
+.gc-eyebrow { margin: 6px 0 0; font-size: 0.78rem; letter-spacing: 0.16em; text-transform: uppercase; color: #ffd66b; font-weight: 700; }
+.gc-all .gc-eyebrow { color: #6ff0a0; }
+.gc-card h2 { margin: 0; font-family: var(--font-display); font-size: clamp(1.6rem, 6vw, 2.1rem); line-height: 1.1;
+  background: linear-gradient(90deg, #fff, #ffe7a0, #fff); -webkit-background-clip: text; background-clip: text; color: transparent; background-size: 200% 100%; animation: gc-shine 3s linear infinite; }
+.gc-sub { margin: 0; color: rgba(255, 255, 255, 0.82); }
+.gc-list { list-style: none; margin: 6px 0 0; padding: 0; width: 100%; display: grid; gap: 8px; }
+.gc-list li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; text-align: left; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(62, 224, 122, 0.35);
+  animation: gc-item 0.5s ease-out both; }
+.gc-list li:nth-child(1) { animation-delay: 0.6s; } .gc-list li:nth-child(2) { animation-delay: 0.75s; } .gc-list li:nth-child(3) { animation-delay: 0.9s; }
+.gc-list li:nth-child(4) { animation-delay: 1.05s; } .gc-list li:nth-child(n+5) { animation-delay: 1.2s; }
+.gc-ck { display: grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 50%; background: #1f9d55; color: #fff; }
+.gc-ck .ico { width: 16px; height: 16px; stroke-width: 3; }
+.gc-list b { display: block; }
+.gc-list small { color: rgba(255, 255, 255, 0.72); }
+.gc-next { margin: 6px 0 0; color: rgba(255, 255, 255, 0.85); font-weight: 600; }
+.gc-btns { display: grid; gap: 8px; width: 100%; }
+.gc-btns .btn { width: 100%; }
+@keyframes gc-fade { from { opacity: 0; } }
+@keyframes gc-pop { from { opacity: 0; transform: translateY(30px) scale(0.85); } }
+@keyframes gc-trophy { from { opacity: 0; transform: scale(0.2) rotate(-30deg); } }
+@keyframes gc-glow { 50% { box-shadow: 0 0 0 10px rgba(255, 214, 107, 0.1), 0 0 70px rgba(255, 200, 90, 0.9); } }
+@keyframes gc-spin { to { transform: rotate(360deg); } }
+@keyframes gc-shine { to { background-position: -200% 0; } }
+@keyframes gc-item { from { opacity: 0; transform: translateX(-14px); } }
+@media (prefers-reduced-motion: reduce) {
+  .gc-conf { display: none; }
+  .gc-ov, .gc-card, .gc-trophy, .gc-rays, .gc-card h2, .gc-list li { animation: none !important; }
+}

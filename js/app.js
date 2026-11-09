@@ -2002,15 +2002,22 @@
   }
 
   // Visão da barbearia inteira (gestor): totais do mês, detalhe por profissional e radar.
-  function pagePerfCasa(scope) {
-    const ym = ui.teamMonth || curYm();
+  // ---------- Metas da empresa ----------
+  // Padrão (state.houseGoals) para todos os meses; um mês pode ter metas próprias (state.houseGoalsM[ym]).
+  const HG_KEYS = ['fat', 'agend', 'cli', 'serv', 'prod', 'planos', 'ticket', 'ocup'];
+  const HG_LABEL = { fat: 'Faturamento total', agend: 'Agendamentos', cli: 'Clientes atendidos', serv: 'Serviços realizados', prod: 'Produtos vendidos', planos: 'Planos mensais', ticket: 'Ticket médio da casa', ocup: 'Ocupação média' };
+  const hgFmt = (k, v) => k === 'fat' || k === 'ticket' ? money0(v) : k === 'ocup' ? nf1.format(v) + '%' : nf0.format(v);
+  function houseGoalsFor(ym) {
+    const m = (state.houseGoalsM || {})[ym];
+    const g = m && Object.keys(m).length ? m : (state.houseGoals || {});
+    const vis = k => !['prod', 'planos', 'ocup'].includes(k) || GB.visibleInds(state).some(i => i.key === k);
+    return Object.fromEntries(Object.entries(g).filter(([k, v]) => HG_KEYS.includes(k) && vis(k) && isNum(v) && v > 0));
+  }
+  // Totais do mês: soma de todos os profissionais (inclusive desligados com resultados no mês).
+  function houseTotals(ym, scope) {
     const R = monthR(ym);
-    const dk = darkFor(monthRange(ym));
-    if (dk) return `<div class="card tm-month"><label class="field"><span class="tm-eyebrow">Mês</span>
-        <select class="input" id="pc-month" data-change="teamMonth">${monthOptions(ym)}</select></label></div>${suspenseCard(dk)}${ownNumbers(R, (currentUser() || {}).barberId, ym)}`;
     const vis = k => GB.visibleInds(state).some(i => i.key === k);
     const rows = [...R.rows].filter(r => !scope || scope.has(r.barber.id)).sort((a, b) => b.sums.fat - a.sums.fat);
-    // Totais da empresa = soma de todos os profissionais do mês, inclusive quem foi desligado depois e tem resultados lançados nesse mês.
     const gone = state.barbers.filter(b => b.active === false && (!scope || scope.has(b.id)))
       .map(b => ({ barber: b, sums: GB.aggregate(state, b.id, monthRange(ym)), values: {} })).filter(r => Object.keys(r.sums.n).length);
     const all = rows.concat(gone);
@@ -2020,9 +2027,76 @@
     const agend = (state.monthly || []).filter(m => m.month === ym && ids.has(m.barberId) && isNum(m.agend)).reduce((a, m) => a + Number(m.agend), 0);
     const fat = sum('fat'), cli = sum('cli');
     const ocups = rows.map(r => r.values.ocup).filter(v => v != null);
+    const vals = { fat, agend, cli, serv: sum('serv'), prod: vis('prod') ? sum('prod') : null, planos: vis('planos') ? sum('planos') : null,
+      ticket: cli > 0 ? fat / cli : null, ocup: vis('ocup') && ocups.length ? ocups.reduce((a, v) => a + v, 0) / ocups.length : null };
+    return { rows, gone, all, has, sum, agend, fat, cli, ocups, vals };
+  }
+
+  // Conquista: quando uma meta da empresa é batida, aparece um card de parabéns (uma vez por meta e por mês, em cada aparelho).
+  function maybeGoalCelebrate(user) {
+    if (!user || !isGestor(user) || location.hash === '#apresentacao' || document.querySelector('.gc-ov')) return;
+    const seen = readJSON('hgSeen', {});
+    // Mês atual; o mês anterior só nos primeiros dias do mês novo (metas batidas no fechamento).
+    const months = [curYm(), ...(new Date().getDate() <= 7 ? [addMonths(curYm(), -1)] : [])];
+    for (const ym of months) {
+      const g = houseGoalsFor(ym), keys = Object.keys(g);
+      if (!keys.length) continue;
+      const T = houseTotals(ym);
+      const hit = keys.filter(k => T.vals[k] != null && T.vals[k] >= g[k]);
+      const was = seen[ym] || [], fresh = hit.filter(k => !was.includes(k));
+      if (!fresh.length) continue;
+      seen[ym] = [...new Set([...was, ...hit])];
+      for (const k of Object.keys(seen)) if (k < addMonths(curYm(), -3)) delete seen[k];
+      DB.pref.set('hgSeen', JSON.stringify(seen));
+      showGoalCelebrate(ym, keys, hit, fresh, T.vals, g);
+      return;
+    }
+  }
+  function showGoalCelebrate(ym, keys, hit, fresh, vals, g) {
+    const allHit = hit.length === keys.length;
+    const next = addMonths(ym, 1), nextName = monthRange(next).label.split(' de ')[0];
+    const title = allHit ? (keys.length > 1 ? 'Todas as metas batidas!' : 'Meta batida!') : fresh.length > 1 ? `${fresh.length} metas batidas!` : 'Meta batida!';
+    const colors = ['#ffd66b', '#3ee07a', '#6cc0ff', '#ff8fc7', '#ffffff', '#ff9a2e'];
+    const conf = Array.from({ length: 36 }, (_, i) => `<span style="left:${(i * 29 + 5) % 100}%;--c:${colors[i % colors.length]};--dl:${((i * 0.37) % 2.4).toFixed(2)}s;--dur:${(3 + (i % 5) * 0.5).toFixed(1)}s;--sz:${(0.7 + (i % 4) * 0.2).toFixed(1)}"></span>`).join('');
+    const el = document.createElement('div');
+    el.className = 'gc-ov' + (allHit ? ' gc-all' : '');
+    el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-labelledby', 'gc-t');
+    el.innerHTML = `<div class="gc-conf" aria-hidden="true">${conf}</div>
+      <div class="gc-card">
+        <div class="gc-rays" aria-hidden="true"></div>
+        <div class="gc-trophy" aria-hidden="true">${icon('trophy')}</div>
+        <p class="gc-eyebrow">Conquista desbloqueada · ${esc(cap(monthRange(ym).label))}</p>
+        <h2 id="gc-t">${title}</h2>
+        <p class="gc-sub">Parabéns${state.company.name ? ', ' + esc(state.company.name) : ''}! ${allHit ? `A equipe bateu ${keys.length > 1 ? `as ${keys.length} metas` : 'a meta'} do mês.` : `A equipe já bateu ${hit.length} de ${keys.length} metas do mês.`}</p>
+        <ul class="gc-list">${fresh.map(k => `<li><span class="gc-ck">${icon('check')}</span><span><b>${HG_LABEL[k]}</b><small class="num">${hgFmt(k, vals[k])} de ${hgFmt(k, g[k])} · ${nf0.format((vals[k] / g[k]) * 100)}%</small></span></li>`).join('')}</ul>
+        <p class="gc-next">${allHit ? 'Hora de subir a régua:' : 'Já pensando no próximo passo?'} configure as metas de ${esc(nextName)}.</p>
+        <div class="gc-btns"><button class="btn btn-primary" data-action="gcNext" data-ym="${next}">${icon('target')} Configurar metas de ${esc(nextName)}</button>
+        <button class="btn" data-action="gcClose">Agora não</button></div>
+      </div>`;
+    // Fica fora do #root (não some quando a tela redesenha), então trata os próprios cliques.
+    el.addEventListener('click', e => {
+      const b = e.target.closest('[data-action]');
+      if (b && ACTIONS[b.dataset.action]) ACTIONS[b.dataset.action](b, e);
+      else if (e.target === el) el.remove();
+    });
+    document.body.appendChild(el);
+    setTimeout(() => { const b = el.querySelector('.btn-primary'); if (b) b.focus(); }, 400);
+    try { Sound.play(allHit ? 'aplausos' : 'fanfarra'); } catch (e) { /* som é opcional */ }
+  }
+
+  function pagePerfCasa(scope) {
+    const ym = ui.teamMonth || curYm();
+    const R = monthR(ym);
+    const dk = darkFor(monthRange(ym));
+    if (dk) return `<div class="card tm-month"><label class="field"><span class="tm-eyebrow">Mês</span>
+        <select class="input" id="pc-month" data-change="teamMonth">${monthOptions(ym)}</select></label></div>${suspenseCard(dk)}${ownNumbers(R, (currentUser() || {}).barberId, ym)}`;
+    const vis = k => GB.visibleInds(state).some(i => i.key === k);
+    const T = houseTotals(ym, scope), { rows, gone, all, has, sum, agend, fat, cli, ocups } = T;
     // Metas da empresa (só o dono define; valem para todos os meses).
     const user = currentUser(), own = !scope && isGestor(user);
-    const hg = !scope ? (state.houseGoals || {}) : {};
+    const hg = !scope ? houseGoalsFor(ym) : {};
+    const tgt = ui.hgYm || ym, tg = houseGoalsFor(tgt);
+    const tgtOpts = [...new Set([ym, curYm(), addMonths(curYm(), 1)])].sort();
     const cur = ym === curYm(), now = new Date(), dim = new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0).getDate();
     const frac = cur ? Math.min(1, now.getDate() / dim) : 1;
     const HG_FMT = { fat: money0, ticket: money0, ocup: v => nf1.format(v) + '%' };
@@ -2049,9 +2123,11 @@
       ['ticket', 'Ticket médio da casa (R$)', '0.01'], ...(vis('ocup') ? [['ocup', 'Ocupação média (%)', '0.1']] : [])];
     const goalForm = own && ui.hgEdit ? `<section class="section card">
         <h2 class="section-title">Metas mensais da empresa</h2>
-        <p class="section-note">Valem para todos os meses. Deixe em branco o indicador que não tiver meta. A sugestão em cinza é a soma das metas individuais da equipe.</p>
+        <p class="section-note">Deixe em branco o indicador que não tiver meta. A sugestão em cinza é a soma das metas individuais da equipe.</p>
         <form class="form" data-form="houseGoals" novalidate>
-          <div class="grid-2">${HG_FIELDS.map(([k, l, st]) => { const sg = sugg(k); return `<label class="field"><span>${l}</span><input class="input num" type="number" min="0" step="${st}" name="${k}" id="hg-${k}" value="${isNum(hg[k]) ? hg[k] : ''}" placeholder="${sg ? 'Sugestão: ' + (st === '1' ? Math.round(sg) : Math.round(sg * 100) / 100) : ''}"></label>`; }).join('')}</div>
+          <label class="field hg-month"><span>Mês das metas</span><select class="input" name="hgYm" data-change="hgYm">${tgtOpts.map(o => `<option value="${o}" ${o === tgt ? 'selected' : ''}>${ymLabel(o).replace(' de ', '/')}</option>`).join('')}</select></label>
+          <div class="grid-2">${HG_FIELDS.map(([k, l, st]) => { const sg = sugg(k); return `<label class="field"><span>${l}</span><input class="input num" type="number" min="0" step="${st}" name="${k}" id="hg-${k}" value="${isNum(tg[k]) ? tg[k] : ''}" placeholder="${sg ? 'Sugestão: ' + (st === '1' ? Math.round(sg) : Math.round(sg * 100) / 100) : ''}"></label>`; }).join('')}</div>
+          <label class="ind-on"><input type="checkbox" name="dflt" checked> Usar estas metas também nos meses seguintes</label>
           <p class="form-msg" data-msg></p>
           <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar metas</button><button class="btn" type="button" data-action="hgEdit">Cancelar</button></div>
         </form>
@@ -3856,6 +3932,7 @@ Content-Type: application/json</pre>
     maybeOvertakeToast();
     hydrateProofs();
     setTimeout(maybeAutoReveal, 700);
+    setTimeout(() => maybeGoalCelebrate(user), 1200);
   }
 
   // Lembrete do checklist: uma vez por dia, enquanto a meta do dia não foi batida.
@@ -4002,7 +4079,14 @@ Content-Type: application/json</pre>
       c.items.splice(i, 1); ui.confirm = null; save(); render();
     },
     popItemMove(el) { const c = popCfgW(), i = Number(el.dataset.i), j = i + Number(el.dataset.d); if (j < 0 || j >= c.items.length) return; [c.items[i], c.items[j]] = [c.items[j], c.items[i]]; save(); render(); },
-    hgEdit() { ui.hgEdit = !ui.hgEdit; render(); if (ui.hgEdit) setTimeout(() => { const f = $('#hg-fat'); if (f) { f.focus(); f.scrollIntoView({ block: 'center' }); } }, 50); },
+    gcClose() { const o = $('.gc-ov'); if (o) o.remove(); },
+    gcNext(el) {
+      const o = $('.gc-ov'); if (o) o.remove();
+      ui.teamMonth = curYm(); ui.hgEdit = true; ui.hgYm = el.dataset.ym;
+      if (location.hash !== '#performance') location.hash = 'performance'; else render();
+      setTimeout(() => { const f = $('#hg-fat'); if (f) { f.focus(); f.scrollIntoView({ block: 'center' }); } }, 150);
+    },
+    hgEdit() { ui.hgEdit = !ui.hgEdit; ui.hgYm = null; render(); if (ui.hgEdit) setTimeout(() => { const f = $('#hg-fat'); if (f) { f.focus(); f.scrollIntoView({ block: 'center' }); } }, 50); },
     cfgTab(el) { ui.cfgTab = el.dataset.t; ui.confirm = null; render(); },
     pdLayout(el) { state.theme = { ...pdTheme(), layout: el.dataset.v }; save(); render(); toast('Formato do escudo: ' + (PD_LAYOUTS.find(l => l.k === el.dataset.v) || {}).n + '.'); },
     pdAutoToggle(el) {
@@ -4435,15 +4519,25 @@ Content-Type: application/json</pre>
     },
     houseGoals(f) {
       const g = {};
-      for (const el of f.querySelectorAll('input[name]')) {
+      for (const el of f.querySelectorAll('input[type=number][name]')) {
         const v = el.value.trim().replace(',', '.');
         if (v === '') continue;
         const n = Number(v);
         if (!isFinite(n) || n < 0) { setMsg(f, 'Confira os valores: use só números positivos.'); el.focus(); return; }
         if (n > 0) g[el.name] = n;
       }
-      state.houseGoals = g; ui.hgEdit = false; save(); render();
-      toast(Object.keys(g).length ? 'Metas da empresa salvas.' : 'Metas da empresa removidas.');
+      const tgt = f.elements.hgYm.value, dflt = f.elements.dflt.checked;
+      const M = { ...(state.houseGoalsM || {}) };
+      if (dflt) {
+        // Os meses anteriores guardam as metas que valiam neles.
+        const old = state.houseGoals || {};
+        if (Object.keys(old).length) for (let k = firstYm(); k < tgt; k = addMonths(k, 1)) if (!M[k]) M[k] = { ...old };
+        for (const k of Object.keys(M)) if (k >= tgt) delete M[k];
+        state.houseGoals = g;
+      } else M[tgt] = g;
+      state.houseGoalsM = M;
+      ui.hgEdit = false; ui.hgYm = null; save(); render();
+      toast(Object.keys(g).length ? `Metas de ${monthRange(tgt).label.split(' de ')[0]} salvas${dflt ? ' (valem também para os meses seguintes)' : ''}.` : 'Metas removidas.');
     },
     pdBday(f) {
       const v = val(f, 'bday');
@@ -4510,6 +4604,7 @@ Content-Type: application/json</pre>
     tvSoundKind(el) { Sound.kind = el.value; Sound.play(el.value, true); },
     perfBarber(el) { ui.perfBarber = el.value; location.hash = 'perfil-' + el.value; },
     teamMonth(el) { ui.teamMonth = el.value; ui.fcPeek = false; render(); },
+    hgYm(el) { ui.hgYm = el.value; render(); },
     lanDate(el) { ui.lanDate = el.value; },
     async leadStatus(el) {
       const l = ui.leadsData && ui.leadsData.list && ui.leadsData.list.find(x => x.id === el.dataset.id); if (!l) return;
@@ -4621,6 +4716,7 @@ Content-Type: application/json</pre>
   });
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && document.getElementById('install-sheet')) { closeInstall(); return; }
+    if (e.key === 'Escape' && $('.gc-ov')) { $('.gc-ov').remove(); return; }
     if (e.key === 'Escape' && ui.orgSheet) { ui.orgSheet = null; render(); return; }
     if (e.key === 'Escape' && ui.popView) { ui.popView = null; render(); return; }
     if (e.key === 'Escape') {
