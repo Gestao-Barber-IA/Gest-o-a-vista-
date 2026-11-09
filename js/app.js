@@ -3337,7 +3337,7 @@ Content-Type: application/json</pre>
     }).join('');
     return `<p class="tv-eyebrow gold">${icon('crown')} Líderes do período</p>
       <h2 class="tv-h">Quem está puxando cada resultado</h2>
-      ${cards ? `<div class="gd-grid">${cards}</div>` : '<div class="card muted">Ainda não há lançamentos neste período.</div>'}`;
+      ${cards ? `<div class="gd-grid" style="--gd-cols:${Math.min(5, Math.max(3, Math.ceil(R.active.length / 2)))}">${cards}</div>` : '<div class="card muted">Ainda não há lançamentos neste período.</div>'}`;
   }
 
   function tvAlerts(R) {
@@ -3394,6 +3394,7 @@ Content-Type: application/json</pre>
     const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
     root.innerHTML = `<div class="tv">
       <div class="tv-progress" aria-hidden="true"><i style="animation-duration:${TV_SECONDS}s${reduce ? ';animation:none;width:100%' : ''}"></i></div>
+      <div class="tv-fit">
       <header class="tv-head">
         ${logo('tv-logo')}
         <div class="tv-title"><b>${esc(state.company.name)}</b><span>Tela da loja · ${esc(tr.type === 'mes' ? 'Mês' : PERIOD_NAMES[ui.period])}: ${esc(tr.label)}</span></div>
@@ -3408,11 +3409,43 @@ Content-Type: application/json</pre>
       </header>
       <div class="tv-body">${slides[i](R)}</div>
       <nav class="tv-dots" aria-label="Telas">${slides.map((_, k) => `<button class="${k === i ? 'on' : ''}" data-action="tvGo" data-i="${k}" aria-label="Tela ${k + 1}"></button>`).join('')}</nav>
+      </div>
     </div>`;
+    fitTV();
+    root.querySelectorAll('.tv img').forEach(im => { if (!im.complete) im.addEventListener('load', fitTV, { once: true }); });
+    setTimeout(fitTV, 800);
     applyLive();
     clearTimeout(ui.tvTimer);
     ui.tvTimer = setTimeout(() => { ui.tvIndex = i + 1; if (location.hash === '#apresentacao') { renderTV(); window.scrollTo(0, 0); } }, TV_SECONDS * 1000);
   }
+
+  // Computador, notebook e TV (tela deitada): a Tela da loja se ajusta ao tamanho da tela, sem rolagem.
+  // No celular em pé continua rolando normalmente.
+  function fitTV() {
+    const tv = root.querySelector('.tv'), box = tv && tv.querySelector('.tv-fit');
+    if (!box) return;
+    const W = window.innerWidth, H = window.innerHeight;
+    const on = W >= 900 && W > H;
+    tv.classList.toggle('tv-fitted', on);
+    box.style.zoom = '';
+    if (!on) return;
+    const cs = getComputedStyle(tv);
+    const availH = H - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    const maxZ = Math.min(2.4, W / 1150); // mantém pelo menos ~1150px de largura de layout
+    let z = 1;
+    for (let k = 0; k < 4; k++) {
+      box.style.zoom = String(z);
+      const h = box.getBoundingClientRect().height;
+      if (!h) break;
+      const nz = Math.max(0.4, Math.min(maxZ, z * availH / h));
+      if (Math.abs(nz - z) < 0.01) break;
+      z = nz;
+    }
+    box.style.zoom = String(z);
+    // Se ainda sobrar um pouquinho (arredondamento), reduz mais um passo.
+    if (box.getBoundingClientRect().height > availH + 1) box.style.zoom = String(z * availH / box.getBoundingClientRect().height);
+  }
+  window.addEventListener('resize', () => { if (location.hash === '#apresentacao') fitTV(); });
 
   async function keepAwake() {
     try { if (navigator.wakeLock && !ui.wake) { ui.wake = await navigator.wakeLock.request('screen'); ui.wake.addEventListener('release', () => { ui.wake = null; }); } } catch (e) { /* opcional */ }
