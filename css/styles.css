@@ -1626,3 +1626,6 @@ html[data-pdl="minimal"] .pd-fx { opacity: 0.5; }
 .th-escudo i { clip-path: polygon(0 5%, 33% 5%, 39% 0, 61% 0, 67% 5%, 100% 5%, 100% 79%, 50% 100%, 0 79%); background: linear-gradient(180deg, #8ff0a8, #1f8a43 55%, #0b3a1c); }
 .th-tech i { clip-path: polygon(15% 0, 85% 0, 100% 9%, 100% 91%, 85% 100%, 15% 100%, 0 91%, 0 9%); background: repeating-linear-gradient(0deg, transparent 0 5px, rgba(108, 200, 255, 0.35) 5px 6px), linear-gradient(180deg, #1b5fd6, #071228); }
 .th-minimal i { border-radius: 8px; background: #1a1c25; border: 1.5px solid #d6a23a; }
+.th-bday { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-top: 16px; }
+.th-bday .field { flex: 1 1 220px; max-width: 320px; }
+.th-bday .form-msg { flex-basis: 100%; margin: 0; color: var(--fg-soft); }

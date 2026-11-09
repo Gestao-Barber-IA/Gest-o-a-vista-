@@ -710,12 +710,14 @@
     { k: 'criancas', n: 'Dia das Crianças', when: '5 a 12 de outubro', c: [['#ffd23f', '#c27a00'], ['#4cc9f0', '#1769a8'], ['#ff6b6b', '#b3262f']], fx: 'bubble', fxc: ['#ffd23f', '#4cc9f0', '#ff6b6b', '#7bdc6b'] },
     { k: 'outubrorosa', n: 'Outubro Rosa', when: 'Outubro', c: [['#ff8fc2', '#c2266f'], ['#ffd1e6', '#c4789c'], ['#ff5f97', '#9c1450']], fx: 'petal', fxc: ['#ff8fc2', '#ffd1e6', '#ffffff'] },
     { k: 'halloween', n: 'Halloween', when: '26 a 31 de outubro', c: [['#ff9a2e', '#b04a06'], ['#b47cff', '#4f22a0'], ['#95e85a', '#3c7d14']], fx: 'bat', fxc: ['#c9a0ff', '#ff9a2e'] },
+    { k: 'copa', n: 'Copa do Mundo', when: 'Escolha manual nos dias de Copa', c: [['#ffdf3c', '#c99a00'], ['#3ee07a', '#0f8a3c'], ['#5aa0ff', '#1d3fb8']], fx: 'confetti', fxc: ['#ffdf3c', '#3ee07a', '#5aa0ff', '#ffffff'] },
+    { k: 'aniversario', n: 'Aniversário', when: 'Semana do aniversário', c: [['#ffd66b', '#b07c1c'], ['#ff8fc7', '#b8327a'], ['#7fd8ff', '#1f78b8']], fx: 'confetti', fxc: ['#ffd66b', '#ff8fc7', '#7fd8ff', '#9be15d', '#ffffff'] },
     { k: 'novembroazul', n: 'Novembro Azul', when: 'Novembro', c: [['#6cc0ff', '#1b58c9'], ['#bcd9ff', '#4a6ea8'], ['#4fd6e0', '#127a85']], fx: 'bubble', fxc: ['#6cc0ff', '#bcd9ff'] },
   ];
   const seasonBy = k => SEASONS.find(s => s.k === k) || null;
   function pdTheme() {
     const t = state.theme || {};
-    return { layout: PD_LAYOUTS.some(l => l.k === t.layout) ? t.layout : 'padrao', season: t.season === 'auto' || seasonBy(t.season) ? t.season : 'off' };
+    return { layout: PD_LAYOUTS.some(l => l.k === t.layout) ? t.layout : 'padrao', season: t.season === 'auto' || seasonBy(t.season) ? t.season : 'off', bday: /^\d{4}-\d{2}-\d{2}$/.test(t.bday || '') ? t.bday : '' };
   }
   // Tema automático pelo calendário.
   function easter(y) {
@@ -724,8 +726,15 @@
     const mo = Math.floor((h + l - 7 * m + 114) / 31), da = ((h + l - 7 * m + 114) % 31) + 1;
     return new Date(y, mo - 1, da);
   }
-  function seasonOn(dt) {
+  // Aniversário da empresa: 3 dias antes até 3 dias depois da data.
+  function bdayNear(d, bday) {
+    if (!bday) return false;
+    const [, mm, dd] = bday.split('-').map(Number);
+    return [-1, 0, 1].some(k => Math.abs(Math.round((new Date(d.getFullYear() + k, mm - 1, dd) - d) / 864e5)) <= 3);
+  }
+  function seasonOn(dt, bday = pdTheme().bday) {
     const d = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()), y = d.getFullYear(), m = d.getMonth() + 1, day = d.getDate();
+    if (bdayNear(d, bday)) return 'aniversario';
     const tue = easter(y); tue.setDate(tue.getDate() - 47);
     const diff = Math.round((d - tue) / 864e5);
     if (diff >= -12 && diff <= 1) return 'carnaval';
@@ -806,6 +815,21 @@
       halloween: `<ellipse cx="60" cy="68" rx="54" ry="10" fill="#2a1840" stroke="#b47cff" stroke-width="2"/><path d="M32 66 L54 0 C58 -12 72 -16 82 -10 C72 -6 66 4 70 16 L88 66 Z" fill="#2a1840" stroke="#b47cff" stroke-width="2" stroke-linejoin="round"/>
         <path d="M37 50 L83 50 L87 62 L33 62 Z" fill="#ff8a1f"/><rect x="52" y="49" width="16" height="14" rx="2" fill="none" stroke="#ffd23f" stroke-width="2.6"/>
         <g class="twinkle"><path d="M98 0v8M94 4h8" stroke="#ffd23f" stroke-width="1.6" stroke-linecap="round"/></g>`,
+      copa: `<circle cx="60" cy="38" r="32" fill="url(#st-g)" stroke="#fff" stroke-opacity=".8" stroke-width="1.6"/>
+        <polygon points="60,26 71,34 67,47 53,47 49,34" fill="#15171f"/>
+        <path d="M60 26 L60 8 M71 34 L88 28 M67 47 L78 62 M53 47 L42 62 M49 34 L32 28" stroke="#15171f" stroke-width="2"/>
+        <path d="M54 6 L66 6 L64 10 L56 10 Z M86 22 L91 30 L89 34 L84 27 Z M80 64 L74 69 L70 66 L76 60 Z M40 64 L46 69 L50 66 L44 60 Z M34 22 L29 30 L31 34 L36 27 Z" fill="#15171f"/>
+        <path d="M2 74 Q60 56 118 74" stroke="#3ee07a" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M8 78 Q60 62 112 78" stroke="#ffdf3c" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <g class="twinkle"><path d="M104 0v10M99 5h10" stroke="#ffdf3c" stroke-width="1.8" stroke-linecap="round"/></g>
+        <defs><radialGradient id="st-g" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#ffffff"/><stop offset=".7" stop-color="#e8ecf2"/><stop offset="1" stop-color="#9aa3b5"/></radialGradient></defs>`,
+      aniversario: `<rect x="22" y="44" width="76" height="32" rx="6" fill="url(#st-g)" stroke="#fff" stroke-opacity=".6" stroke-width="1.4"/>
+        <rect x="34" y="22" width="52" height="24" rx="5" fill="#ff8fc7" stroke="#fff" stroke-opacity=".6" stroke-width="1.4"/>
+        <path d="M22 50 Q28 58 34 50 Q40 58 46 50 Q52 58 58 50 Q64 58 70 50 Q76 58 82 50 Q88 58 94 50 Q97 54 98 50 L98 46 L22 46 Z" fill="#fff"/>
+        <path d="M34 28 Q39 34 44 28 Q49 34 54 28 Q59 34 64 28 Q69 34 74 28 Q79 34 84 28 L86 25 L34 25 Z" fill="#fff"/>
+        <circle cx="34" cy="64" r="2.4" fill="#ff8fc7"/><circle cx="52" cy="66" r="2.4" fill="#7fd8ff"/><circle cx="70" cy="64" r="2.4" fill="#9be15d"/><circle cx="86" cy="66" r="2.4" fill="#ff8fc7"/>
+        <rect x="45" y="6" width="5" height="16" rx="1.5" fill="#7fd8ff"/><rect x="58" y="4" width="5" height="18" rx="1.5" fill="#ffd66b"/><rect x="71" y="6" width="5" height="16" rx="1.5" fill="#9be15d"/>
+        <g class="twinkle"><path d="M47.5 -4 C44 1 45 5 47.5 5 C50 5 51 1 47.5 -4Z M60.5 -6 C57 -1 58 3 60.5 3 C63 3 64 -1 60.5 -6Z M73.5 -4 C70 1 71 5 73.5 5 C76 5 77 1 73.5 -4Z" fill="#ffb23f"/></g>
+        <defs><linearGradient id="st-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe7a0"/><stop offset="1" stop-color="#c98a2a"/></linearGradient></defs>`,
       novembroazul: `<path d="M60 40 C52 26 34 24 22 36 C16 42 8 42 4 36 C6 54 24 60 38 54 C48 50 56 46 60 44 C64 46 72 50 82 54 C96 60 114 54 116 36 C112 42 104 42 98 36 C86 24 68 26 60 40 Z" fill="url(#st-g)" stroke="#fff" stroke-opacity=".75" stroke-width="1.6"/>
         <path d="M30 40 C40 34 50 36 56 42 M90 40 C80 34 70 36 64 42" stroke="#fff" stroke-opacity=".35" stroke-width="2" fill="none" stroke-linecap="round"/>
         <g class="twinkle"><path d="M60 -2v10M55 3h10" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></g>
@@ -3272,6 +3296,12 @@ Content-Type: application/json</pre>
     const rows = names.map((name, i) => ({ barber: { id: 'ex' + i, name, photo: null }, overall: [92.4, 84, 79.1][i], sums: { fat: [18400, 15900, 13200][i] }, leads: Array(5 - i * 2).fill('x'), pos: i + 1 }));
     return { rows, N: 8, title: { barberId: 'ex0', type: 'mvp' }, mvpNeed: 5, half: 4 };
   }
+  function bdayText(bday) {
+    if (!bday) return 'Cadastre a data de inauguração abaixo.';
+    const [y, m, d] = bday.split('-').map(Number), now = new Date();
+    const anos = now.getFullYear() - y - (now < new Date(now.getFullYear(), m - 1, d) ? 1 : 0);
+    return `Semana de ${d} de ${['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'][m - 1]}${anos > 0 ? ` · ${anos} ano${anos > 1 ? 's' : ''}` : ''}`;
+  }
   function pageTemas() {
     const th = pdTheme(), R0 = computeRanking(state, range());
     const R = R0.rows.length >= 3 ? R0 : sampleRanking();
@@ -3294,8 +3324,13 @@ Content-Type: application/json</pre>
         <div class="th-grid th-seasons">
           ${opt(th.season === 'off', 'pdSeason', 'off', `<span class="th-ico th-plain">${icon('x')}</span><b>Sem tema</b><small>Cores normais: MVP, Destaque, prata e bronze.</small>`)}
           ${opt(th.season === 'auto', 'pdSeason', 'auto', `<span class="th-ico th-plain">${icon('clock')}</span><b>Automático pelo calendário</b><small>${auto ? `Hoje: ${esc(auto.n)}.` : 'Hoje: sem tema (fora das datas).'}</small>`)}
-          ${SEASONS.map(s => opt(th.season === s.k, 'pdSeason', s.k, `<span class="th-ico">${seasonTopper(s.k)}</span><b>${esc(s.n)}</b><small>${esc(s.when)}</small>${sw(s)}`)).join('')}
+          ${SEASONS.map(s => opt(th.season === s.k, 'pdSeason', s.k, `<span class="th-ico">${seasonTopper(s.k)}</span><b>${esc(s.n)}</b><small>${esc(s.k === 'aniversario' ? bdayText(th.bday) : s.when)}</small>${sw(s)}`)).join('')}
         </div>
+        <form class="form th-bday" data-form="pdBday" novalidate>
+          <label class="field"><span>Data de inauguração ${MARCA === 'salao' ? 'do salão' : 'da barbearia'}</span><input class="input" type="date" id="th-bday" name="bday" value="${esc(th.bday)}"></label>
+          <button class="btn btn-primary" type="submit">${icon('check')} Salvar data</button>
+          <p class="form-msg" data-msg>No automático, o tema Aniversário entra 3 dias antes e sai 3 dias depois dessa data.</p>
+        </form>
       </section>`;
   }
 
@@ -4280,6 +4315,12 @@ Content-Type: application/json</pre>
       try { more = await popsPhotos(f.elements.photos.files, p.id); } catch (e) { return setMsg(f, Cloud.enabled ? Cloud.message(e) : e.message); }
       Object.assign(p, { name: name.slice(0, 80), desc: desc.slice(0, 400), video, steps: [...(p.steps || []), ...more], at: Date.now() });
       save(); toast('POP salvo.'); render();
+    },
+    pdBday(f) {
+      const v = val(f, 'bday');
+      if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) { setMsg(f, 'Data inválida.'); return; }
+      state.theme = { ...pdTheme(), bday: v }; save(); render();
+      toast(v ? 'Data de inauguração salva.' : 'Data de inauguração removida.');
     },
     reveal(f) {
       const c = revealCfg();
