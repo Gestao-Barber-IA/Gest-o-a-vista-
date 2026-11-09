@@ -4068,6 +4068,23 @@ Content-Type: application/json</pre>
     get(k) { return this.run('readonly', st => st.get(k)).catch(() => null); },
     del(k) { return this.run('readwrite', st => st.delete(k)).catch(() => null); },
   };
+  // Áudio compacto: mono, taxa menor e no máximo `maxSec` segundos (para vídeos MP4 e arquivos grandes).
+  async function audioCompact(buf, rate, maxSec) {
+    const len = Math.min(buf.duration, maxSec);
+    const off = new OfflineAudioContext(1, Math.ceil(len * rate), rate);
+    const src = off.createBufferSource(); src.buffer = buf; src.connect(off.destination); src.start(0, 0, len);
+    return off.startRendering();
+  }
+  function wavBlob(buf) {
+    const d = buf.getChannelData(0), n = d.length, out = new DataView(new ArrayBuffer(44 + n * 2)), rate = buf.sampleRate;
+    const str = (o, t) => { for (let i = 0; i < t.length; i++) out.setUint8(o + i, t.charCodeAt(i)); };
+    str(0, 'RIFF'); out.setUint32(4, 36 + n * 2, true); str(8, 'WAVE'); str(12, 'fmt '); out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 1, true);
+    out.setUint32(24, rate, true); out.setUint32(28, rate * 2, true); out.setUint16(32, 2, true); out.setUint16(34, 16, true); str(36, 'data'); out.setUint32(40, n * 2, true);
+    let peak = 0; for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(d[i]));
+    const g = peak > 0 ? Math.min(1 / peak, 4) * 0.95 : 1; // normaliza o volume
+    for (let i = 0; i < n; i++) out.setInt16(44 + i * 2, Math.max(-1, Math.min(1, d[i] * g)) * 0x7fff, true);
+    return new Blob([out], { type: 'audio/wav' });
+  }
   const pmKey = v => v === 'intro' ? 'intro' : Number(v);
   const pmName = p => p === 'intro' ? 'da abertura' : `do ${p}º lugar`;
   const fmtSec = v => { v = Math.max(0, Math.round(Number(v) || 0)); return Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0'); };
@@ -4088,14 +4105,14 @@ Content-Type: application/json</pre>
           : `<b>Trilha padrão do app</b><small>${place === 1 ? 'Hino com subida de tom e aplausos' : place === 2 ? 'Progressão com bateria e melodia' : 'Fanfarra curta'}</small>`}</div>
         <div class="pm-btns">
           <button class="btn btn-sm" data-action="pmTest" data-p="${place}">${icon('play')} Ouvir</button>
-          <label class="btn btn-sm ${m ? '' : 'btn-primary'}" style="cursor:pointer">${icon('upload')} ${m && m.acct ? 'Trocar nesta demonstração' : m ? 'Trocar' : 'Enviar música'}<input type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg" hidden data-change="pmFile" data-p="${place}"></label>
+          <label class="btn btn-sm ${m ? '' : 'btn-primary'}" style="cursor:pointer">${icon('upload')} ${m && m.acct ? 'Trocar nesta demonstração' : m ? 'Trocar' : 'Enviar música'}<input type="file" accept="audio/*,video/mp4,video/*,.mp3,.mp4,.m4a,.aac,.wav,.ogg,.mov" hidden data-change="pmFile" data-p="${place}"></label>
           ${m && !m.acct ? `<button class="btn btn-sm" data-action="pmDel" data-p="${place}" aria-label="Remover a música ${pmName(place)}">${icon('trash')}</button>` : ''}
         </div>
       </div>`;
     };
     return `<section class="section card pm-card">
       <h2 class="section-title">Músicas do fechamento</h2>
-      <p class="section-note"><b>Abertura:</b> a música começa assim que você inicia o fechamento e sai suave ao passar de tela. <b>Pódio:</b> escolha uma música para cada colocação. Ao tocar em Revelar, ela começa no segundo que você escolher, com o volume subindo, e continua na revelação. Sem música enviada, toca a trilha do app. Arquivos de áudio de até 12 MB (MP3, M4A, WAV).</p>
+      <p class="section-note"><b>Abertura:</b> a música começa assim que você inicia o fechamento e sai suave ao passar de tela. <b>Pódio:</b> escolha uma música para cada colocação. Ao tocar em Revelar, ela começa no segundo que você escolher, com o volume subindo, e continua na revelação. Sem música enviada, toca a trilha do app. Aceita MP3, MP4 (inclusive vídeo: o app separa só o áudio), M4A e WAV.</p>
       ${DEMO_ON ? `<p class="pm-note pm-demo">${icon('cloud')}<span>${ui.acctMusic ? '<b>Modo apresentação:</b> as músicas marcadas "da sua conta" estão salvas no servidor e tocam aqui sem precisar enviar de novo. Para trocar de vez, troque na sua conta. O que você enviar aqui vale só para este aparelho.' : '<b>Modo apresentação:</b> o que você enviar aqui fica só neste aparelho. Para salvar no servidor, envie as músicas na sua conta (Fechamento do mês) e abra o modo apresentação a partir dela: as mesmas músicas tocam aqui.'}</span></p>` : ''}
       <div class="pm-list">${row('intro')}<p class="pm-sub">Pódio</p>${[3, 2, 1].map(row).join('')}</div>
       <p class="pm-note">${icon('help')}<span>Tocar música comercial (artistas, rádio, streaming) no estabelecimento pode exigir licença do ECAD. Músicas livres de direitos, como as da Biblioteca de Áudio do YouTube e da Pixabay Music, evitam isso.</span></p>
@@ -5335,19 +5352,26 @@ Content-Type: application/json</pre>
     async pmFile(el) {
       const place = pmKey(el.dataset.p), f = el.files && el.files[0];
       if (!f) return;
-      if (f.size > MUSIC_MAX) { toast('A música passa de 12 MB. Use um arquivo menor (MP3 de até uns 8 minutos).'); return; }
-      if (f.type && !/^audio\//.test(f.type)) { toast('Envie um arquivo de áudio (MP3, M4A ou WAV).'); return; }
-      toast('Enviando a música…', 6000);
+      const isVideo = /^video\//.test(f.type) || /\.(mp4|mov|m4v|webm)$/i.test(f.name);
+      if (f.type && !/^(audio|video)\//.test(f.type)) { toast('Envie um arquivo de áudio ou vídeo (MP3, MP4, M4A ou WAV).'); return; }
+      if (f.size > 300 * 1024 * 1024) { toast('Arquivo grande demais. Use um vídeo ou música de até 300 MB.'); return; }
+      toast(isVideo || f.size > MUSIC_MAX ? 'Separando o áudio do arquivo…' : 'Enviando a música…', 8000);
       try {
         const ab = await f.arrayBuffer();
         const c = Sound.ensure();
-        const buf = c ? await new Promise((res, rej) => c.decodeAudioData(ab.slice(0), res, rej)) : null;
-        if (!buf) throw new Error('Não foi possível ler este arquivo de áudio.');
-        const id = uid('m_'), ext = (f.name.split('.').pop() || 'mp3').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 4) || 'mp3';
+        let buf = c ? await new Promise((res, rej) => c.decodeAudioData(ab.slice(0), res, rej)).catch(() => null) : null;
+        if (!buf) throw new Error(isVideo ? 'Não foi possível tirar o áudio deste vídeo. Tente outro arquivo ou um MP3.' : 'Não foi possível ler este arquivo de áudio.');
+        // Vídeo (MP4) ou arquivo grande: guarda só o áudio, compactado (mono, 24 kHz, até 4 minutos) para caber nos 12 MB.
+        let up = f, ext = (f.name.split('.').pop() || 'mp3').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 4) || 'mp3';
+        if (isVideo || f.size > MUSIC_MAX) {
+          buf = await audioCompact(buf, 24000, 240);
+          up = new File([wavBlob(buf)], f.name.replace(/\.[^.]+$/, '') + '.wav', { type: 'audio/wav' }); ext = 'wav';
+        }
+        const id = uid('m_');
         const pm = { ...(state.podiumMusic || {}) }, old = pm[place];
         const entry = { id, name: f.name.replace(/\.[^.]+$/, '').slice(0, 80), start: 0, dur: Math.round(buf.duration) };
-        if (Cloud.enabled) entry.path = await Cloud.uploadBlob(MUSIC_BUCKET, `${Cloud.companyId}/podio-${place}-${id}.${ext}`, f);
-        else await FileStore.put('music|' + id, f);
+        if (Cloud.enabled) entry.path = await Cloud.uploadBlob(MUSIC_BUCKET, `${Cloud.companyId}/podio-${place}-${id}.${ext}`, up);
+        else await FileStore.put('music|' + id, up);
         if (old) { if (old.path && Cloud.enabled) Cloud.removeFile(MUSIC_BUCKET, old.path); else FileStore.del('music|' + old.id); }
         Music.bufs[id] = buf;
         pm[place] = entry; state.podiumMusic = pm; save();
