@@ -144,6 +144,7 @@
     api: ['Integração por API', 'Outro sistema envia os resultados de cada barbeiro por dia. Os campos vindos da API ficam com cadeado em Lançamentos; só o dono destrava para um ajuste manual.'],
     proof: ['Provas do checklist', 'Cada ação precisa de uma foto ou print como prova. A gestão confere e aprova ou recusa; só ação aprovada pontua. Ninguém confere a própria prova.'],
     compare: ['Comparar profissionais', 'Mostra os números de dois profissionais lado a lado no mês. Verde com ▲ é quem está à frente em cada indicador; vermelho com ▼, quem está atrás; "=" é empate. No meio aparece a diferença. O barbeiro compara os próprios números com o líder de cada indicador; o dono e o gestor de área comparam quem podem ver.'],
+    evoCasa: ['Evolução da empresa', 'Compara a soma de toda a equipe com ela mesma em outro período. Verde com ▲ é onde a empresa melhorou; vermelho com ▼, onde caiu. Ticket médio, ocupação e fidelização são calculados sobre os totais da equipe. Com o mês em andamento, compara o mesmo número de dias, a não ser que você marque o mês anterior inteiro.'],
     evo: ['Evolução', 'Compara o profissional com ele mesmo em outro período. Verde com ▲ é onde melhorou; vermelho com ▼, onde caiu. Com o mês em andamento, compara o mesmo número de dias (ex.: 1 a 7 deste mês × 1 a 7 do mês anterior), a não ser que você marque o mês anterior inteiro. Em períodos que não são o mês inteiro, entram os lançamentos por dia.'],
     access_lv: ['Nível de acesso', () => ACCESS_TIP()],
     leads: ['Interessados', 'Cadastros feitos na página de vendas (gest-o-a-vista.vercel.app/oferta) antes do quiz: nome, celular, e-mail e as respostas do quiz. Use a situação para organizar o contato: Novo, Contatado, Virou cliente ou Descartado. Só o dono do SaaS vê esta lista.'],
@@ -1565,8 +1566,8 @@
     o._score = row && R.active.length ? row.overall : null; o._leads = row && R.active.length ? row.leads.length : null;
     return o;
   };
-  function cmpList(va, vb, subs) {
-    const inds = [...GB.visibleInds(state), ...CMP_EXTRA];
+  function cmpList(va, vb, subs, extra = CMP_EXTRA) {
+    const inds = [...GB.visibleInds(state), ...extra];
     let wa = 0, wb = 0;
     for (const i of GB.visibleInds(state)) { const a = va[i.key], b = vb[i.key]; if (a != null && b != null) { if (a > b) wa++; else if (b > a) wb++; } }
     return { html: `<div class="cmp-list">${inds.map(i => cmpRow(i, va[i.key], vb[i.key], subs && subs.a && subs.a[i.key], subs && subs.b && subs.b[i.key])).join('')}</div>`, wa, wb };
@@ -1658,6 +1659,65 @@
   const dShort = d => d.slice(8, 10) + '/' + d.slice(5, 7) + (d.slice(0, 4) !== String(new Date().getFullYear()) ? '/' + d.slice(2, 4) : '');
   const rLabel = r => `${dShort(r.start)} a ${dShort(r.end)}`;
   const evoRefresh = () => { if ($('#tm-insights')) refreshTeam(); else render(); };
+  // Controles do comparativo (modo, datas livres, mês em andamento), usados na evolução do profissional e da empresa.
+  function evoControls(ym, ra, rb) {
+    const ev = ui.evo || {}, mode = ev.mode || 'mes';
+    const modes = [['mes', 'Mês × mês anterior'], ['ano', 'Mês × ano passado'], ['semana', 'Semana × anterior'], ['livre', 'Escolher datas']];
+    const running = mode !== 'livre' && mode !== 'semana' && monthRange(ym).start <= iso(new Date()) && iso(new Date()) <= monthRange(ym).end;
+    return `<div class="seg evo-seg" role="group" aria-label="Comparar períodos">${modes.map(([k, l]) => `<button type="button" class="${mode === k ? 'on' : ''}" aria-pressed="${mode === k}" data-action="evoMode" data-m="${k}">${l}</button>`).join('')}</div>
+      ${mode === 'livre' ? `<div class="evo-dates">
+        <label class="field"><span>Período A</span><span class="evo-dd"><input class="input" type="date" data-change="evoDate" data-k="a1" value="${ra.start}"><input class="input" type="date" data-change="evoDate" data-k="a2" value="${ra.end}"></span></label>
+        <label class="field"><span>Período B</span><span class="evo-dd"><input class="input" type="date" data-change="evoDate" data-k="b1" value="${rb.start}"><input class="input" type="date" data-change="evoDate" data-k="b2" value="${rb.end}"></span></label></div>` : ''}
+      ${running ? `<label class="ind-on evo-full"><input type="checkbox" data-change="evoFull" ${ev.full ? 'checked' : ''}> Comparar com o mês anterior inteiro</label>
+        <p class="section-note">${ev.full ? 'O mês atual ainda não acabou: a comparação com o mês inteiro tende a ficar abaixo.' : 'Mês em andamento: compara o mesmo número de dias nos dois períodos.'}</p>` : ''}`;
+  }
+
+  // Evolução da empresa: a soma de todos os profissionais comparada com ela mesma em outro período.
+  function houseSums(range, scope) {
+    const S = { fat: 0, serv: 0, cli: 0, check: 0, hDisp: 0, hOcup: 0, planos: 0, ret: 0, prod: 0, comanda: 0, agend: 0, n: {} };
+    for (const b of state.barbers) {
+      if (scope && !scope.has(b.id)) continue;
+      const a = GB.aggregate(state, b.id, range);
+      if (!Object.keys(a.n).length) continue;
+      for (const k of Object.keys(a.n)) {
+        if (k === 'comanda') S.comanda = Math.max(S.comanda, a.comanda); else S[k] = (S[k] || 0) + (a[k] || 0);
+        S.n[k] = (S.n[k] || 0) + a.n[k];
+      }
+      // Agendamentos: lançados por mês, entram quando o mês inteiro está dentro do período.
+      for (const m of state.monthly || []) {
+        if (m.barberId !== b.id || !isNum(m.agend)) continue;
+        const mr = monthRange(m.month);
+        if (mr.start >= range.start && mr.end <= range.end) { S.agend += Number(m.agend); S.n.agend = (S.n.agend || 0) + 1; }
+      }
+    }
+    return S;
+  }
+  const HOUSE_EXTRA = [{ key: 'agend', label: 'Agendamentos', fmt: 'int' }, { key: 'comanda', label: 'Maior comanda do mês', fmt: 'money2' }];
+  function houseVals(S) {
+    const o = {};
+    for (const ind of GB.visibleInds(state)) o[ind.key] = ind.calc(S);
+    o.agend = S.n.agend ? S.agend : null;
+    o.comanda = S.n.comanda ? S.comanda : null;
+    return o;
+  }
+  function evoHouse(ym, scope) {
+    const [ra, rb] = evoRanges(ym);
+    const SA = houseSums(ra, scope), SB = houseSums(rb, scope);
+    const va = houseVals(SA), vb = houseVals(SB);
+    const L = cmpList(va, vb, null, HOUSE_EXTRA);
+    const n = GB.visibleInds(state).filter(i => va[i.key] != null && vb[i.key] != null).length;
+    const info = S => Object.keys(S.n).length ? `Faturamento ${money0(S.fat)}` : 'sem dados';
+    return `<section class="section card evo">
+      <h2 class="section-title">Evolução ${scope ? 'da área' : 'da empresa'} ${tip('evoCasa')}</h2>
+      ${evoControls(ym, ra, rb)}
+      <div class="cmp-sum">
+        <div class="cmp-who a"><b>${rLabel(ra)}</b><small class="num">${info(SA)}</small><span class="cmp-wins num">Melhor em ${L.wa} de ${n}</span></div>
+        <div class="cmp-who b"><b>${rLabel(rb)}</b><small class="num">${info(SB)}</small><span class="cmp-wins num">Melhor em ${L.wb} de ${n}</span></div>
+      </div>
+      ${L.html}
+    </section>`;
+  }
+
   function evoBlock(bid, ym) {
     const b = barberById(bid); if (!b) return '';
     const ev = ui.evo || {}, mode = ev.mode || 'mes';
@@ -1667,17 +1727,10 @@
     const va = cmpVals(A, rowA), vb = cmpVals(B, rowB);
     const L = cmpList(va, vb);
     const n = GB.visibleInds(state).filter(i => va[i.key] != null && vb[i.key] != null).length;
-    const modes = [['mes', 'Mês × mês anterior'], ['ano', 'Mês × ano passado'], ['semana', 'Semana × anterior'], ['livre', 'Escolher datas']];
-    const running = mode !== 'livre' && mode !== 'semana' && monthRange(ym).start <= iso(new Date()) && iso(new Date()) <= monthRange(ym).end;
     const pos = (R, row) => row && R.active.length ? `${ord(row.pos)} de ${R.rows.length} · ${score(row.overall)} pts` : 'sem dados';
     return `<section class="section card evo">
       <h2 class="section-title">Evolução de ${first(b.name)} ${tip('evo')}</h2>
-      <div class="seg evo-seg" role="group" aria-label="Comparar períodos">${modes.map(([k, l]) => `<button type="button" class="${mode === k ? 'on' : ''}" aria-pressed="${mode === k}" data-action="evoMode" data-m="${k}">${l}</button>`).join('')}</div>
-      ${mode === 'livre' ? `<div class="evo-dates">
-        <label class="field"><span>Período A</span><span class="evo-dd"><input class="input" type="date" data-change="evoDate" data-k="a1" value="${ra.start}"><input class="input" type="date" data-change="evoDate" data-k="a2" value="${ra.end}"></span></label>
-        <label class="field"><span>Período B</span><span class="evo-dd"><input class="input" type="date" data-change="evoDate" data-k="b1" value="${rb.start}"><input class="input" type="date" data-change="evoDate" data-k="b2" value="${rb.end}"></span></label></div>` : ''}
-      ${running ? `<label class="ind-on evo-full"><input type="checkbox" data-change="evoFull" ${ev.full ? 'checked' : ''}> Comparar com o mês anterior inteiro</label>
-        <p class="section-note">${ev.full ? 'O mês atual ainda não acabou: a comparação com o mês inteiro tende a ficar abaixo.' : 'Mês em andamento: compara o mesmo número de dias nos dois períodos.'}</p>` : ''}
+      ${evoControls(ym, ra, rb)}
       <div class="cmp-sum">
         <div class="cmp-who a"><b>${rLabel(ra)}</b><small class="num">${pos(A, rowA)}</small><span class="cmp-wins num">Melhor em ${L.wa} de ${n}</span></div>
         <div class="cmp-who b"><b>${rLabel(rb)}</b><small class="num">${pos(B, rowB)}</small><span class="cmp-wins num">Melhor em ${L.wb} de ${n}</span></div>
@@ -1985,6 +2038,7 @@
         ${stat('Profissionais', nf0.format(all.length))}
       </section>
       ${all.length ? `<p class="section-note">Cada número acima é a soma dos ${nf0.format(all.length)} profissionais ${scope ? 'da sua área' : 'da equipe'} no mês${gone.length ? `, incluindo ${gone.length === 1 ? '1 profissional desligado que tem' : `${gone.length} profissionais desligados que têm`} resultados lançados nesse mês` : ''}. O ticket médio da casa é o faturamento total dividido pelo total de clientes, e a ocupação é a média dos profissionais.</p>` : ''}
+      ${has ? evoHouse(ym, scope) : ''}
 ${rows.length ? '' : emptyBarbers()}
       <p class="section-note">O detalhado por profissional, o ranking e o radar estão em Performance da equipe.</p>`;
   }
