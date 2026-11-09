@@ -2,7 +2,7 @@
    Permite instalar o app na tela de início. Sempre busca a versão mais nova na
    internet; a cópia guardada só é usada quando o celular está sem conexão.
    Dados (Supabase) nunca passam por aqui. */
-const CACHE = 'gbia-v47';
+const CACHE = 'gbia-v48';
 const SHELL = ['./', 'index.html', 'css/styles.css', 'js/vendor/supabase.js', 'js/config.js', 'js/icons.js', 'js/data.js', 'js/cloud.js', 'js/app.js', 'assets/logo.jpg', 'assets/icon-192.png', 'assets/logo-salao.jpg', 'assets/icon-salao-192.png'];
 
 self.addEventListener('install', e => {
