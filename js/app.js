@@ -373,6 +373,7 @@
       <span class="demo-tag">${icon('monitor')} <b>Modo apresentação</b><small>números e profissionais fictícios</small></span>
       <span class="demo-acts">
         <span class="seg demo-seg" role="group" aria-label="Ver como"><button type="button" class="${asOwner ? 'on' : ''}" data-action="demoAs" data-r="dono">Ver como dono</button><button type="button" class="${asOwner ? '' : 'on'}" data-action="demoAs" data-r="pro">Ver como profissional</button></span>
+        <button type="button" class="btn btn-sm btn-primary" data-action="pitchStart">${icon('play')} Apresentar o sistema</button>
         <button type="button" class="btn btn-sm" data-action="startDemo" data-b="${other.key}">${esc('Trocar para ' + other.name)}</button>
         <button type="button" class="btn btn-sm" data-action="demoReset">Reiniciar</button>
         <button type="button" class="btn btn-sm btn-primary" data-action="demoExit">${icon('x')} Sair</button>
@@ -387,7 +388,8 @@
   function brandChooser() {
     const card = b => `<button type="button" class="bc-card bc-${b.key}" data-action="pickBrand" data-b="${b.key}">
       <img src="${b.logo}" alt="" width="512" height="512"><b>${esc(b.name)}</b><span>${esc(b.tagline)}</span><em>${icon('right')} Continuar</em></button>`;
-    const demo = b => `<button type="button" class="link-btn bc-demo" data-action="startDemo" data-b="${b.key}">${icon('monitor')} ${esc('Ver demonstração do ' + b.name)}</button>`;
+    const demo = b => `<button type="button" class="link-btn bc-demo" data-action="startDemo" data-b="${b.key}">${icon('monitor')} ${esc('Ver demonstração do ' + b.name)}</button>
+      <button type="button" class="link-btn bc-demo bc-pitch" data-action="startDemo" data-b="${b.key}" data-pitch="1">${icon('play')} ${esc('Apresentação do ' + b.name)}</button>`;
     return `<div class="auth bc"><div class="bc-in">
       <h1>Escolha o sistema do seu negócio</h1>
       <p>Toque na marca para entrar ou criar o cadastro.</p>
@@ -2049,7 +2051,7 @@
 
   // Conquista: quando uma meta da empresa é batida, aparece um card de parabéns (uma vez por meta e por mês, em cada aparelho).
   function maybeGoalCelebrate(user) {
-    if (!user || !isGestor(user) || location.hash === '#apresentacao' || ui.fx || document.getElementById('fx') || document.querySelector('.gc-ov')) return;
+    if (!user || !isGestor(user) || location.hash === '#apresentacao' || ui.fx || ui.pitch || document.getElementById('fx') || document.getElementById('pt') || document.querySelector('.gc-ov')) return;
     const seen = readJSON('hgSeen', {});
     // Mês atual; o mês anterior só nos primeiros dias do mês novo (metas batidas no fechamento).
     const months = [curYm(), ...(new Date().getDate() <= 7 ? [addMonths(curYm(), -1)] : [])];
@@ -2764,6 +2766,90 @@ Content-Type: application/json</pre>
     if (d > 0 && slide && slide.classList.contains('is-suspense')) { fxDrum(slide); return; }
     fxStep(d);
   }
+  // ---------- Apresentação do sistema (slides de venda para outras empresas, Barber ou Salão) ----------
+  function pitchWords() {
+    const sal = MARCA === 'salao';
+    return { sal, brand: B().name, pro: sal ? 'profissional' : 'barbeiro', pros: sal ? 'profissionais' : 'barbeiros', Pros: sal ? 'Profissionais' : 'Barbeiros',
+      place: sal ? 'salão' : 'barbearia', places: sal ? 'salões' : 'barbearias', da: sal ? 'do salão' : 'da barbearia', sua: sal ? 'seu salão' : 'sua barbearia' };
+  }
+  function pitchSlides() {
+    const w = pitchWords(), ym = curYm(), R = monthR(ym), has = R.rows.length >= 3;
+    const feat = (ic, t, d) => `<div class="pt-feat">${icon(ic)}<b>${t}</b><small>${d}</small></div>`;
+    const T = houseTotals(ym), g = houseGoalsFor(ym);
+    const goalCard = (k, label, f) => { const v = T.vals[k], gg = g[k]; if (v == null) return ''; const pct = gg ? Math.min(100, (v / gg) * 100) : 0;
+      return `<div class="pt-goal ${gg && v >= gg ? 'done' : ''}"><small>${label}</small><b class="num">${f(v)}</b>${gg ? `<span class="pt-bar"><i style="width:${pct.toFixed(1)}%"></i></span><em class="num">${v >= gg ? 'Meta batida ✓' : `Meta ${f(gg)} · faltam ${f(gg - v)}`}</em>` : ''}</div>`; };
+    const mvp = R.title.barberId && R.rows.find(r => r.barber.id === R.title.barberId);
+    return [
+      `<div class="pt-slide pt-cover">
+        <div class="fx-emblem"><span class="fx-orbit"></span><span class="fx-orbit o2"></span>${logo('fx-logo')}</div>
+        <p class="fx-kicker">Apresentação</p>
+        <h1 class="pt-brand">${esc(w.brand)}</h1>
+        <p class="pt-lead">A gestão que transforma resultado em motivação para a equipe ${esc(w.da)}.</p>
+        <p class="fx-tag">Cada atendimento conta.</p></div>`,
+      `<div class="pt-slide"><p class="fx-kicker">O desafio</p><h2 class="pt-h">O dia a dia de quem gerencia ${w.sal ? 'um salão' : 'uma barbearia'}</h2>
+        <div class="pt-grid g4">${feat('target', 'Metas que ninguém acompanha', `A equipe não sabe se está perto ou longe da meta.`)}${feat('clock', 'Resultado só no fim do mês', 'Quando aparece o problema, o mês já acabou.')}
+        ${feat('users', 'Equipe sem reconhecimento', `Quem se destaca não é celebrado e perde a motivação.`)}${feat('help', 'Decisões no achismo', `Sem números claros por ${w.pro}, a gestão vira palpite.`)}</div></div>`,
+      `<div class="pt-slide"><p class="fx-kicker">A solução</p><h2 class="pt-h">Tudo em um só lugar</h2>
+        <div class="pt-grid g3">${feat('trophy', 'Ranking em tempo real', `Pontuação de cada ${w.pro} em ${R.N || GB.visibleInds(state).length} indicadores.`)}${feat('monitor', 'Tela da loja na TV', 'Pódio animado e ultrapassagens ao vivo.')}${feat('target', 'Metas e conquistas', 'Quanto falta, ritmo por dia e comemoração.')}
+        ${feat('crown', 'Fechamento do mês', 'Revelação do pódio com suspense e música.')}${feat('file', 'Relatórios e cards', 'Painel do mês e cards prontos para stories.')}${feat('checksq', 'Checklist e POPs', 'Rotina da equipe padronizada, todo dia.')}</div></div>`,
+      `<div class="pt-slide pt-wide"><p class="fx-kicker">Ranking</p><h2 class="pt-h">Quem está na frente, em cada indicador</h2>
+        <div class="pt-split"><div class="pt-list">${GB.visibleInds(state).map(i => `<span>${icon('check')} ${esc(i.label)}</span>`).join('')}
+          <p class="pt-note"><b>MVP</b> lidera a maioria dos indicadores. <b>Destaque</b> lidera metade. O resto é por pontos.</p></div>
+          ${has ? `<div class="pt-podium">${podium(R)}</div>` : ''}</div></div>`,
+      `<div class="pt-slide pt-wide"><p class="fx-kicker">Tela da loja</p><h2 class="pt-h">A TV ${esc(w.da)} motiva a equipe o dia inteiro</h2>
+        <div class="pt-split"><div class="pt-list"><span>${icon('trophy')} Pódio animado com coroa, MVP e Destaque</span><span>${icon('bolt')} Ultrapassagens ao vivo com som</span><span>${icon('palette')} Temas: Natal, Copa, Outubro Rosa e mais</span><span>${icon('target')} Alertas de quem precisa de ajuda</span></div>
+          ${has ? `<div class="pt-rank">${rankingList(R, 5)}</div>` : ''}</div></div>`,
+      `<div class="pt-slide pt-wide"><p class="fx-kicker">Metas</p><h2 class="pt-h">Metas da empresa com o caminho para bater</h2>
+        <div class="pt-grid g3">${goalCard('fat', 'Faturamento total', money0)}${goalCard('cli', 'Clientes atendidos', v => nf0.format(v))}${goalCard('ticket', 'Ticket médio', money0)}</div>
+        <p class="pt-lead sm">Barra de progresso, quanto falta, <b>quanto vender por dia</b> e um card de conquista quando a equipe bate a meta.</p></div>`,
+      `<div class="pt-slide"><p class="fx-kicker">Fechamento do mês</p><h2 class="pt-h">O fim do mês vira um evento</h2>
+        <div class="pt-grid g3">${feat('sparkle', 'Abertura de cinema', '“É hora do fechamento” com a música da casa.')}${feat('crown', 'Pódio com suspense', '3º, 2º e 1º revelados com trilha que cresce.')}${feat('award', 'Líderes do mês', 'Quem ficou em 1º em cada indicador e o recorde da maior comanda.')}</div></div>`,
+      `<div class="pt-slide pt-wide"><p class="fx-kicker">Relatórios</p><h2 class="pt-h">Cards prontos para postar</h2>
+        <div class="pt-split"><div class="pt-list"><span>${icon('file')} Painel do mês em PDF, com o logo ${esc(w.da)}</span><span>${icon('download')} Card de cada ${w.pro} no tamanho dos stories</span><span>${icon('diamond')} Card especial do MVP e do Destaque</span><span>${icon('chart')} Evolução mês a mês e participação no faturamento</span></div>
+          ${mvp ? `<img class="pt-card" data-card="${ym}|${mvp.barber.id}|title" alt="Card do ${R.title.type === 'mvp' ? 'MVP' : 'Destaque'} do mês">` : ''}</div></div>`,
+      `<div class="pt-slide"><p class="fx-kicker">Para a equipe</p><h2 class="pt-h">Cada ${w.pro} acompanha tudo no celular</h2>
+        <div class="pt-grid g4">${feat('chart', 'Minha performance', 'Posição, pontos e o que falta em cada indicador.')}${feat('undo', 'Evolução', 'Comparação com o mês anterior.')}${feat('checksq', 'Checklist Agenda Cheia', 'A rotina que enche a agenda, todo dia.')}${feat('book', 'POPs', 'O padrão da casa com fotos e vídeo.')}</div></div>`,
+      `<div class="pt-slide"><p class="fx-kicker">Como começar</p><h2 class="pt-h">Simples de colocar para rodar</h2>
+        <div class="pt-steps"><div><b>1</b><span>Cadastre a equipe e convide cada ${w.pro} pelo link</span></div><div><b>2</b><span>Lance os resultados ou conecte o sistema que você já usa</span></div><div><b>3</b><span>Ligue a Tela da loja na TV e acompanhe</span></div></div></div>`,
+      `<div class="pt-slide pt-cover"><div class="fx-emblem"><span class="fx-orbit"></span><span class="fx-orbit o2"></span>${logo('fx-logo')}</div>
+        <h1 class="pt-brand sm">Vamos levar ${esc(w.sua)} para o próximo nível?</h1>
+        <p class="fx-tag">Cada atendimento conta.</p>
+        <a class="btn btn-primary pt-cta" href="oferta/" target="_blank" rel="noopener">${icon('rocket')} Conhecer os planos</a>
+        <p class="pt-lead sm">${esc(w.brand)} · gest-o-a-vista.vercel.app</p></div>`,
+    ];
+  }
+  function pitchOpen() {
+    ui.pitch = { i: 0 };
+    let ov = document.getElementById('pt');
+    if (!ov) {
+      ov = document.createElement('div'); ov.id = 'pt'; ov.className = 'fx pt'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Apresentação do ' + B().name);
+      ov.innerHTML = `<div class="fx-bg">${fxDots(34)}</div><div class="fx-stage pt-stage" aria-live="polite"></div><nav class="fx-ctrl"></nav>`;
+      ov.addEventListener('click', e => { const b = e.target.closest('[data-pt]'); if (b) { const a = b.dataset.pt; if (a === 'next') pitchGo(1); else if (a === 'prev') pitchGo(-1); else if (a === 'close') pitchClose(); else if (a === 'full') { const d = document.documentElement; if (!document.fullscreenElement && d.requestFullscreen) d.requestFullscreen().catch(() => {}); else if (document.exitFullscreen) document.exitFullscreen().catch(() => {}); } } });
+      let x0 = null; ov.addEventListener('pointerdown', e => { x0 = e.clientX; }); ov.addEventListener('pointerup', e => { if (x0 != null && Math.abs(e.clientX - x0) > 60 && !e.target.closest('a,button')) pitchGo(e.clientX < x0 ? 1 : -1); x0 = null; });
+      document.body.appendChild(ov);
+    }
+    keepAwake(); pitchRender();
+  }
+  function pitchRender() {
+    const ov = document.getElementById('pt'), pt = ui.pitch; if (!ov || !pt) return;
+    const sl = pitchSlides(), n = sl.length; pt.i = Math.max(0, Math.min(n - 1, pt.i));
+    ov.querySelector('.pt-stage').innerHTML = sl[pt.i];
+    ov.querySelector('.fx-ctrl').innerHTML = `<button class="fx-btn" data-pt="prev" aria-label="Anterior" ${pt.i === 0 ? 'disabled' : ''}>${icon('left')}</button>
+      <span class="fx-pages" aria-label="Slide ${pt.i + 1} de ${n}">${sl.map((_, k) => `<i class="${k === pt.i ? 'on' : k < pt.i ? 'done' : ''}"></i>`).join('')}</span>
+      <button class="fx-btn" data-pt="next" aria-label="Próximo" ${pt.i === n - 1 ? 'disabled' : ''}>${icon('right')}</button>
+      <button class="fx-btn sm" data-pt="full" aria-label="Tela cheia">${icon('expand')}</button>
+      <button class="fx-btn sm" data-pt="close" aria-label="Fechar apresentação">${icon('x')}</button>`;
+    ov.querySelector('.pt-stage').scrollTop = 0;
+    if (ov.querySelector('img[data-card]')) hydrateCards();
+  }
+  function pitchGo(d) { if (!ui.pitch) return; ui.pitch.i += d; pitchRender(); }
+  function pitchClose() { ui.pitch = null; const ov = document.getElementById('pt'); if (ov) { ov.classList.add('fx-out'); setTimeout(() => ov.remove(), 330); } }
+  document.addEventListener('keydown', e => {
+    if (!ui.pitch) return;
+    if (['ArrowRight', 'PageDown', ' ', 'Enter'].includes(e.key)) { e.preventDefault(); pitchGo(1); }
+    else if (['ArrowLeft', 'PageUp'].includes(e.key)) { e.preventDefault(); pitchGo(-1); }
+    else if (e.key === 'Escape') pitchClose();
+  });
   function fxStep(d) {
     const fx = ui.fx; if (!fx) return;
     const ni = fx.i + d;
@@ -5047,9 +5133,10 @@ Content-Type: application/json</pre>
       try { localStorage.setItem(THEME_KEY, t); } catch (e) { /* opcional */ }
       applyTheme(t); render();
     },
+    pitchStart() { pitchOpen(); },
     startDemo(el) {
       const b = BRANDS[el.dataset.b] ? el.dataset.b : 'barber';
-      try { sessionStorage.setItem('gbia.demo', b); } catch (e) { toast('Este navegador bloqueou o modo apresentação.'); return; }
+      try { sessionStorage.setItem('gbia.demo', b); if (el.dataset.pitch) sessionStorage.setItem('gbia.pitch', '1'); } catch (e) { toast('Este navegador bloqueou o modo apresentação.'); return; }
       location.href = location.origin + location.pathname;
     },
     demoAs(el) { demoLogin(el.dataset.r); location.hash = 'inicio'; render(); window.scrollTo(0, 0); },
@@ -5635,6 +5722,7 @@ Content-Type: application/json</pre>
     if (BRANDS[pm]) DB.pref.set('brand', pm);
     applyBrand(DB.demo || DB.pref.get('brand', '') || 'barber');
   }
+  if (DEMO_ON) { let pf = null; try { pf = sessionStorage.getItem('gbia.pitch'); sessionStorage.removeItem('gbia.pitch'); } catch (e) { /* opcional */ } if (pf) setTimeout(() => { if (currentUser()) pitchOpen(); }, 2400); }
   if (DEMO_ON && Cloud.demoMusic) {
     Cloud.demoMusic.load().then(m => { if (m && Object.keys(m).length) { ui.acctMusic = m; if (location.hash === '#fechamento') render(); } }).catch(() => { /* sem conta: só as músicas deste aparelho */ });
   }
