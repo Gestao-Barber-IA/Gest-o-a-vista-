@@ -635,10 +635,8 @@
       { r: 'time', t: 'Performance da equipe', i: 'trophy' },
       { r: 'checklist', t: 'Checklist Agenda Cheia', i: 'checksq' },
       { r: 'pops', t: 'POPs · Guia do Sucesso', i: 'book' },
-      { r: 'tarefas', t: 'Tarefas', i: 'clipboard', soon: 1 },
-      { r: 'metas', t: 'Metas', i: 'target', soon: 1 },
-      { r: 'premios', t: 'Prêmios e metas', i: 'gift', soon: 1 },
-      { r: 'sonhos', t: 'Sonhos', i: 'rocket', soon: 1 },
+      { r: 'comissoes', t: 'Comissões e prêmios', i: 'gift', g: 1 },
+      { r: 'sonhos', t: 'Sonhos', i: 'rocket' },
       { r: 'organograma', t: 'Organograma', i: 'org', g: 1 },
     ] },
     { group: 'Gestor', g: 1, items: [
@@ -646,7 +644,6 @@
       { r: 'configuracoes', t: 'Configurações', i: 'gear' },
       { r: 'assinatura', t: 'Assinatura', i: 'card', cloud: 1 },
       { r: 'admin', t: 'Painel do SaaS', i: 'gauge', admin: 1 },
-      { r: 'cockpit', t: 'Cockpit do gestor', i: 'gauge', soon: 1 },
     ] },
     { group: 'Sistema', g: 1, items: [
       { r: 'atualizacoes', t: 'Atualizações', i: 'sparkle', g: 1 },
@@ -973,7 +970,7 @@
 
   function prevPositions() {
     if (darkFor(range(ui.offset - 1))) return {};
-    const P = computeRanking(state, range(ui.offset - 1));
+    const P = computeRanking(rkState(), range(ui.offset - 1));
     const hasData = P.active.length > 0;
     return hasData ? Object.fromEntries(P.rows.map(r => [r.barber.id, r.pos])) : {};
   }
@@ -1221,12 +1218,13 @@
   }, 30000);
 
   function pageInicio(user) {
-    const R = computeRanking(state, range());
+    const R = computeRanking(rkState(), range());
     const w = darkFor(range());
     if (w) return `${periodBar()}${suspenseCard(w)}${ownNumbers(R, user.barberId, ui.period === 'mes' ? range().start.slice(0, 7) : null)}${howLink()}`;
     liveDetect(R);
     return `
       ${periodBar()}
+      ${unitBar()}
       ${isGestor(user) ? suspenseNote() + gestorGuide() : ''}
       ${monthOnlyData(R) ? `<div class="card week-note"><p>${icon('help')}<span>Os resultados lançados à mão são <b>totais do mês</b>, por isso não aparecem na visão por semana. A Semana mostra só resultados diários (da integração ou do checklist).</span></p>
         <button class="btn btn-primary btn-sm" data-action="period" data-period="mes">Ver o mês</button></div>` : ''}
@@ -1329,6 +1327,17 @@
       'Para mudar, toque em Trocar plano e escolha o plano pelo tamanho da equipe.',
       'Para pagar uma fatura em aberto, toque em Pagar fatura (PIX, boleto ou cartão). Depois, toque em Já paguei, atualizar.',
     ], tips: ['Se o acesso for suspenso por falta de pagamento, os dados continuam guardados e voltam assim que o pagamento é confirmado.'] },
+    comissoes: { t: 'Comissões e prêmios', ic: 'gift', gestor: 1, steps: [
+      'Em Regras de comissão e prêmios, preencha o que você paga: % sobre o faturamento, valor por plano e por produto vendido, prêmios por colocação, MVP, Destaque e bônus por bater a meta.',
+      'Se algum profissional tem uma comissão diferente, abra "Comissão diferente para algum profissional".',
+      'Toque em Salvar regras. Abaixo aparece o cálculo de cada profissional no mês, com o total da equipe.',
+      'Escolha outro mês para ver os anteriores e toque em Baixar planilha para pagar ou conferir.',
+    ], tips: ['No mês em andamento os valores ainda mudam; os prêmios por colocação valem no fechamento.', 'Os números vêm de Lançamentos e do ranking: nada para digitar de novo.'] },
+    sonhos: { t: 'Sonhos', ic: 'rocket', steps: [
+      'Cada profissional entra em Sonhos e conta o sonho dele: o que é, quanto custa e quanto já juntou.',
+      'Com as comissões configuradas, ele escolhe quanto da comissão vai guardar, e o app mostra em quantos meses chega lá.',
+      'O dono vê os sonhos de toda a equipe, para usar nas conversas de feedback e nas reuniões.',
+    ], tips: ['Quando o trabalho tem um porquê, a meta ganha sentido.'] },
     atualizacoes: { t: 'Atualizações', ic: 'sparkle', gestor: 1, steps: [
       'Toda mudança no sistema aparece aqui, com a data: o que é novo, o que melhorou e o que foi corrigido.',
       'As novidades que você ainda não viu ficam marcadas, e o número aparece ao lado de Atualizações no menu.',
@@ -1381,6 +1390,216 @@
       <p class="muted hp-none" hidden>Nada encontrado. Tente outra palavra.</p>
     </section>`;
   }
+
+  // ---------- Unidades (lojas): ranking por unidade e geral ----------
+  const unitsList = () => (Array.isArray(state.units) ? state.units : []).filter(Boolean);
+  const curUnit = () => { const u = DB.pref.get('unit', ''); return unitsList().includes(u) ? u : ''; };
+  const rkState = () => { const u = curUnit(); return u ? { ...state, barbers: state.barbers.filter(b => b.unit === u) } : state; };
+  const unitBar = () => unitsList().length ? `<div class="unit-bar" role="toolbar" aria-label="Unidade">${['', ...unitsList()].map(u => `<button type="button" class="btn btn-sm ${curUnit() === u ? 'btn-primary' : ''}" data-action="unitPick" data-u="${esc(u)}">${u ? esc(u) : 'Todas as unidades'}</button>`).join('')}</div>` : '';
+  function unitsCard() {
+    const us = unitsList();
+    return `<section class="section card">
+      <h2 class="section-title">Unidades</h2>
+      <p class="muted">Tem mais de uma loja? Cadastre as unidades e escolha a unidade de cada profissional em Adicionar profissional. O Início e a Tela da loja mostram o ranking de cada unidade ou o geral.</p>
+      ${us.length ? `<ul class="unit-list">${us.map(u => `<li><span>${icon('building')} ${esc(u)}</span><small class="muted">${state.barbers.filter(b => b.unit === u && b.active !== false).length} profissionais</small><button class="btn btn-sm" data-action="unitDel" data-u="${esc(u)}" aria-label="Remover a unidade ${esc(u)}">${icon('trash')}</button></li>`).join('')}</ul>` : ''}
+      <form class="form unit-form" data-form="unitAdd" novalidate>
+        <label class="field"><span>Nova unidade</span><input class="input" name="name" maxlength="40" placeholder="Ex.: Centro"></label>
+        <div><button class="btn btn-sm btn-primary" type="submit">${icon('plus')} Adicionar unidade</button></div>
+        <p class="form-msg" data-msg></p>
+      </form></section>`;
+  }
+  // Comparação das unidades no mês (Performance da empresa).
+  function unitsCompare() {
+    const us = unitsList(); if (us.length < 2) return '';
+    const ym = curYm(), rows = us.map(u => {
+      const R = computeRanking({ ...state, barbers: state.barbers.filter(b => b.unit === u) }, monthRange(ym));
+      const fat = R.rows.reduce((a, r) => a + (r.sums.fat || 0), 0), cli = R.rows.reduce((a, r) => a + (r.sums.cli || 0), 0);
+      return { u, n: R.rows.length, fat, ticket: cli ? fat / cli : 0, avg: R.rows.length ? R.rows.reduce((a, r) => a + r.overall, 0) / R.rows.length : 0, top: R.rows[0] && hasData(R.rows[0]) ? R.rows[0].barber.name : '—' };
+    }).sort((a, b) => b.fat - a.fat);
+    const mx = Math.max(1, ...rows.map(r => r.fat));
+    return `<section class="section card"><h2 class="section-title">Unidades em ${esc(ymLabel(ym))}</h2>
+      <div class="unit-cmp">${rows.map((r, i) => `<div class="unit-row"><b>${i + 1}º · ${esc(r.u)}</b><span class="num">${money2(r.fat)}</span>
+        <div class="bar"><i style="width:${Math.max(2, r.fat / mx * 100)}%"></i></div>
+        <small class="muted">${r.n} profissionais · ticket ${money2(r.ticket)} · 1º lugar: ${esc(r.top)}</small></div>`).join('')}</div></section>`;
+  }
+
+  // ---------- Comissões e prêmios ----------
+  const COM_DEF = { pct: 0, pctBy: {}, plano: 0, prod: 0, pos: { 1: 0, 2: 0, 3: 0 }, mvp: 0, dest: 0, meta: 0 };
+  const comCfg = () => { const c = state.comCfg || {}; return { ...COM_DEF, ...c, pctBy: { ...(c.pctBy || {}) }, pos: { ...COM_DEF.pos, ...(c.pos || {}) } }; };
+  const comOn = () => { const c = comCfg(); return c.pct > 0 || Object.values(c.pctBy).some(v => v > 0) || c.plano > 0 || c.prod > 0 || c.mvp > 0 || c.dest > 0 || c.meta > 0 || Object.values(c.pos).some(v => v > 0); };
+  function comFor(ym, bid) {
+    const c = comCfg(), R = monthR(ym), row = R.rows.find(r => r.barber.id === bid);
+    if (!row || !hasData(row)) return null;
+    const s = row.sums, pct = Number(c.pctBy[bid] > 0 ? c.pctBy[bid] : c.pct) || 0;
+    const base = (s.fat || 0) * pct / 100, vPl = (s.planos || 0) * c.plano, vPr = (s.prod || 0) * c.prod;
+    const bonus = [];
+    if (R.N >= 1 && row.pos <= 3 && c.pos[row.pos] > 0) bonus.push([`${row.pos}º lugar`, Number(c.pos[row.pos])]);
+    if (R.title.barberId === bid && R.title.type === 'mvp' && c.mvp > 0) bonus.push(['MVP do mês', Number(c.mvp)]);
+    if (R.title.barberId === bid && R.title.type === 'destaque' && c.dest > 0) bonus.push(['Destaque do mês', Number(c.dest)]);
+    const gFat = GB.goalFor(state, bid, 'fat');
+    if (c.meta > 0 && gFat > 0 && (s.fat || 0) >= gFat) bonus.push(['Meta de faturamento', Number(c.meta)]);
+    const bTot = bonus.reduce((a, [, v]) => a + v, 0);
+    return { row, fat: s.fat || 0, pct, base, planos: s.planos || 0, vPl, prod: s.prod || 0, vPr, bonus, bTot, total: base + vPl + vPr + bTot };
+  }
+  function pageComissoes() {
+    const c = comCfg(), months = monthsUntil(curYm()).slice().reverse(), ym = months.includes(ui.comYm) ? ui.comYm : months[0];
+    const act = state.barbers.filter(b => b.active !== false);
+    const lines = act.map(b => ({ b, r: comFor(ym, b.id) })).filter(x => x.r).sort((a, b) => b.r.total - a.r.total);
+    const tot = lines.reduce((a, x) => a + x.r.total, 0), inp = (n, v, ph, st = '0.01') => `<input class="input num" type="number" min="0" step="${st}" name="${n}" value="${v > 0 ? v : ''}" placeholder="${ph}">`;
+    return `<section class="section card">
+      <h2 class="section-title">Regras de comissão e prêmios</h2>
+      <p class="muted">Defina como cada profissional ganha. O sistema calcula sozinho, mês a mês, com os números lançados e o ranking. Deixe em branco o que não usa.</p>
+      <form class="form" data-form="comCfg" novalidate>
+        <div class="grid-2">
+          <label class="field"><span>Comissão sobre o faturamento (%)</span>${inp('pct', c.pct, 'Ex.: 40', '0.1')}</label>
+          <label class="field"><span>Por plano mensal vendido (R$)</span>${inp('plano', c.plano, 'Ex.: 15')}</label>
+          <label class="field"><span>Por produto vendido (R$)</span>${inp('prod', c.prod, 'Ex.: 5')}</label>
+          <label class="field"><span>Bônus ao bater a meta individual de faturamento (R$)</span>${inp('meta', c.meta, 'Ex.: 100')}</label>
+          <label class="field"><span>Prêmio 1º lugar (R$)</span>${inp('pos1', c.pos[1], 'Ex.: 200')}</label>
+          <label class="field"><span>Prêmio 2º lugar (R$)</span>${inp('pos2', c.pos[2], 'Ex.: 100')}</label>
+          <label class="field"><span>Prêmio 3º lugar (R$)</span>${inp('pos3', c.pos[3], 'Ex.: 50')}</label>
+          <label class="field"><span>Prêmio extra MVP (R$)</span>${inp('mvp', c.mvp, 'Ex.: 150')}</label>
+          <label class="field"><span>Prêmio extra Destaque (R$)</span>${inp('dest', c.dest, 'Ex.: 80')}</label>
+        </div>
+        <details class="com-by"><summary>Comissão diferente para algum profissional</summary>
+          <div class="grid-2">${act.map(b => `<label class="field"><span>${esc(b.name)} (%)</span><input class="input num" type="number" min="0" step="0.1" name="by-${esc(b.id)}" value="${c.pctBy[b.id] > 0 ? c.pctBy[b.id] : ''}" placeholder="Padrão: ${c.pct || 0}%"></label>`).join('')}</div></details>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar regras</button></div>
+      </form></section>
+    <section class="section card">
+      <div class="com-head"><h2 class="section-title">Comissões de ${esc(ymLabel(ym))}</h2>
+        <select class="input input-sm" data-change="comYm" aria-label="Mês">${months.map(m => `<option value="${m}" ${m === ym ? 'selected' : ''}>${esc(ymLabel(m))}</option>`).join('')}</select></div>
+      ${ym === curYm() ? '<p class="pm-note">' + icon('clock') + '<span>Mês em andamento: os valores e os prêmios por colocação ainda podem mudar até o fechamento.</span></p>' : ''}
+      ${!comOn() ? '<p class="muted">Preencha as regras acima para ver as comissões.</p>' : lines.length ? `<div class="com-table" role="table">
+        <div class="com-row com-th" role="row"><span>Profissional</span><span>Faturamento</span><span>Comissão</span><span>Planos e produtos</span><span>Prêmios</span><span>Total</span></div>
+        ${lines.map(({ b, r }) => `<div class="com-row" role="row"><span class="com-name">${avatar(b, 32)}<b>${esc(b.name)}</b></span>
+          <span class="num" data-l="Faturamento">${money2(r.fat)}</span>
+          <span class="num" data-l="Comissão">${money2(r.base)}<small>${nf1.format(r.pct)}%</small></span>
+          <span class="num" data-l="Planos e produtos">${money2(r.vPl + r.vPr)}<small>${r.planos} planos · ${r.prod} produtos</small></span>
+          <span class="num" data-l="Prêmios">${money2(r.bTot)}${r.bonus.length ? `<small>${r.bonus.map(([l]) => esc(l)).join(' · ')}</small>` : ''}</span>
+          <span class="num com-tot" data-l="Total">${money2(r.total)}</span></div>`).join('')}
+        <div class="com-row com-foot" role="row"><span>Total da equipe</span><span></span><span></span><span></span><span></span><span class="num com-tot">${money2(tot)}</span></div>
+      </div>
+      <div class="btn-row" style="margin-top:12px"><button class="btn btn-sm" data-action="comCsv" data-ym="${ym}">${icon('download')} Baixar planilha</button></div>` : '<p class="muted">Ainda não há resultados lançados neste mês.</p>'}
+    </section>`;
+  }
+  function comCsv(ym) {
+    const q = v => { const t = String(v ?? ''); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }, n2 = v => nf2.format(v);
+    const rows = [['Profissional', 'Faturamento', 'Comissão %', 'Comissão', 'Planos', 'Valor planos', 'Produtos', 'Valor produtos', 'Prêmios', 'Detalhe dos prêmios', 'Total']];
+    state.barbers.filter(b => b.active !== false).forEach(b => { const r = comFor(ym, b.id); if (r) rows.push([b.name, n2(r.fat), nf1.format(r.pct), n2(r.base), r.planos, n2(r.vPl), r.prod, n2(r.vPr), n2(r.bTot), r.bonus.map(([l, v]) => `${l} ${n2(v)}`).join(' + '), n2(r.total)]); });
+    downloadFile(`comissoes-${exportSlug()}-${ym}.csv`, new Blob(['﻿' + rows.map(r => r.map(q).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+  }
+
+  // ---------- Sonhos: cada profissional registra um sonho e acompanha quanto falta ----------
+  function dreamPlan(b) {
+    const d = b.dream; if (!d || !(d.v > 0)) return null;
+    const saved = Math.min(d.v, Math.max(0, Number(d.saved) || 0)), left = Math.max(0, d.v - saved);
+    let perMonth = 0;
+    if (comOn()) { const ms = monthsUntil(curYm()).slice(-4, -1).map(m => comFor(m, b.id)).filter(Boolean); if (ms.length) perMonth = ms.reduce((a, r) => a + r.total, 0) / ms.length * (Number(d.pct) || 20) / 100; }
+    return { d, saved, left, pctDone: saved / d.v * 100, perMonth, months: perMonth > 0 ? Math.ceil(left / perMonth) : null };
+  }
+  const dreamCard = (b, own) => {
+    const p = dreamPlan(b);
+    if (!p) return own ? '' : `<div class="card dream-card is-empty">${avatar(b, 48)}<b>${esc(b.name)}</b><small class="muted">Ainda não contou o sonho.</small></div>`;
+    return `<div class="card dream-card">${avatar(b, 48)}<b>${esc(b.name)}</b>
+      <p class="dream-t">${icon('rocket')} ${esc(p.d.t)}</p>
+      <div class="bar"><i style="width:${Math.max(2, p.pctDone)}%"></i></div>
+      <small class="num">${money2(p.saved)} de ${money2(p.d.v)} · ${nf0.format(p.pctDone)}%</small>
+      ${p.left <= 0 ? '<span class="chip chip-ok">Sonho realizado!</span>' : p.months ? `<small class="muted">Guardando ${nf0.format(Number(p.d.pct) || 20)}% da comissão (≈ ${money2(p.perMonth)}/mês), chega lá em ${p.months} ${p.months === 1 ? 'mês' : 'meses'}.</small>` : ''}
+    </div>`;
+  };
+  function pageSonhos(user) {
+    const me = user.barberId ? barberById(user.barberId) : null, d = (me && me.dream) || {};
+    const others = state.barbers.filter(b => b.active !== false && (!me || b.id !== me.id));
+    return `<section class="section card">
+      <h2 class="section-title">Sonhos</h2>
+      <p class="muted">Cada profissional conta um sonho (uma viagem, um carro, a casa própria…) e acompanha quanto falta. Quando o trabalho tem um porquê, a meta ganha sentido.</p>
+      ${me ? `<div class="dream-me">${dreamCard(me, true)}</div>
+      <form class="form" data-form="dream" novalidate>
+        <label class="field"><span>Qual é o seu sonho?</span><input class="input" name="t" maxlength="80" value="${esc(d.t || '')}" placeholder="Ex.: Viagem para a praia com a família"></label>
+        <div class="grid-2">
+          <label class="field"><span>Quanto custa (R$)</span><input class="input num" type="number" min="0" step="1" name="v" value="${d.v || ''}" placeholder="Ex.: 6000"></label>
+          <label class="field"><span>Quanto já juntou (R$)</span><input class="input num" type="number" min="0" step="1" name="saved" value="${d.saved || ''}" placeholder="0"></label>
+          ${comOn() ? `<label class="field"><span>Quanto da comissão vai guardar (%)</span><input class="input num" type="number" min="1" max="100" step="1" name="pct" value="${d.pct || 20}"></label>` : ''}
+        </div>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar meu sonho</button>${d.t ? ` <button class="btn btn-sm" type="button" data-action="dreamDel">Apagar</button>` : ''}</div>
+      </form>` : ''}
+    </section>
+    ${isGestor(user) || !me ? `<section class="section"><h2 class="section-title">Sonhos da equipe</h2><div class="dream-grid">${others.map(b => dreamCard(b, false)).join('') || '<p class="muted">Ninguém na equipe ainda.</p>'}</div></section>` : ''}`;
+  }
+
+  // ---------- Feedback automático do mês (a partir dos números) ----------
+  function feedbackText(bid, ym) {
+    const R = monthR(ym), row = R.rows.find(r => r.barber.id === bid), b = barberById(bid);
+    if (!b || !row || !hasData(row)) return '';
+    const first = b.name.split(' ')[0], mes = monthRange(ym).label.split(' de ')[0];
+    const inds = R.active.map(ind => ({ ind, rank: row.ranks[ind.key], sc: row.scores[ind.key], v: row.values[ind.key] })).filter(x => x.v !== null && x.v !== undefined);
+    const strong = inds.filter(x => x.rank === 1 || x.sc >= 70).sort((a, b) => b.sc - a.sc).slice(0, 3);
+    const weak = inds.filter(x => x.sc < 50).sort((a, b) => a.sc - b.sc).slice(0, 2);
+    const n = R.rows.length, lines = [];
+    lines.push(`${first}, aqui vai o seu resumo de ${mes}:`);
+    const tt = R.title.barberId === bid ? (R.title.type === 'mvp' ? ' e foi o MVP do mês' : ' e foi o Destaque do mês') : '';
+    lines.push(`📊 Você ficou em ${row.pos}º lugar de ${n}, com ${score(row.overall)} pontos${tt}.`);
+    if (strong.length) lines.push(`💪 Pontos fortes: ${strong.map(x => `${x.ind.label} (${fmt(x.ind, x.v)}${x.rank === 1 ? ', 1º da equipe' : ''})`).join('; ')}.`);
+    if (weak.length) lines.push(`🎯 Para crescer: ${weak.map(x => `${x.ind.label} (hoje ${fmt(x.ind, x.v)}, ${x.rank}º da equipe)`).join('; ')}.`);
+    const gFat = GB.goalFor(state, bid, 'fat');
+    if (gFat > 0) lines.push((row.sums.fat || 0) >= gFat ? `✅ Bateu a meta de faturamento (${money2(row.sums.fat)} de ${money2(gFat)}). Parabéns!` : `📈 Faturamento: ${money2(row.sums.fat || 0)} de ${money2(gFat)} da meta (faltaram ${money2(gFat - (row.sums.fat || 0))}).`);
+    if (weak.length) lines.push(`👉 Foco do próximo mês: ${weak[0].ind.label}. Um passo de cada vez!`);
+    else lines.push('👉 Continue assim: o próximo passo é manter a regularidade e ajudar o time a subir junto.');
+    return lines.join('\n');
+  }
+  function feedbackCard(bid, user) {
+    if (!(isGestor(user) || isAreaMgr(user))) return '';
+    const ym = ui.period === 'mes' ? range().start.slice(0, 7) : curYm(), txt = feedbackText(bid, ym);
+    if (!txt) return '';
+    const u = state.users.find(x => x.barberId === bid), ph = String((u && u.phone) || '').replace(/\D/g, '');
+    const wa = `https://wa.me/${ph ? (ph.length <= 11 ? '55' + ph : ph) : ''}?text=${encodeURIComponent(txt)}`;
+    return `<section class="section card fb-card"><h2 class="section-title">${icon('chat')} Feedback de ${esc(monthRange(ym).label)}</h2>
+      <p class="muted">Texto pronto, feito com os números do mês. Revise, ajuste se quiser e envie.</p>
+      <textarea class="input fb-txt" id="fb-txt" rows="8">${esc(txt)}</textarea>
+      <div class="btn-row"><button class="btn btn-sm" data-action="fbCopy">${icon('copy')} Copiar</button>
+        <a class="btn btn-sm btn-primary" href="${esc(wa)}" target="_blank" rel="noopener" data-action="fbWa">${icon('chat')} Enviar no WhatsApp</a></div></section>`;
+  }
+
+  // ---------- Importar planilha (CSV) de outro sistema ----------
+  const CSV_COLS = { data: ['data', 'date', 'dia'], barbeiro: ['profissional', 'barbeiro', 'colaborador', 'funcionario', 'nome', 'atendente'],
+    faturamento: ['faturamento', 'valor', 'total', 'receita', 'vendas'], servicos: ['servicos', 'atendimentos', 'qtd servicos'], clientes: ['clientes', 'qtd clientes'],
+    planos_mensais: ['planos', 'planos mensais', 'assinaturas'], venda_produtos: ['produtos', 'venda de produtos', 'qtd produtos'], horas_ocupadas: ['horas', 'horas ocupadas'],
+    clientes_retorno: ['retorno', 'clientes retorno', 'fidelizados'], maior_comanda: ['maior comanda', 'comanda'] };
+  const normH = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  function csvParse(text) {
+    const first = text.split(/\r?\n/)[0] || '', sep = (first.match(/;/g) || []).length >= (first.match(/,/g) || []).length ? ';' : ',';
+    const rows = []; let cur = [''], q = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (q) { if (ch === '"' && text[i + 1] === '"') { cur[cur.length - 1] += '"'; i++; } else if (ch === '"') q = false; else cur[cur.length - 1] += ch; }
+      else if (ch === '"') q = true; else if (ch === sep) cur.push(''); else if (ch === '\n') { rows.push(cur); cur = ['']; } else if (ch !== '\r') cur[cur.length - 1] += ch;
+    }
+    if (cur.length > 1 || cur[0]) rows.push(cur);
+    return rows.filter(r => r.some(c => c.trim()));
+  }
+  const brNum = v => { let t = String(v || '').replace(/[^\d,.-]/g, ''); if (!t) return null; if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.'); const n = Number(t); return Number.isFinite(n) ? n : null; };
+  const brDate = v => { const t = String(v || '').trim(); let m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/); if (m) { const y = m[3].length === 2 ? '20' + m[3] : m[3]; return `${y}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`; } m = t.match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[0] : ''; };
+  function csvToItems(text) {
+    const rows = csvParse(text.replace(/^﻿/, '')); if (rows.length < 2) throw new Error('A planilha precisa ter a linha de títulos e pelo menos uma linha de dados.');
+    const head = rows[0].map(normH), col = {};
+    for (const [k, al] of Object.entries(CSV_COLS)) { const i = head.findIndex(h => al.includes(h)); if (i >= 0) col[k] = i; }
+    if (col.data === undefined || col.barbeiro === undefined) throw new Error('Não achei as colunas de data e de profissional. Use títulos como "Data" e "Profissional".');
+    const byName = n => { const t = normH(n); return state.barbers.find(b => normH(b.name) === t) || state.barbers.find(b => normH(b.name).split(' ')[0] === t.split(' ')[0] && t.split(' ')[0]); };
+    return rows.slice(1).map(r => {
+      const it = { data: brDate(r[col.data]) }, b = byName(r[col.barbeiro]); it.barbeiro = b ? b.id : String(r[col.barbeiro] || '');
+      for (const k of Object.keys(CSV_COLS)) if (k !== 'data' && k !== 'barbeiro' && col[k] !== undefined) it[k] = brNum(r[col[k]]);
+      return it;
+    });
+  }
+  const csvImportCard = () => `<section class="section card">
+      <h2 class="section-title">Importar planilha de outro sistema</h2>
+      <p class="muted">Exporte o relatório de atendimentos do seu sistema de agenda (AppBarber, Trinks, Avec, Booksy…) em CSV ou do Excel (Salvar como CSV) e envie aqui. Cada linha: um dia de um profissional.</p>
+      <p class="section-note">Títulos aceitos: <b>Data</b> e <b>Profissional</b> (obrigatórios), e Faturamento, Serviços, Clientes, Planos, Produtos, Horas, Retorno, Maior comanda. Datas em DD/MM/AAAA e valores como 1.234,56 funcionam.</p>
+      <label class="btn btn-sm btn-primary" style="cursor:pointer">${icon('upload')} Escolher planilha (CSV)<input type="file" accept=".csv,text/csv" hidden data-change="csvImport"></label>
+      ${ui.csvMsg ? `<div class="pm-note">${icon('help')}<span>${esc(ui.csvMsg)}</span></div>` : ''}
+    </section>`;
 
   // ---------- Atualizações, Sugestões de melhorias e Reportar erro ----------
   const UPDATES = () => window.GB_UPDATES || [];
@@ -2366,6 +2585,7 @@
       </div>
       <section class="section"><h2 class="section-title">Indicadores ${tip('score')}</h2><div class="ind-grid">${cards}</div></section>
       ${fatHistory(b.id)}
+      ${feedbackCard(b.id, user)}
       ${perfStrengths(b.id)}
       ${evoBlock(b.id, ui.period === 'mes' ? range().start.slice(0, 7) : curYm())}`;
   }
@@ -2655,6 +2875,7 @@
       ${has ? indivGoals(rows) : ''}
       ${has ? evoHouse(ym, scope) : ''}
 ${rows.length ? '' : emptyBarbers()}
+      ${scope ? '' : unitsCompare()}
       <p class="section-note">O detalhado por profissional, o ranking e o radar estão em Performance da equipe.</p>`;
   }
 
@@ -2692,6 +2913,7 @@ ${rows.length ? '' : emptyBarbers()}
           <div class="acc-edit">
             <label class="field"><span>Função</span><input class="input" name="role" list="role-list" value="${esc(b.role || '')}" placeholder="Ex.: Barbeiro" maxlength="60" data-change="barberRole" data-id="${esc(b.id)}"></label>
             <label class="field"><span>Nascimento</span><input class="input" type="date" value="${esc((state.births || {})[b.id] || '')}" data-change="barberBirth" data-id="${esc(b.id)}" aria-label="Data de nascimento de ${esc(b.name)}"></label>
+            ${unitsList().length ? `<label class="field"><span>Unidade</span><select class="input" data-change="barberUnit" data-id="${esc(b.id)}"><option value="">Sem unidade</option>${unitsList().map(u => `<option ${b.unit === u ? 'selected' : ''}>${esc(u)}</option>`).join('')}</select></label>` : ''}
             <label class="field"><span>Nível de acesso</span><select class="input" data-change="barberAccess" data-id="${esc(b.id)}">${ACCESS.map(([k, l]) => `<option value="${k}" ${accessOf(b.id) === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
           </div>${accessOf(b.id) === 'lider' ? leaderExtrasBox(b) : ''}</div>
         <div class="btn-row">
@@ -2808,7 +3030,7 @@ ${rows.length ? '' : emptyBarbers()}
     if (billing() && !billing().api) {
       return `<section class="section card empty">${icon('plug')}<h2>Integração com o seu sistema</h2>
         <p>Nos planos pagos, a agenda ou o caixa que você já usa envia os resultados direto para o Gestão Barber IA, sem digitar nada. No teste grátis, os resultados são lançados à mão em Lançamentos.</p>
-        <div class="btn-row" style="justify-content:center"><a class="btn btn-primary" href="#assinatura">${icon('card')} Ver planos</a><a class="btn" href="#lancamentos">Lançar à mão</a></div></section>`;
+        <div class="btn-row" style="justify-content:center"><a class="btn btn-primary" href="#assinatura">${icon('card')} Ver planos</a><a class="btn" href="#lancamentos">Lançar à mão</a></div></section>${csvImportCard()}`;
     }
     const ex = JSON.stringify([
       { data: iso(new Date()), barbeiro: state.barbers[0]?.name || 'Nome do barbeiro', faturamento: 420.5, servicos: 9, clientes: 8, checklist_pop: 1, horas_disponiveis: 8, horas_ocupadas: 6.5, planos_mensais: 1, clientes_retorno: 5, venda_produtos: 2 },
@@ -2834,7 +3056,7 @@ Content-Type: application/json</pre>
           <p class="form-msg" data-msg></p>
           <div><button class="btn btn-primary" type="submit">${icon('upload')} Importar lançamentos</button></div>
         </form>
-      </section>`;
+      </section>${csvImportCard()}`;
   }
 
   function pageEmpresa() {
@@ -2860,7 +3082,8 @@ Content-Type: application/json</pre>
       <div class="row-wrap" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
         <button class="btn btn-sm" data-action="exportJson">${icon('download')} Cópia completa (JSON)</button>
         <button class="btn btn-sm" data-action="exportCsv">${icon('download')} Lançamentos em planilha (CSV)</button>
-      </div></section>`;
+      </div></section>
+    ${unitsCard()}`;
   }
 
   // Cópia dos dados da empresa (portabilidade, LGPD). Sem senhas, chave da API nem convites.
@@ -3593,7 +3816,10 @@ Content-Type: application/json</pre>
     const paying = list.filter(c => c.status !== 'courtesy' && c.access === 'paid' && ['active', 'canceled'].includes(c.sub_status));
     const mrr = paying.filter(c => c.sub_status === 'active').reduce((a, c) => a + (pmap[c.plan_id]?.price_cents || 0), 0) / 100;
     const f = ui.adminFilter || 'todas';
-    const groups = { todas: () => true, teste: c => c.access === 'trial', pagantes: c => c.access === 'paid' && c.sub_status !== 'courtesy', bloqueadas: c => c.access === 'blocked', cortesia: c => c.sub_status === 'courtesy' };
+    // Em risco: em teste ou pagando, com conta de mais de 3 dias e 10 dias ou mais sem lançar nada.
+    const idle = c => Math.floor((Date.now() - new Date(c.last_activity || c.created_at).getTime()) / 864e5);
+    const atRisk = c => (c.access === 'trial' || c.access === 'paid') && c.sub_status !== 'courtesy' && Date.now() - new Date(c.created_at).getTime() > 3 * 864e5 && idle(c) >= 10;
+    const groups = { todas: () => true, risco: atRisk, teste: c => c.access === 'trial', pagantes: c => c.access === 'paid' && c.sub_status !== 'courtesy', bloqueadas: c => c.access === 'blocked', cortesia: c => c.sub_status === 'courtesy' };
     const rows = list.filter(groups[f]);
     const kpi = (l, v) => `<div class="stat"><span>${l}</span><b class="num">${v}</b></div>`;
     if (ui.adminTab === 'leads') return adminTabs() + adminLeads();
@@ -3604,15 +3830,15 @@ Content-Type: application/json</pre>
         <h2 class="section-title">Resumo do SaaS</h2>
         <div class="perf-stats">
           ${kpi('Barbearias', list.length)}${kpi('Em teste', list.filter(groups.teste).length)}${kpi('Pagantes', paying.length)}
-          ${kpi('Bloqueadas', list.filter(groups.bloqueadas).length)}${kpi('Receita mensal', 'R$ ' + nf2.format(mrr))}
+          ${kpi('Bloqueadas', list.filter(groups.bloqueadas).length)}${kpi('Em risco', list.filter(atRisk).length)}${kpi('Receita mensal', 'R$ ' + nf2.format(mrr))}
         </div>
       </section>
       <section class="section">
-        <div class="btn-row">${Object.keys(groups).map(k => `<button class="btn btn-sm ${k === f ? 'btn-primary' : ''}" data-action="adminFilter" data-f="${k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join('')}
+        <div class="btn-row">${Object.keys(groups).map(k => `<button class="btn btn-sm ${k === f ? 'btn-primary' : ''}" data-action="adminFilter" data-f="${k}">${k === 'risco' ? `Em risco (${list.filter(atRisk).length})` : k[0].toUpperCase() + k.slice(1)}</button>`).join('')}
           <button class="btn btn-sm" data-action="adminReload">${icon('check')} Atualizar</button></div>
         <ul class="list">${rows.map(c => `<li class="list-row adm-row">
           <div class="grow"><b>${esc(c.name)}</b><span class="muted">${esc(c.owner || '')} · ${esc(c.email || '')}${c.phone ? ' · ' + esc(c.phone) : ''}</span>
-            <div class="adm-meta"><span class="chip ${c.access === 'blocked' ? 'chip-bad' : c.access === 'trial' ? 'chip-warn' : 'chip-ok'}">${STATUS_TXT[c.sub_status] || c.sub_status}</span>
+            <div class="adm-meta"><span class="chip ${c.access === 'blocked' ? 'chip-bad' : c.access === 'trial' ? 'chip-warn' : 'chip-ok'}">${STATUS_TXT[c.sub_status] || c.sub_status}</span>${atRisk(c) ? `<span class="chip chip-bad">${icon('bell')} Em risco · ${idle(c)} dias sem lançar</span>` : ''}
             <span class="muted">${c.plan_id ? esc(pmap[c.plan_id]?.name || c.plan_id) : 'sem plano'} · ${c.barbers} barbeiros · ${c.users} acessos</span>
             <span class="muted">${c.access === 'trial' ? 'teste até ' + fmtDate(c.trial_ends_at) : c.paid_until ? 'pago até ' + fmtDate(c.paid_until) : ''} · cadastro ${fmtDate(c.created_at)}${c.last_activity ? ' · último lançamento ' + fmtDate(c.last_activity) : ''}</span></div></div>
           <div class="btn-row">
@@ -4714,6 +4940,8 @@ Content-Type: application/json</pre>
     cadastro: { t: 'Meu cadastro', r: pageCadastro },
     ajuda: { t: 'Central de ajuda', r: pageAjuda },
     atualizacoes: { t: 'Atualizações', r: pageAtualizacoes, g: 1 },
+    comissoes: { t: 'Comissões e prêmios', r: pageComissoes, g: 1 },
+    sonhos: { t: 'Sonhos', r: pageSonhos },
     sugestoes: { t: 'Sugestões de melhorias', r: pageSugestoes, g: 1 },
     erro: { t: 'Reportar erro', r: pageErro, g: 1 },
   };
@@ -4721,7 +4949,7 @@ Content-Type: application/json</pre>
   // ---------- ranking ao vivo: ultrapassagens ----------
   const LIVE_MS = 15 * 60 * 1000; // "agora" vale por 15 minutos
   const readJSON = (k, d) => { try { return JSON.parse(DB.pref.get(k, '') || 'null') || d; } catch (e) { return d; } };
-  const rangeKey = r => r.start + '_' + r.end;
+  const rangeKey = r => r.start + '_' + r.end + (curUnit() ? '_' + curUnit() : '');
 
   // Compara com a última posição vista neste aparelho e registra quem subiu e quem desceu.
   function liveDetect(R) {
@@ -5289,7 +5517,7 @@ Content-Type: application/json</pre>
     applyBrand(DB.demo || state.brand || 'barber');
     applyPdTheme();
     const tr = tvRange();
-    const R = computeRanking(state, tr);
+    const R = computeRanking(rkState(), tr);
     const dk = darkFor(tr, true);
     if (!dk) liveDetect(R);
     const slides = dk ? [() => suspenseCard(dk, true)] : [tvRanking, tvGuardians, tvAlerts];
@@ -5558,6 +5786,15 @@ Content-Type: application/json</pre>
     popRevMore() { ui.popRevAll = true; render(); },
     popCsv() { popCsv(); },
     exportJson() { exportJson(); },
+    unitPick(el) { DB.pref.set('unit', el.dataset.u || ''); rkCache = {}; render(); },
+    unitDel(el) {
+      const u = el.dataset.u; if (!confirm(`Remover a unidade "${u}"? Os profissionais dela ficam sem unidade.`)) return;
+      state.units = unitsList().filter(x => x !== u); state.barbers.forEach(b => { if (b.unit === u) b.unit = null; });
+      if (DB.pref.get('unit', '') === u) DB.pref.set('unit', ''); save(); render();
+    },
+    comCsv(el) { comCsv(el.dataset.ym); },
+    dreamDel() { const b = barberById(currentUser()?.barberId); if (!b || !confirm('Apagar o seu sonho?')) return; b.dream = null; save(); toast('Sonho apagado.'); render(); },
+    async fbCopy() { const t = document.getElementById('fb-txt'); try { await navigator.clipboard.writeText(t.value); toast('Feedback copiado.'); } catch (e) { t.select(); document.execCommand('copy'); toast('Feedback copiado.'); } },
     fbReload(el) { ui[el.dataset.k] = null; render(); },
     sugFilter(el) { ui.sugFilter = el.dataset.f; render(); },
     admBugF(el) { ui.admBugF = el.dataset.f; render(); },
@@ -5925,6 +6162,24 @@ Content-Type: application/json</pre>
   }
 
   const FORMS = {
+    comCfg(f) {
+      const n = k => { const v = Number(String(f.elements[k]?.value || '').replace(',', '.')); return Number.isFinite(v) && v > 0 ? v : 0; };
+      const pctBy = {}; state.barbers.forEach(b => { const v = n('by-' + b.id); if (v > 0) pctBy[b.id] = v; });
+      if (n('pct') > 100 || Object.values(pctBy).some(v => v > 100)) return setMsg(f, 'A comissão em % deve ser de 0 a 100.');
+      state.comCfg = { pct: n('pct'), pctBy, plano: n('plano'), prod: n('prod'), pos: { 1: n('pos1'), 2: n('pos2'), 3: n('pos3') }, mvp: n('mvp'), dest: n('dest'), meta: n('meta') };
+      save(); toast('Regras salvas. As comissões foram recalculadas.'); render();
+    },
+    dream(f) {
+      const b = barberById(currentUser()?.barberId); if (!b) return;
+      const t = val(f, 't').slice(0, 80), v = Number(val(f, 'v')) || 0, saved = Number(val(f, 'saved')) || 0, pct = Math.min(100, Math.max(1, Number(val(f, 'pct')) || 20));
+      if (!t || !(v > 0)) return setMsg(f, 'Conte qual é o sonho e quanto ele custa.');
+      b.dream = { t, v: Math.round(v), saved: Math.round(Math.min(saved, v)), pct, at: curYm() }; save(); toast('Sonho salvo! Agora é trabalhar por ele.'); render();
+    },
+    unitAdd(f) {
+      const name = val(f, 'name').slice(0, 40); if (!name) return setMsg(f, 'Digite o nome da unidade.');
+      if (unitsList().some(u => u.toLowerCase() === name.toLowerCase())) return setMsg(f, 'Essa unidade já existe.');
+      state.units = [...unitsList(), name]; save(); toast(`Unidade ${name} adicionada. Agora escolha a unidade de cada profissional.`); render();
+    },
     async bugAdd(f) {
       const title = val(f, 'title'), desc = (f.elements.desc.value || '').trim(), file = f.elements.shot.files[0];
       if (title.length < 3) return setMsg(f, 'Escreva um resumo do problema.');
@@ -6248,6 +6503,16 @@ Content-Type: application/json</pre>
   };
 
   const CHANGES = {
+    comYm(el) { ui.comYm = el.value; render(); },
+    barberUnit(el) { const b = barberById(el.dataset.id); if (!b) return; b.unit = el.value || null; rkCache = {}; save(); toast(el.value ? `${b.name} agora é da unidade ${el.value}.` : `${b.name} ficou sem unidade.`); },
+    async csvImport(el) {
+      const f = el.files && el.files[0]; if (!f) return;
+      try {
+        const items = csvToItems(await f.text()), res = importEntries(state, items); save(); rkCache = {};
+        ui.csvMsg = `${res.ok} ${res.ok === 1 ? 'linha importada' : 'linhas importadas'}.` + (res.errors.length ? ` ${res.errors.length} com problema: ${res.errors.slice(0, 3).join(' ').replace(/barbeiro/g, 'profissional')}${res.errors.length > 3 ? '…' : ''}` : '');
+      } catch (e) { ui.csvMsg = e.message; }
+      el.value = ''; render();
+    },
     async bugSt(el) { try { await Cloud.fb.updBug(el.dataset.id, { status: el.value }); const b = ui.admBugs && ui.admBugs.list && ui.admBugs.list.find(x => x.id === el.dataset.id); if (b) b.status = el.value; toast('Situação atualizada.'); render(); } catch (e) { toast(Cloud.message(e)); } },
     async sugSt(el) { try { await Cloud.fb.updSug(el.dataset.id, { status: el.value }); const x = ui.admSugs && ui.admSugs.list && ui.admSugs.list.find(y => y.id === el.dataset.id); if (x) x.status = el.value; toast('Situação atualizada.'); render(); } catch (e) { toast(Cloud.message(e)); } },
     tvSoundKind(el) { Sound.kind = el.value; Sound.play(el.value, true); },

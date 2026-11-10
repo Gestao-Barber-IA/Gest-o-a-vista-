@@ -548,6 +548,9 @@
     // Fotos de pessoas fictícias (geradas por IA), só para a demonstração.
     const slug = n => n.split(' ')[0].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     const barbers = people.map(([name, , , , role]) => ({ id: uid('b_'), name, photo: 'assets/demo/' + slug(name) + '.jpg', active: true, role, instagram: '' }));
+    // Sonhos de exemplo (aba Sonhos).
+    const DREAMS = [['Viagem para Porto Seguro com a família', 6000, 2400, 20], ['Moto nova', 15000, 4200, 25], ['Curso de barbearia avançada em São Paulo', 3500, 2900, 30], ['Entrada do apartamento', 40000, 9500, 30]];
+    barbers.forEach((b, i) => { const d = DREAMS[i]; if (d) b.dream = { t: d[0], v: d[1], saved: d[2], pct: d[3] }; });
     // Mês fechado de cada profissional: faturamento de R$ 11 a 21 mil e ticket médio de R$ 85 a 130.
     // Clientes = faturamento ÷ ticket; serviços e horas em comandas seguem os clientes.
     const vols = people.map(p => p[1]), prices = people.map(p => p[2]);
@@ -639,7 +642,8 @@
     return {
       version: 2,
       demo: true,
-      demoV: 9,
+      demoV: 10,
+      comCfg: { pct: 40, pctBy: {}, plano: 10, prod: 5, pos: { 1: 200, 2: 100, 3: 50 }, mvp: 150, dest: 80, meta: 100 },
       demoYm: curYm,
       presentation: !!DEMO,
       brand,
@@ -695,7 +699,7 @@
           }
           if (!Array.isArray(st.hidden)) { st.hidden = ['fid']; DB.save(st); } // fidelização começa oculta
           // Demonstração antiga (sem fotos dos profissionais): recria com a versão nova.
-          if (st.demo && (st.demoV !== 9 || st.demoYm !== iso(new Date()).slice(0, 7))) { const d = demoState(DEMO || 'barber'); DB.save(d); return d; }
+          if (st.demo && (st.demoV !== 10 || st.demoYm !== iso(new Date()).slice(0, 7))) { const d = demoState(DEMO || 'barber'); DB.save(d); return d; }
           // Na apresentação, a marca é sempre a escolhida (Barber ou Salão).
           if (DEMO && st.brand !== DEMO) { st.brand = DEMO; DB.save(st); }
           return st;

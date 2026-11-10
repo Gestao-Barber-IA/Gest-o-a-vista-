@@ -190,7 +190,7 @@
   const pick = (o, keys) => { const r = {}; for (const k of keys) if (o[k] !== null && o[k] !== undefined && o[k] !== '') r[k] = Number(o[k]); return r; };
 
   const TABLES = {
-    barbers: { key: b => b.id, row: (b, cid) => ({ id: b.id, company_id: cid, name: b.name, photo: b.photo || null, active: b.active !== false, role: b.role || 'Barbeiro', instagram: b.instagram || '' }), list: s => s.barbers, pk: r => ({ id: r.id }) },
+    barbers: { key: b => b.id, row: (b, cid) => ({ id: b.id, company_id: cid, name: b.name, photo: b.photo || null, active: b.active !== false, role: b.role || 'Barbeiro', instagram: b.instagram || '', dream: b.dream || null, unit: b.unit || null }), list: s => s.barbers, pk: r => ({ id: r.id }) },
     invites: { key: i => i.code, row: (i, cid) => ({ code: i.code, company_id: cid, barber_id: i.barberId, used: !!i.used }), list: s => s.invites, pk: r => ({ code: r.code }) },
     entries: { key: e => e.id, row: (e, cid) => ({ id: e.id, company_id: cid, barber_id: e.barberId, date: e.date, data: pick(e, ENTRY_KEYS), source: e.source || 'api' }), list: s => s.entries, pk: r => ({ id: r.id }) },
     pop: { key: r => r.barberId + '|' + r.day, row: (r, cid) => ({ id: r.barberId + '|' + r.day, company_id: cid, barber_id: r.barberId, day: r.day, data: { ev: r.ev || {}, notes: r.notes || {}, msg: r.msg || {}, res: r.res || null, by: r.by || null, at: r.at || null } }), list: s => s.pop || [], pk: r => ({ id: r.id }) },
@@ -209,7 +209,7 @@
       out.tables[t] = map;
     }
     const co = s.company;
-    out.company = JSON.stringify({ name: co.name, cnpj: co.cnpj || '', phone: co.phone || '', email: co.email || '', logo: co.logo || null, settings: { weights: s.weights, goals: s.goals, hidden: s.hidden, org: s.org || null, pop: s.popCfg || null, reveal: s.reveal || null, ocup: s.ocupCfg || null, pops: s.pops || null, brand: s.brand || null, theme: s.theme || null, houseGoals: s.houseGoals || null, houseGoalsM: s.houseGoalsM || null, music: s.podiumMusic || null, births: s.births || null } });
+    out.company = JSON.stringify({ name: co.name, cnpj: co.cnpj || '', phone: co.phone || '', email: co.email || '', logo: co.logo || null, settings: { weights: s.weights, goals: s.goals, hidden: s.hidden, org: s.org || null, pop: s.popCfg || null, reveal: s.reveal || null, ocup: s.ocupCfg || null, pops: s.pops || null, brand: s.brand || null, theme: s.theme || null, houseGoals: s.houseGoals || null, houseGoalsM: s.houseGoalsM || null, music: s.podiumMusic || null, births: s.births || null, com: s.comCfg || null, dreams: s.dreams || null, units: s.units || null } });
     for (const u of s.users) out.users[u.id] = JSON.stringify({ name: u.name, phone: u.phone || '', status: u.status });
     return out;
   }
@@ -270,7 +270,7 @@
       version: 2, demo: false, cloud: true,
       company: { name: co.name, cnpj: co.cnpj, phone: co.phone, email: co.email, logo: co.logo },
       users: profs.map(p => ({ id: p.id, name: p.name, email: p.email, phone: p.phone, role: p.role, status: p.status, barberId: p.barber_id })),
-      barbers: barbers.map(b => ({ id: b.id, name: b.name, photo: b.photo, active: b.active, role: b.role, instagram: b.instagram })),
+      barbers: barbers.map(b => ({ id: b.id, name: b.name, photo: b.photo, active: b.active, role: b.role, instagram: b.instagram, dream: b.dream || null, unit: b.unit || null })),
       entries: entries.map(e => ({ id: e.id, barberId: e.barber_id, date: e.date, source: e.source, ...e.data })),
       monthly: monthly.map(m => ({ barberId: m.barber_id, month: m.month, ...m.data })),
       invites: invites.map(i => ({ code: i.code, barberId: i.barber_id, used: i.used, createdAt: String(i.created_at).slice(0, 10) })),
@@ -287,6 +287,9 @@
       houseGoalsM: st.houseGoalsM || null,
       podiumMusic: st.music || null,
       births: st.births || null,
+      comCfg: st.com || null,
+      dreams: st.dreams || null,
+      units: st.units || null,
       ocupCfg: st.ocup || null,
       pop: pop.map(r => ({ barberId: r.barber_id, day: r.day, ...(r.data || {}) })),
       apiKey: key ? key.key : '',
