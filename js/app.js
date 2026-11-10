@@ -648,6 +648,11 @@
       { r: 'admin', t: 'Painel do SaaS', i: 'gauge', admin: 1 },
       { r: 'cockpit', t: 'Cockpit do gestor', i: 'gauge', soon: 1 },
     ] },
+    { group: 'Sistema', g: 1, items: [
+      { r: 'atualizacoes', t: 'Atualizações', i: 'sparkle', g: 1 },
+      { r: 'sugestoes', t: 'Sugestões de melhorias', i: 'idea', g: 1 },
+      { r: 'erro', t: 'Reportar erro', i: 'bug', g: 1 },
+    ] },
     { group: 'Conta', items: [
       { r: 'cadastro', t: 'Meu cadastro', i: 'idcard' },
       { r: 'ajuda', t: 'Central de ajuda', i: 'help' },
@@ -667,7 +672,7 @@
       const am = isAreaMgr(user), hg = hasGrants(user);
       const lf = myExtras().fields.length > 0;
       const items = gr.items.filter(it => (!it.g || g || (it.a && am) || (it.r === 'lancamentos' && lf)) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
-        <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && (g || hg) ? (g || accessOf(user.barberId) !== 'profissional' ? 'Performance da empresa' : 'Performance da área') : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}</a>`).join('');
+        <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && (g || hg) ? (g || accessOf(user.barberId) !== 'profissional' ? 'Performance da empresa' : 'Performance da área') : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}${it.r === 'atualizacoes' && updUnseen() ? `<span class="nav-new" aria-label="${updUnseen()} novidades">${updUnseen()}</span>` : ''}</a>`).join('');
       return (gr.group ? `<div class="nav-group">${esc(gr.group)}</div>` : '') + items;
     }).join('');
     const periods = Object.entries(PERIOD_NAMES).map(([k, v]) =>
@@ -1324,6 +1329,21 @@
       'Para mudar, toque em Trocar plano e escolha o plano pelo tamanho da equipe.',
       'Para pagar uma fatura em aberto, toque em Pagar fatura (PIX, boleto ou cartão). Depois, toque em Já paguei, atualizar.',
     ], tips: ['Se o acesso for suspenso por falta de pagamento, os dados continuam guardados e voltam assim que o pagamento é confirmado.'] },
+    atualizacoes: { t: 'Atualizações', ic: 'sparkle', gestor: 1, steps: [
+      'Toda mudança no sistema aparece aqui, com a data: o que é novo, o que melhorou e o que foi corrigido.',
+      'As novidades que você ainda não viu ficam marcadas, e o número aparece ao lado de Atualizações no menu.',
+    ], tips: ['Tem uma ideia para o sistema? Mande em Sugestões de melhorias.'] },
+    sugestoes: { t: 'Sugestões de melhorias', ic: 'idea', gestor: 1, steps: [
+      'Escreva a sua ideia (e, se quiser, explique como usaria) e toque em Enviar sugestão.',
+      'Veja as ideias dos outros donos e toque no botão de voto das que fazem sentido para você. Tocar de novo tira o voto.',
+      'Use os filtros: Mais votadas, Mais recentes, Em andamento e Feitas.',
+      'Quando nossa equipe analisar, a situação muda (em análise, planejada, feita) e a resposta aparece na sugestão.',
+    ], tips: ['É um voto por empresa em cada sugestão.', 'As mais votadas ganham prioridade no planejamento.'] },
+    erro: { t: 'Reportar erro', ic: 'bug', gestor: 1, steps: [
+      'Escreva um resumo do problema e escolha em qual tela ele aconteceu.',
+      'Conte o que você fez, o que esperava e o que aconteceu. Se puder, envie um print da tela.',
+      'Toque em Enviar. Abaixo, em Seus reportes, você acompanha a situação e a resposta da nossa equipe.',
+    ], tips: ['O modelo do aparelho e o navegador vão junto automaticamente, para facilitar a análise.'] },
     cadastro: { t: 'Meu cadastro', ic: 'idcard', steps: [
       'Troque a foto, o nome e o e-mail.',
       'Para mudar a senha, preencha Nova senha e Confirmar nova senha. Deixe em branco para manter a atual.',
@@ -1361,6 +1381,157 @@
       <p class="muted hp-none" hidden>Nada encontrado. Tente outra palavra.</p>
     </section>`;
   }
+
+  // ---------- Atualizações, Sugestões de melhorias e Reportar erro ----------
+  const UPDATES = () => window.GB_UPDATES || [];
+  const UPD_TAG = { novo: ['Novo', 'chip-ok'], melhoria: ['Melhoria', 'chip-blue'], correcao: ['Correção', 'chip-warn'] };
+  const updUnseen = () => { const seen = DB.pref.get('updSeen', ''); const i = UPDATES().findIndex(u => u.id === seen); return i < 0 ? UPDATES().length : i; };
+  const fmtDay = d => { const [y, m, dd] = d.split('-').map(Number); return `${dd} de ${MONTH_NAMES[m - 1]} de ${y}`; };
+  function pageAtualizacoes() {
+    const list = UPDATES(), unseen = updUnseen();
+    if (list[0]) setTimeout(() => { if (DB.pref.get('updSeen', '') !== list[0].id) { DB.pref.set('updSeen', list[0].id); } }, 1500);
+    return `<section class="section card">
+      <h2 class="section-title">Atualizações do sistema</h2>
+      <p class="muted">Tudo o que mudou, melhorou ou foi corrigido no ${esc(B().name)}, do mais novo para o mais antigo. Tem uma ideia? Mande em <a href="#sugestoes">Sugestões de melhorias</a>.</p>
+    </section>
+    <div class="up-list">${list.map((u, i) => `<article class="card up-item ${i < unseen ? 'is-new' : ''}">
+      <div class="up-head"><time datetime="${esc(u.date)}">${esc(fmtDay(u.date))}</time>${i < unseen ? '<span class="chip chip-ok">Novidade</span>' : ''}</div>
+      <h3>${esc(u.title)}</h3>
+      <ul>${u.items.map(([k, t]) => `<li><span class="chip ${(UPD_TAG[k] || UPD_TAG.melhoria)[1]}">${(UPD_TAG[k] || UPD_TAG.melhoria)[0]}</span><span>${esc(t)}</span></li>`).join('')}</ul>
+    </article>`).join('')}</div>`;
+  }
+
+  // Dados: na nuvem (todas as empresas) ou, na demonstração, só neste aparelho.
+  const FB_DEMO = () => [
+    { id: 'd1', created_at: '2026-10-28T12:00:00Z', title: 'Lembrete no WhatsApp para o profissional fazer o checklist', description: 'Seria ótimo o sistema mandar um lembrete automático no fim da tarde para quem ainda não completou o checklist do dia.', status: 'aberta', reply: '', votes: 14, voted: false, own: false, brand: 'barber' },
+    { id: 'd2', created_at: '2026-10-20T12:00:00Z', title: 'Ranking por unidade para quem tem mais de uma loja', description: 'Tenho duas unidades e queria ver o ranking de cada uma separado e também o geral.', status: 'planejada', reply: 'Boa ideia! Já está no nosso planejamento.', votes: 9, voted: true, own: false, brand: 'barber' },
+    { id: 'd3', created_at: '2026-10-15T12:00:00Z', title: 'Relatório de comissão por profissional', description: 'Calcular a comissão de cada um a partir do faturamento lançado.', status: 'analisando', reply: '', votes: 7, voted: false, own: false, brand: 'salao' },
+    { id: 'd4', created_at: '2026-11-02T12:00:00Z', title: 'Meta diária de cada profissional na Tela da loja', description: '', status: 'aberta', reply: '', votes: 4, voted: false, own: false, brand: 'barber' },
+  ];
+  function fbLocal() { try { const v = JSON.parse(DB.pref.get('fb', '') || 'null'); if (v && Array.isArray(v.sugs)) return v; } catch (e) { /* recria */ } return { bugs: [], sugs: DB.demo ? FB_DEMO() : [] }; }
+  const fbSave = v => { try { DB.pref.set('fb', JSON.stringify(v)); } catch (e) { throw new Error('Imagem grande demais para guardar neste aparelho.'); } };
+  const fbCloud = () => Cloud.enabled && Cloud.fb;
+  const FB = {
+    bugs: async () => fbCloud() ? Cloud.fb.bugs() : fbLocal().bugs,
+    addBug: async row => { if (fbCloud()) return Cloud.fb.addBug(row); const v = fbLocal(); v.bugs.unshift({ ...row, id: uid('bug_'), created_at: new Date().toISOString(), status: 'novo', reply: '' }); fbSave(v); },
+    sugs: async () => fbCloud() ? Cloud.fb.sugs() : fbLocal().sugs,
+    addSug: async row => { if (fbCloud()) return Cloud.fb.addSug(row); const v = fbLocal(); v.sugs.unshift({ ...row, id: uid('sug_'), created_at: new Date().toISOString(), status: 'aberta', reply: '', votes: 1, voted: true, own: true }); fbSave(v); },
+    vote: async (id, on) => {
+      if (fbCloud()) { if (on) await Cloud.fb.vote(id); else await Cloud.fb.unvote(id); if (on) return; return; }
+      const v = fbLocal(), s = v.sugs.find(x => x.id === id); if (s && s.voted !== on) { s.voted = on; s.votes += on ? 1 : -1; fbSave(v); }
+    },
+    delSug: async id => { if (fbCloud()) return Cloud.fb.delSug(id); const v = fbLocal(); v.sugs = v.sugs.filter(x => x.id !== id); fbSave(v); },
+  };
+  function fbLoad(key, fn) {
+    if (ui[key] === undefined || ui[key] === null) {
+      ui[key] = 'loading';
+      fn().then(list => { ui[key] = { list: list || [] }; render(); }).catch(e => { ui[key] = { error: Cloud.enabled ? Cloud.message(e) : String(e.message || e) }; render(); });
+    }
+    if (ui[key] === 'loading') return { wait: `<div class="card muted">Carregando…</div>` };
+    if (ui[key].error) {
+      const miss = /relation|does not exist|schema cache|not found/i.test(ui[key].error);
+      return { wait: `<div class="card">${miss ? 'Esta área ainda está sendo ativada no servidor. Tente de novo mais tarde.' : esc(ui[key].error)} <button class="btn btn-sm" data-action="fbReload" data-k="${key}">Tentar de novo</button></div>` };
+    }
+    return { list: ui[key].list };
+  }
+  const BUG_ST = { novo: ['Recebido', 'chip'], analisando: ['Em análise', 'chip-warn'], corrigido: ['Corrigido', 'chip-ok'], descartado: ['Não reproduzido', 'chip'] };
+  const SUG_ST = { aberta: ['Aberta para votos', 'chip'], analisando: ['Em análise', 'chip-warn'], planejada: ['Planejada', 'chip-blue'], feita: ['Feita', 'chip-ok'], recusada: ['Não vamos fazer', 'chip'] };
+  const stChip = (map, k) => `<span class="chip ${(map[k] || Object.values(map)[0])[1]}">${(map[k] || Object.values(map)[0])[0]}</span>`;
+  const whenBR = d => new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const fbPages = () => NAV.flatMap(g => g.items).filter(i => !i.soon && !i.admin).map(i => i.t);
+
+  function pageErro() {
+    const r = fbLoad('fbBugs', FB.bugs);
+    return `<section class="section card">
+      <h2 class="section-title">Reportar erro</h2>
+      <p class="muted">Algo não funcionou como deveria? Conte para nós. Quanto mais detalhes, mais rápido conseguimos corrigir.</p>
+      <form class="form" data-form="bugAdd" novalidate>
+        <label class="field"><span>Resumo do problema *</span><input class="input" name="title" maxlength="120" required placeholder="Ex.: O ranking não atualiza depois de lançar"></label>
+        <label class="field"><span>Em qual tela aconteceu?</span><select class="input" name="page"><option value="">Escolha a tela</option>${fbPages().map(t => `<option>${esc(t)}</option>`).join('')}<option>Outra</option></select></label>
+        <label class="field"><span>O que aconteceu? *</span><textarea class="input" name="desc" rows="5" maxlength="3000" required placeholder="O que você fez, o que esperava que acontecesse e o que aconteceu de fato."></textarea></label>
+        <label class="field"><span>Print da tela (opcional)</span><input class="input" type="file" name="shot" accept="image/*"></label>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('upload')} Enviar</button></div>
+        <p class="section-note">Junto vão o modelo do aparelho, o navegador e a versão do app, para facilitar a análise.</p>
+      </form></section>
+    <section class="section card">
+      <h2 class="section-title">Seus reportes</h2>
+      ${r.wait || (r.list.length ? `<ul class="fb-list">${r.list.map(b => `<li class="fb-item">
+        <div class="fb-top"><b>${esc(b.title)}</b>${stChip(BUG_ST, b.status)}</div>
+        <small class="muted">${whenBR(b.created_at)}${b.page ? ' · ' + esc(b.page) : ''}</small>
+        <p>${esc(b.description)}</p>
+        ${b.reply ? `<div class="fb-reply">${icon('chat')}<span><b>Resposta da equipe:</b> ${esc(b.reply)}</span></div>` : ''}
+      </li>`).join('')}</ul>` : '<p class="muted">Você ainda não reportou nenhum erro.</p>')}
+    </section>`;
+  }
+
+  function pageSugestoes() {
+    const r = fbLoad('fbSugs', FB.sugs), f = ui.sugFilter || 'votos';
+    const FILT = [['votos', 'Mais votadas'], ['recentes', 'Mais recentes'], ['andamento', 'Em andamento'], ['feitas', 'Feitas']];
+    let list = r.list ? [...r.list] : [];
+    if (f === 'andamento') list = list.filter(s => s.status === 'analisando' || s.status === 'planejada');
+    else if (f === 'feitas') list = list.filter(s => s.status === 'feita');
+    else list = list.filter(s => s.status !== 'feita' && s.status !== 'recusada');
+    list.sort(f === 'recentes' ? (a, b) => (a.created_at < b.created_at ? 1 : -1) : (a, b) => b.votes - a.votes || (a.created_at < b.created_at ? 1 : -1));
+    return `<section class="section card">
+      <h2 class="section-title">Sugestões de melhorias</h2>
+      <p class="muted">Sugira uma melhoria e vote nas ideias dos outros donos (um voto por empresa). As mais votadas ganham prioridade no nosso planejamento.</p>
+      <form class="form" data-form="sugAdd" novalidate>
+        <label class="field"><span>Sua ideia *</span><input class="input" name="title" maxlength="120" required placeholder="Ex.: Lembrete no WhatsApp para fazer o checklist"></label>
+        <label class="field"><span>Explique um pouco (opcional)</span><textarea class="input" name="desc" rows="3" maxlength="2000" placeholder="Como você usaria e por que ajudaria a sua empresa."></textarea></label>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('idea')} Enviar sugestão</button></div>
+      </form></section>
+    <section class="section">
+      <div class="btn-row">${FILT.map(([k, l]) => `<button class="btn btn-sm ${k === f ? 'btn-primary' : ''}" data-action="sugFilter" data-f="${k}">${l}</button>`).join('')}</div>
+      ${r.wait || (list.length ? `<ul class="fb-list sug-list">${list.map(s => `<li class="card fb-item sug-item">
+        <button class="sug-vote ${s.voted ? 'on' : ''}" data-action="sugVote" data-id="${esc(s.id)}" aria-pressed="${!!s.voted}" aria-label="${s.voted ? 'Tirar meu voto' : 'Votar'}: ${esc(s.title)}" ${s.status === 'feita' || s.status === 'recusada' ? 'disabled' : ''}>${icon('vote')}<b class="num">${s.votes}</b><small>${s.votes === 1 ? 'voto' : 'votos'}</small></button>
+        <div class="sug-body">
+          <div class="fb-top"><b>${esc(s.title)}</b>${stChip(SUG_ST, s.status)}${s.own ? '<span class="chip chip-blue">Sua sugestão</span>' : ''}</div>
+          <small class="muted">${whenBR(s.created_at)}</small>
+          ${s.description ? `<p>${esc(s.description)}</p>` : ''}
+          ${s.reply ? `<div class="fb-reply">${icon('chat')}<span><b>Resposta da equipe:</b> ${esc(s.reply)}</span></div>` : ''}
+          ${s.own && s.status === 'aberta' ? `<button class="link-btn" data-action="sugDel" data-id="${esc(s.id)}">Apagar minha sugestão</button>` : ''}
+        </div></li>`).join('')}</ul>` : `<p class="muted fb-empty">${f === 'feitas' ? 'Nenhuma sugestão feita ainda.' : f === 'andamento' ? 'Nenhuma sugestão em andamento.' : 'Nenhuma sugestão ainda. Seja o primeiro!'}</p>`)}
+    </section>`;
+  }
+
+  // Painel do SaaS: erros e sugestões de todas as empresas.
+  function adminErros() {
+    const r = fbLoad('admBugs', () => Cloud.fb.bugs()), names = adminNames();
+    if (r.wait) return r.wait;
+    const f = ui.admBugF || 'abertos', rows = r.list.filter(b => f === 'todos' || (f === 'abertos' ? b.status === 'novo' || b.status === 'analisando' : b.status === f));
+    return `<section class="section">
+      <div class="btn-row">${[['abertos', 'Em aberto'], ['corrigido', 'Corrigidos'], ['descartado', 'Não reproduzidos'], ['todos', 'Todos']].map(([k, l]) => `<button class="btn btn-sm ${k === f ? 'btn-primary' : ''}" data-action="admBugF" data-f="${k}">${l}</button>`).join('')}
+        <button class="btn btn-sm" data-action="fbReload" data-k="admBugs">${icon('check')} Atualizar</button></div>
+      <ul class="fb-list">${rows.map(b => `<li class="card fb-item">
+        <div class="fb-top"><b>${esc(b.title)}</b>${stChip(BUG_ST, b.status)}</div>
+        <small class="muted">${whenBR(b.created_at)} · ${esc(names[b.company_id] || 'Empresa')}${b.page ? ' · ' + esc(b.page) : ''}</small>
+        <p>${esc(b.description)}</p>
+        <small class="muted fb-dev">${esc(b.device || '')}</small>
+        <div class="btn-row">${b.shot ? `<button class="btn btn-sm" data-action="bugShot" data-p="${esc(b.shot)}">${icon('eye')} Ver print</button>` : ''}
+          <select class="input input-sm" data-change="bugSt" data-id="${esc(b.id)}" aria-label="Situação">${Object.entries(BUG_ST).map(([k, [l]]) => `<option value="${k}" ${b.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+        <label class="field"><span>Resposta para o cliente</span><textarea class="input" rows="2" maxlength="1000" id="bug-r-${esc(b.id)}">${esc(b.reply || '')}</textarea></label>
+        <div><button class="btn btn-sm btn-primary" data-action="bugReply" data-id="${esc(b.id)}">${icon('check')} Salvar resposta</button></div>
+      </li>`).join('') || '<p class="muted">Nada por aqui.</p>'}</ul></section>`;
+  }
+  function adminSugs() {
+    const r = fbLoad('admSugs', () => Cloud.fb.sugs()), names = adminNames();
+    if (r.wait) return r.wait;
+    const list = [...r.list].sort((a, b) => b.votes - a.votes || (a.created_at < b.created_at ? 1 : -1));
+    return `<section class="section">
+      <div class="btn-row"><button class="btn btn-sm" data-action="fbReload" data-k="admSugs">${icon('check')} Atualizar</button></div>
+      <ul class="fb-list">${list.map(s => `<li class="card fb-item">
+        <div class="fb-top"><b class="num adm-votes">${s.votes}</b><b>${esc(s.title)}</b>${stChip(SUG_ST, s.status)}</div>
+        <small class="muted">${whenBR(s.created_at)} · ${esc(names[s.company_id] || 'Empresa')} · ${s.brand === 'salao' ? 'Gestão Salão IA' : 'Gestão Barber IA'}</small>
+        ${s.description ? `<p>${esc(s.description)}</p>` : ''}
+        <div class="btn-row"><select class="input input-sm" data-change="sugSt" data-id="${esc(s.id)}" aria-label="Situação">${Object.entries(SUG_ST).map(([k, [l]]) => `<option value="${k}" ${s.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+          <button class="btn btn-sm" data-action="admSugDel" data-id="${esc(s.id)}">${icon('trash')} Apagar</button></div>
+        <label class="field"><span>Resposta para os clientes</span><textarea class="input" rows="2" maxlength="1000" id="sug-r-${esc(s.id)}">${esc(s.reply || '')}</textarea></label>
+        <div><button class="btn btn-sm btn-primary" data-action="sugReply" data-id="${esc(s.id)}">${icon('check')} Salvar resposta</button></div>
+      </li>`).join('') || '<p class="muted">Nenhuma sugestão ainda.</p>'}</ul></section>`;
+  }
+  const adminNames = () => Object.fromEntries(((ui.adminData && ui.adminData.list) || []).map(c => [c.id, c.name]));
 
   // ---------- Primeiros passos e pendências do gestor (Início) ----------
   function guideSteps() {
@@ -3372,7 +3543,7 @@ Content-Type: application/json</pre>
   }
 
   // ---------- Painel do dono do SaaS ----------
-  const adminTabs = () => `<div class="org-tabs" role="toolbar">${[['empresas', 'building', 'Empresas'], ['leads', 'users', 'Interessados']].map(([k, ic, l]) => `<button type="button" class="${(ui.adminTab || 'empresas') === k ? 'on' : ''}" aria-pressed="${(ui.adminTab || 'empresas') === k}" data-action="adminTab" data-t="${k}">${icon(ic)}<span>${l}</span></button>`).join('')}</div>`;
+  const adminTabs = () => `<div class="org-tabs" role="toolbar">${[['empresas', 'building', 'Empresas'], ['leads', 'users', 'Interessados'], ['erros', 'bug', 'Erros'], ['sugestoes', 'idea', 'Sugestões']].map(([k, ic, l]) => `<button type="button" class="${(ui.adminTab || 'empresas') === k ? 'on' : ''}" aria-pressed="${(ui.adminTab || 'empresas') === k}" data-action="adminTab" data-t="${k}">${icon(ic)}<span>${l}</span></button>`).join('')}</div>`;
   // Interessados que se cadastraram na página de vendas (/oferta).
   const LEAD_TIPO = { barbearia: 'Barbearia', salao: 'Salão de beleza', esmalteria: 'Esmalteria', estetica: 'Clínica de estética' };
   const LEAD_EQ = { 4: 'até 4', 10: '5 a 10', 99: 'mais de 10' };
@@ -3426,6 +3597,8 @@ Content-Type: application/json</pre>
     const rows = list.filter(groups[f]);
     const kpi = (l, v) => `<div class="stat"><span>${l}</span><b class="num">${v}</b></div>`;
     if (ui.adminTab === 'leads') return adminTabs() + adminLeads();
+    if (ui.adminTab === 'erros') return adminTabs() + adminErros();
+    if (ui.adminTab === 'sugestoes') return adminTabs() + adminSugs();
     return `${adminTabs()}
       <section class="section card">
         <h2 class="section-title">Resumo do SaaS</h2>
@@ -4540,6 +4713,9 @@ Content-Type: application/json</pre>
     admin: { t: 'Painel do SaaS', r: pageAdmin, g: 1 },
     cadastro: { t: 'Meu cadastro', r: pageCadastro },
     ajuda: { t: 'Central de ajuda', r: pageAjuda },
+    atualizacoes: { t: 'Atualizações', r: pageAtualizacoes, g: 1 },
+    sugestoes: { t: 'Sugestões de melhorias', r: pageSugestoes, g: 1 },
+    erro: { t: 'Reportar erro', r: pageErro, g: 1 },
   };
 
   // ---------- ranking ao vivo: ultrapassagens ----------
@@ -5382,6 +5558,22 @@ Content-Type: application/json</pre>
     popRevMore() { ui.popRevAll = true; render(); },
     popCsv() { popCsv(); },
     exportJson() { exportJson(); },
+    fbReload(el) { ui[el.dataset.k] = null; render(); },
+    sugFilter(el) { ui.sugFilter = el.dataset.f; render(); },
+    admBugF(el) { ui.admBugF = el.dataset.f; render(); },
+    async sugVote(el) {
+      const list = ui.fbSugs && ui.fbSugs.list, s = list && list.find(x => String(x.id) === el.dataset.id); if (!s) return;
+      const on = !s.voted; s.voted = on; s.votes += on ? 1 : -1; render(); // otimista
+      try { await FB.vote(s.id, on); } catch (e) { s.voted = !on; s.votes += on ? -1 : 1; render(); toast('Não foi possível registrar o voto: ' + (Cloud.enabled ? Cloud.message(e) : e.message)); }
+    },
+    async sugDel(el) {
+      if (!confirm('Apagar a sua sugestão? Os votos dela também saem.')) return;
+      try { await FB.delSug(el.dataset.id); ui.fbSugs = null; toast('Sugestão apagada.'); render(); } catch (e) { toast(Cloud.enabled ? Cloud.message(e) : e.message); }
+    },
+    async bugShot(el) { try { window.open(await Cloud.fb.shotUrl(el.dataset.p), '_blank', 'noopener'); } catch (e) { toast(Cloud.message(e)); } },
+    async bugReply(el) { const t = document.getElementById('bug-r-' + el.dataset.id); try { await Cloud.fb.updBug(el.dataset.id, { reply: (t.value || '').trim() }); toast('Resposta salva. O cliente vê em Reportar erro.'); } catch (e) { toast(Cloud.message(e)); } },
+    async sugReply(el) { const t = document.getElementById('sug-r-' + el.dataset.id); try { await Cloud.fb.updSug(el.dataset.id, { reply: (t.value || '').trim() }); toast('Resposta salva. Todos os clientes veem na sugestão.'); } catch (e) { toast(Cloud.message(e)); } },
+    async admSugDel(el) { if (!confirm('Apagar esta sugestão e os votos dela?')) return; try { await Cloud.fb.delSug(el.dataset.id); ui.admSugs = null; render(); } catch (e) { toast(Cloud.message(e)); } },
     helpOpen(el) { ui.help = el.dataset.k; render(); setTimeout(() => { const c = $('.hp-card .icon-btn'); if (c) c.focus(); }, 30); },
     helpClose(el, e) { if (el.classList.contains('hp-ov') && e.target.closest('.hp-card')) return; ui.help = null; render(); },
     guideHide() { DB.pref.set('guideHide', '1'); render(); },
@@ -5733,6 +5925,29 @@ Content-Type: application/json</pre>
   }
 
   const FORMS = {
+    async bugAdd(f) {
+      const title = val(f, 'title'), desc = (f.elements.desc.value || '').trim(), file = f.elements.shot.files[0];
+      if (title.length < 3) return setMsg(f, 'Escreva um resumo do problema.');
+      if (desc.length < 5) return setMsg(f, 'Conte o que aconteceu.');
+      const btn = f.querySelector('[type=submit]'); btn.disabled = true; setMsg(f, 'Enviando…', true);
+      try {
+        let shot = null;
+        if (file) { const img = await readImage(file, 1600, 0.8); shot = fbCloud() ? await Cloud.fb.shotUp(img) : img; }
+        const device = `${navigator.userAgent} · tela ${screen.width}x${screen.height} · janela ${innerWidth}x${innerHeight} · versão ${(UPDATES()[0] || {}).id || '-'}`.slice(0, 300);
+        await FB.addBug({ title: title.slice(0, 120), description: desc.slice(0, 3000), page: val(f, 'page').slice(0, 80), device, shot });
+        f.reset(); ui.fbBugs = null; toast('Erro reportado. Obrigado! Você acompanha a resposta aqui mesmo.', 4000); render();
+      } catch (e) { btn.disabled = false; setMsg(f, 'Não foi possível enviar: ' + (Cloud.enabled ? Cloud.message(e) : e.message)); }
+    },
+    async sugAdd(f) {
+      const title = val(f, 'title'), desc = (f.elements.desc.value || '').trim();
+      if (title.length < 3) return setMsg(f, 'Escreva a sua ideia.');
+      const btn = f.querySelector('[type=submit]'); btn.disabled = true;
+      try {
+        const row = await FB.addSug({ title: title.slice(0, 120), description: desc.slice(0, 2000), brand: MARCA === 'salao' ? 'salao' : 'barber' });
+        if (fbCloud() && row && row.id) { try { await Cloud.fb.vote(row.id); } catch (e) { /* o voto do autor é opcional */ } }
+        f.reset(); ui.fbSugs = null; ui.sugFilter = 'recentes'; toast('Sugestão enviada! Os outros donos já podem votar.', 4000); render();
+      } catch (e) { btn.disabled = false; setMsg(f, 'Não foi possível enviar: ' + (Cloud.enabled ? Cloud.message(e) : e.message)); }
+    },
     async subscribe(f) {
       const plan = f.querySelector('input[name="plan_id"]:checked');
       if (!plan) return setMsg(f, 'Escolha um plano.');
@@ -6033,6 +6248,8 @@ Content-Type: application/json</pre>
   };
 
   const CHANGES = {
+    async bugSt(el) { try { await Cloud.fb.updBug(el.dataset.id, { status: el.value }); const b = ui.admBugs && ui.admBugs.list && ui.admBugs.list.find(x => x.id === el.dataset.id); if (b) b.status = el.value; toast('Situação atualizada.'); render(); } catch (e) { toast(Cloud.message(e)); } },
+    async sugSt(el) { try { await Cloud.fb.updSug(el.dataset.id, { status: el.value }); const x = ui.admSugs && ui.admSugs.list && ui.admSugs.list.find(y => y.id === el.dataset.id); if (x) x.status = el.value; toast('Situação atualizada.'); render(); } catch (e) { toast(Cloud.message(e)); } },
     tvSoundKind(el) { Sound.kind = el.value; Sound.play(el.value, true); },
     perfBarber(el) { ui.perfBarber = el.value; location.hash = 'perfil-' + el.value; },
     teamMonth(el) { ui.teamMonth = el.value; ui.fcPeek = false; render(); },

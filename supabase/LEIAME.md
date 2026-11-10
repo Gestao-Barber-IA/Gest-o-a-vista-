@@ -107,3 +107,10 @@ Enquanto a pasta não existir, o app continua guardando as fotos dentro do cadas
 ## Backup
 - O plano gratuito do Supabase não oferece backup para baixar nem volta no tempo. Com clientes pagando, vale o plano **Pro** (backup diário de 7 dias) e, se possível, o complemento **Point in Time Recovery**.
 - Cada empresa também pode baixar a própria cópia em **Configurações › Empresa › Cópia dos seus dados**.
+
+## Reportar erro e Sugestões de melhorias
+As abas **Reportar erro** e **Sugestões de melhorias** guardam os dados no Supabase. Para ativar num projeto que já existe, rode no **SQL Editor** todo o conteúdo de `supabase/feedback.sql`. Ele também está no final do `schema.sql`, e pode ser rodado mais de uma vez.
+
+- **Reportar erro:** cada dono vê só os erros da própria empresa. Você vê todos em **Painel do SaaS › Erros**, muda a situação e responde.
+- **Sugestões:** todos os donos veem todas as sugestões e votam (um voto por empresa). Você vê a lista por número de votos em **Painel do SaaS › Sugestões**, muda a situação (em análise, planejada, feita…) e responde.
+- **Atualizações:** não usa o banco. A lista fica em `js/updates.js` e é atualizada junto com cada mudança do sistema.
