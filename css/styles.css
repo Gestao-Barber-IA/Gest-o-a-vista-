@@ -2325,3 +2325,14 @@ html[data-brand="salao"] .pt-ask b { background-image: linear-gradient(180deg, #
 .dream-me { margin: 6px 0 14px; max-width: 420px; }
 /* Feedback automático */
 .fb-card textarea.fb-txt { font: inherit; font-size: 0.95rem; line-height: 1.5; min-height: 0; margin: 8px 0 10px; }
+
+/* Conjuntos do menu que minimizam */
+.nav-toggle { display: flex; align-items: center; gap: 8px; width: calc(100% - 12px); background: none; border: 0; padding: 6px 8px 6px 0; cursor: pointer; text-align: left; border-radius: 8px; }
+.nav-toggle span { flex: 1; }
+.nav-toggle .ico { width: 14px; height: 14px; flex: none; opacity: 0.7; transition: transform 0.2s ease; }
+.nav-toggle[aria-expanded="false"] .ico { transform: rotate(-90deg); }
+.nav-toggle:hover, .nav-toggle:focus-visible { color: #fff; }
+.nav-items { display: grid; gap: inherit; }
+.nav-items[hidden] { display: none; }
+.nav-new-g { font-style: normal; letter-spacing: 0; display: none; }
+.nav-toggle[aria-expanded="false"] .nav-new-g { display: inline-grid; }
