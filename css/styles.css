@@ -2390,3 +2390,47 @@ tbody tr:nth-child(even) td.disc-name { background: var(--surface-2); }
 .folga-card span { display: grid; gap: 2px; } .folga-card small { color: var(--fg-soft); }
 .com-row > span small.neg, .disc-pen { color: #ff8a80; }
 .disc-pen { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+
+/* ---------- Checklist Líder e Recepção ---------- */
+.rt-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.rt-who { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 1.15rem; }
+.rt-who .ico { color: var(--accent); }
+.rt-day { display: flex; gap: 8px; align-items: center; }
+.rt-day .input { width: auto; }
+.rt-sum { display: grid; gap: 10px; }
+.rt-sum b { font-size: 1.4rem; }
+.rt-list { display: grid; gap: 10px; }
+.rt-item { display: grid; gap: 10px; border-left: 4px solid var(--line); }
+.rt-item.st-done { border-left-color: #52d37e; }
+.rt-item.st-late-done { border-left-color: #f4c542; }
+.rt-item.st-miss { border-left-color: #ff6b6b; }
+.rt-ihead { display: flex; gap: 12px; align-items: flex-start; }
+.rt-time { flex: none; font-family: var(--font-display); font-weight: 800; font-size: 1.05rem; padding: 4px 10px; border-radius: 10px; background: var(--surface-3); }
+.rt-tt { min-width: 0; }
+.rt-tt h3 { margin: 2px 0 2px; font-size: 1.02rem; display: flex; align-items: center; gap: 6px; }
+.rt-tt h3 .ico { color: #52d37e; flex: none; }
+.rt-tt p { margin: 0; font-size: 0.9rem; }
+.rt-st { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.rt-st .chip .ico { width: 1em; height: 1em; }
+.rt-chip { font-size: 0.82rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--surface-3); color: var(--muted); }
+.st-done .rt-chip { background: rgba(82, 211, 126, 0.16); color: #52d37e; }
+.st-late-done .rt-chip { background: rgba(244, 197, 66, 0.16); color: #f4c542; }
+.st-miss .rt-chip { background: rgba(255, 107, 107, 0.16); color: #ff8a80; }
+.rt-proof { display: flex; gap: 12px; align-items: flex-start; }
+.rt-proof p { margin: 2px 0 0; font-size: 0.92rem; color: var(--fg-soft); white-space: pre-wrap; overflow-wrap: anywhere; }
+.rt-go { justify-self: start; }
+.rt-elist { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.rt-elist li { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.rt-elist li > span:nth-child(2) { display: grid; flex: 1; min-width: 0; }
+.rt-elist li.off { opacity: 0.55; }
+.rt-days { display: flex; flex-wrap: wrap; gap: 6px 14px; border: 0; padding: 0; margin: 0; }
+.rt-days legend { font-size: 0.85rem; color: var(--muted); margin-bottom: 6px; padding: 0; }
+@media (max-width: 640px) {
+  .rt-bar .seg { width: 100%; display: flex; } .rt-bar .seg button { flex: 1; padding: 9px 8px; }
+  .rt-day { width: 100%; } .rt-day .input { flex: 1; }
+  .rt-go { justify-self: stretch; justify-content: center; }
+  .rt-elist li { flex-wrap: wrap; } .rt-elist li .btn { margin-left: auto; }
+}
+.rt-days .check { padding: 8px 12px; gap: 8px; align-items: center; } .rt-days .check input { width: 18px; height: 18px; margin: 0; }
+@media (max-width: 640px) { .rt-edit .pop-dhead { flex-wrap: wrap; } .rt-edit .pop-dhead .btn { width: 100%; justify-content: center; } }
+[data-form="rtSave"] textarea.input, #rt-note { font: inherit; font-size: 0.95rem; line-height: 1.45; }
