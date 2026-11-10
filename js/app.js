@@ -663,6 +663,7 @@
     cockpit: 'Visão rápida do gestor com os principais números do negócio.',
   };
 
+  const navShut = () => { try { const v = JSON.parse(DB.pref.get('navShut', '[]')); return Array.isArray(v) ? v : []; } catch (e) { return []; } };
   function drawer(user, route) {
     const g = isGestor(user);
     const groups = NAV.filter(gr => !gr.g || g).map(gr => {
@@ -670,7 +671,10 @@
       const lf = myExtras().fields.length > 0;
       const items = gr.items.filter(it => (!it.g || g || (it.a && am) || (it.r === 'lancamentos' && lf)) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
         <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && (g || hg) ? (g || accessOf(user.barberId) !== 'profissional' ? 'Performance da empresa' : 'Performance da área') : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}${it.r === 'atualizacoes' && updUnseen() ? `<span class="nav-new" aria-label="${updUnseen()} novidades">${updUnseen()}</span>` : ''}</a>`).join('');
-      return (gr.group ? `<div class="nav-group">${esc(gr.group)}</div>` : '') + items;
+      if (!gr.group || !items.trim()) return gr.group ? '' : items;
+      // Conjunto que pode ser minimizado (fica lembrado neste aparelho); o conjunto da tela aberta aparece sempre.
+      const shut = navShut().includes(gr.group) && !gr.items.some(it => it.r === route);
+      return `<button type="button" class="nav-group nav-toggle" data-action="navGroup" data-g="${esc(gr.group)}" aria-expanded="${!shut}"><span>${esc(gr.group)}</span>${gr.items.some(it => it.r === 'atualizacoes') && updUnseen() ? `<i class="nav-new nav-new-g" aria-label="${updUnseen()} novidades">${updUnseen()}</i>` : ''}${icon('down')}</button><div class="nav-items" ${shut ? 'hidden' : ''}>${items}</div>`;
     }).join('');
     const periods = Object.entries(PERIOD_NAMES).map(([k, v]) =>
       `<button type="button" aria-pressed="${ui.period === k}" data-action="period" data-period="${k}">${v}</button>`).join('');
@@ -5695,6 +5699,11 @@ Content-Type: application/json</pre>
       if (error) toast(Cloud.message(error));
     },
     demoFill(el) { $('#li-email').value = el.dataset.email; $('#li-pass').value = 'demo123'; $('#li-pass').focus(); },
+    navGroup(el) {
+      const box = el.nextElementSibling, g = el.dataset.g; if (!box) return;
+      const open = box.hidden; box.hidden = !open; el.setAttribute('aria-expanded', String(open));
+      const set = new Set(navShut()); if (open) set.delete(g); else set.add(g); DB.pref.set('navShut', JSON.stringify([...set]));
+    },
     openDrawer() { $('.drawer').classList.add('open'); $('.scrim').hidden = false; },
     closeDrawer() { $('.drawer').classList.remove('open'); $('.scrim').hidden = true; },
     togglePopover() { const p = $('.popover'); p.hidden = !p.hidden; },
