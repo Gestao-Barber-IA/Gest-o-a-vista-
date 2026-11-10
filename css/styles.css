@@ -2251,3 +2251,38 @@ html[data-brand="salao"] .pt-ask b { background-image: linear-gradient(180deg, #
 .pm-place.ppodio { background: linear-gradient(135deg, #fff3c4, #c98f24); color: #2a1c00; }
 .pm-place.pfinal { background: linear-gradient(135deg, #b8f0c9, #2e9e5b); color: #072a14; }
 .pm-place.plideres { background: linear-gradient(135deg, #cfe3ff, #3d7be0); color: #06183a; }
+
+/* Atualizações, Sugestões de melhorias e Reportar erro */
+.nav-new { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; display: inline-grid; place-items: center; font-size: 0.72rem; font-weight: 800; background: var(--accent); color: var(--accent-ink, #111); flex: none; }
+.chip-blue { background: rgba(91, 157, 255, 0.16); color: #8fbaff; }
+.up-list { display: grid; gap: 14px; }
+.up-item { display: grid; gap: 10px; }
+.up-item.is-new { border-color: var(--line-accent); }
+.up-head { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.up-head time { color: var(--muted); font-size: 0.85rem; letter-spacing: 0.04em; }
+.up-item h3 { margin: 0; font-size: 1.1rem; }
+.up-item ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.up-item li { display: flex; gap: 10px; align-items: flex-start; line-height: 1.45; }
+.up-item li .chip { flex: none; min-width: 84px; justify-content: center; text-align: center; }
+.fb-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 12px; }
+.fb-item { display: grid; gap: 6px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; }
+.fb-item p { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg-soft); }
+.fb-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.fb-top > b { margin-right: auto; overflow-wrap: anywhere; }
+.fb-reply { display: flex; gap: 8px; align-items: flex-start; margin-top: 4px; padding: 10px 12px; border-radius: 12px; background: rgba(214, 180, 106, 0.1); border: 1px solid var(--line-accent); }
+.fb-reply .ico { flex: none; color: var(--accent); margin-top: 2px; }
+.fb-dev { overflow-wrap: anywhere; font-size: 0.75rem; }
+.fb-empty { margin-top: 14px; }
+.sug-item { grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 14px; }
+.sug-body { display: grid; gap: 6px; min-width: 0; }
+.sug-vote { display: grid; justify-items: center; gap: 0; min-width: 64px; padding: 8px 6px; border-radius: 14px; border: 1px solid var(--line); background: none; color: var(--fg); cursor: pointer; font: inherit; }
+.sug-vote .ico { width: 20px; height: 20px; color: var(--muted); }
+.sug-vote b { font-size: 1.25rem; line-height: 1.1; }
+.sug-vote small { font-size: 0.7rem; color: var(--muted); }
+.sug-vote.on { border-color: var(--accent); background: rgba(214, 180, 106, 0.14); }
+.sug-vote.on .ico { color: var(--accent); fill: var(--accent); }
+.sug-vote[disabled] { opacity: 0.55; cursor: default; }
+.adm-votes { min-width: 34px; height: 28px; padding: 0 8px; border-radius: 999px; display: inline-grid; place-items: center; background: var(--accent); color: var(--accent-ink, #111); margin-right: 0 !important; }
+.input-sm { padding: 6px 10px; font-size: 0.9rem; width: auto; }
+
+[data-form="bugAdd"] textarea.input, [data-form="sugAdd"] textarea.input, .fb-item textarea.input { font: inherit; font-size: 0.95rem; line-height: 1.45; min-height: 0; }

@@ -154,6 +154,34 @@
     if (i < 0 || !url.startsWith(CFG.supabaseUrl.replace(/\/$/, ''))) return;
     try { await c.storage.from(PHOTOS).remove([decodeURIComponent(url.slice(i + mark.length))]); } catch (e) { /* segue */ }
   };
+  // Reportar erro e Sugestões de melhorias (com votos).
+  const RES = r => { if (r.error) throw r.error; return r.data; };
+  Cloud.fb = {
+    bugs: async () => RES(await c.from('bug_reports').select('*').order('created_at', { ascending: false }).limit(500)) || [],
+    addBug: async row => RES(await c.from('bug_reports').insert(row).select().single()),
+    updBug: async (id, patch) => RES(await c.from('bug_reports').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)),
+    delBug: async id => RES(await c.from('bug_reports').delete().eq('id', id)),
+    shotUp: async (dataUrl) => {
+      const blob = await (await fetch(dataUrl)).blob(), path = `${Cloud.companyId}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+      const { error } = await c.storage.from('reportes').upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+      if (error) throw error; return path;
+    },
+    shotUrl: async path => { const { data, error } = await c.storage.from('reportes').createSignedUrl(path, 3600); if (error) throw error; return data.signedUrl; },
+    sugs: async () => {
+      const [s2, v] = await Promise.all([
+        c.from('suggestions').select('*').order('created_at', { ascending: false }).limit(1000),
+        c.from('suggestion_votes').select('suggestion_id, company_id').limit(50000),
+      ]);
+      const list = RES(s2) || [], votes = RES(v) || [], cnt = {}, mine = new Set();
+      for (const x of votes) { cnt[x.suggestion_id] = (cnt[x.suggestion_id] || 0) + 1; if (x.company_id === Cloud.companyId) mine.add(x.suggestion_id); }
+      return list.map(x => ({ ...x, votes: cnt[x.id] || 0, voted: mine.has(x.id), own: x.company_id === Cloud.companyId }));
+    },
+    addSug: async row => RES(await c.from('suggestions').insert(row).select().single()),
+    updSug: async (id, patch) => RES(await c.from('suggestions').update(patch).eq('id', id)),
+    delSug: async id => RES(await c.from('suggestions').delete().eq('id', id)),
+    vote: async id => RES(await c.from('suggestion_votes').insert({ suggestion_id: id })),
+    unvote: async id => RES(await c.from('suggestion_votes').delete().eq('suggestion_id', id).eq('company_id', Cloud.companyId)),
+  };
   Cloud.rotateKey = async () => { const { data, error } = await c.rpc('rotate_api_key'); if (error) throw error; return data; };
 
   // ---------- conversão entre o app e as tabelas ----------
