@@ -2368,3 +2368,8 @@ html[data-brand="salao"] .pt-ask b { background-image: linear-gradient(180deg, #
 .disc-hint { display: block; margin-top: 4px; }
 [data-form="discSave"] textarea.input { font: inherit; font-size: 0.95rem; line-height: 1.45; min-height: 0; }
 .disc-table td, .disc-table th { text-align: left !important; }
+
+.folga-card { display: flex; gap: 12px; align-items: center; margin: 10px 0 4px; padding: 12px 14px; border-radius: 14px; border: 1px solid rgba(82, 211, 126, 0.45); background: rgba(82, 211, 126, 0.1); }
+.folga-card span { display: grid; gap: 2px; } .folga-card small { color: var(--fg-soft); }
+.com-row > span small.neg, .disc-pen { color: #ff8a80; }
+.disc-pen { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
