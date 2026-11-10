@@ -2286,3 +2286,42 @@ html[data-brand="salao"] .pt-ask b { background-image: linear-gradient(180deg, #
 .input-sm { padding: 6px 10px; font-size: 0.9rem; width: auto; }
 
 [data-form="bugAdd"] textarea.input, [data-form="sugAdd"] textarea.input, .fb-item textarea.input { font: inherit; font-size: 0.95rem; line-height: 1.45; min-height: 0; }
+
+/* Unidades */
+.unit-bar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.unit-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
+.unit-list li { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.unit-list li span { display: flex; align-items: center; gap: 8px; font-weight: 600; margin-right: auto; }
+.unit-cmp { display: grid; gap: 12px; }
+.unit-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; }
+.unit-row .bar, .unit-row small { grid-column: 1 / -1; }
+/* Comissões */
+.com-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.com-by { margin: 4px 0 10px; } .com-by summary { cursor: pointer; color: var(--accent); margin-bottom: 10px; }
+.com-table { display: grid; gap: 6px; margin-top: 10px; }
+.com-row { display: grid; grid-template-columns: minmax(160px, 1.6fr) repeat(5, minmax(0, 1fr)); gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.com-row > span { display: grid; gap: 2px; text-align: right; }
+.com-row > span small { color: var(--muted); font-size: 0.75rem; }
+.com-row .com-name { display: flex; align-items: center; gap: 10px; text-align: left; }
+.com-th { border: 0; padding-top: 0; padding-bottom: 0; color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.com-th > span:first-child, .com-foot > span:first-child { text-align: left; }
+.com-tot { font-weight: 800; color: var(--money); }
+.com-foot { background: rgba(214, 180, 106, 0.08); border-color: var(--line-accent); font-weight: 700; }
+@media (max-width: 760px) {
+  .com-th { display: none; }
+  .com-row { grid-template-columns: 1fr 1fr; }
+  .com-row .com-name { grid-column: 1 / -1; }
+  .com-row > span[data-l] { text-align: left; }
+  .com-row > span[data-l]::before { content: attr(data-l); color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+  .com-foot > span:empty { display: none; }
+}
+/* Sonhos */
+.dream-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.dream-card { display: grid; justify-items: center; text-align: center; gap: 8px; }
+.dream-card.is-empty { opacity: 0.6; }
+.dream-card .bar { width: 100%; }
+.dream-t { margin: 0; display: flex; gap: 6px; align-items: center; font-weight: 600; }
+.dream-t .ico { color: var(--accent); flex: none; }
+.dream-me { margin: 6px 0 14px; max-width: 420px; }
+/* Feedback automático */
+.fb-card textarea.fb-txt { font: inherit; font-size: 0.95rem; line-height: 1.5; min-height: 0; margin: 8px 0 10px; }
