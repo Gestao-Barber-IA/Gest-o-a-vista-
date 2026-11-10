@@ -634,6 +634,7 @@
     { group: 'GP · Gestão de pessoas', items: [
       { r: 'time', t: 'Performance da equipe', i: 'trophy' },
       { r: 'checklist', t: 'Checklist Agenda Cheia', i: 'checksq' },
+      { r: 'rotina', t: 'Checklist Líder e Recepção', i: 'clock', rt: 1 },
       { r: 'pops', t: 'POPs · Guia do Sucesso', i: 'book' },
       { r: 'comissoes', t: 'Comissões e prêmios', i: 'gift', g: 1 },
       { r: 'sonhos', t: 'Sonhos', i: 'rocket' },
@@ -670,7 +671,7 @@
     const groups = NAV.filter(gr => !gr.g || g || isAreaMgr(user)).map(gr => {
       const am = isAreaMgr(user), hg = hasGrants(user);
       const lf = myExtras().fields.length > 0;
-      const items = gr.items.filter(it => (!it.g || g || (it.a && am) || (it.r === 'lancamentos' && lf)) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
+      const items = gr.items.filter(it => (!it.g || g || (it.a && am) || (it.r === 'lancamentos' && lf)) && (!it.rt || rtAuds(user).length) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
         <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && (g || hg) ? (g || accessOf(user.barberId) !== 'profissional' ? 'Performance da empresa' : 'Performance da área') : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}${it.r === 'atualizacoes' && updUnseen() ? `<span class="nav-new" aria-label="${updUnseen()} novidades">${updUnseen()}</span>` : ''}</a>`).join('');
       if (!gr.group || !items.trim()) return gr.group ? '' : items;
       // Conjunto que pode ser minimizado (fica lembrado neste aparelho); o conjunto da tela aberta aparece sempre.
@@ -1338,6 +1339,13 @@
       'Toque em Salvar regras. Abaixo aparece o cálculo de cada profissional no mês, com o total da equipe.',
       'Escolha outro mês para ver os anteriores e toque em Baixar planilha para pagar ou conferir.',
     ], tips: ['Penalidade registrada em Fiscalização reduz a comissão de quinta, sexta e sábado seguintes (padrão: 10 pontos).', 'Folga remunerada: quem tiver a maior taxa de ocupação do mês com faturamento acima do mínimo (padrão: R$ 13.500) ganha 1 dia de folga pago pela média diária dele.', 'No mês em andamento os valores ainda mudam; os prêmios por colocação valem no fechamento.', 'Os números vêm de Lançamentos e do ranking: nada para digitar de novo.'] },
+    rotina: { t: 'Checklist Líder e Recepção', ic: 'clock', steps: [
+      'O dono (ou quem tem acesso de Gestor) abre a tela, escolhe a lista (Líder de barbeiros ou Recepção) e toca em Nova tarefa.',
+      'Cada tarefa tem horário, dias da semana e, se quiser, a exigência de foto e descrição para ser confirmada.',
+      'O líder e a recepcionista abrem a tela todo dia e marcam cada tarefa quando terminam. Nas tarefas com prova, tiram a foto e escrevem o que fizeram.',
+      'Passou do horário (com 15 minutos de tolerância) sem marcar, a tarefa aparece como Atrasada. Feita depois do horário mostra quantos minutos atrasou.',
+      'Escolha outro dia no calendário para ver o histórico: o que foi feito, a que horas, por quem e as fotos.',
+    ], tips: ['Líder = quem tem nível de acesso Líder em Adicionar profissional. Recepção = quem tem "Recepcionista" na função.', 'Só o dono e o nível Gestor criam, mudam ou apagam tarefas. Pause uma tarefa (desmarque Ativa) para tirar do dia sem perder o histórico.', 'Quem marcou pode desmarcar no mesmo dia; depois disso, só a gestão.'] },
     fiscalizacao: { t: 'Fiscalização', ic: 'alert', gestor: 1, steps: [
       'Toque em Novo registro, escolha o profissional, a data e o tipo de falta (atraso, falta, atendimento, higiene, uniforme…).',
       'A gravidade é sugerida sozinha: se a mesma falta aconteceu nos últimos 30 dias, vira Reincidência. Você pode mudar para Advertência ou Penalidade (a Penalidade reduz a comissão de quinta, sexta e sábado seguintes, em Comissões e prêmios).',
@@ -1747,6 +1755,136 @@
     const all = (ui.discData && ui.discData.list) || [], q = v => { const t = String(v ?? ''); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
     const rows = [['Profissional', 'Gravidade', 'Data', 'Tipo de falta', 'Relato do líder', 'Registrado por']].concat(all.map(x => [(barberById(x.barber_id) || {}).name || '', (DISC_SEV[x.severity] || [''])[0], String(x.day).slice(0, 10), (DISC_KIND[x.kind] || [''])[0], x.note, x.author || '']));
     downloadFile(`fiscalizacao-${exportSlug()}-${iso(new Date())}.csv`, new Blob(['﻿' + rows.map(r => r.map(q).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+  }
+
+  // ---------- Checklist de rotina (Líder e Recepção) ----------
+  // Tarefas com horário que o líder de barbeiros e a recepção ticam no dia. Só o dono e o nível Gestor mudam as tarefas.
+  const RT_AUD = { lider: 'Líder de barbeiros', recepcao: 'Recepção' };
+  const RT_WD = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  const RT_TOL = 15; // minutos de tolerância depois do horário
+  const isRecep = bid => /recep/i.test((barberById(bid) || {}).role || '');
+  const isManager = u => !!u && (isGestor(u) || accessOf(u.barberId) === 'gestor');
+  // Quais listas a pessoa cumpre: Líder = nível de acesso Líder; Recepção = função com "recep". A gestão vê as duas.
+  function rtAuds(u) {
+    if (!u) return [];
+    if (isManager(u)) return ['lider', 'recepcao'];
+    const a = [];
+    if (accessOf(u.barberId) === 'lider') a.push('lider');
+    if (isRecep(u.barberId)) a.push('recepcao');
+    return a;
+  }
+  const hmMin = s => { const [h, m] = String(s || '0:0').split(':').map(Number); return h * 60 + (m || 0); };
+  const clockOf = d => { const t = new Date(d); return String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0'); };
+  const rtDemoTasks = () => [
+    ['lider', '08:30', 'Abrir a barbearia e conferir as bancadas', 'Luzes, ar, música e bancadas limpas. Foto do salão pronto.', true],
+    ['lider', '09:00', 'Reunião rápida com a equipe', 'Agenda do dia, metas e avisos.', false],
+    ['lider', '13:00', 'Conferir uniforme e higiene da equipe', 'Foto da equipe uniformizada.', true],
+    ['lider', '19:30', 'Fechamento: bancadas limpas e materiais guardados', 'Foto das bancadas no fim do dia.', true],
+    ['recepcao', '08:45', 'Confirmar os clientes do dia', 'Mensagem de confirmação para todos os agendados.', false],
+    ['recepcao', '10:00', 'Recepção e café prontos', 'Foto da recepção arrumada e do café.', true],
+    ['recepcao', '15:00', 'Ligar para clientes sumidos (mais de 45 dias)', '', false],
+    ['recepcao', '19:00', 'Fechar o caixa', 'Foto do relatório do caixa, com o total no texto.', true],
+  ].map((r, i) => ({ id: 'rt' + i, audience: r[0], at: r[1], title: r[2], detail: r[3], proof: r[4], days: [1, 2, 3, 4, 5, 6], active: true }));
+  const rtDemoDone = () => { const d = todayIso(), t = h => `${d}T${h}:00`; return [
+    { id: 'rd0', task_id: 'rt0', day: d, done_at: new Date(t('08:27')).toISOString(), author: 'Líder', note: 'Salão aberto, bancadas limpas.', photo: null },
+    { id: 'rd1', task_id: 'rt4', day: d, done_at: new Date(t('09:20')).toISOString(), author: 'Recepção', note: '', photo: null },
+  ]; };
+  const rtGet = (k, d) => { try { const v = JSON.parse(DB.pref.get(k, '') || 'null'); if (Array.isArray(v)) return v; } catch (e) { /* recria */ } return DB.demo ? d() : []; };
+  const rtSet = (k, v) => DB.pref.set(k, JSON.stringify(v));
+  const RT = {
+    tasks: async () => Cloud.enabled ? Cloud.rt.tasks() : rtGet('rtTasks', rtDemoTasks),
+    done: async (from, to) => Cloud.enabled ? Cloud.rt.done(from, to) : rtGet('rtDone', rtDemoDone).filter(x => x.day >= from && x.day <= to),
+    addTask: async row => { if (Cloud.enabled) return Cloud.rt.addTask(row); const v = rtGet('rtTasks', rtDemoTasks); v.push({ ...row, id: uid('rt_') }); rtSet('rtTasks', v); },
+    updTask: async (id, patch) => { if (Cloud.enabled) return Cloud.rt.updTask(id, patch); const v = rtGet('rtTasks', rtDemoTasks), r = v.find(x => x.id === id); if (r) Object.assign(r, patch); rtSet('rtTasks', v); },
+    delTask: async id => { if (Cloud.enabled) return Cloud.rt.delTask(id); rtSet('rtTasks', rtGet('rtTasks', rtDemoTasks).filter(x => x.id !== id)); rtSet('rtDone', rtGet('rtDone', rtDemoDone).filter(x => x.task_id !== id)); },
+    tick: async row => { if (Cloud.enabled) return Cloud.rt.tick(row); const v = rtGet('rtDone', rtDemoDone); if (v.some(x => x.task_id === row.task_id && x.day === row.day)) throw new Error('Esta tarefa já foi marcada.'); v.push({ ...row, id: uid('rd_'), done_at: new Date().toISOString() }); rtSet('rtDone', v); },
+    untick: async id => { if (Cloud.enabled) return Cloud.rt.untick(id); rtSet('rtDone', rtGet('rtDone', rtDemoDone).filter(x => x.id !== id)); },
+  };
+  const rtMsg = e => { const m = Cloud.enabled ? Cloud.message(e) : String(e.message || e); return /relation|does not exist|schema cache/i.test(m) ? 'O Checklist de rotina ainda está sendo ativado no servidor.' : m; };
+  const rtRow = (taskId, note, photo) => { const u = currentUser(); return { task_id: taskId, day: (ui.rtData && ui.rtData.list && ui.rtData.list.day) || todayIso(), note, photo, author: ((u && u.name) || 'Gestor').slice(0, 80), ...(Cloud.enabled ? {} : { user_id: u && u.id }) }; };
+  const rtImg = (x, cls = '') => !x.photo ? '' : x.photo.startsWith('data:') ? `<img class="pop-ph ${cls}" src="${esc(x.photo)}" alt="Foto da tarefa">` : `<img class="pop-ph ${cls}" data-proof="${esc(x.photo)}" alt="Foto da tarefa" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">`;
+  // Situação de uma tarefa no dia escolhido.
+  function rtState(t, d, day) {
+    const today = todayIso();
+    if (d) { const late = hmMin(clockOf(d.done_at)) - hmMin(t.at); return late > RT_TOL ? ['late-done', `Feita às ${clockOf(d.done_at)} · ${late} min depois do horário`] : ['done', `Feita às ${clockOf(d.done_at)}`]; }
+    if (day > today) return ['wait', 'Agendada'];
+    if (day < today) return ['miss', 'Não foi feita'];
+    const now = new Date(), nm = now.getHours() * 60 + now.getMinutes();
+    return nm > hmMin(t.at) + RT_TOL ? ['miss', 'Atrasada'] : ['wait', `Fazer até ${t.at}`];
+  }
+  function pageRotina(user) {
+    const auds = rtAuds(user);
+    if (!auds.length) return `<div class="card empty">${icon('checksq')}<h2>Checklist de rotina</h2><p>Esta lista é do líder de barbeiros e da recepção. Se você deveria ver, peça ao dono para ajustar seu nível de acesso ou sua função.</p></div>`;
+    const today = todayIso(), day = ui.rtDay && ui.rtDay <= today ? ui.rtDay : today;
+    const r = fbLoad('rtData', async () => { const [tasks, done] = await Promise.all([RT.tasks(), RT.done(day, day)]); return { tasks, done, day }; });
+    if (r.wait) return r.wait;
+    const mgr = isManager(user), aud = auds.includes(ui.rtAud) ? ui.rtAud : auds[0], wd = fromIso(day).getDay();
+    const all = r.list.tasks.filter(t => t.audience === aud).sort((a, b) => a.at.localeCompare(b.at) || a.title.localeCompare(b.title));
+    const tasks = all.filter(t => t.active !== false && (t.days || []).includes(wd));
+    const doneBy = Object.fromEntries(r.list.done.filter(x => x.day === day || String(x.day).slice(0, 10) === day).map(x => [x.task_id, x]));
+    const nDone = tasks.filter(t => doneBy[t.id]).length, nMiss = tasks.filter(t => rtState(t, doneBy[t.id], day)[0] === 'miss').length;
+    const canTick = day === today || mgr;
+    const dayTxt = day === today ? 'Hoje' : `${RT_WD[wd]}, ${Number(day.slice(8))}/${day.slice(5, 7)}`;
+    const head = `<section class="section">
+      <div class="rt-bar">
+        ${auds.length > 1 ? `<div class="seg" role="group" aria-label="Lista">${auds.map(a => `<button type="button" class="${a === aud ? 'on' : ''}" aria-pressed="${a === aud}" data-action="rtAud" data-a="${a}">${RT_AUD[a]}</button>`).join('')}</div>` : `<h2 class="rt-who">${icon('checksq')} ${RT_AUD[aud]}</h2>`}
+        <div class="rt-day"><input class="input input-sm" type="date" value="${day}" max="${today}" data-change="rtDay" aria-label="Dia">${day !== today ? `<button class="btn btn-sm" data-action="rtToday">Hoje</button>` : ''}</div>
+      </div>
+      ${tasks.length ? `<div class="card rt-sum"><div><b class="num">${nDone}/${tasks.length}</b> <span>feitas · ${esc(dayTxt)}</span>${nMiss ? ` <span class="chip chip-warn">${nMiss} ${day === today ? 'atrasada' : 'não feita'}${nMiss > 1 ? 's' : ''}</span>` : ''}</div>
+        <div class="pop-bar"><i style="width:${(nDone / tasks.length * 100).toFixed(1)}%"></i></div></div>` : ''}
+    </section>`;
+    const items = tasks.map(t => {
+      const d = doneBy[t.id], [st, stTxt] = rtState(t, d, day), draft = ui.rtDraft && ui.rtDraft.id === t.id ? ui.rtDraft : null;
+      const mayUndo = d && (mgr || (d.user_id && d.user_id === user.id && day === today) || (!Cloud.enabled && day === today));
+      const body = d ? `<div class="rt-proof">${d.photo ? `<button class="pop-evimg" data-action="rtView" data-id="${esc(d.id)}" aria-label="Ver foto">${rtImg(d)}</button>` : ''}
+          <div><small class="muted">${esc(d.author || '')}</small>${d.note ? `<p>${esc(d.note)}</p>` : ''}${mayUndo ? `<button class="link-btn" data-action="rtUndo" data-id="${esc(d.id)}">${ui.confirm === 'rt' + d.id ? 'Confirmar: desmarcar' : 'Desmarcar'}</button>` : ''}</div></div>`
+        : draft ? `<div class="pop-draft">
+          <div class="pop-draft-ph">${draft.photo ? `<img class="pop-ph big" src="${esc(draft.photo)}" alt="Foto escolhida">` : `<span class="pop-ph big pop-ph-none">${icon('camera')}<small>Foto obrigatória</small></span>`}
+            <div class="btn-row"><label class="btn btn-sm" style="cursor:pointer">${icon('camera')} Tirar foto<input type="file" accept="image/*" capture="environment" hidden data-change="rtPhoto"></label>
+            <label class="btn btn-sm" style="cursor:pointer">${icon('upload')} Galeria<input type="file" accept="image/*" hidden data-change="rtPhoto"></label></div></div>
+          <label class="field"><span class="tm-flabel">Descrição *</span><textarea class="input pop-ta" id="rt-note" maxlength="1000" placeholder="O que foi feito, como ficou, algum problema…">${esc(draft.note || '')}</textarea></label>
+          <p class="form-msg" id="rt-msg">${esc(draft.err || '')}</p>
+          <div class="btn-row"><button class="btn btn-primary" data-action="rtConfirm" ${draft.busy ? 'disabled' : ''}>${icon('check')} ${draft.busy ? 'Enviando…' : 'Confirmar'}</button><button class="btn" data-action="rtCancel">Cancelar</button></div>
+        </div>`
+        : canTick && day <= today ? `<button class="btn ${t.proof ? '' : 'btn-primary'} rt-go" data-action="rtTick" data-id="${esc(t.id)}">${icon(t.proof ? 'camera' : 'check')} ${t.proof ? 'Enviar foto e confirmar' : 'Marcar como feita'}</button>` : '';
+      return `<article class="card rt-item st-${st}">
+        <div class="rt-ihead"><span class="rt-time num">${esc(t.at)}</span><div class="rt-tt"><h3>${d ? icon('check') + ' ' : ''}${esc(t.title)}</h3>${t.detail ? `<p class="muted">${esc(t.detail)}</p>` : ''}</div></div>
+        <div class="rt-st"><span class="rt-chip">${esc(stTxt)}</span>${t.proof ? `<span class="chip chip-soft">${icon('camera')} Foto e descrição</span>` : ''}</div>
+        ${body}</article>`;
+    }).join('');
+    const empty = `<div class="card muted">${all.length ? `Nenhuma tarefa de ${RT_AUD[aud].toLowerCase()} para ${day === today ? 'hoje' : 'este dia'}.` : mgr ? 'Ainda não há tarefas nesta lista. Toque em Nova tarefa para começar.' : 'O dono ainda não cadastrou as tarefas desta lista.'}</div>`;
+    const editor = mgr ? `<section class="section card rt-edit">
+      <div class="pop-dhead"><div><h2 class="pop-h2">${icon('edit')} Tarefas de ${RT_AUD[aud]}</h2><p class="muted">Só o dono e quem tem acesso de Gestor criam e mudam as tarefas.</p></div>
+        <button class="btn btn-primary" data-action="rtNew">${icon('plus')} Nova tarefa</button></div>
+      ${all.length ? `<ul class="rt-elist">${all.map(t => `<li class="${t.active === false ? 'off' : ''}"><span class="rt-time num">${esc(t.at)}</span><span><b>${esc(t.title)}</b><small class="muted">${(t.days || []).length === 7 ? 'Todos os dias' : [...(t.days || [])].sort().map(i => RT_WD[i]).join(', ') || 'Nenhum dia'}${t.proof ? ' · foto e descrição' : ''}${t.active === false ? ' · pausada' : ''}</small></span><button class="btn btn-sm" data-action="rtEdit" data-id="${esc(t.id)}">${icon('edit')} Editar</button></li>`).join('')}</ul>` : ''}
+    </section>` : '';
+    return `${head}<section class="section rt-list">${tasks.length ? items : empty}</section>${editor}${rtModal(r.list.tasks, aud)}${rtViewer(r.list.done)}`;
+  }
+  function rtModal(tasks, aud) {
+    const m = ui.rtEdit; if (!m) return '';
+    const t = m === 'new' ? { audience: aud, at: '09:00', title: '', detail: '', days: [1, 2, 3, 4, 5, 6], proof: false, active: true } : tasks.find(x => x.id === m);
+    if (!t) return '';
+    return `<div class="hp-ov" data-action="rtClose" role="presentation"><div class="hp-card card" role="dialog" aria-modal="true" aria-label="Tarefa">
+      <div class="hp-head"><h2>${icon('checksq')} ${m === 'new' ? 'Nova tarefa' : 'Editar tarefa'}</h2><button class="icon-btn" data-action="rtClose" aria-label="Fechar">${icon('x')}</button></div>
+      <form class="form" data-form="rtSave" novalidate>
+        <label class="field"><span>Tarefa *</span><input class="input" name="title" maxlength="120" required value="${esc(t.title)}" placeholder="Ex.: Fechar o caixa"></label>
+        <div class="grid-2">
+          <label class="field"><span>Horário *</span><input class="input" type="time" name="at" required value="${esc(t.at)}"></label>
+          <label class="field"><span>Quem faz *</span><select class="input" name="aud">${Object.entries(RT_AUD).map(([k, l]) => `<option value="${k}" ${t.audience === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        </div>
+        <fieldset class="rt-days"><legend>Dias da semana</legend>${RT_WD.map((l, i) => `<label class="check"><input type="checkbox" name="d${i}" ${(t.days || []).includes(i) ? 'checked' : ''}><span>${l}</span></label>`).join('')}</fieldset>
+        <label class="field"><span>Como fazer (opcional)</span><textarea class="input" name="detail" rows="3" maxlength="1000" placeholder="O que conferir, o que mostrar na foto…">${esc(t.detail || '')}</textarea></label>
+        <label class="check"><input type="checkbox" name="proof" ${t.proof ? 'checked' : ''}><span><b>Exige foto e descrição</b><small>Só dá para confirmar enviando uma foto e escrevendo o que foi feito.</small></span></label>
+        <label class="check"><input type="checkbox" name="active" ${t.active !== false ? 'checked' : ''}><span><b>Ativa</b><small>Desmarque para pausar a tarefa sem apagar o histórico.</small></span></label>
+        <p class="form-msg" data-msg></p>
+        <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button>${m !== 'new' ? `<button class="btn btn-sm" type="button" data-action="rtDel" data-id="${esc(t.id)}">${icon('trash')} ${ui.confirm === 'rtDel' ? 'Confirmar exclusão' : 'Apagar'}</button>` : ''}</div>
+      </form></div></div>`;
+  }
+  function rtViewer(done) {
+    const d = ui.rtView && done.find(x => x.id === ui.rtView); if (!d) return '';
+    return `<div class="pop-viewer" role="dialog" aria-modal="true" aria-label="Foto da tarefa"><div class="inst-scrim" data-action="rtViewClose"></div>
+      <figure>${rtImg(d, 'full')}<figcaption><b>${esc(d.author || '')} · ${clockOf(d.done_at)}</b>${d.note ? `<span>${esc(d.note)}</span>` : ''}</figcaption>
+      <button class="btn" data-action="rtViewClose">${icon('x')} Fechar</button></figure></div>`;
   }
 
   // ---------- Atualizações, Sugestões de melhorias e Reportar erro ----------
@@ -5077,6 +5215,7 @@ Content-Type: application/json</pre>
     relatorios: { t: 'Relatórios mensais', r: pageRelatorios },
     organograma: { t: 'Organograma', r: pageOrganograma, g: 1 },
     checklist: { t: 'Checklist Agenda Cheia', r: pageChecklist },
+    rotina: { t: 'Checklist Líder e Recepção', r: pageRotina },
     pops: { t: 'POPs · Guia do Sucesso', r: pagePops },
     time: { t: 'Performance da equipe', r: pageTime },
     performance: { t: 'Minha performance', r: pagePerformance },
@@ -5941,6 +6080,44 @@ Content-Type: application/json</pre>
     popCsv() { popCsv(); },
     exportJson() { exportJson(); },
     discNew() { ui.discEdit = 'new'; render(); },
+    rtAud(el) { ui.rtAud = el.dataset.a; ui.rtDraft = null; render(); },
+    rtToday() { ui.rtDay = null; ui.rtData = null; ui.rtDraft = null; render(); },
+    rtNew() { ui.rtEdit = 'new'; ui.confirm = null; render(); },
+    rtEdit(el) { ui.rtEdit = el.dataset.id; ui.confirm = null; render(); },
+    rtClose(el, e) { if (el.classList.contains('hp-ov') && e.target.closest('.hp-card')) return; ui.rtEdit = null; render(); },
+    rtView(el) { ui.rtView = el.dataset.id; render(); },
+    rtViewClose() { ui.rtView = null; render(); },
+    rtCancel() { ui.rtDraft = null; render(); },
+    async rtDel(el) {
+      if (ui.confirm !== 'rtDel') { ui.confirm = 'rtDel'; render(); return; }
+      try { await RT.delTask(el.dataset.id); ui.confirm = null; ui.rtEdit = null; ui.rtData = null; toast('Tarefa apagada.'); render(); } catch (e) { toast(rtMsg(e)); }
+    },
+    async rtTick(el) {
+      const t = ((ui.rtData && ui.rtData.list && ui.rtData.list.tasks) || []).find(x => x.id === el.dataset.id); if (!t) return;
+      if (t.proof) { ui.rtDraft = { id: t.id, photo: null, note: '' }; render(); return; }
+      el.disabled = true;
+      try { await RT.tick(rtRow(t.id, '', null)); ui.rtData = null; toast('Tarefa marcada como feita.'); render(); } catch (e) { el.disabled = false; toast(rtMsg(e)); }
+    },
+    async rtConfirm() {
+      const d = ui.rtDraft; if (!d || d.busy) return;
+      d.note = ($('#rt-note') || {}).value || d.note || ''; d.err = '';
+      if (!d.photo) { d.err = 'Tire ou escolha a foto da tarefa.'; render(); return; }
+      if (d.note.trim().length < 3) { d.err = 'Escreva a descrição do que foi feito.'; render(); return; }
+      d.busy = true; render();
+      try {
+        const u = currentUser(), day = todayIso();
+        const photo = Cloud.enabled ? await Cloud.uploadProof(`${Cloud.companyId}/${(u && u.barberId) || 'gestao'}/rotina-${day}-${uid()}.jpg`, d.photo) : d.photo;
+        try { await RT.tick(rtRow(d.id, d.note.trim(), photo)); } catch (e) { if (Cloud.enabled) Cloud.removeProof(photo); throw e; }
+        ui.rtDraft = null; ui.rtData = null; toast('Tarefa confirmada com foto.'); render();
+      } catch (e) { d.busy = false; d.err = 'Não foi possível confirmar: ' + rtMsg(e); render(); }
+    },
+    async rtUndo(el) {
+      const id = el.dataset.id;
+      if (ui.confirm !== 'rt' + id) { ui.confirm = 'rt' + id; render(); return; }
+      ui.confirm = null;
+      const d = ((ui.rtData && ui.rtData.list && ui.rtData.list.done) || []).find(x => x.id === id);
+      try { await RT.untick(id); if (d && d.photo && Cloud.enabled && !d.photo.startsWith('data:')) Cloud.removeProof(d.photo); ui.rtData = null; toast('Tarefa desmarcada.'); render(); } catch (e) { toast(rtMsg(e)); render(); }
+    },
     discOpen(el) { ui.discEdit = el.dataset.id; render(); },
     discClose(el, e) { if (el.classList.contains('hp-ov') && e.target.closest('.hp-card')) return; ui.discEdit = null; render(); },
     discPick(el) { const f = { ...(ui.discF || {}) }; f.b = f.b === el.dataset.b ? '' : el.dataset.b; ui.discF = f; render(); },
@@ -6325,6 +6502,19 @@ Content-Type: application/json</pre>
   }
 
   const FORMS = {
+    async rtSave(f) {
+      const title = (f.elements.title.value || '').trim().slice(0, 120), at = val(f, 'at'), audience = val(f, 'aud');
+      const days = [0, 1, 2, 3, 4, 5, 6].filter(i => f.elements['d' + i].checked);
+      if (!title) return setMsg(f, 'Escreva a tarefa.');
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(at)) return setMsg(f, 'Escolha o horário.');
+      if (!days.length) return setMsg(f, 'Marque pelo menos um dia da semana.');
+      const row = { title, at, audience, days, detail: (f.elements.detail.value || '').trim().slice(0, 1000), proof: f.elements.proof.checked, active: f.elements.active.checked };
+      const btn = f.querySelector('[type=submit]'); btn.disabled = true;
+      try {
+        if (ui.rtEdit === 'new') await RT.addTask(row); else await RT.updTask(ui.rtEdit, row);
+        ui.rtEdit = null; ui.rtData = null; ui.rtAud = audience; toast('Tarefa salva.'); render();
+      } catch (e) { btn.disabled = false; setMsg(f, 'Não foi possível salvar: ' + rtMsg(e)); }
+    },
     async discSave(f) {
       const b = val(f, 'b'), day = val(f, 'day'), kind = val(f, 'kind'), sev = val(f, 'sev'), note = (f.elements.note.value || '').trim().slice(0, 2000);
       if (!b) return setMsg(f, 'Escolha o profissional.');
@@ -6677,6 +6867,12 @@ Content-Type: application/json</pre>
   };
 
   const CHANGES = {
+    rtDay(el) { ui.rtDay = el.value && el.value <= todayIso() ? el.value : null; ui.rtData = null; ui.rtDraft = null; render(); },
+    async rtPhoto(el) {
+      const f = el.files && el.files[0], d = ui.rtDraft; if (!f || !d) return;
+      d.note = ($('#rt-note') || {}).value || d.note || '';
+      try { d.photo = await readImage(f, Cloud.enabled ? 1400 : 900, 0.78); d.err = ''; render(); } catch (e) { toast(e.message); }
+    },
     discQ(el) { ui.discF = { ...(ui.discF || {}), q: el.value }; render(); },
     discFb(el) { ui.discF = { ...(ui.discF || {}), b: el.value }; render(); },
     discFk(el) { ui.discF = { ...(ui.discF || {}), k: el.value }; render(); },
