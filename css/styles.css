@@ -2336,3 +2336,40 @@ html[data-brand="salao"] .pt-ask b { background-image: linear-gradient(180deg, #
 .nav-items[hidden] { display: none; }
 .nav-new-g { font-style: normal; letter-spacing: 0; display: none; }
 .nav-toggle[aria-expanded="false"] .nav-new-g { display: inline-grid; }
+
+/* Fiscalização (controle disciplinar) */
+.disc-title { display: flex; align-items: center; gap: 10px; margin: 0 0 4px; font-family: var(--font-display); font-size: clamp(1.5rem, 4vw, 2.1rem); }
+.disc-title .ico { color: #f4c542; width: 1.3em; height: 1.3em; }
+.disc-sum { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.disc-sumc { display: flex; align-items: center; gap: 10px; padding: 10px 14px; flex: none; cursor: pointer; color: inherit; font: inherit; text-align: left; }
+.disc-sumc span { display: grid; } .disc-sumc small { color: var(--muted); font-size: 0.78rem; }
+.disc-sumc.on { border-color: var(--accent); }
+.disc-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.disc-q { flex: 1 1 200px; width: auto; }
+.disc-add { margin-left: auto; }
+.disc-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; }
+.disc-table { width: 100%; border-collapse: collapse; min-width: 820px; }
+.disc-table th { text-align: left; font-weight: 600; font-size: 0.85rem; color: var(--muted); padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.disc-table td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.disc-table td + td, .disc-table th + th { border-left: 1px solid var(--line); }
+.disc-table tr:last-child td { border-bottom: 0; }
+.disc-name { position: sticky; left: 0; background: var(--surface); min-width: 210px; }
+.disc-name { display: table-cell; }
+.disc-name span { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+.disc-name .ico { color: var(--muted); }
+.disc-open { float: right; margin-left: 10px; padding: 3px 10px; border-radius: 8px; border: 1px solid var(--line); background: none; color: var(--muted); font: inherit; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; }
+.disc-open:hover { color: var(--fg); border-color: var(--line-accent); }
+.disc-table td.num { white-space: nowrap; }
+.disc-note { max-width: 340px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--fg-soft); }
+.dtag { display: inline-block; padding: 3px 10px; border-radius: 6px; font-weight: 600; font-size: 0.9rem; white-space: nowrap; color: #fff; }
+.sev-oc { background: #6b4fa0; } .sev-adv { background: #8a6d1f; } .sev-rei { background: #a0562b; } .sev-sus { background: #b03a3a; }
+.k-atraso { background: #8a6d1f; } .k-atend { background: #a3403f; } .k-hig { background: #2f6b4a; } .k-unif { background: #2f5d9a; }
+.k-org { background: #2b7a7a; } .k-comp { background: #9a3f75; } .k-falta { background: #7a3030; } .k-outro { background: #5a5a66; }
+.disc-hint { display: block; margin-top: 4px; }
+[data-form="discSave"] textarea.input { font: inherit; font-size: 0.95rem; line-height: 1.45; min-height: 0; }
+.disc-table td, .disc-table th { text-align: left !important; }
+
+.folga-card { display: flex; gap: 12px; align-items: center; margin: 10px 0 4px; padding: 12px 14px; border-radius: 14px; border: 1px solid rgba(82, 211, 126, 0.45); background: rgba(82, 211, 126, 0.1); }
+.folga-card span { display: grid; gap: 2px; } .folga-card small { color: var(--fg-soft); }
+.com-row > span small.neg, .disc-pen { color: #ff8a80; }
+.disc-pen { display: flex; gap: 6px; align-items: center; margin-top: 6px; }

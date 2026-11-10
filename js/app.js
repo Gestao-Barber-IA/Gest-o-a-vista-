@@ -640,6 +640,7 @@
       { r: 'organograma', t: 'Organograma', i: 'org', g: 1 },
     ] },
     { group: 'Gestor', g: 1, items: [
+      { r: 'fiscalizacao', t: 'Fiscalização', i: 'alert', g: 1, a: 1 },
       { r: 'barbeiros', t: 'Adicionar profissional', i: 'users', g: 1 },
       { r: 'configuracoes', t: 'Configurações', i: 'gear' },
       { r: 'assinatura', t: 'Assinatura', i: 'card', cloud: 1 },
@@ -666,7 +667,7 @@
   const navShut = () => { try { const v = JSON.parse(DB.pref.get('navShut', '[]')); return Array.isArray(v) ? v : []; } catch (e) { return []; } };
   function drawer(user, route) {
     const g = isGestor(user);
-    const groups = NAV.filter(gr => !gr.g || g).map(gr => {
+    const groups = NAV.filter(gr => !gr.g || g || isAreaMgr(user)).map(gr => {
       const am = isAreaMgr(user), hg = hasGrants(user);
       const lf = myExtras().fields.length > 0;
       const items = gr.items.filter(it => (!it.g || g || (it.a && am) || (it.r === 'lancamentos' && lf)) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
@@ -1336,7 +1337,14 @@
       'Se algum profissional tem uma comissão diferente, abra "Comissão diferente para algum profissional".',
       'Toque em Salvar regras. Abaixo aparece o cálculo de cada profissional no mês, com o total da equipe.',
       'Escolha outro mês para ver os anteriores e toque em Baixar planilha para pagar ou conferir.',
-    ], tips: ['No mês em andamento os valores ainda mudam; os prêmios por colocação valem no fechamento.', 'Os números vêm de Lançamentos e do ranking: nada para digitar de novo.'] },
+    ], tips: ['Penalidade registrada em Fiscalização reduz a comissão de quinta, sexta e sábado seguintes (padrão: 10 pontos).', 'Folga remunerada: quem tiver a maior taxa de ocupação do mês com faturamento acima do mínimo (padrão: R$ 13.500) ganha 1 dia de folga pago pela média diária dele.', 'No mês em andamento os valores ainda mudam; os prêmios por colocação valem no fechamento.', 'Os números vêm de Lançamentos e do ranking: nada para digitar de novo.'] },
+    fiscalizacao: { t: 'Fiscalização', ic: 'alert', gestor: 1, steps: [
+      'Toque em Novo registro, escolha o profissional, a data e o tipo de falta (atraso, falta, atendimento, higiene, uniforme…).',
+      'A gravidade é sugerida sozinha: se a mesma falta aconteceu nos últimos 30 dias, vira Reincidência. Você pode mudar para Advertência ou Penalidade (a Penalidade reduz a comissão de quinta, sexta e sábado seguintes, em Comissões e prêmios).',
+      'Escreva o relato do líder (horário, o que aconteceu, cliente envolvido) e salve.',
+      'Use a busca e os filtros (profissional, tipo, gravidade e mês). Toque em Abrir para ver ou corrigir um registro.',
+      'No topo aparecem os profissionais com mais registros; tocar em um filtra a lista.',
+    ], tips: ['Só o gestor e os líderes veem esta página; o profissional não.', 'Baixe a planilha para guardar o histórico ou levar a uma conversa formal.'] },
     sonhos: { t: 'Sonhos', ic: 'rocket', steps: [
       'Cada profissional entra em Sonhos e conta o sonho dele: o que é, quanto custa e quanto já juntou.',
       'Com as comissões configuradas, ele escolhe quanto da comissão vai guardar, e o app mostra em quantos meses chega lá.',
@@ -1428,7 +1436,7 @@
   }
 
   // ---------- Comissões e prêmios ----------
-  const COM_DEF = { pct: 0, pctBy: {}, plano: 0, prod: 0, pos: { 1: 0, 2: 0, 3: 0 }, mvp: 0, dest: 0, meta: 0 };
+  const COM_DEF = { pct: 0, pctBy: {}, plano: 0, prod: 0, pos: { 1: 0, 2: 0, 3: 0 }, mvp: 0, dest: 0, meta: 0, pen: 10, folgaMin: 13500 };
   const comCfg = () => { const c = state.comCfg || {}; return { ...COM_DEF, ...c, pctBy: { ...(c.pctBy || {}) }, pos: { ...COM_DEF.pos, ...(c.pos || {}) } }; };
   const comOn = () => { const c = comCfg(); return c.pct > 0 || Object.values(c.pctBy).some(v => v > 0) || c.plano > 0 || c.prod > 0 || c.mvp > 0 || c.dest > 0 || c.meta > 0 || Object.values(c.pos).some(v => v > 0); };
   function comFor(ym, bid) {
@@ -1442,10 +1450,44 @@
     if (R.title.barberId === bid && R.title.type === 'destaque' && c.dest > 0) bonus.push(['Destaque do mês', Number(c.dest)]);
     const gFat = GB.goalFor(state, bid, 'fat');
     if (c.meta > 0 && gFat > 0 && (s.fat || 0) >= gFat) bonus.push(['Meta de faturamento', Number(c.meta)]);
+    // Folga remunerada: maior taxa de ocupação do mês, com faturamento acima do mínimo. Vale a média diária de ganho dele no mês.
+    const days = workDays(ym, bid), earn = base + vPl + vPr, folga = folgaWinner(ym);
+    if (folga && folga.barber.id === bid && earn > 0) bonus.push(['Folga remunerada (1 dia)', earn / days]);
+    // Penalidades (Fiscalização): a comissão cai nos 3 dias (quinta, sexta e sábado) seguintes ao registro.
+    for (const p of penaltiesFor(bid, ym)) {
+      const dayFat = p.dates.reduce((a, d) => a + dayFatOf(bid, d, ym, s.fat || 0, days), 0), pts = Math.min(pct, Number(c.pen) || 0);
+      if (pts > 0 && dayFat > 0) bonus.push([`Penalidade ${p.label}`, -(dayFat * pts / 100)]);
+    }
     const bTot = bonus.reduce((a, [, v]) => a + v, 0);
-    return { row, fat: s.fat || 0, pct, base, planos: s.planos || 0, vPl, prod: s.prod || 0, vPr, bonus, bTot, total: base + vPl + vPr + bTot };
+    return { row, fat: s.fat || 0, pct, base, planos: s.planos || 0, vPl, prod: s.prod || 0, vPr, bonus, bTot, total: Math.max(0, base + vPl + vPr + bTot), days };
+  }
+  // Dias trabalhados no mês (regra da taxa de ocupação, menos as ausências lançadas).
+  const workDays = (ym, bid) => { const rec = (state.monthly || []).find(m => m.barberId === bid && m.month === ym); return Math.max(1, (Number(GB.ocupCfgOf(state).days) || 22) - (rec && Number(rec.aus) > 0 ? Number(rec.aus) : 0)); };
+  function folgaWinner(ym) {
+    const min = Number(comCfg().folgaMin) || 0; if (!(min > 0)) return null;
+    const cands = monthR(ym).rows.filter(r => hasData(r) && (r.sums.fat || 0) > min && r.values.ocup !== null && r.values.ocup !== undefined);
+    return cands.sort((a, b) => b.values.ocup - a.values.ocup || (b.sums.fat || 0) - (a.sums.fat || 0))[0] || null;
+  }
+  // Quinta, sexta e sábado seguintes ao dia da penalidade.
+  function penaltyDates(day) {
+    const d = fromIso(String(day).slice(0, 10)); d.setDate(d.getDate() + 1);
+    while (d.getDay() !== 4) d.setDate(d.getDate() + 1);
+    return [0, 1, 2].map(k => iso(new Date(d.getFullYear(), d.getMonth(), d.getDate() + k)));
+  }
+  const discAll = () => (ui.discData && ui.discData.list) || (Cloud.enabled ? [] : discLocal());
+  function penaltiesFor(bid, ym) {
+    return discAll().filter(x => x.barber_id === bid && x.severity === 'penalidade').map(x => {
+      const all = penaltyDates(x.day), dates = all.filter(d => d.slice(0, 7) === ym);
+      return { dates, label: `${all.map(d => d.slice(8, 10)).join(', ')}/${all[2].slice(5, 7)}` };
+    }).filter(p => p.dates.length);
+  }
+  // Faturamento do dia: o lançado no dia; sem lançamento diário no mês, a média diária do mês.
+  function dayFatOf(bid, day, ym, monthFat, days) {
+    const es = state.entries.filter(e => e.barberId === bid && e.date.slice(0, 7) === ym && isNum(e.fat));
+    return es.length ? es.filter(e => e.date === day).reduce((a, e) => a + Number(e.fat), 0) : monthFat / days;
   }
   function pageComissoes() {
+    if (!ui.discData) fbLoad('discData', DISC.list); // penalidades da Fiscalização entram no cálculo
     const c = comCfg(), months = monthsUntil(curYm()).slice().reverse(), ym = months.includes(ui.comYm) ? ui.comYm : months[0];
     const act = state.barbers.filter(b => b.active !== false);
     const lines = act.map(b => ({ b, r: comFor(ym, b.id) })).filter(x => x.r).sort((a, b) => b.r.total - a.r.total);
@@ -1464,7 +1506,10 @@
           <label class="field"><span>Prêmio 3º lugar (R$)</span>${inp('pos3', c.pos[3], 'Ex.: 50')}</label>
           <label class="field"><span>Prêmio extra MVP (R$)</span>${inp('mvp', c.mvp, 'Ex.: 150')}</label>
           <label class="field"><span>Prêmio extra Destaque (R$)</span>${inp('dest', c.dest, 'Ex.: 80')}</label>
+          <label class="field"><span>Penalidade: a comissão cai quantos pontos % na quinta, sexta e sábado seguintes</span>${inp('pen', c.pen, 'Ex.: 10', '1')}</label>
+          <label class="field"><span>Folga remunerada: maior taxa de ocupação do mês, com faturamento acima de (R$)</span>${inp('folgaMin', c.folgaMin, 'Ex.: 13500')}</label>
         </div>
+        <p class="section-note">Penalidade: registrada em Fiscalização, reduz a comissão dos 3 dias (ex.: de 40% para 30%). Folga remunerada: 1 dia de folga pago pela média diária de ganho do profissional no mês. Deixe em branco para não usar.</p>
         <details class="com-by"><summary>Comissão diferente para algum profissional</summary>
           <div class="grid-2">${act.map(b => `<label class="field"><span>${esc(b.name)} (%)</span><input class="input num" type="number" min="0" step="0.1" name="by-${esc(b.id)}" value="${c.pctBy[b.id] > 0 ? c.pctBy[b.id] : ''}" placeholder="Padrão: ${c.pct || 0}%"></label>`).join('')}</div></details>
         <p class="form-msg" data-msg></p>
@@ -1474,13 +1519,15 @@
       <div class="com-head"><h2 class="section-title">Comissões de ${esc(ymLabel(ym))}</h2>
         <select class="input input-sm" data-change="comYm" aria-label="Mês">${months.map(m => `<option value="${m}" ${m === ym ? 'selected' : ''}>${esc(ymLabel(m))}</option>`).join('')}</select></div>
       ${ym === curYm() ? '<p class="pm-note">' + icon('clock') + '<span>Mês em andamento: os valores e os prêmios por colocação ainda podem mudar até o fechamento.</span></p>' : ''}
+      ${(() => { const w = folgaWinner(ym); if (!w) return Number(comCfg().folgaMin) > 0 ? `<p class="muted">Folga remunerada: ninguém com faturamento acima de ${money2(comCfg().folgaMin)} e taxa de ocupação lançada ainda.</p>` : ''; const r = comFor(ym, w.barber.id); const v = r ? (r.base + r.vPl + r.vPr) / r.days : 0;
+        return `<div class="folga-card">${avatar(w.barber, 44)}<span><b>Folga remunerada de ${esc(monthRange(ym).label.split(' de ')[0])}: ${esc(w.barber.name)}</b><small>Maior taxa de ocupação (${nf1.format(w.values.ocup)}%) com faturamento de ${money2(w.sums.fat)}. Ganha 1 dia de folga pago por ${money2(v)} (média diária do mês, ${r ? r.days : 0} dias trabalhados).</small></span></div>`; })()}
       ${!comOn() ? '<p class="muted">Preencha as regras acima para ver as comissões.</p>' : lines.length ? `<div class="com-table" role="table">
-        <div class="com-row com-th" role="row"><span>Profissional</span><span>Faturamento</span><span>Comissão</span><span>Planos e produtos</span><span>Prêmios</span><span>Total</span></div>
+        <div class="com-row com-th" role="row"><span>Profissional</span><span>Faturamento</span><span>Comissão</span><span>Planos e produtos</span><span>Prêmios e descontos</span><span>Total</span></div>
         ${lines.map(({ b, r }) => `<div class="com-row" role="row"><span class="com-name">${avatar(b, 32)}<b>${esc(b.name)}</b></span>
           <span class="num" data-l="Faturamento">${money2(r.fat)}</span>
           <span class="num" data-l="Comissão">${money2(r.base)}<small>${nf1.format(r.pct)}%</small></span>
           <span class="num" data-l="Planos e produtos">${money2(r.vPl + r.vPr)}<small>${r.planos} planos · ${r.prod} produtos</small></span>
-          <span class="num" data-l="Prêmios">${money2(r.bTot)}${r.bonus.length ? `<small>${r.bonus.map(([l]) => esc(l)).join(' · ')}</small>` : ''}</span>
+          <span class="num" data-l="Prêmios e descontos">${money2(r.bTot)}${r.bonus.length ? `<small>${r.bonus.map(([l, v]) => `<span class="${v < 0 ? 'neg' : ''}">${esc(l)}${v < 0 ? ' −' + money2(-v) : ''}</span>`).join(' · ')}</small>` : ''}</span>
           <span class="num com-tot" data-l="Total">${money2(r.total)}</span></div>`).join('')}
         <div class="com-row com-foot" role="row"><span>Total da equipe</span><span></span><span></span><span></span><span></span><span class="num com-tot">${money2(tot)}</span></div>
       </div>
@@ -1604,6 +1651,103 @@
       <label class="btn btn-sm btn-primary" style="cursor:pointer">${icon('upload')} Escolher planilha (CSV)<input type="file" accept=".csv,text/csv" hidden data-change="csvImport"></label>
       ${ui.csvMsg ? `<div class="pm-note">${icon('help')}<span>${esc(ui.csvMsg)}</span></div>` : ''}
     </section>`;
+
+  // ---------- Fiscalização (controle disciplinar) ----------
+  const DISC_SEV = { ocorrencia: ['Ocorrência', 'sev-oc'], advertencia: ['Advertência', 'sev-adv'], reincidencia: ['Reincidência', 'sev-rei'], penalidade: ['Penalidade', 'sev-sus'] };
+  const DISC_KIND = { atraso: ['Atraso', 'k-atraso'], falta: ['Falta', 'k-falta'], atendimento: ['Atendimento', 'k-atend'], higiene: ['Higiene', 'k-hig'], uniforme: ['Uniforme', 'k-unif'], organizacao: ['Organização', 'k-org'], comportamento: ['Comportamento', 'k-comp'], outro: ['Outro', 'k-outro'] };
+  const discTag = (map, k) => { const [l, c] = map[k] || Object.values(map)[0]; return `<span class="dtag ${c}">${l}</span>`; };
+  const discDemo = () => {
+    const bs = state.barbers.filter(b => b.active !== false), ym = curYm(), d = n => `${ym}-${String(n).padStart(2, '0')}`;
+    const rows = [[0, 'advertencia', 'atraso', 3, 'Avisou 8h32 que chegaria atrasado. Chegou 9h10.'], [1, 'reincidencia', 'atraso', 5, 'Chegou 8h58, segunda vez no mês.'], [2, 'ocorrencia', 'atraso', 6, 'Chegou 9h07 e foi ajeitar o cabelo antes de atender.'],
+      [3, 'reincidencia', 'atendimento', 8, 'Atrasou o cliente das 10h em 20 minutos.'], [4, 'ocorrencia', 'atendimento', 9, 'Não ofereceu café nem bebida ao cliente.'], [5, 'ocorrencia', 'higiene', 11, 'Bancada sem limpar entre um cliente e outro.'], [1, 'ocorrencia', 'uniforme', 12, 'Veio sem o avental da casa.'], [3, 'penalidade', 'atendimento', 2, 'Terceira vez atrasando cliente no mês. Penalidade aplicada.']];
+    return rows.filter(r => bs[r[0]]).map((r, i) => ({ id: 'dd' + i, barber_id: bs[r[0]].id, severity: r[1], kind: r[2], day: d(r[3]), note: r[4], author: 'Líder', created_at: d(r[3]) + 'T12:00:00Z' }));
+  };
+  const discLocal = () => { try { const v = JSON.parse(DB.pref.get('disc', '') || 'null'); if (Array.isArray(v)) return v; } catch (e) { /* recria */ } return DB.demo ? discDemo() : []; };
+  const discSave = v => DB.pref.set('disc', JSON.stringify(v));
+  const DISC = {
+    list: async () => Cloud.enabled ? Cloud.disc.list() : discLocal(),
+    add: async row => { if (Cloud.enabled) return Cloud.disc.add(row); const v = discLocal(); v.unshift({ ...row, id: uid('dc_'), created_at: new Date().toISOString() }); discSave(v); },
+    upd: async (id, patch) => { if (Cloud.enabled) return Cloud.disc.upd(id, patch); const v = discLocal(), r = v.find(x => x.id === id); if (r) Object.assign(r, patch); discSave(v); },
+    del: async id => { if (Cloud.enabled) return Cloud.disc.del(id); discSave(discLocal().filter(x => x.id !== id)); },
+  };
+  // Quem o usuário pode fiscalizar: o gestor, todos; o líder, a equipe da área dele.
+  const discPeople = user => state.barbers.filter(b => isGestor(user) || (typeof areaIds === 'function' ? areaIds(user, ['gestor', 'membro']).includes(b.id) : false));
+  const fmtDayBR = d => { const [y, m, dd] = String(d).slice(0, 10).split('-').map(Number); return `${dd} de ${MONTH_NAMES[m - 1]} de ${y}`; };
+  // Sugere a gravidade: mesma falta do mesmo profissional nos últimos 30 dias = reincidência.
+  function discSuggest(list, bid, kind, day, skipId) {
+    const t = fromIso(day).getTime();
+    const prev = list.filter(r => r.id !== skipId && r.barber_id === bid && r.kind === kind && fromIso(r.day).getTime() <= t && t - fromIso(r.day).getTime() <= 30 * 864e5);
+    return prev.length ? 'reincidencia' : 'ocorrencia';
+  }
+  function pageFiscalizacao(user) {
+    const r = fbLoad('discData', DISC.list);
+    if (r.wait) return r.wait;
+    const people = discPeople(user), ids = new Set(people.map(b => b.id)), f = ui.discF || {};
+    const name = id => (barberById(id) || { name: 'Profissional removido' }).name;
+    let list = r.list.filter(x => ids.has(x.barber_id) || isGestor(user));
+    const q = normH(f.q || '');
+    list = list.filter(x => (!f.b || x.barber_id === f.b) && (!f.k || x.kind === f.k) && (!f.s || x.severity === f.s) && (!f.m || String(x.day).slice(0, 7) === f.m)
+      && (!q || normH(name(x.barber_id) + ' ' + x.note).includes(q)));
+    list.sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : a.created_at < b.created_at ? 1 : -1));
+    const months = [...new Set(r.list.map(x => String(x.day).slice(0, 7)))].sort().reverse();
+    // Resumo: quem mais teve registros no período filtrado.
+    const cnt = {}; list.forEach(x => { const c = cnt[x.barber_id] || (cnt[x.barber_id] = { n: 0, adv: 0, rei: 0, sus: 0 }); c.n++; if (x.severity === 'advertencia') c.adv++; if (x.severity === 'reincidencia') c.rei++; if (x.severity === 'penalidade') c.sus++; });
+    const top = Object.entries(cnt).sort((a, b) => b[1].n - a[1].n).slice(0, 6);
+    const opt = (v, l, cur) => `<option value="${esc(v)}" ${cur === v ? 'selected' : ''}>${esc(l)}</option>`;
+    return `<section class="section disc-hero">
+      <h2 class="disc-title">${icon('alert')} Controle disciplinar</h2>
+      <p class="muted">Registre atrasos, faltas e problemas de atendimento, higiene ou uniforme com o relato do líder. Só o gestor e os líderes veem esta página.</p>
+    </section>
+    ${top.length ? `<section class="section"><div class="disc-sum">${top.map(([id, c]) => `<button class="card disc-sumc ${f.b === id ? 'on' : ''}" data-action="discPick" data-b="${esc(id)}">${avatar(barberById(id) || { name: name(id) }, 36)}<span><b>${esc(name(id).split(' ')[0])}</b><small>${c.n} ${c.n === 1 ? 'registro' : 'registros'}${c.rei ? ` · ${c.rei} reincid.` : ''}${c.adv ? ` · ${c.adv} advert.` : ''}${c.sus ? ` · ${c.sus} penal.` : ''}</small></span></button>`).join('')}</div></section>` : ''}
+    <section class="section">
+      <div class="disc-bar">
+        <input class="input disc-q" type="search" placeholder="Buscar nome ou relato" value="${esc(f.q || '')}" data-change="discQ" aria-label="Buscar">
+        <select class="input input-sm" data-change="discFb" aria-label="Profissional">${opt('', 'Todos os profissionais', f.b || '')}${people.map(b => opt(b.id, b.name, f.b || '')).join('')}</select>
+        <select class="input input-sm" data-change="discFk" aria-label="Tipo de falta">${opt('', 'Todos os tipos', f.k || '')}${Object.entries(DISC_KIND).map(([k, [l]]) => opt(k, l, f.k || '')).join('')}</select>
+        <select class="input input-sm" data-change="discFs" aria-label="Gravidade">${opt('', 'Todas as gravidades', f.s || '')}${Object.entries(DISC_SEV).map(([k, [l]]) => opt(k, l, f.s || '')).join('')}</select>
+        <select class="input input-sm" data-change="discFm" aria-label="Mês">${opt('', 'Todos os meses', f.m || '')}${months.map(m => opt(m, ymLabel(m), f.m || '')).join('')}</select>
+        <button class="btn btn-primary disc-add" data-action="discNew">${icon('plus')} Novo registro</button>
+      </div>
+      ${list.length ? `<div class="disc-wrap"><table class="disc-table">
+        <thead><tr><th>Profissional</th><th>Gravidade</th><th>Data da ocorrência</th><th>Tipo de falta</th><th>Relato do líder</th></tr></thead>
+        <tbody>${list.map(x => `<tr>
+          <td class="disc-name"><span>${icon('file')} ${esc(name(x.barber_id))}</span><button class="disc-open" data-action="discOpen" data-id="${esc(x.id)}">Abrir</button></td>
+          <td>${discTag(DISC_SEV, x.severity)}</td>
+          <td class="num">${esc(fmtDayBR(x.day))}</td>
+          <td>${discTag(DISC_KIND, x.kind)}</td>
+          <td class="disc-note" title="${esc(x.note)}">${esc(x.note)}</td></tr>`).join('')}</tbody></table></div>
+        <div class="btn-row" style="margin-top:10px"><small class="muted">${list.length} ${list.length === 1 ? 'registro' : 'registros'}</small><button class="btn btn-sm" data-action="discCsv">${icon('download')} Baixar planilha</button></div>`
+      : `<div class="card muted">${r.list.length ? 'Nenhum registro com esses filtros.' : 'Nenhum registro ainda. Toque em Novo registro para começar.'}</div>`}
+    </section>
+    ${discModal(user, r.list)}`;
+  }
+  function discModal(user, all) {
+    const m = ui.discEdit; if (!m) return '';
+    const x = m === 'new' ? { barber_id: (ui.discF || {}).b || '', day: todayIso(), kind: 'atraso', severity: '', note: '' } : all.find(y => y.id === m);
+    if (!x) return '';
+    const people = discPeople(user), sev = x.severity || (x.barber_id ? discSuggest(all, x.barber_id, x.kind, x.day) : 'ocorrencia');
+    return `<div class="hp-ov" data-action="discClose" role="presentation"><div class="hp-card card" role="dialog" aria-modal="true" aria-label="Registro disciplinar">
+      <div class="hp-head"><h2>${icon('alert')} ${m === 'new' ? 'Novo registro' : 'Registro'}</h2><button class="icon-btn" data-action="discClose" aria-label="Fechar">${icon('x')}</button></div>
+      <form class="form" data-form="discSave" novalidate>
+        <label class="field"><span>Profissional *</span><select class="input" name="b" required data-change="discSug"><option value="">Escolha</option>${people.map(b => `<option value="${esc(b.id)}" ${x.barber_id === b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>
+        <div class="grid-2">
+          <label class="field"><span>Data da ocorrência *</span><input class="input" type="date" name="day" value="${esc(String(x.day).slice(0, 10))}" max="${todayIso()}" data-change="discSug"></label>
+          <label class="field"><span>Tipo de falta *</span><select class="input" name="kind" data-change="discSug">${Object.entries(DISC_KIND).map(([k, [l]]) => `<option value="${k}" ${x.kind === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        </div>
+        <label class="field"><span>Gravidade *</span><select class="input" name="sev">${Object.entries(DISC_SEV).map(([k, [l]]) => `<option value="${k}" ${sev === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+          <small class="muted disc-hint" data-hint>${m === 'new' ? 'Sugestão automática: a mesma falta nos últimos 30 dias vira reincidência.' : ''}</small>
+          ${x.severity === 'penalidade' ? `<small class="disc-pen">${icon('alert')} Comissão reduzida em ${nf0.format(comCfg().pen || 0)} pontos em ${penaltyDates(x.day).map(d => d.slice(8, 10) + '/' + d.slice(5, 7)).join(', ')} (quinta, sexta e sábado).</small>` : ''}</label>
+        <label class="field"><span>Relato do líder</span><textarea class="input" name="note" rows="4" maxlength="2000" placeholder="O que aconteceu, horário, cliente envolvido…">${esc(x.note || '')}</textarea></label>
+        ${x.author ? `<small class="muted">Registrado por ${esc(x.author)}${x.created_at ? ' em ' + whenBR(x.created_at) : ''}</small>` : ''}
+        <p class="form-msg" data-msg></p>
+        <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button>${m !== 'new' && isGestor(user) ? `<button class="btn btn-sm" type="button" data-action="discDel" data-id="${esc(x.id)}">${icon('trash')} Apagar</button>` : ''}</div>
+      </form></div></div>`;
+  }
+  function discCsv() {
+    const all = (ui.discData && ui.discData.list) || [], q = v => { const t = String(v ?? ''); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+    const rows = [['Profissional', 'Gravidade', 'Data', 'Tipo de falta', 'Relato do líder', 'Registrado por']].concat(all.map(x => [(barberById(x.barber_id) || {}).name || '', (DISC_SEV[x.severity] || [''])[0], String(x.day).slice(0, 10), (DISC_KIND[x.kind] || [''])[0], x.note, x.author || '']));
+    downloadFile(`fiscalizacao-${exportSlug()}-${iso(new Date())}.csv`, new Blob(['﻿' + rows.map(r => r.map(q).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+  }
 
   // ---------- Atualizações, Sugestões de melhorias e Reportar erro ----------
   const UPDATES = () => window.GB_UPDATES || [];
@@ -4944,6 +5088,7 @@ Content-Type: application/json</pre>
     cadastro: { t: 'Meu cadastro', r: pageCadastro },
     ajuda: { t: 'Central de ajuda', r: pageAjuda },
     atualizacoes: { t: 'Atualizações', r: pageAtualizacoes, g: 1 },
+    fiscalizacao: { t: 'Fiscalização', r: pageFiscalizacao, g: 1, a: 1 },
     comissoes: { t: 'Comissões e prêmios', r: pageComissoes, g: 1 },
     sonhos: { t: 'Sonhos', r: pageSonhos },
     sugestoes: { t: 'Sugestões de melhorias', r: pageSugestoes, g: 1 },
@@ -5795,6 +5940,15 @@ Content-Type: application/json</pre>
     popRevMore() { ui.popRevAll = true; render(); },
     popCsv() { popCsv(); },
     exportJson() { exportJson(); },
+    discNew() { ui.discEdit = 'new'; render(); },
+    discOpen(el) { ui.discEdit = el.dataset.id; render(); },
+    discClose(el, e) { if (el.classList.contains('hp-ov') && e.target.closest('.hp-card')) return; ui.discEdit = null; render(); },
+    discPick(el) { const f = { ...(ui.discF || {}) }; f.b = f.b === el.dataset.b ? '' : el.dataset.b; ui.discF = f; render(); },
+    discCsv() { discCsv(); },
+    async discDel(el) {
+      if (!confirm('Apagar este registro?')) return;
+      try { await DISC.del(el.dataset.id); ui.discEdit = null; ui.discData = null; toast('Registro apagado.'); render(); } catch (e) { toast(Cloud.enabled ? Cloud.message(e) : e.message); }
+    },
     unitPick(el) { DB.pref.set('unit', el.dataset.u || ''); rkCache = {}; render(); },
     unitDel(el) {
       const u = el.dataset.u; if (!confirm(`Remover a unidade "${u}"? Os profissionais dela ficam sem unidade.`)) return;
@@ -6171,11 +6325,22 @@ Content-Type: application/json</pre>
   }
 
   const FORMS = {
+    async discSave(f) {
+      const b = val(f, 'b'), day = val(f, 'day'), kind = val(f, 'kind'), sev = val(f, 'sev'), note = (f.elements.note.value || '').trim().slice(0, 2000);
+      if (!b) return setMsg(f, 'Escolha o profissional.');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return setMsg(f, 'Escolha a data da ocorrência.');
+      const u = currentUser(), row = { barber_id: b, day, kind, severity: sev, note };
+      const btn = f.querySelector('[type=submit]'); btn.disabled = true;
+      try {
+        if (ui.discEdit === 'new') await DISC.add({ ...row, author: (u && u.name ? u.name : 'Gestor').slice(0, 80) }); else await DISC.upd(ui.discEdit, row);
+        ui.discEdit = null; ui.discData = null; toast('Registro salvo.'); render();
+      } catch (e) { btn.disabled = false; const msg = Cloud.enabled ? Cloud.message(e) : e.message; setMsg(f, /relation|does not exist|schema cache/i.test(msg) ? 'A Fiscalização ainda está sendo ativada no servidor.' : 'Não foi possível salvar: ' + msg); }
+    },
     comCfg(f) {
       const n = k => { const v = Number(String(f.elements[k]?.value || '').replace(',', '.')); return Number.isFinite(v) && v > 0 ? v : 0; };
       const pctBy = {}; state.barbers.forEach(b => { const v = n('by-' + b.id); if (v > 0) pctBy[b.id] = v; });
       if (n('pct') > 100 || Object.values(pctBy).some(v => v > 100)) return setMsg(f, 'A comissão em % deve ser de 0 a 100.');
-      state.comCfg = { pct: n('pct'), pctBy, plano: n('plano'), prod: n('prod'), pos: { 1: n('pos1'), 2: n('pos2'), 3: n('pos3') }, mvp: n('mvp'), dest: n('dest'), meta: n('meta') };
+      state.comCfg = { pct: n('pct'), pctBy, plano: n('plano'), prod: n('prod'), pos: { 1: n('pos1'), 2: n('pos2'), 3: n('pos3') }, mvp: n('mvp'), dest: n('dest'), meta: n('meta'), pen: n('pen'), folgaMin: n('folgaMin') };
       save(); toast('Regras salvas. As comissões foram recalculadas.'); render();
     },
     dream(f) {
@@ -6512,6 +6677,18 @@ Content-Type: application/json</pre>
   };
 
   const CHANGES = {
+    discQ(el) { ui.discF = { ...(ui.discF || {}), q: el.value }; render(); },
+    discFb(el) { ui.discF = { ...(ui.discF || {}), b: el.value }; render(); },
+    discFk(el) { ui.discF = { ...(ui.discF || {}), k: el.value }; render(); },
+    discFs(el) { ui.discF = { ...(ui.discF || {}), s: el.value }; render(); },
+    discFm(el) { ui.discF = { ...(ui.discF || {}), m: el.value }; render(); },
+    discSug(el) { // muda a gravidade sugerida conforme profissional, tipo e data
+      const f = el.form; if (!f || ui.discEdit !== 'new') return;
+      const b = f.elements.b.value, k = f.elements.kind.value, d = f.elements.day.value; if (!b || !d) return;
+      const sug = discSuggest((ui.discData && ui.discData.list) || [], b, k, d);
+      f.elements.sev.value = sug; const h = f.querySelector('[data-hint]');
+      if (h) h.textContent = sug === 'reincidencia' ? `${(barberById(b) || {}).name || 'O profissional'} já teve "${DISC_KIND[k][0]}" nos últimos 30 dias: sugerimos Reincidência.` : 'Primeira vez nos últimos 30 dias: sugerimos Ocorrência.';
+    },
     comYm(el) { ui.comYm = el.value; render(); },
     barberUnit(el) { const b = barberById(el.dataset.id); if (!b) return; b.unit = el.value || null; rkCache = {}; save(); toast(el.value ? `${b.name} agora é da unidade ${el.value}.` : `${b.name} ficou sem unidade.`); },
     async csvImport(el) {
