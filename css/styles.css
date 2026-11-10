@@ -2373,3 +2373,11 @@ html[data-brand="salao"] .pt-ask b { background-image: linear-gradient(180deg, #
 .folga-card span { display: grid; gap: 2px; } .folga-card small { color: var(--fg-soft); }
 .com-row > span small.neg, .disc-pen { color: #ff8a80; }
 .disc-pen { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+
+/* Trava visual contra cópia: texto da página não é selecionável (campos e itens marcados continuam) */
+body { -webkit-user-select: none; user-select: none; }
+input, textarea, select, [contenteditable="true"], .selectable, .invite-link, #api-key, code, pre { -webkit-user-select: text; user-select: text; }
+img { -webkit-user-drag: none; -webkit-touch-callout: none; }
+/* Marca d'água da licença (Tela da loja e fechamento) */
+.lic-mark { position: fixed; left: 14px; bottom: 10px; z-index: 5; pointer-events: none; font-size: 0.72rem; letter-spacing: 0.06em; color: rgba(255, 255, 255, 0.32); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); max-width: 60vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media print { .lic-mark { display: none; } }

@@ -3501,7 +3501,7 @@ Content-Type: application/json</pre>
     if (!ov) {
       ov = document.createElement('div');
       ov.id = 'fx'; ov.className = 'fx'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Apresentação do fechamento do mês');
-      ov.innerHTML = `<div class="fx-bg">${fxDots(34)}</div><div class="fx-stage" aria-live="polite"></div><nav class="fx-ctrl"></nav>`;
+      ov.innerHTML = `<div class="fx-bg">${fxDots(34)}</div><div class="fx-stage" aria-live="polite"></div><nav class="fx-ctrl"></nav>${licMark()}`;
       document.body.appendChild(ov);
       fxBind(ov);
     }
@@ -5658,6 +5658,8 @@ Content-Type: application/json</pre>
       ${cards ? `<div class="al-grid">${cards}</div>` : '<div class="card muted">Sem barbeiros no ranking.</div>'}`;
   }
 
+  // Marca d'água discreta: um print vazado mostra de qual empresa saiu.
+  const licMark = () => `<div class="lic-mark" aria-hidden="true">Licenciado para ${esc(state.company.name || 'esta empresa')} · ${esc(B().name)} © ${new Date().getFullYear()}</div>`;
   function renderTV() {
     if (!DB.demo) DB.pref.set('tvSeen', '1');
     document.body.classList.remove('has-nav');
@@ -5672,7 +5674,7 @@ Content-Type: application/json</pre>
     const slides = dk ? [() => suspenseCard(dk, true)] : [tvRanking, tvGuardians, tvAlerts];
     const i = ((ui.tvIndex % slides.length) + slides.length) % slides.length;
     const reduce = reduceMotion();
-    root.innerHTML = `<div class="tv">
+    root.innerHTML = `<div class="tv">${licMark()}
       <div class="tv-progress" aria-hidden="true"><i style="animation-duration:${TV_SECONDS}s${reduce ? ';animation:none;width:100%' : ''}"></i></div>
       <div class="tv-fit">
       <header class="tv-head">
@@ -6803,6 +6805,17 @@ Content-Type: application/json</pre>
     },
   };
 
+  // Trava visual contra cópia: sem botão direito, sem atalhos de ver/salvar o código e sem arrastar imagens.
+  // Campos de digitação e textos marcados como selecionáveis continuam funcionando normalmente.
+  (function antiCopy() {
+    const free = t => t && t.closest && t.closest('input, textarea, select, [contenteditable="true"], .selectable, .invite-link, #api-key, code, pre');
+    document.addEventListener('contextmenu', e => { if (!free(e.target)) e.preventDefault(); });
+    document.addEventListener('keydown', e => {
+      const k = (e.key || '').toLowerCase(), mod = e.ctrlKey || e.metaKey;
+      if (k === 'f12' || (mod && e.shiftKey && ['i', 'j', 'c', 'k'].includes(k)) || (mod && e.altKey && ['i', 'j', 'c', 'u'].includes(k)) || (mod && !e.shiftKey && ['u', 's'].includes(k))) { e.preventDefault(); e.stopPropagation(); }
+    }, true);
+    document.addEventListener('dragstart', e => { if (e.target && e.target.tagName === 'IMG') e.preventDefault(); });
+  })();
   root.addEventListener('click', e => {
     const tr = e.target.closest('tr[data-href]');
     if (tr && !e.target.closest('a')) { location.hash = tr.dataset.href; return; }

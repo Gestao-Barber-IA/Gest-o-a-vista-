@@ -30,6 +30,9 @@ Sistema de gestão de performance da equipe para barbearias (**Gestão Barber IA
 - Fotos dos profissionais e logo no armazenamento do Supabase (pasta pública `fotos`, com nome de arquivo aleatório); fotos antigas, guardadas dentro do cadastro, são levadas para lá automaticamente quando o gestor entra
 - **Cópia dos seus dados** em Configurações › Empresa: arquivo completo (JSON) e planilha dos lançamentos (CSV), sem senhas nem chave da API
 
+## Publicação
+A Vercel roda `npm run build` (`scripts/build.mjs`), que gera a pasta `dist` com o JavaScript embaralhado (sem comentários e com nomes internos trocados) e publica só ela (`vercel.json`). O código legível fica apenas no repositório. Para testar localmente: `npm install && npm run build` e abrir a pasta `dist` por um servidor.
+
 ## Testes
 
 ```

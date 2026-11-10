@@ -15,3 +15,5 @@ jobs:
         run: for f in js/*.js sw.js; do node --check "$f"; done
       - name: Regras de pontuação
         run: node --test tests/*.test.js
+      - name: Publicação (código embaralhado)
+        run: npm install --no-audit --no-fund && npm run build
