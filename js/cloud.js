@@ -182,6 +182,13 @@
     vote: async id => RES(await c.from('suggestion_votes').insert({ suggestion_id: id })),
     unvote: async id => RES(await c.from('suggestion_votes').delete().eq('suggestion_id', id).eq('company_id', Cloud.companyId)),
   };
+  // Fiscalização (controle disciplinar): só gestor e líderes.
+  Cloud.disc = {
+    list: async () => RES(await c.from('discipline').select('*').eq('company_id', Cloud.companyId).order('day', { ascending: false }).order('created_at', { ascending: false }).limit(2000)) || [],
+    add: async row => RES(await c.from('discipline').insert(row).select().single()),
+    upd: async (id, patch) => RES(await c.from('discipline').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)),
+    del: async id => RES(await c.from('discipline').delete().eq('id', id)),
+  };
   Cloud.rotateKey = async () => { const { data, error } = await c.rpc('rotate_api_key'); if (error) throw error; return data; };
 
   // ---------- conversão entre o app e as tabelas ----------
