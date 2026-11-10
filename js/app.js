@@ -2988,7 +2988,7 @@ Content-Type: application/json</pre>
       fxCount(slide);
       if (sl.k === 'podium' && !pmAll().podio) Sound.play('sino');
       if (sl.k === 'final' && !pmAll().final) Sound.play('aplausos');
-      if (sl.k === 'leaders') Sound.play('fanfarra');
+      if (sl.k === 'leaders' && !pmAll().lideres) Sound.play('fanfarra');
       if (fx.mode === 'auto' && sl.k !== 'final') fx.timer = setTimeout(() => fxStep(1), sl.k === 'leaders' ? 8000 : sl.k === 'podium' ? 5600 : 3400);
     }
     if (fx.live && (sl.k === 'podium' || sl.k === 'leaders' || sl.k === 'final' || sl.place)) revealSend({ t: sl.place ? 'card' : sl.k, place: sl.place || 0 });
@@ -4724,10 +4724,10 @@ Content-Type: application/json</pre>
     c.fillStyle = '#ffffff'; c.fillRect(s0 - 1, 0, 3, H);
     if (sel.drop != null) { const xd = x(sel.drop); c.strokeStyle = '#ff8a3c'; c.setLineDash([5, 4]); c.lineWidth = 2; c.beginPath(); c.moveTo(xd, 0); c.lineTo(xd, H); c.stroke(); c.setLineDash([]); }
   }
-  const PM_SCENES = { intro: 'da abertura', podio: 'do "É hora do pódio"', final: 'do "Parabéns ao pódio"' };
+  const PM_SCENES = { intro: 'da abertura', podio: 'do "É hora do pódio"', lideres: 'do "Líderes do mês"', final: 'do "Parabéns ao pódio"' };
   const pmKey = v => PM_SCENES[v] ? v : Number(v);
   const pmName = p => PM_SCENES[p] || `do ${p}º lugar`;
-  const PM_SLIDE = { intro: 'intro', podium: 'podio', final: 'final' }; // tela do fechamento → música
+  const PM_SLIDE = { intro: 'intro', podium: 'podio', leaders: 'lideres', final: 'final' }; // tela do fechamento → música
   const fmtSec = v => { v = Math.max(0, Math.round(Number(v) || 0)); return Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0'); };
   // Músicas em uso: as da conta (no modo apresentação aberto a partir da conta) e, por cima, as enviadas aqui.
   function pmAll() {
@@ -4739,11 +4739,12 @@ Content-Type: application/json</pre>
     const row = place => {
       const m = pm[place];
       return `<div class="pm-row">
-        <span class="pm-place p${place}">${place === 'intro' ? icon('play') : place === 'podio' ? icon('crown') : place === 'final' ? icon('trophy') : place + 'º'}</span>
+        <span class="pm-place p${place}">${place === 'intro' ? icon('play') : place === 'podio' ? icon('crown') : place === 'lideres' ? icon('medal') : place === 'final' ? icon('trophy') : place + 'º'}</span>
         <div class="pm-info">${m && m.acct ? `<b>${esc(m.name)} <span class="chip chip-ok">${icon('cloud')} da sua conta</span></b><small>${m.dur ? `Duração ${fmtSec(m.dur)} · ` : ''}começa em ${fmtSec(m.start || 0)}</small>`
           : m ? `<b>${esc(m.name)}</b><small>${m.dur ? `Duração ${fmtSec(m.dur)} · ` : ''}${m.end ? `trecho de ${fmtSec(m.start || 0)} a ${fmtSec(m.end)} · ` : ''}começa em <label class="pm-start"><input class="input num" type="number" min="0" step="1" value="${Math.round(m.start || 0)}" data-change="pmStart" data-p="${place}" aria-label="Segundo em que a música ${pmName(place)} começa"> s</label></small>`
           : place === 'intro' ? `<b>Abertura sem música</b><small>Envie uma música para tocar assim que o fechamento começar</small>`
           : place === 'podio' ? `<b>"É hora do pódio": sino do app</b><small>Envie uma música para tocar quando aparecer "É hora do pódio"</small>`
+          : place === 'lideres' ? `<b>"Líderes do mês": fanfarra do app</b><small>Envie uma música para tocar na tela dos líderes de cada indicador</small>`
           : place === 'final' ? `<b>"Parabéns ao pódio": aplausos do app</b><small>Envie uma música para tocar na tela final, até fechar a apresentação</small>`
           : `<b>Trilha padrão do app</b><small>${place === 1 ? 'Hino com subida de tom e aplausos' : place === 2 ? 'Progressão com bateria e melodia' : 'Fanfarra curta'}</small>`}</div>
         <div class="pm-btns">
@@ -4758,7 +4759,7 @@ Content-Type: application/json</pre>
       <h2 class="section-title">Músicas do fechamento</h2>
       <p class="section-note"><b>Abertura:</b> a música começa assim que você inicia o fechamento e sai suave ao passar de tela. <b>Pódio:</b> escolha uma música para cada colocação. Ao tocar em Revelar, ela começa no segundo que você escolher, com o volume subindo, e a colocação aparece no <b>ápice da música</b> (o momento em que ela explode). Sem música enviada, toca a trilha do app. Aceita MP3, MP4 (inclusive vídeo: o app separa só o áudio), M4A e WAV.</p>
       ${DEMO_ON ? `<p class="pm-note pm-demo">${icon('cloud')}<span>${ui.acctMusic ? '<b>Modo apresentação:</b> as músicas marcadas "da sua conta" estão salvas no servidor e tocam aqui sem precisar enviar de novo. Para trocar de vez, troque na sua conta. O que você enviar aqui vale só para este aparelho.' : '<b>Modo apresentação:</b> o que você enviar aqui fica só neste aparelho. Para salvar no servidor, envie as músicas na sua conta (Fechamento do mês) e abra o modo apresentação a partir dela: as mesmas músicas tocam aqui.'}</span></p>` : ''}
-      <div class="pm-list">${row('intro')}<p class="pm-sub">Pódio</p>${row('podio')}${[3, 2, 1].map(row).join('')}<p class="pm-sub">Final</p>${row('final')}</div>
+      <div class="pm-list">${row('intro')}<p class="pm-sub">Pódio</p>${row('podio')}${[3, 2, 1].map(row).join('')}<p class="pm-sub">Final</p>${row('lideres')}${row('final')}</div>
       <p class="pm-note">${icon('help')}<span>Tocar música comercial (artistas, rádio, streaming) no estabelecimento pode exigir licença do ECAD. Músicas livres de direitos, como as da Biblioteca de Áudio do YouTube e da Pixabay Music, evitam isso.</span></p>
     </section>`;
   }
@@ -4836,8 +4837,8 @@ Content-Type: application/json</pre>
     preload() {
       if (this.preloading) return this.preloading;
       const all = pmAll();
-      if (!['intro', 'podio', 1, 2, 3, 'final'].some(p2 => all[p2] && all[p2].id && !(this.bufs[all[p2].id] instanceof AudioBuffer))) return Promise.resolve();
-      return (this.preloading = (async () => { for (const p2 of ['intro', 'podio', 3, 2, 1, 'final']) { try { await this.customBuf(p2); } catch (e) { /* segue */ } } })().finally(() => { this.preloading = null; }));
+      if (!['intro', 'podio', 1, 2, 3, 'lideres', 'final'].some(p2 => all[p2] && all[p2].id && !(this.bufs[all[p2].id] instanceof AudioBuffer))) return Promise.resolve();
+      return (this.preloading = (async () => { for (const p2 of ['intro', 'podio', 3, 2, 1, 'lideres', 'final']) { try { await this.customBuf(p2); } catch (e) { /* segue */ } } })().finally(() => { this.preloading = null; }));
     },
     ready(place) { const m = pmAll()[place]; return !m || !m.id || this.bufs[m.id] instanceof AudioBuffer; },
     // Segundos, a partir do começo do recorte, até o ápice (a "explosão") da música da colocação.
@@ -5459,7 +5460,7 @@ Content-Type: application/json</pre>
         if (!buf) { toast('Não foi possível carregar a música. Tente enviar de novo.'); ui.pmTest = null; el.innerHTML = `${icon('play')} Ouvir`; return; }
         if (PM_SCENES[place]) Music.playCustom(place, 1.5);
         else { const w = Music.build(place); toast(`A revelação cai no ápice da música, ${nf1.format(w)} s depois de tocar em Revelar.`, 4000); }
-      } else if (PM_SCENES[place]) { ui.pmTest = null; el.innerHTML = `${icon('play')} Ouvir`; if (place === 'intro') toast('A abertura ainda não tem música. Envie uma para ouvir.'); else Sound.play(place === 'podio' ? 'sino' : 'aplausos', true); return; }
+      } else if (PM_SCENES[place]) { ui.pmTest = null; el.innerHTML = `${icon('play')} Ouvir`; if (place === 'intro') toast('A abertura ainda não tem música. Envie uma para ouvir.'); else Sound.play(place === 'podio' ? 'sino' : place === 'lideres' ? 'fanfarra' : 'aplausos', true); return; }
       else { Music.build(place); setTimeout(() => { if (ui.pmTest === place) Music.win(place); }, Music.buildDur[place] * 1000); }
       clearTimeout(ui.pmTimer);
       ui.pmTimer = setTimeout(() => { if (ui.pmTest === place) { ui.pmTest = null; Music.fadeCustom(1.5); const b = document.querySelector(`[data-action="pmTest"][data-p="${place}"]`); if (b) b.innerHTML = `${icon('play')} Ouvir`; } }, m ? 15000 : (Music.buildDur[place] + 9) * 1000);
