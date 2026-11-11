@@ -3261,6 +3261,37 @@ ${rows.length ? '' : emptyBarbers()}
         ${state.barbers.length ? `<ul class="list">${rows}</ul>` : '<div class="card muted">Ninguém cadastrado ainda.</div>'}</section>`;
   }
 
+  // Prioridade de cada indicador (vira peso): Essencial 3, Importante 2, Complementar 1, Não usar 0.
+  const W_PRIO = [[3, 'Essencial'], [2, 'Importante'], [1, 'Complementar'], [0, 'Não usar']];
+  const W_PRESETS = {
+    faturar: { t: 'Faturar mais', i: 'wallet', d: 'Faturamento, ticket médio e venda de produtos em primeiro lugar.', p: { fat: 3, ticket: 3, prod: 3, planos: 2, serv: 2, cli: 1, ocup: 1, check: 1, fid: 1 } },
+    agenda: { t: 'Agenda cheia', i: 'clock', d: 'Ocupação, clientes atendidos e checklist em primeiro lugar.', p: { ocup: 3, cli: 3, check: 3, serv: 2, fat: 2, ticket: 1, planos: 1, prod: 1, fid: 1 } },
+    fidelizar: { t: 'Fidelizar clientes', i: 'users', d: 'Fidelização e planos mensais em primeiro lugar.', p: { fid: 3, planos: 3, cli: 2, check: 2, fat: 2, ticket: 1, serv: 1, ocup: 1, prod: 1 } },
+    equilibrado: { t: 'Equilibrado', i: 'chart', d: 'Todos os indicadores com a mesma importância.', p: { fat: 2, ticket: 2, prod: 2, planos: 2, serv: 2, cli: 2, ocup: 2, check: 2, fid: 2 } },
+  };
+  // Converte prioridades em pesos que somam 100.
+  function wFromPrio(pr) {
+    const keys = Object.keys(pr).filter(k => pr[k] > 0), sum = keys.reduce((a, k) => a + pr[k], 0), w = {};
+    INDICATORS.forEach(i => { w[i.key] = 0; });
+    if (!sum) return w;
+    // Arredonda para baixo e distribui o que sobra pelas maiores frações (mesma prioridade, mesmo peso, até 1 ponto).
+    const exact = keys.map(k => [k, pr[k] / sum * 100]);
+    exact.forEach(([k, v]) => { w[k] = Math.floor(v); });
+    let left = 100 - keys.reduce((a, k) => a + w[k], 0);
+    exact.sort((a, b) => (b[1] % 1) - (a[1] % 1) || pr[b[0]] - pr[a[0]]).forEach(([k]) => { if (left > 0) { w[k]++; left--; } });
+    return w;
+  }
+  // Prioridade aproximada de um peso já salvo (comparado ao maior peso ativo).
+  function wPrioOf(w, ind) {
+    const ws = INDICATORS.filter(i => !(state.hidden || []).includes(i.key)).map(i => Number(w[i.key] ?? i.weight)), mx = Math.max(1, ...ws), v = Number(w[ind.key] ?? ind.weight);
+    if (v <= 0) return 0; const r = v / mx; return r >= 0.75 ? 3 : r >= 0.4 ? 2 : 1;
+  }
+  // Atualiza as porcentagens na tela, sem recarregar.
+  function wRefresh(f) {
+    const vals = INDICATORS.map(i => ({ k: i.key, v: Math.max(0, Number(f.elements[i.key].value) || 0) })), tot = vals.reduce((a, x) => a + x.v, 0);
+    vals.forEach(x => { const row = f.querySelector(`.wp-row[data-k="${x.k}"]`); if (!row) return; const on = x.v > 0; row.classList.toggle('is-off', !on);
+      row.querySelector('[data-pct]').textContent = on && tot ? `vale ${Math.round(x.v / tot * 100)}% da nota` : 'não usado'; });
+  }
   function pageConfig(part) {
     const w = state.weights, rv = revealCfg(), oc = GB.ocupCfgOf(state), oh = GB.hoursPerDay(oc);
     const hidden = state.hidden || [];
@@ -3277,11 +3308,19 @@ ${rows.length ? '' : emptyBarbers()}
     return `
       <section class="section card">
         <h2 class="section-title">Indicadores e pesos ${tip('weights')}</h2>
-        <p class="section-note">O peso define quanto cada indicador vale na pontuação geral. Desmarque "Ativo" para ocultar um indicador do app inteiro; os dados dele ficam guardados para quando você reativar. Soma dos ativos: <b class="num">${total} pts</b>.</p>
+        <p class="section-note">Escolha a <b>prioridade</b> de cada indicador e o sistema calcula os pesos sozinho. Como funciona: em cada indicador, quem está em 1º ganha nota 100 e o último ganha 0. A nota geral é a média dessas notas, e os indicadores <b>essenciais</b> pesam mais. A porcentagem mostra quanto cada um vale na nota geral.</p>
+        <div class="wp-presets"><span class="muted">Modelos prontos:</span>${Object.entries(W_PRESETS).map(([k, p]) => `<button type="button" class="btn btn-sm" data-action="wPreset" data-p="${k}" title="${esc(p.d)}">${icon(p.i)} ${esc(p.t)}</button>`).join('')}</div>
         <form class="form" data-form="weights" novalidate>
-          <div class="grid-2">${INDICATORS.map(i => { const off = hidden.includes(i.key); return `<div class="field ind-cfg ${off ? 'is-off' : ''}"><label for="w-${i.key}">${esc(i.label)} ${tip(i.key)}${off ? ' <span class="chip chip-soft">oculto</span>' : ''}</label>
-            <div class="ind-row"><input class="input num" id="w-${i.key}" name="${i.key}" type="number" min="0" max="100" step="1" value="${w[i.key] ?? i.weight}">
-            <label class="ind-on"><input type="checkbox" id="on-${i.key}" name="on-${i.key}" ${off ? '' : 'checked'}> Ativo</label></div></div>`; }).join('')}</div>
+          <div class="wp-list">${INDICATORS.map(i => { const off = hidden.includes(i.key), pr = off ? 0 : wPrioOf(w, i), pct = off || !total ? 0 : Math.round((Number(w[i.key] ?? i.weight) / total) * 100);
+            return `<div class="wp-row ${off ? 'is-off' : ''}" data-k="${i.key}">
+              <span class="wp-name">${esc(i.label)} ${tip(i.key)}</span>
+              <select class="input input-sm wp-sel" name="p-${i.key}" data-change="wPrio" aria-label="Prioridade de ${esc(i.label)}">${W_PRIO.map(([v, l]) => `<option value="${v}" ${pr === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+              <span class="wp-pct num" data-pct>${off ? 'não usado' : `vale ${pct}% da nota`}</span>
+            </div>`; }).join('')}</div>
+          <details class="wp-adv"><summary>Ajuste fino dos pesos (avançado)</summary>
+            <p class="section-note">Se preferir, digite o peso de cada indicador. A prioridade acima preenche estes números sozinha.</p>
+            <div class="grid-2">${INDICATORS.map(i => `<label class="field"><span>${esc(i.label)}</span><input class="input num" id="w-${i.key}" name="${i.key}" type="number" min="0" max="100" step="1" value="${hidden.includes(i.key) ? 0 : (w[i.key] ?? i.weight)}" data-change="wNum"></label>`).join('')}</div>
+          </details>
           <p class="form-msg" data-msg></p>
           <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar indicadores</button>
           <button class="btn" type="button" data-action="defaultWeights">Voltar aos pesos padrão</button></div>
@@ -6522,6 +6561,12 @@ Content-Type: application/json</pre>
     },
     defaultOcup() { state.ocupCfg = null; save(); toast('Regra de ocupação padrão restaurada.'); render(); },
     defaultGoals() { state.goals = { ...(state.goals || {}), team: { ...GB.DEFAULT_GOALS } }; save(); toast('Metas padrão restauradas.'); render(); },
+    wPreset(el) {
+      const p = W_PRESETS[el.dataset.p]; if (!p) return;
+      state.weights = wFromPrio(p.p); state.hidden = INDICATORS.filter(i => !(p.p[i.key] > 0)).map(i => i.key);
+      INDICATORS.forEach(i => { if (!(state.weights[i.key] > 0)) state.weights[i.key] = i.weight; });
+      rkCache = {}; save(); toast(`Modelo "${p.t}" aplicado. Ajuste algum indicador, se quiser.`); render();
+    },
     defaultWeights() { state.weights = Object.fromEntries(INDICATORS.map(i => [i.key, i.weight])); save(); toast('Pesos padrão restaurados.'); render(); },
     resetDemo() {
       if (ui.confirm !== 'demo') { ui.confirm = 'demo'; render(); return; }
@@ -6791,9 +6836,10 @@ Content-Type: application/json</pre>
         if (Number.isNaN(v) || v < 0 || v > 100) return setMsg(f, `Peso de "${i.label}" deve ficar entre 0 e 100.`);
         w[i.key] = Math.round(v);
       }
-      const hidden = INDICATORS.filter(i => !f.elements['on-' + i.key].checked).map(i => i.key);
-      if (INDICATORS.length - hidden.length < 2) return setMsg(f, 'Deixe pelo menos 2 indicadores ativos.');
-      state.weights = w; state.hidden = hidden; save(); toast('Indicadores salvos.'); render();
+      const hidden = INDICATORS.filter(i => w[i.key] <= 0).map(i => i.key);
+      if (INDICATORS.length - hidden.length < 2) return setMsg(f, 'Deixe pelo menos 2 indicadores em uso.');
+      INDICATORS.forEach(i => { if (w[i.key] <= 0) w[i.key] = (state.weights || {})[i.key] || i.weight; }); // guarda o peso para quando voltar a usar
+      state.weights = w; state.hidden = hidden; save(); toast('Indicadores salvos. O ranking já usa os novos pesos.'); render();
     },
     ocup(f) {
       const open = val(f, 'open'), close = val(f, 'close');
@@ -6925,6 +6971,11 @@ Content-Type: application/json</pre>
   };
 
   const CHANGES = {
+    wPrio(el) { // a prioridade preenche os pesos (somando 100)
+      const f = el.form, pr = {}; INDICATORS.forEach(i => { pr[i.key] = Number(f.elements['p-' + i.key].value) || 0; });
+      const w = wFromPrio(pr); INDICATORS.forEach(i => { f.elements[i.key].value = w[i.key]; }); wRefresh(f);
+    },
+    wNum(el) { wRefresh(el.form); },
     rtDay(el) { ui.rtDay = el.value && el.value <= todayIso() ? el.value : null; ui.rtData = null; ui.rtDraft = null; render(); },
     async rtPhoto(el) {
       const f = el.files && el.files[0], d = ui.rtDraft; if (!f || !d) return;

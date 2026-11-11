@@ -2,6 +2,11 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-11-prioridades', date: '2026-11-11', title: 'Pesos dos indicadores mais fáceis', items: [
+    ['melhoria', 'Em Configurações › Indicadores e metas, escolha a prioridade de cada indicador (Essencial, Importante, Complementar ou Não usar) e o sistema calcula os pesos sozinho.'],
+    ['novo', 'Modelos prontos conforme o objetivo: Faturar mais, Agenda cheia, Fidelizar clientes e Equilibrado.'],
+    ['melhoria', 'Cada indicador mostra quanto vale na nota geral (ex.: "vale 24% da nota"). O ajuste fino por número continua disponível.'],
+  ] },
   { id: '2026-11-11-marca-cliente', date: '2026-11-11', title: 'O sistema com a cara da sua empresa', items: [
     ['melhoria', 'Com o logo enviado, o menu mostra o logo e o nome da sua empresa (o nome do sistema fica pequeno, em cima).'],
     ['melhoria', 'O fechamento do mês abre com o logo da sua empresa; a marca do sistema aparece só de forma discreta.'],
