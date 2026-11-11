@@ -108,7 +108,7 @@
     applyTheme(getTheme());
   }
   let rkCache = {};
-  const save = () => { if (Cloud.enabled) Cloud.save(state); else DB.save(state); rkCache = {}; };
+  const save = () => { noticeDiff(); if (Cloud.enabled) Cloud.save(state); else DB.save(state); rkCache = {}; };
 
   // ---------- formatação ----------
   const nf0 = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
@@ -655,6 +655,7 @@
       { r: 'inicio', t: 'Início', i: 'grid' },
       { r: 'performance', t: 'Minha performance', i: 'chart' },
       { r: 'lancamentos', t: 'Lançamentos', i: 'wallet', g: 1, a: 1 },
+      { r: 'avisos', t: 'Avisos e alterações', i: 'bell' },
     ] },
     { group: 'Apresentações', items: [
       { r: 'apresentacao', t: 'Tela da loja', i: 'monitor' },
@@ -703,7 +704,7 @@
       const am = isAreaMgr(user), hg = hasGrants(user);
       const lf = lanAny();
       const items = gr.items.filter(it => (!it.g || g || (it.a && am) || (it.r === 'lancamentos' && lf)) && (!it.rt || rtAuds(user).length) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
-        <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && (g || hg) ? (g || accessOf(user.barberId) !== 'profissional' ? 'Performance da empresa' : 'Performance da área') : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}${it.r === 'atualizacoes' && updUnseen() ? `<span class="nav-new" aria-label="${updUnseen()} novidades">${updUnseen()}</span>` : ''}</a>`).join('');
+        <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && (g || hg) ? (g || accessOf(user.barberId) !== 'profissional' ? 'Performance da empresa' : 'Performance da área') : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}${it.r === 'avisos' && avUnseen() ? `<span class="nav-new" aria-label="${avUnseen()} avisos novos">${avUnseen()}</span>` : ''}${it.r === 'atualizacoes' && updUnseen() ? `<span class="nav-new" aria-label="${updUnseen()} novidades">${updUnseen()}</span>` : ''}</a>`).join('');
       if (!gr.group || !items.trim()) return gr.group ? '' : items;
       // Conjunto que pode ser minimizado (fica lembrado neste aparelho); o conjunto da tela aberta aparece sempre.
       const shut = navShut().includes(gr.group) && !gr.items.some(it => it.r === route);
@@ -1935,6 +1936,84 @@
       <h3>${esc(u.title)}</h3>
       <ul>${u.items.map(([k, t]) => `<li><span class="chip ${(UPD_TAG[k] || UPD_TAG.melhoria)[1]}">${(UPD_TAG[k] || UPD_TAG.melhoria)[0]}</span><span>${esc(t)}</span></li>`).join('')}</ul>
     </article>`).join('')}</div>`;
+  }
+
+  // ---------- Avisos e alterações: o que o dono muda e importa para a equipe (gerado sozinho) ----------
+  // A cada salvamento do dono, compara as regras com a versão anterior e registra o que mudou.
+  let avBase = null, avState = null;
+  const pctOf = () => { const w = state.weights || {}, hid = state.hidden || [], act = INDICATORS.filter(i => !hid.includes(i.key) && Number(w[i.key] ?? i.weight) > 0), tot = act.reduce((a, i) => a + Number(w[i.key] ?? i.weight), 0) || 1; return act.map(i => [i, Math.round(Number(w[i.key] ?? i.weight) / tot * 100)]); };
+  const lbl = k => (EXTRA_FIELDS().concat(GB.MONTH_FIELDS).find(f => f.key === k) || { label: k }).label;
+  function avSnap() {
+    const o = org(), c = comCfg(), pop = GB.popCfgOf(state), oc = GB.ocupCfgOf(state), per = {};
+    for (const b of state.barbers) per[b.id] = {
+      access: JSON.stringify(accessOf(b.id)), extras: JSON.stringify(extrasOf(b.id)),
+      goals: JSON.stringify((state.goals?.byBarber || {})[b.id] || {}), com: JSON.stringify(c.pctBy[b.id] || 0) };
+    return {
+      pesos: JSON.stringify(pctOf().map(([i, p]) => [i.key, p])),
+      metas: JSON.stringify(INDICATORS.map(i => [i.key, GB.goalFor(state, '', i.key)])),
+      self: JSON.stringify([...selfCfg()].sort()),
+      com: JSON.stringify({ ...c, pctBy: null }),
+      ocup: JSON.stringify([oc.open, oc.close, oc.lunch, oc.days]),
+      pop: JSON.stringify((pop.items || []).map(x => [x.title, x.pts, x.target])),
+      pops: JSON.stringify(popsList().map(x => x.title || x.t || x.id)),
+      per };
+  }
+  const listTxt = a => a.filter(Boolean).join(' · ');
+  const AV_TXT = {
+    pesos: () => ['Pesos dos indicadores', 'Quanto cada indicador vale na sua nota agora: ' + listTxt(pctOf().map(([i, p]) => `${i.label} ${p}%`)) + '.' + ((state.hidden || []).length ? ' Fora da nota: ' + INDICATORS.filter(i => (state.hidden || []).includes(i.key)).map(i => i.label).join(', ') + '.' : '')],
+    metas: () => ['Metas mensais da equipe', 'Novas metas do mês: ' + listTxt(GB.visibleInds(state).map(i => `${i.label} ${fmtGoal(i, GB.goalFor(state, '', i.key))}`)) + '.'],
+    self: () => { const f = selfCfg(); return ['Lançamento dos próprios números', f.length ? 'Agora você pode lançar seus próprios números em Lançamentos: ' + f.map(lbl).join(', ') + '.' : 'O lançamento dos próprios números foi desligado. Os números passam a ser lançados pela gestão.']; },
+    com: () => { const c = comCfg(); return ['Comissões e prêmios', 'Regras atuais: ' + listTxt([c.pct > 0 && `comissão de ${nf1.format(c.pct)}% do faturamento`, c.plano > 0 && `${money0(c.plano)} por plano vendido`, c.prod > 0 && `${money0(c.prod)} por produto vendido`, [1, 2, 3].some(n => c.pos[n] > 0) && `pódio: ${[1, 2, 3].map(n => `${n}º ${money0(c.pos[n])}`).join(', ')}`, c.mvp > 0 && `MVP ${money0(c.mvp)}`, c.dest > 0 && `Destaque ${money0(c.dest)}`, c.meta > 0 && `bater a meta ${money0(c.meta)}`, c.pen > 0 && `penalidade de ${nf1.format(c.pen)}% por ocorrência`]) + '.']; },
+    ocup: () => { const oc = GB.ocupCfgOf(state); return ['Regra da taxa de ocupação', `Agora 100% de ocupação = ${nf1.format(GB.hoursPerDay(oc))} h por dia (${oc.open} às ${oc.close}${Number(oc.lunch) ? `, ${oc.lunch} min de almoço` : ''}) × ${oc.days} dias no mês.`]; },
+    pop: () => ['Checklist Agenda Cheia', 'Itens e pontos do checklist: ' + listTxt((GB.popCfgOf(state).items || []).map(x => `${x.title} (${x.pts} pt${x.pts == 1 ? '' : 's'})`)) + '.'],
+    pops: () => ['POPs · Guia do Sucesso', 'Os POPs foram atualizados. Confira em POPs · Guia do Sucesso: ' + popsList().map(x => x.title || x.t).filter(Boolean).slice(0, 8).join(', ') + '.'],
+    access: id => { const a = ACCESS.find(x => x[0] === accessOf(id)); return ['Seu nível de acesso', `Agora você tem acesso de ${a[1]}: ${a[2]}`]; },
+    extras: id => { const x = extrasOf(id); const t = [x.review && 'conferir e aprovar o checklist da equipe', x.fields.length && 'lançar os números da equipe em ' + x.fields.map(lbl).join(', ')].filter(Boolean); return ['Seus acessos extras', t.length ? 'Agora você pode: ' + t.join('; ') + '.' : 'Seus acessos extras de líder foram retirados.']; },
+    goals: id => { const g = (state.goals?.byBarber || {})[id] || {}, ks = GB.visibleInds(state).filter(i => isNum(g[i.key])); return ['Suas metas individuais', ks.length ? 'Suas metas do mês: ' + listTxt(GB.visibleInds(state).map(i => `${i.label} ${fmtGoal(i, GB.goalFor(state, id, i.key))}`)) + '.' : 'Suas metas voltaram a ser as metas da equipe.']; },
+    comp: id => { const v = comCfg().pctBy[id] || 0; return ['Sua comissão', v > 0 ? `Sua comissão agora é de ${nf1.format(v)}% do faturamento.` : 'Sua comissão volta a seguir a regra geral da equipe.']; },
+  };
+  function addNotice(key, to) {
+    const [t, d] = (AV_TXT[key])(to);
+    const list = Array.isArray(state.notices) ? state.notices : (state.notices = []);
+    const now = Date.now(), k = key + (to ? ':' + to : '');
+    // Vários ajustes seguidos no mesmo assunto viram um aviso só (o mais recente).
+    const i = list.findIndex(n => n.k === k && now - Date.parse(n.at) < 30 * 60000);
+    if (i >= 0) list.splice(i, 1);
+    list.unshift({ id: uid('av_'), k, t, d, at: new Date(now).toISOString(), ...(to ? { to } : {}) });
+    if (list.length > 80) list.length = 80;
+  }
+  function noticeDiff() {
+    const u = currentUser();
+    if (!u || !isGestor(u)) { avBase = null; return; }
+    const now = avSnap();
+    if (avState !== state || !avBase) { avBase = now; avState = state; return; }
+    for (const k of ['pesos', 'metas', 'self', 'com', 'ocup', 'pop', 'pops']) if (now[k] !== avBase[k]) addNotice(k);
+    for (const [id, p] of Object.entries(now.per)) {
+      const was = avBase.per[id]; if (!was) continue;
+      if (p.access !== was.access) addNotice('access', id);
+      if (p.extras !== was.extras && accessOf(id) === 'lider') addNotice('extras', id);
+      if (p.goals !== was.goals) addNotice('goals', id);
+      if (p.com !== was.com) addNotice('comp', id);
+    }
+    avBase = avSnap();
+  }
+  // Prepara a base de comparação assim que a tela abre (antes do dono mudar algo).
+  function avPrime() { const u = currentUser(); if (u && isGestor(u) && avState !== state) { avBase = avSnap(); avState = state; } }
+  const avFor = u => (state.notices || []).filter(n => !n.to || (u && (isGestor(u) || n.to === u.barberId)));
+  const avKey = () => 'avSeen.' + ((currentUser() || {}).id || '');
+  const avUnseen = () => { const u = currentUser(); if (!u || isGestor(u)) return 0; const seen = DB.pref.get(avKey(), ''); return avFor(u).filter(n => n.at > seen).length; };
+  function pageAvisos(user) {
+    const list = avFor(user), seen = DB.pref.get(avKey(), ''), own = isGestor(user);
+    if (list[0] && !own) setTimeout(() => DB.pref.set(avKey(), list[0].at), 1500);
+    const when = s => new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return `<section class="section card">
+      <h2 class="section-title">${icon('bell')} Avisos e alterações</h2>
+      <p class="muted">${own ? 'Tudo o que você muda e que importa para a equipe aparece aqui sozinho, e cada profissional vê no menu dele: pesos e pontos dos indicadores, metas, comissões, checklist, POPs e regras de acesso. Avisos marcados com um nome só aparecem para aquela pessoa.' : 'Mudanças feitas pela gestão que afetam você: pesos e pontos dos indicadores, metas, comissões, checklist, POPs e seus acessos.'}</p>
+    </section>
+    ${list.length ? `<div class="up-list">${list.map(n => { const nw = !own && n.at > seen, b = n.to && barberById(n.to); return `<article class="card up-item av-item ${nw ? 'is-new' : ''}">
+      <div class="up-head"><time datetime="${esc(n.at)}">${esc(when(n.at))}</time>${nw ? '<span class="chip chip-ok">Novo</span>' : ''}${n.to ? `<span class="chip chip-soft">${own ? 'Só para ' + esc(b ? first(b.name) : 'profissional') : 'Só para você'}</span>` : ''}</div>
+      <h3>${esc(n.t)}</h3><p>${esc(n.d)}</p></article>`; }).join('')}</div>`
+      : `<section class="section card"><p class="muted">Nenhum aviso ainda. ${own ? 'Quando você mudar pesos, metas, comissões, checklist ou acessos, o aviso aparece aqui e no menu da equipe.' : 'Quando a gestão mudar alguma regra, você vê aqui.'}</p></section>`}`;
   }
 
   // Dados: na nuvem (todas as empresas) ou, na demonstração, só neste aparelho.
@@ -5331,6 +5410,7 @@ Content-Type: application/json</pre>
     cadastro: { t: 'Meu cadastro', r: pageCadastro },
     ajuda: { t: 'Central de ajuda', r: pageAjuda },
     atualizacoes: { t: 'Atualizações', r: pageAtualizacoes, g: 1 },
+    avisos: { t: 'Avisos e alterações', r: pageAvisos },
     fiscalizacao: { t: 'Fiscalização', r: pageFiscalizacao, g: 1, a: 1 },
     comissoes: { t: 'Comissões e prêmios', r: pageComissoes, g: 1 },
     sonhos: { t: 'Sonhos', r: pageSonhos },
@@ -5991,6 +6071,7 @@ Content-Type: application/json</pre>
 
   // ---------- render principal ----------
   function render() {
+    avPrime();
     clearTimeout(ui.tvTimer);
     rkCache = {};
     const h = decodeURIComponent(location.hash.slice(1));
@@ -7263,7 +7344,7 @@ Content-Type: application/json</pre>
     }, 600000);
     Cloud.onRemote = next => {
       const apply = () => {
-        state = next; rkCache = {};
+        state = next; rkCache = {}; avPrime();
         setTimeout(maybeAutoReveal, 600);
         if (ui.fx) return;
         if (location.hash === '#apresentacao') renderTV();

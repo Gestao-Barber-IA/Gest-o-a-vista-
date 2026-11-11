@@ -2,6 +2,11 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-11-avisos', date: '2026-11-11', title: 'Avisos e alterações para a equipe', items: [
+    ['novo', 'Nova tela Avisos e alterações no menu de todos. Quando o dono muda algo que afeta a equipe, o aviso aparece sozinho, com a data.'],
+    ['melhoria', 'Entram: pesos e % de cada indicador, metas, comissões e prêmios, checklist, POPs, regra de ocupação, autolançamento e mudanças de acesso. Avisos pessoais (acesso, metas individuais, comissão) só aparecem para a própria pessoa.'],
+    ['melhoria', 'O profissional vê no menu quantos avisos novos tem.'],
+  ] },
   { id: '2026-11-11-autolancamento', date: '2026-11-11', title: 'Profissional lança os próprios números', items: [
     ['novo', 'Para quem usa sistema sem integração: em Configurações › Indicadores e metas, marque os indicadores que cada profissional pode lançar sozinho.'],
     ['melhoria', 'O profissional vê Lançamentos no menu e preenche só os próprios números, só nos indicadores liberados. Campos da integração continuam travados.'],
