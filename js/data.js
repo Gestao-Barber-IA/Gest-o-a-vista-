@@ -411,7 +411,7 @@
     const rows = barbers.map(b => ({ barber: b, sums: aggregate(state, b.id, range), values: {}, ranks: {}, scores: {}, leads: [], overall: 0 }));
 
     const active = [], inactive = [];
-    const hidden = state.hidden || [];
+    const hidden = [...(state.hidden || []), ...RETIRED];
     for (const ind of INDICATORS) {
       const w = weights[ind.key] ?? ind.weight;
       if (hidden.includes(ind.key)) { inactive.push({ ...ind, weight: w, reason: 'oculto' }); continue; }
@@ -760,8 +760,10 @@
   }
 
   // Indicadores ligados (o gestor pode ocultar um indicador em Configurações).
-  const visibleInds = state => INDICATORS.filter(i => !(state.hidden || []).includes(i.key));
+  // Indicadores retirados por enquanto: não aparecem e não pontuam em nenhuma empresa (voltam tirando daqui).
+  const RETIRED = ['fid'];
+  const visibleInds = state => INDICATORS.filter(i => !RETIRED.includes(i.key) && !(state.hidden || []).includes(i.key));
   const FIELD_IND = { fidPct: 'fid', ocupPct: 'ocup', aus: 'ocup' };
 
-  window.GB = Object.assign(window.GB || {}, { BONUS_INDS, OCUP_DEFAULT, ocupCfgOf, hoursPerDay, ocupCapacity, SUM_KEYS, manualEntries, manualTotal, applyManualTotal, evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
+  window.GB = Object.assign(window.GB || {}, { RETIRED, BONUS_INDS, OCUP_DEFAULT, ocupCfgOf, hoursPerDay, ocupCapacity, SUM_KEYS, manualEntries, manualTotal, applyManualTotal, evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
 })();
