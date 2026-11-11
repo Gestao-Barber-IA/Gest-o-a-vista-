@@ -215,6 +215,7 @@ async function main() {
       })),
     };
     lidas++;
+    if (!CARGA && process.stdout.isTTY && lidas % 20 === 0) console.log(`  … ${lidas} comandas lidas`);
     if (CARGA && lidas % 100 === 0) {
       salvarCache(cache); await enviar(true);
       log(`Carga inicial: ${lidas} de ${faltam.length} comandas lidas.`);

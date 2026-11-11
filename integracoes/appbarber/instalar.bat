@@ -10,6 +10,8 @@ if errorlevel 1 (echo. & echo Deu erro no teste. Tire um print desta tela e mand
 echo.
 set /p OK=Os numeros estao certos? Digite S e Enter para ligar a sincronizacao automatica: 
 if /i not "%OK%"=="S" (echo Nada foi ligado. Quando quiser, rode o instalar.bat de novo. & pause & exit /b)
+echo.
+echo Enviando os numeros e lendo as primeiras comandas. Pode levar ate 5 minutos, aguarde...
 node sincronizar.mjs --agora
 schtasks /Create /F /TN "Gestao Barber IA - AppBarber" /SC MINUTE /MO 10 /TR "\"%~dp0sincronizar.bat\"" >nul
 if errorlevel 1 (echo Nao consegui agendar. Rode o instalar.bat clicando com o botao direito e "Executar como administrador". & pause & exit /b)
