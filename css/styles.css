@@ -2441,3 +2441,10 @@ img { -webkit-user-drag: none; -webkit-touch-callout: none; }
 .rt-days .check { padding: 8px 12px; gap: 8px; align-items: center; } .rt-days .check input { width: 18px; height: 18px; margin: 0; }
 @media (max-width: 640px) { .rt-edit .pop-dhead { flex-wrap: wrap; } .rt-edit .pop-dhead .btn { width: 100%; justify-content: center; } }
 [data-form="rtSave"] textarea.input, #rt-note { font: inherit; font-size: 0.95rem; line-height: 1.45; }
+
+/* Evolução (empresa e profissional): período anterior à esquerda, mais recente à direita */
+.evo .cmp-sum .cmp-who.a { order: 2; }
+.evo .cmp-sum .cmp-who.b { order: 1; }
+.evo .cmp-row > .cmp-v:first-child { order: 3; flex-direction: row-reverse; justify-content: flex-start; text-align: right; }
+.evo .cmp-row > .cmp-mid { order: 2; }
+.evo .cmp-row > .cmp-v.r { order: 1; flex-direction: row-reverse; justify-content: flex-end; text-align: left; }
