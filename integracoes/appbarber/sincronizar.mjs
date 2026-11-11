@@ -5,7 +5,7 @@
 // Uso:  node sincronizar.mjs          (envia)
 //       node sincronizar.mjs --teste  (só mostra os números, não envia)
 // Precisa do Node.js 18 ou mais novo. Configuração em config.json (veja config.exemplo.json).
-import { readFileSync, appendFileSync } from "node:fs";
+import { readFileSync, appendFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -17,9 +17,32 @@ const log = (msg) => {
   try { appendFileSync(join(DIR, "sincronizacao.log"), line + "\n"); } catch { /* sem log em arquivo */ }
 };
 
+// Instalação guiada: pergunta as chaves e grava o config.json (node sincronizar.mjs --configurar).
+if (process.argv.includes("--configurar")) {
+  const { createInterface } = await import("node:readline");
+  const rl = createInterface({ input: process.stdin });
+  const fila = [], esperando = [];
+  rl.on("line", (l) => (esperando.length ? esperando.shift()(l) : fila.push(l)));
+  rl.on("close", () => { while (esperando.length) esperando.shift()(""); });
+  rl.question = (q) => { process.stdout.write(q); return fila.length ? Promise.resolve(fila.shift()) : new Promise((r) => esperando.push(r)); };
+  let old = {}; try { old = JSON.parse(readFileSync(join(DIR, "config.json"), "utf8")); } catch { /* primeira vez */ }
+  const ask = async (q, k) => { const v = (await rl.question(q + (old[k] ? " (Enter mantém a atual)" : "") + ":\n> ")).trim(); return v || old[k] || ""; };
+  console.log("\n=== Configuração da sincronização AppBarber → Gestão Barber IA ===\n");
+  const c = { ...old };
+  c.appbarber_api_key = await ask("1) Cole a CHAVE DA API da AppBarber (enviada pela AppBarber)", "appbarber_api_key");
+  c.codigo_estabelecimento = await ask("2) Digite o CÓDIGO DO ESTABELECIMENTO na AppBarber", "codigo_estabelecimento");
+  c.gestao_api_key = await ask("3) Cole a CHAVE gbia_ do Gestão Barber IA (menu Configurações › Integração & API)", "gestao_api_key");
+  rl.close();
+  if (!c.appbarber_api_key || !c.codigo_estabelecimento || !/^gbia_/.test(c.gestao_api_key)) { console.log("\nFaltou alguma informação (a chave do Gestão começa com gbia_). Rode o instalar.bat de novo."); process.exit(1); }
+  c.nomes = c.nomes || {};
+  writeFileSync(join(DIR, "config.json"), JSON.stringify(c, null, 2));
+  console.log("\nConfiguração salva.\n");
+  process.exit(0);
+}
+
 let cfg;
 try { cfg = JSON.parse(readFileSync(join(DIR, "config.json"), "utf8")); }
-catch { log("ERRO: não encontrei o config.json. Copie o config.exemplo.json para config.json e preencha."); process.exit(1); }
+catch { log("ERRO: não encontrei o config.json. Dê dois cliques em instalar.bat."); process.exit(1); }
 for (const k of ["appbarber_api_key", "codigo_estabelecimento", "gestao_api_key"]) {
   if (!cfg[k] || String(cfg[k]).includes("COLE")) { log(`ERRO: preencha "${k}" no config.json.`); process.exit(1); }
 }
