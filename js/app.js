@@ -297,7 +297,7 @@
 
   function authShell(inner) {
     const other = BRANDS[MARCA === 'salao' ? 'barber' : 'salao'];
-    return `<div class="auth"><div class="auth-card">${brand('brand--lg')}${inner}
+    return `<div class="auth"><div class="auth-card">${brand('brand--lg')}${DB.demo ? `<div class="pm-note">${icon('monitor')}<span>Você está no <b>modo apresentação</b>. Para entrar na sua conta, <button type="button" class="link-btn" data-action="demoExit">saia da demonstração</button>.</span></div>` : ''}${inner}
       ${Cloud.enabled ? `<button type="button" class="btn btn-block bc-demo-btn" data-action="startDemo" data-b="${MARCA}">${icon('monitor')} ${esc('Ver demonstração do ' + B().name)}</button>` : ''}
       <button type="button" class="link-btn bc-switch" data-action="pickBrand" data-b="${other.key}">${esc((MARCA === 'salao' ? 'É barbearia?' : 'É salão de beleza ou esmalteria?') + ' Use o ' + other.name)}</button>
       <p class="auth-foot">Cada atendimento conta.</p></div></div>`;
@@ -6043,6 +6043,7 @@ Content-Type: application/json</pre>
     closeDrawer() { $('.drawer').classList.remove('open'); $('.scrim').hidden = true; },
     togglePopover() { const p = $('.popover'); p.hidden = !p.hidden; },
     async logout() {
+      if (DB.demo) { ACTIONS.demoExit(); return; } // na demonstração, "Sair" volta para a entrada da conta de verdade
       if (Cloud.enabled) { await Cloud.signOut(); state = blankState(); rkCache = {}; }
       else DB.session.clear();
       ui.authMode = 'entrar'; location.hash = ''; render();
