@@ -109,7 +109,7 @@ async function main() {
   const q = new URLSearchParams({ establishment_code: String(cfg.codigo_estabelecimento), start_date: iso(ini), end_date: iso(hoje), status_type: "2" });
   if (cfg.codigo_filial) q.set("branch_code", String(cfg.codigo_filial));
   const url = BASE + "/v1/appointments/history?" + q;
-  const HDR = { "X-API-Key": cfg.appbarber_api_key, Accept: "application/json", "User-Agent": "GestaoBarberIA-Sync/1.4" };
+  const HDR = { "X-API-Key": cfg.appbarber_api_key, Accept: "application/json", "User-Agent": "GestaoBarberIA-Sync/1.5" };
   if (process.argv.includes("--diagnostico")) {
     let ip = "?"; try { ip = (await (await fetch("https://api.ipify.org")).text()).trim(); } catch { /* sem IP */ }
     const k = String(cfg.appbarber_api_key);
@@ -136,6 +136,20 @@ async function main() {
     const acc = new Map();
     const add = (nome, d) => { const k = nome + "|" + d; if (!acc.has(k)) acc.set(k, { nome, d, fat: 0, serv: 0, prod: 0, cli: new Set(), com: new Map() }); return acc.get(k); };
     const usadas = new Set();
+    // A AppBarber pode escrever o nome do profissional diferente na agenda e na comanda
+    // (ex.: "Izaque Macedo" x "Izaquias Macedo"). Liga os dois pelo agendamento da comanda e usa o nome da agenda.
+    const nomeAg = new Map(lista.map((a) => [String(a.appointment_code || a.scheduling_code), String(a.employee_name || "").trim()]));
+    const porComanda = new Map();
+    for (const a of lista) { const k = String(a.invoice_code || ""); if (!k) continue; if (!porComanda.has(k)) porComanda.set(k, new Set()); porComanda.get(k).add(String(a.employee_name || "").trim()); }
+    const alias = new Map();
+    for (const c of codigos) {
+      const inv = cache[c]; if (!inv || !inv.itens) continue;
+      for (const it of inv.itens) if (it.ag && nomeAg.get(it.ag) && it.p) alias.set(it.p, nomeAg.get(it.ag));
+      const pa = [...new Set(inv.itens.map((it) => it.p).filter(Boolean))], ag = [...(porComanda.get(c) || [])];
+      if (pa.length === 1 && ag.length === 1 && !alias.has(pa[0])) alias.set(pa[0], ag[0]);
+    }
+    const nomeAgenda = new Set(lista.map((a) => String(a.employee_name || "").trim()));
+    const nomeDe = (p) => (nomeAgenda.has(p) ? p : alias.get(p) || p);
     for (const c of codigos) {
       const inv = cache[c]; if (!inv || !inv.itens) continue;
       usadas.add(c);
@@ -143,7 +157,7 @@ async function main() {
       if (!d || d < iso(ini)) continue;
       for (const it of inv.itens) {
         if (!it.p) continue;
-        const x = add(it.p, d);
+        const x = add(nomeDe(it.p), d);
         x.fat += it.v; if (it.prod) x.prod += it.q; else x.serv += it.q;
         x.cli.add(inv.cli); x.com.set(c, (x.com.get(c) || 0) + it.v);
       }
@@ -211,7 +225,7 @@ async function main() {
     cache[c] = {
       d, cli: String(inv.person_code || inv.person_name || c), final: pago || !!antiga, lida: Date.now(),
       itens: (inv.items || []).filter((it) => Number(it.product_is_tip) !== 1 && Number(it.product_is_cashback) !== 1).map((it) => ({
-        p: String(it.employee_name || "").trim(), v: num(it.item_value), q: Number(it.item_quantity) || 1, prod: !!it.product_code && !it.service_code,
+        p: String(it.employee_name || "").trim(), ag: it.scheduling_code ? String(it.scheduling_code) : undefined, v: num(it.item_value), q: Number(it.item_quantity) || 1, prod: !!it.product_code && !it.service_code,
       })),
     };
     lidas++;
