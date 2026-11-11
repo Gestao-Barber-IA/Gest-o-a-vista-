@@ -63,12 +63,13 @@ const num = (v) => {
 // "21/12/2026 11:40" → "2026-12-21"
 const dia = (s) => { const m = String(s || "").match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
 
+// Sai sempre pelo IPv4 (o IP fixo cadastrado na AppBarber); se a internet tiver IPv6, a AppBarber veria outro endereço.
 // GET com os cabeçalhos exatamente como escritos (ex.: "X-API-Key"); o fetch do Node os envia em minúsculas.
 async function getExato(url, headers) {
   const u = new URL(url);
   const mod = await import(u.protocol === "http:" ? "node:http" : "node:https");
   return new Promise((ok, fail) => {
-    const req = mod.request(u, { method: "GET", headers }, (res) => {
+    const req = mod.request(u, { method: "GET", headers, family: 4 }, (res) => {
       let b = ""; res.setEncoding("utf8"); res.on("data", (c) => (b += c));
       res.on("end", () => ok({ ok: res.statusCode >= 200 && res.statusCode < 300, status: res.statusCode, text: b }));
     });
@@ -81,11 +82,11 @@ async function main() {
   const q = new URLSearchParams({ establishment_code: String(cfg.codigo_estabelecimento), start_date: iso(ini), end_date: iso(hoje), status_type: "2" });
   if (cfg.codigo_filial) q.set("branch_code", String(cfg.codigo_filial));
   const url = (cfg.appbarber_url || "https://api.appbarber.com") + "/v1/appointments/history?" + q;
-  const HDR = { "X-API-Key": cfg.appbarber_api_key, Accept: "application/json", "User-Agent": "GestaoBarberIA-Sync/1.2" };
+  const HDR = { "X-API-Key": cfg.appbarber_api_key, Accept: "application/json", "User-Agent": "GestaoBarberIA-Sync/1.3" };
   if (process.argv.includes("--diagnostico")) {
     let ip = "?"; try { ip = (await (await fetch("https://api.ipify.org")).text()).trim(); } catch { /* sem IP */ }
     const k = String(cfg.appbarber_api_key);
-    console.log(`\n=== Diagnóstico (mande para a AppBarber) ===\nIP público deste computador: ${ip}\nGET ${url}\nX-API-Key: ${k.slice(0, 8)}…${k.slice(-4)}\nAccept: application/json\nUser-Agent: ${HDR["User-Agent"]}\n`);
+    console.log(`\n=== Diagnóstico (mande para a AppBarber) ===\nIP público deste computador (IPv4, usado na conexão): ${ip}\nGET ${url}\nX-API-Key: ${k.slice(0, 8)}…${k.slice(-4)}\nAccept: application/json\nUser-Agent: ${HDR["User-Agent"]}\n`);
   }
   const r = await getExato(url, HDR);
   const txt = r.text;
