@@ -1510,7 +1510,7 @@
     return { row, fat: s.fat || 0, pct, base, planos: s.planos || 0, vPl, prod: s.prod || 0, vPr, bonus, bTot, total: Math.max(0, base + vPl + vPr + bTot), days };
   }
   // Dias trabalhados no mês (regra da taxa de ocupação, menos as ausências lançadas).
-  const workDays = (ym, bid) => { const rec = (state.monthly || []).find(m => m.barberId === bid && m.month === ym); return Math.max(1, (Number(GB.ocupCfgOf(state).days) || 22) - (rec && Number(rec.aus) > 0 ? Number(rec.aus) : 0)); };
+  const workDays = (ym, bid) => { const rec = (state.monthly || []).find(m => m.barberId === bid && m.month === ym); return Math.max(1, (Number(GB.ocupCfgFor(state, bid).days) || 22) - (rec && Number(rec.aus) > 0 ? Number(rec.aus) : 0)); };
   function folgaWinner(ym) {
     const min = Number(comCfg().folgaMin) || 0; if (!(min > 0)) return null;
     const cands = monthR(ym).rows.filter(r => hasData(r) && (r.sums.fat || 0) > min && r.values.ocup !== null && r.values.ocup !== undefined);
@@ -2161,6 +2161,7 @@
     const hg = state.houseGoals || {}, hm = (state.houseGoalsM || {})[curYm()] || {};
     return [
       { ok: !!state.company.logo, t: 'Coloque o logo e os dados da empresa', h: 'empresa', b: 'Abrir dados', k: 'configuracoes' },
+      { ok: !!state.ocupCfg, t: 'Cadastre o horário de funcionamento (e dos profissionais com horário diferente)', h: 'horarios', b: 'Cadastrar horários', k: 'configuracoes' },
       { ok: state.barbers.filter(b => b.active !== false).length >= 2, t: 'Cadastre a equipe (com foto e aniversário)', h: 'barbeiros', b: 'Adicionar', k: 'barbeiros' },
       { ok: Object.keys(hg).length > 0 || Object.keys(hm).length > 0, t: 'Defina as metas do mês', h: 'performance', b: 'Definir metas', k: 'performance' },
       { ok: (state.entries || []).length > 0 || (state.monthly || []).length > 0, t: 'Lance os primeiros resultados (ou ligue a integração)', h: 'lancamentos', b: 'Lançar', k: 'lancamentos' },
@@ -2171,6 +2172,7 @@
     const out = [], now = new Date(), day = now.getDate(), ym = curYm(), prev = addMonths(ym, -1);
     const waiting = state.users.filter(u => u.status === 'pendente').length;
     if (waiting) out.push({ t: `${waiting} ${waiting > 1 ? 'pessoas aguardam' : 'pessoa aguarda'} sua aprovação para entrar`, h: 'barbeiros', b: 'Aprovar' });
+    if (!state.ocupCfg) out.push({ t: 'Cadastre o horário de funcionamento da empresa e dos profissionais. Ele define os 100% da taxa de ocupação e quando os dados da integração são buscados.', h: 'horarios', b: 'Cadastrar horários' });
     let proofs = 0;
     for (let i = 0; i < 7; i++) { const d = iso(new Date(now.getFullYear(), now.getMonth(), day - i)); for (const b of state.barbers) proofs += popPendingOf(b.id, d); }
     if (proofs) out.push({ t: `${proofs} ${proofs > 1 ? 'provas' : 'prova'} do checklist para conferir`, h: 'checklist', b: 'Conferir' });
@@ -3439,7 +3441,7 @@ ${rows.length ? '' : emptyBarbers()}
         </form>
       </section>
       <section class="section card">
-        <h2 class="section-title">Regra da taxa de ocupação ${tip('ocup')}</h2>
+        <h2 class="section-title" id="horarios">Horário de funcionamento e taxa de ocupação ${tip('ocup')}</h2>
         <p class="section-note">Ocupação = horas em comandas finalizadas ÷ horas da agenda no mês. Hoje, 100% = <b class="num">${nf1.format(oh)} h por dia × ${oc.days} dias = ${nf0.format(oh * oc.days)} h no mês</b>. Atendimentos antes da abertura, depois do fechamento ou no almoço compensam horários vagos; quem passa da capacidade fica acima de 100%. No mês em andamento a capacidade cresce dia a dia, e as ausências de cada barbeiro (férias, atestado) são lançadas em Lançamentos.</p>
         <form class="form" data-form="ocup" novalidate>
           <div class="grid-2">
@@ -3448,6 +3450,7 @@ ${rows.length ? '' : emptyBarbers()}
             <label class="field"><span>Almoço (minutos)</span><input class="input num" type="number" id="oc-lunch" name="lunch" min="0" max="240" step="5" value="${oc.lunch}"></label>
             <label class="field"><span>Dias trabalhados no mês</span><input class="input num" type="number" id="oc-days" name="days" min="1" max="31" step="1" value="${oc.days}"></label>
           </div>
+          ${ocupByBarber(oc)}
           <p class="form-msg" data-msg></p>
           <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar regra</button>
           <button class="btn" type="button" data-action="defaultOcup">Voltar ao padrão (9h às 20h, 1 h de almoço, 22 dias)</button></div>
@@ -3506,6 +3509,21 @@ Content-Type: application/json</pre>
       </section>${csvImportCard()}`;
   }
 
+  // Configurações › Regra da taxa de ocupação: horário próprio de cada profissional (vazio = o da empresa).
+  function ocupByBarber(oc) {
+    const by = oc.by || {}, list = state.barbers.filter(b => b.active !== false);
+    if (!list.length) return '';
+    const n = Object.keys(by).filter(k => list.some(b => b.id === k)).length;
+    return `<details class="oc-by" ${n ? 'open' : ''}><summary>Horário diferente por profissional ${n ? `<span class="chip chip-ok">${n}</span>` : '<span class="muted">(opcional)</span>'}</summary>
+      <p class="section-note">Preencha só para quem trabalha em outro horário ou em menos dias. Campos vazios usam o horário da empresa.</p>
+      ${list.map(b => { const o = by[b.id] || {}; return `<div class="oc-row"><b>${esc(b.name)}</b><div class="grid-2">
+        <label class="field"><span>Entrada</span><input class="input" type="time" name="bo-${esc(b.id)}" value="${esc(o.open || '')}"></label>
+        <label class="field"><span>Saída</span><input class="input" type="time" name="bc-${esc(b.id)}" value="${esc(o.close || '')}"></label>
+        <label class="field"><span>Almoço (min)</span><input class="input num" type="number" min="0" max="240" step="5" name="bl-${esc(b.id)}" value="${o.lunch ?? ''}" placeholder="${oc.lunch}"></label>
+        <label class="field"><span>Dias no mês</span><input class="input num" type="number" min="1" max="31" step="1" name="bd-${esc(b.id)}" value="${o.days ?? ''}" placeholder="${oc.days}"></label>
+      </div></div>`; }).join('')}
+    </details>`;
+  }
   function pageEmpresa() {
     const c = state.company;
     return `<section class="section card">
@@ -6100,7 +6118,8 @@ Content-Type: application/json</pre>
     if (route !== 'fechamento') ui.fcPeek = false;
     if (route === 'fechamento' && new Date().getDate() <= 7) DB.pref.set('fcSeen', addMonths(curYm(), -1));
     if (route !== 'time') ui.profSel = null;
-    const alias = { empresa: 'empresa', integracao: 'integracao' };
+    const alias = { empresa: 'empresa', integracao: 'integracao', horarios: 'indicadores' };
+    if (route === 'horarios') setTimeout(() => { const el = document.getElementById('horarios'); if (el) el.scrollIntoView({ block: 'start' }); }, 450);
     if (alias[route]) { ui.cfgTab = alias[route]; route = 'configuracoes'; }
     if (route === 'gestao-visual') route = 'inicio';
     if (route === 'apresentacao') { renderTV(); return; }
@@ -6973,13 +6992,25 @@ Content-Type: application/json</pre>
     },
     ocup(f) {
       const open = val(f, 'open'), close = val(f, 'close');
+      // Horário diferente por profissional (campos vazios = horário da empresa).
+      const by = {};
+      for (const b of state.barbers) {
+        const o = {}, g = k => (f.elements[`b${k}-${b.id}`] || {}).value || '';
+        if (g('o')) o.open = g('o'); if (g('c')) o.close = g('c');
+        if (g('l') !== '') o.lunch = Number(g('l')); if (g('d') !== '') o.days = Number(g('d'));
+        if (!Object.keys(o).length) continue;
+        const t = { open: o.open || open, close: o.close || close, lunch: o.lunch ?? Number(val(f, 'lunch')), days: o.days ?? Number(val(f, 'days')) };
+        if (GB.hoursPerDay(t) <= 0 || !(t.days >= 1 && t.days <= 31) || t.lunch < 0 || t.lunch > 240) return setMsg(f, `Confira o horário de ${b.name}: o fechamento precisa ser depois da abertura (descontado o almoço) e os dias entre 1 e 31.`);
+        by[b.id] = o;
+      }
       const lunch = Number(val(f, 'lunch')), days = Number(val(f, 'days'));
       if (!/^\d{2}:\d{2}$/.test(open) || !/^\d{2}:\d{2}$/.test(close)) return setMsg(f, 'Informe a abertura e o fechamento da agenda.');
       if (!Number.isFinite(lunch) || lunch < 0 || lunch > 240) return setMsg(f, 'O almoço deve ficar entre 0 e 240 minutos.');
       if (!Number.isInteger(days) || days < 1 || days > 31) return setMsg(f, 'Os dias trabalhados devem ficar entre 1 e 31.');
       const cfg = { open, close, lunch, days };
       if (GB.hoursPerDay(cfg) <= 0) return setMsg(f, 'O fechamento precisa ser depois da abertura, descontado o almoço.');
-      state.ocupCfg = cfg; save(); toast(`Regra salva: 100% = ${nf0.format(GB.hoursPerDay(cfg) * days)} h no mês.`); render();
+      if (Object.keys(by).length) cfg.by = by;
+      state.ocupCfg = cfg; save(); toast(`Horários salvos: 100% = ${nf0.format(GB.hoursPerDay(cfg) * days)} h no mês${Object.keys(by).length ? ` (e ${Object.keys(by).length} profissional${Object.keys(by).length > 1 ? 'is' : ''} com horário próprio)` : ''}.`); render();
     },
     async popsNew(f) {
       if (!isGestor(currentUser())) return;
