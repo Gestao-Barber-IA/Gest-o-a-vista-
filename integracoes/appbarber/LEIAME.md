@@ -9,12 +9,17 @@ Depois envia ao Gestão Barber IA, por profissional e por dia:
 
 | AppBarber | Gestão Barber IA |
 |---|---|
-| soma dos valores dos serviços realizados | Faturamento |
-| quantidade de serviços realizados | Serviços realizados |
+| total dos itens da comanda do profissional (serviços + produtos, valor final do caixa, sem gorjeta) | Faturamento (igual ao "Total realizado/vendido" da AppBarber) |
+| serviços da comanda | Serviços realizados |
+| produtos da comanda (quantidade) | Venda de produtos |
 | clientes diferentes atendidos no dia | Clientes atendidos |
 | maior comanda do profissional no dia | Maior comanda do mês |
 
-Os outros indicadores ficam fora da AppBarber nesta versão: produtos, planos, ocupação e checklist. O profissional pode
+Cada comanda é lida **uma única vez** (1 chamada) e guardada em `comandas.json`. Enquanto a comanda não é lida, vale o
+valor do agendamento. Comanda ainda não paga é relida no máximo 1 vez por hora. A primeira vez lê as comandas dos últimos
+31 dias aos poucos (até 120 por sincronização, respeitando o limite de 30 chamadas por minuto da AppBarber).
+
+Planos, ocupação e checklist ficam fora da AppBarber nesta versão. O profissional pode
 lançar esses números ele mesmo (Configurações › Indicadores e metas › "Profissional lança os próprios números").
 Reenviar o mesmo dia **substitui** o valor anterior, então nada é contado em dobro.
 
