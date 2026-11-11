@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSAO = "1.6";
+const VERSAO = "1.7";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const TESTE = process.argv.includes("--teste");
 const CARGA = process.argv.includes("--carga"); // carga inicial: lê todas as comandas no ritmo máximo permitido
@@ -70,6 +70,13 @@ const num = (v) => {
   let s = String(v ?? "").trim(); if (!s) return 0;
   if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
   const n = Number(s); return Number.isFinite(n) ? n : 0;
+};
+// "2026-12-21 08:40:00.000000" ou "21/12/2026 08:40" → minutos desde 1970 (hora local, só para diferenças)
+const minutos = (s) => {
+  let m = String(s || "").match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  if (m) return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) / 60000;
+  m = String(s || "").match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})/);
+  return m ? Date.UTC(+m[3], +m[2] - 1, +m[1], +m[4], +m[5]) / 60000 : null;
 };
 // "21/12/2026 11:40" → "2026-12-21"
 const dia = (s) => { const m = String(s || "").match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
@@ -155,10 +162,16 @@ async function main() {
   }
   const lista = ((JSON.parse(txt).data) || []).filter((a) => !a.scheduling_status || /realizad/i.test(a.scheduling_status));
 
+  // Horas atendidas no dia: junta os horários que se sobrepõem (não conta duas vezes o mesmo tempo).
+  function horasJuntas(lst) {
+    const a = lst.slice().sort((p, q) => p[0] - q[0]); let tot = 0, [s0, e0] = a[0];
+    for (const [s1, e1] of a.slice(1)) { if (s1 <= e0) e0 = Math.max(e0, e1); else { tot += e0 - s0; s0 = s1; e0 = e1; } }
+    return Math.round((tot + e0 - s0) / 60 * 100) / 100;
+  }
   function calc() {
     // Soma por profissional e dia. Comanda já lida: itens da comanda. Ainda não lida: valor do agendamento (provisório).
     const acc = new Map();
-    const add = (nome, d) => { const k = nome + "|" + d; if (!acc.has(k)) acc.set(k, { nome, d, fat: 0, serv: 0, prod: 0, cli: new Set(), com: new Map() }); return acc.get(k); };
+    const add = (nome, d) => { const k = nome + "|" + d; if (!acc.has(k)) acc.set(k, { nome, d, fat: 0, serv: 0, prod: 0, cli: new Set(), com: new Map(), int: [] }); return acc.get(k); };
     const usadas = new Set();
     // A AppBarber pode escrever o nome do profissional diferente na agenda e na comanda
     // (ex.: "Izaque Macedo" x "Izaquias Macedo"). Liga os dois pelo agendamento da comanda e usa o nome da agenda.
@@ -183,6 +196,7 @@ async function main() {
         if (!it.p) continue;
         const x = add(nomeDe(it.p), d);
         x.fat += it.v; if (it.prod) x.prod += it.q; else x.serv += it.q;
+        if (!it.prod && it.ini != null && it.fim > it.ini && it.fim - it.ini <= 600) x.int.push([it.ini, it.fim]);
         x.cli.add(inv.cli); x.com.set(c, (x.com.get(c) || 0) + it.v);
       }
     }
@@ -199,6 +213,7 @@ async function main() {
       data: x.d, barbeiro: NOMES[x.nome] || x.nome,
       faturamento: Math.round(x.fat * 100) / 100, servicos: x.serv, clientes: x.cli.size, venda_produtos: x.prod,
       maior_comanda: Math.round(Math.max(0, ...x.com.values()) * 100) / 100,
+      ...(x.int.length ? { horas_ocupadas: horasJuntas(x.int) } : {}),
     }));
   }
   async function enviar(silencioso) {
@@ -220,7 +235,7 @@ async function main() {
   const cache = lerCache();
   const codigos = [...new Set(lista.map((a) => a.invoice_code).filter((c) => c && Number(c) > 0).map(String))];
   // Comanda ainda não paga é relida no máximo 1 vez por hora (e depois que o dia vira, uma última vez).
-  let faltam = codigos.filter((c) => !cache[c] || (!cache[c].final && (Date.now() - (cache[c].lida || 0) > 3600000 || (cache[c].d && cache[c].d < iso(hoje)))));
+  let faltam = codigos.filter((c) => !cache[c] || (cache[c].itens && !cache[c].h) || (!cache[c].final && (Date.now() - (cache[c].lida || 0) > 3600000 || (cache[c].d && cache[c].d < iso(hoje)))));
   // Só lê as comandas do mês atual (o ranking é por mês). Nos 3 primeiros dias, também as do mês anterior,
   // para o fechamento sair com as comandas finais. Os outros dias ficam com o valor do agendamento.
   const diaDe = new Map(lista.map((a) => [String(a.invoice_code), dia(a.scheduling_start) || ""]));
@@ -247,9 +262,9 @@ async function main() {
     const pago = num(inv.invoice_payed_value) > 0 || !!inv.payment_type_code;
     const antiga = d && d < iso(hoje);
     cache[c] = {
-      d, cli: String(inv.person_code || inv.person_name || c), final: pago || !!antiga, lida: Date.now(),
+      d, cli: String(inv.person_code || inv.person_name || c), final: pago || !!antiga, lida: Date.now(), h: 1,
       itens: (inv.items || []).filter((it) => Number(it.product_is_tip) !== 1 && Number(it.product_is_cashback) !== 1).map((it) => ({
-        p: String(it.employee_name || "").trim(), ag: it.scheduling_code ? String(it.scheduling_code) : undefined, v: num(it.item_value), q: Number(it.item_quantity) || 1, prod: !!it.product_code && !it.service_code,
+        p: String(it.employee_name || "").trim(), ag: it.scheduling_code ? String(it.scheduling_code) : undefined, ini: minutos(it.scheduling_start) ?? undefined, fim: minutos(it.scheduling_end) ?? undefined, v: num(it.item_value), q: Number(it.item_quantity) || 1, prod: !!it.product_code && !it.service_code,
       })),
     };
     lidas++;
@@ -269,8 +284,8 @@ async function main() {
   log(`AppBarber: ${lista.length} atendimentos realizados de ${iso(ini)} a ${iso(hoje)} → ${itens.length} dias de profissionais.`);
   if (TESTE) {
     const tot = new Map();
-    for (const i of itens) { const t = tot.get(i.barbeiro) || { fat: 0, serv: 0, prod: 0, dias: 0 }; t.fat += i.faturamento; t.serv += i.servicos; t.prod += i.venda_produtos; t.dias++; tot.set(i.barbeiro, t); }
-    for (const [n, t] of tot) console.log(`  ${n}: R$ ${t.fat.toFixed(2)} · ${t.serv} serviços · ${t.prod} produtos · ${t.dias} dias`);
+    for (const i of itens) { const t = tot.get(i.barbeiro) || { fat: 0, serv: 0, prod: 0, h: 0, dias: 0 }; t.fat += i.faturamento; t.serv += i.servicos; t.prod += i.venda_produtos; t.h += i.horas_ocupadas || 0; t.dias++; tot.set(i.barbeiro, t); }
+    for (const [n, t] of tot) console.log(`  ${n}: R$ ${t.fat.toFixed(2)} · ${t.serv} serviços · ${t.prod} produtos · ${t.h.toFixed(1)} h atendidas · ${t.dias} dias`);
     if (faltam.length) console.log(`  (${faltam.length} comandas ainda não lidas: nelas vale o valor do agendamento até a sincronização ler.)`);
     log("Modo teste: nada foi enviado.");
     return;

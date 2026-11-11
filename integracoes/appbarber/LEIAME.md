@@ -14,6 +14,7 @@ Depois envia ao Gestão Barber IA, por profissional e por dia:
 | produtos da comanda (quantidade) | Venda de produtos |
 | clientes diferentes atendidos no dia | Clientes atendidos |
 | maior comanda do profissional no dia | Maior comanda do mês |
+| horas de atendimento (início e fim de cada serviço da comanda; horários sobrepostos contam uma vez) | Taxa de ocupação (o app divide pelas horas da agenda definidas em Configurações) |
 
 Cada comanda é lida **uma única vez** (1 chamada) e guardada em `comandas.json`. Só são lidas as comandas do **mês atual**
 (nos 3 primeiros dias do mês, também as do mês anterior, para o fechamento). Enquanto a comanda não é lida, e nos
@@ -22,7 +23,7 @@ comandas do mês atual (do dia 1º até hoje), no ritmo máximo da AppBarber (1.
 hora: cerca de 35 minutos para 550 comandas). Os números vão sendo atualizados no app
 durante a carga. Para rodar de novo: `node sincronizar.mjs --carga` na pasta.
 
-Planos, ocupação e checklist ficam fora da AppBarber nesta versão. O profissional pode
+Planos e checklist ficam fora da AppBarber nesta versão. O profissional pode
 lançar esses números ele mesmo (Configurações › Indicadores e metas › "Profissional lança os próprios números").
 Reenviar o mesmo dia **substitui** o valor anterior, então nada é contado em dobro.
 
