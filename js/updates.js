@@ -2,6 +2,13 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-11-aprovacao', date: '2026-11-11', title: 'Cadastro com aprovação', items: [
+    ['melhoria', 'Novas empresas passam por uma análise da nossa equipe antes do primeiro acesso. O teste grátis de 7 dias começa a contar na aprovação.'],
+  ] },
+  { id: '2026-11-10-protecao', date: '2026-11-10', title: 'Proteção do sistema', items: [
+    ['melhoria', 'A Tela da loja e o fechamento mostram discretamente o nome da empresa licenciada.'],
+    ['melhoria', 'Mais proteção contra cópia do sistema. Campos de digitação e botões de copiar continuam funcionando normalmente.'],
+  ] },
   { id: '2026-11-10-rotina', date: '2026-11-10', title: 'Checklist Líder e Recepção', items: [
     ['novo', 'Nova tela Checklist Líder e Recepção, em Gestão de pessoas: tarefas com horário para o líder de barbeiros e para a recepção marcarem ao longo do dia.'],
     ['novo', 'Só o dono e quem tem acesso de Gestor criam e mudam as tarefas: horário, dias da semana e se a tarefa exige foto e descrição para ser confirmada.'],

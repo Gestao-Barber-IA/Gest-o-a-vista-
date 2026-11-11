@@ -2391,6 +2391,13 @@ tbody tr:nth-child(even) td.disc-name { background: var(--surface-2); }
 .com-row > span small.neg, .disc-pen { color: #ff8a80; }
 .disc-pen { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
 
+/* Trava visual contra cópia: texto da página não é selecionável (campos e itens marcados continuam) */
+body { -webkit-user-select: none; user-select: none; }
+input, textarea, select, [contenteditable="true"], .selectable, .invite-link, #api-key, code, pre { -webkit-user-select: text; user-select: text; }
+img { -webkit-user-drag: none; -webkit-touch-callout: none; }
+/* Marca d'água da licença (Tela da loja e fechamento) */
+.lic-mark { position: fixed; left: 14px; bottom: 10px; z-index: 5; pointer-events: none; font-size: 0.72rem; letter-spacing: 0.06em; color: rgba(255, 255, 255, 0.32); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); max-width: 60vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media print { .lic-mark { display: none; } }
 /* ---------- Checklist Líder e Recepção ---------- */
 .rt-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .rt-who { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 1.15rem; }
@@ -2434,3 +2441,10 @@ tbody tr:nth-child(even) td.disc-name { background: var(--surface-2); }
 .rt-days .check { padding: 8px 12px; gap: 8px; align-items: center; } .rt-days .check input { width: 18px; height: 18px; margin: 0; }
 @media (max-width: 640px) { .rt-edit .pop-dhead { flex-wrap: wrap; } .rt-edit .pop-dhead .btn { width: 100%; justify-content: center; } }
 [data-form="rtSave"] textarea.input, #rt-note { font: inherit; font-size: 0.95rem; line-height: 1.45; }
+
+/* Evolução (empresa e profissional): período anterior à esquerda, mais recente à direita */
+.evo .cmp-sum .cmp-who.a { order: 2; }
+.evo .cmp-sum .cmp-who.b { order: 1; }
+.evo .cmp-row > .cmp-v:first-child { order: 3; flex-direction: row-reverse; justify-content: flex-start; text-align: right; }
+.evo .cmp-row > .cmp-mid { order: 2; }
+.evo .cmp-row > .cmp-v.r { order: 1; flex-direction: row-reverse; justify-content: flex-end; text-align: left; }
