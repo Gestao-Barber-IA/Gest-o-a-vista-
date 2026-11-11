@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { minify } from 'terser';
 
 const OUT = 'dist';
-const SKIP = new Set(['.git', '.github', 'node_modules', 'dist', 'tests', 'scripts', 'supabase', 'docs', 'package.json', 'package-lock.json', 'vercel.json', 'README.md']);
+const SKIP = new Set(['.git', '.github', 'node_modules', 'dist', 'tests', 'scripts', 'supabase', 'integracoes', 'docs', 'package.json', 'package-lock.json', 'vercel.json', 'README.md']);
 const JS = ['js/app.js', 'js/data.js', 'js/cloud.js', 'js/icons.js', 'js/updates.js', 'js/config.js', 'sw.js'];
 
 await rm(OUT, { recursive: true, force: true });
