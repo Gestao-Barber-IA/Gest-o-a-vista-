@@ -18,8 +18,10 @@ Os outros indicadores ficam fora da AppBarber nesta versão: produtos, planos, o
 lançar esses números ele mesmo (Configurações › Indicadores e metas › "Profissional lança os próprios números").
 Reenviar o mesmo dia **substitui** o valor anterior, então nada é contado em dobro.
 
-> A AppBarber cobra cada chamada feita com sucesso. Com o agendamento abaixo, de hora em hora das 8h às 22h,
-> são cerca de 15 chamadas por dia.
+> A AppBarber cobra cada chamada feita com sucesso (5.000 chamadas = R$ 100, ou seja, R$ 0,02 cada).
+> A sincronização roda a cada 10 minutos, só no horário de funcionamento definido no app
+> (Configurações › Indicadores e metas › Regra da taxa de ocupação: abertura e fechamento). Fora dele, nada é cobrado.
+> Com 10 horas por dia, são 60 chamadas por dia, cerca de 1.800 por mês (≈ R$ 36).
 
 ## Instalação (Windows)
 1. Instale o **Node.js** (versão LTS) em https://nodejs.org.
@@ -35,8 +37,9 @@ $d="C:\GestaoBarberIA\appbarber"; New-Item -ItemType Directory -Force $d | Out-N
    - o código do estabelecimento;
    - a chave `gbia_...`, que fica no app em **Configurações › Integração & API**.
 5. Ele busca os números na AppBarber e mostra o total de cada profissional, **sem enviar nada**.
-6. Se os números estiverem certos, digite **S** e aperte Enter. A sincronização passa a rodar sozinha a cada 1 hora,
-   das 8h às 22h.
+6. Se os números estiverem certos, digite **S** e aperte Enter.
+7. A sincronização passa a rodar sozinha a cada 10 minutos, no horário de abertura e fechamento definido no app.
+   Mudou o horário no app? O sincronizador segue o novo horário sozinho.
 
 Para trocar uma chave depois, dê dois cliques em `C:\GestaoBarberIA\appbarber\instalar.bat`.
 Se o nome de algum profissional na AppBarber for diferente do cadastro no Gestão, ajuste `nomes` no `config.json`,

@@ -20,7 +20,7 @@ const json = (body: unknown, status = 200) =>
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
-  if (req.method !== "POST") return json({ erro: "Use POST." }, 405);
+  if (req.method !== "POST" && req.method !== "GET") return json({ erro: "Use POST." }, 405);
 
   const key = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
   if (!key.startsWith("gbia_")) return json({ erro: "Envie a chave da API no cabeçalho Authorization: Bearer <chave>." }, 401);
@@ -28,6 +28,15 @@ Deno.serve(async (req) => {
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
   const { data: k } = await db.from("api_keys").select("company_id").eq("key", key).maybeSingle();
   if (!k) return json({ erro: "Chave da API inválida." }, 401);
+
+  // GET: horário de funcionamento definido no app (Configurações › Regra da taxa de ocupação),
+  // usado pelos sincronizadores para só buscar dados com a barbearia aberta.
+  if (req.method === "GET") {
+    const { data: c } = await db.from("companies").select("settings").eq("id", k.company_id).single();
+    const o = (c?.settings as any)?.ocup || {};
+    const hm = (v: unknown, d: string) => (typeof v === "string" && /^\d{2}:\d{2}$/.test(v) ? v : d);
+    return json({ abertura: hm(o.open, "09:00"), fechamento: hm(o.close, "20:00") });
+  }
   // A integração por API só vale nos planos pagos e com a assinatura em dia.
   const { data: co } = await db.from("companies").select("sub_status, paid_until, plan_id").eq("id", k.company_id).single();
   const { data: plan } = co?.plan_id ? await db.from("plans").select("api").eq("id", co.plan_id).maybeSingle() : { data: null };

@@ -10,9 +10,12 @@ if errorlevel 1 (echo. & echo Deu erro no teste. Tire um print desta tela e mand
 echo.
 set /p OK=Os numeros estao certos? Digite S e Enter para ligar a sincronizacao automatica: 
 if /i not "%OK%"=="S" (echo Nada foi ligado. Quando quiser, rode o instalar.bat de novo. & pause & exit /b)
-node sincronizar.mjs
-schtasks /Create /F /TN "Gestao Barber IA - AppBarber" /SC HOURLY /MO 1 /ST 08:00 /ET 22:00 /TR "\"%~dp0sincronizar.bat\"" >nul
+node sincronizar.mjs --agora
+schtasks /Create /F /TN "Gestao Barber IA - AppBarber" /SC MINUTE /MO 10 /TR "\"%~dp0sincronizar.bat\"" >nul
+if errorlevel 1 (echo Nao consegui agendar. Rode o instalar.bat clicando com o botao direito e "Executar como administrador". & pause & exit /b)
 echo.
-echo PRONTO! A sincronizacao vai rodar sozinha a cada 1 hora, das 8h as 22h.
+echo PRONTO! A sincronizacao roda a cada 10 minutos, SO no horario de funcionamento
+echo definido no app: Configuracoes - Indicadores e metas - Regra da taxa de ocupacao (abertura e fechamento).
+echo Fora desse horario ela nao chama a AppBarber e nao gasta creditos.
 echo Deixe este computador ligado e conectado na internet da barbearia.
 pause
