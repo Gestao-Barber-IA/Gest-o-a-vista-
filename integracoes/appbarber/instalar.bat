@@ -18,4 +18,11 @@ echo PRONTO! A sincronizacao roda a cada 10 minutos, SO no horario de funcioname
 echo definido no app: Configuracoes - Indicadores e metas - Regra da taxa de ocupacao (abertura e fechamento).
 echo Fora desse horario ela nao chama a AppBarber e nao gasta creditos.
 echo Deixe este computador ligado e conectado na internet da barbearia.
+echo.
+echo ==== CARGA INICIAL DAS COMANDAS ====
+echo Le de uma vez as comandas deste mes (do dia 1 ate hoje), no ritmo maximo
+echo permitido pela AppBarber (1.000 por hora). Os numeros vao sendo atualizados no app durante a carga.
+set CG=S
+set /p CG=Fazer a carga inicial agora? [Enter = S]: 
+if /i "%CG%"=="S" node sincronizar.mjs --carga
 pause

@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 
 const DIR = dirname(fileURLToPath(import.meta.url));
 const TESTE = process.argv.includes("--teste");
+const CARGA = process.argv.includes("--carga"); // carga inicial: lê todas as comandas no ritmo máximo permitido
 const log = (msg) => {
   const line = `[${new Date().toLocaleString("pt-BR")}] ${msg}`;
   console.log(line);
@@ -101,7 +102,7 @@ async function dentroDoHorario() {
 }
 
 async function main() {
-  if (!TESTE && !process.argv.includes("--agora")) {
+  if (!TESTE && !CARGA && !process.argv.includes("--agora")) {
     const h = await dentroDoHorario();
     if (!h.ok) { console.log(`Fora do horário de funcionamento (${h.abertura} às ${h.fechamento}, definido no app). Nada foi buscado.`); return; }
   }
@@ -130,15 +131,75 @@ async function main() {
   }
   const lista = ((JSON.parse(txt).data) || []).filter((a) => !a.scheduling_status || /realizad/i.test(a.scheduling_status));
 
+  function calc() {
+    // Soma por profissional e dia. Comanda já lida: itens da comanda. Ainda não lida: valor do agendamento (provisório).
+    const acc = new Map();
+    const add = (nome, d) => { const k = nome + "|" + d; if (!acc.has(k)) acc.set(k, { nome, d, fat: 0, serv: 0, prod: 0, cli: new Set(), com: new Map() }); return acc.get(k); };
+    const usadas = new Set();
+    for (const c of codigos) {
+      const inv = cache[c]; if (!inv || !inv.itens) continue;
+      usadas.add(c);
+      const d = inv.d || dia((lista.find((a) => String(a.invoice_code) === c) || {}).scheduling_start);
+      if (!d || d < iso(ini)) continue;
+      for (const it of inv.itens) {
+        if (!it.p) continue;
+        const x = add(it.p, d);
+        x.fat += it.v; if (it.prod) x.prod += it.q; else x.serv += it.q;
+        x.cli.add(inv.cli); x.com.set(c, (x.com.get(c) || 0) + it.v);
+      }
+    }
+    for (const a of lista) {
+      if (a.invoice_code && usadas.has(String(a.invoice_code))) continue;
+      const d = dia(a.scheduling_start); const nome = String(a.employee_name || "").trim();
+      if (!d || !nome) continue;
+      const x = add(nome, d), v = num(a.service_value);
+      x.fat += v; x.serv += 1;
+      x.cli.add(String(a.client_phone || a.client_name || a.appointment_code).replace(/\D/g, "") || String(a.client_name));
+      const c = a.invoice_code || a.appointment_code; x.com.set(c, (x.com.get(c) || 0) + v);
+    }
+    return [...acc.values()].map((x) => ({
+      data: x.d, barbeiro: NOMES[x.nome] || x.nome,
+      faturamento: Math.round(x.fat * 100) / 100, servicos: x.serv, clientes: x.cli.size, venda_produtos: x.prod,
+      maior_comanda: Math.round(Math.max(0, ...x.com.values()) * 100) / 100,
+    }));
+  }
+  async function enviar(silencioso) {
+    const itens = calc();
+    if (!itens.length) { if (!silencioso) log("Nada para enviar."); return; }
+    const g = await fetch(GESTAO_URL, { method: "POST", headers: { Authorization: "Bearer " + cfg.gestao_api_key, "Content-Type": "application/json" }, body: JSON.stringify(itens) });
+    const res = await g.json().catch(() => ({}));
+    if (!g.ok && !res.recebidos) throw new Error(`Gestão Barber IA respondeu ${g.status}: ${res.erro || JSON.stringify(res).slice(0, 200)}`);
+    if (!silencioso) log(`Gestão Barber IA: ${res.recebidos} lançamentos gravados.`);
+    if (!silencioso && res.problemas?.length) {
+      const nomes = [...new Set(res.problemas.map((p) => (p.match(/barbeiro "([^"]*)"/) || [])[1]).filter(Boolean))];
+      if (nomes.length) log(`ATENÇÃO: profissionais da AppBarber sem cadastro igual no Gestão: ${nomes.join(", ")}. Ajuste em "nomes" no config.json.`);
+      else log("Problemas: " + res.problemas.slice(0, 5).join(" | "));
+    }
+  }
+
   // Comandas: cada uma é lida UMA vez (1 chamada) e guardada em comandas.json. Elas têm os itens com o profissional,
   // o valor final (preço ajustado no caixa), serviços extras e produtos — o mesmo "Total realizado/vendido" da AppBarber.
   const cache = lerCache();
   const codigos = [...new Set(lista.map((a) => a.invoice_code).filter((c) => c && Number(c) > 0).map(String))];
   // Comanda ainda não paga é relida no máximo 1 vez por hora (e depois que o dia vira, uma última vez).
-  const faltam = codigos.filter((c) => !cache[c] || (!cache[c].final && (Date.now() - (cache[c].lida || 0) > 3600000 || (cache[c].d && cache[c].d < iso(hoje)))));
-  const MAX = TESTE ? 0 : Math.max(0, Number(cfg.max_comandas_por_vez ?? 120));
+  let faltam = codigos.filter((c) => !cache[c] || (!cache[c].final && (Date.now() - (cache[c].lida || 0) > 3600000 || (cache[c].d && cache[c].d < iso(hoje)))));
+  // Só lê as comandas do mês atual (o ranking é por mês). Nos 3 primeiros dias, também as do mês anterior,
+  // para o fechamento sair com as comandas finais. Os outros dias ficam com o valor do agendamento.
+  const diaDe = new Map(lista.map((a) => [String(a.invoice_code), dia(a.scheduling_start) || ""]));
+  const desde = iso(new Date(hoje.getFullYear(), hoje.getMonth() - (hoje.getDate() <= 3 ? 1 : 0), 1));
+  for (let i = faltam.length - 1; i >= 0; i--) if ((diaDe.get(faltam[i]) || "") < desde) faltam.splice(i, 1);
+  // Mais novas primeiro.
+  faltam.sort((a, b) => (diaDe.get(b) || "").localeCompare(diaDe.get(a) || ""));
+  // Durante a carga inicial, as sincronizações agendadas não leem comandas (para não passar do limite da AppBarber).
+  const LOCK = join(DIR, "carga.lock");
+  let cargaRodando = false; try { cargaRodando = !CARGA && Date.now() - Number(readFileSync(LOCK, "utf8")) < 5 * 60000; } catch { /* sem carga */ }
+  const MAX = TESTE || cargaRodando ? 0 : CARGA ? Infinity : Math.max(0, Number(cfg.max_comandas_por_vez ?? 120));
+  // Limites da AppBarber: 30/min por IP e 1.000/hora por chave. Carga: ~16/min (cabe nas 1.000/hora).
+  const PAUSA = Number(cfg.pausa_ms) || (CARGA ? 3700 : 2100);
+  if (CARGA) log(`Carga inicial: ${faltam.length} comandas para ler (cerca de ${Math.ceil(faltam.length * PAUSA / 60000)} minutos). Pode deixar a janela aberta; os números vão sendo atualizados no app.`);
   let lidas = 0, parou = "";
   for (const c of faltam.slice(0, MAX)) {
+    if (CARGA) { try { writeFileSync(LOCK, String(Date.now())); } catch { /* opcional */ } }
     const rr = await getExato(`${BASE}/v1/invoice/${encodeURIComponent(c)}?establishment_code=${encodeURIComponent(cfg.codigo_estabelecimento)}`, HDR).catch((e) => ({ ok: false, status: 0, text: e.message }));
     if (rr.status === 429) { parou = "limite de chamadas da AppBarber"; break; }
     if (rr.status === 404) { cache[c] = { final: true, itens: [], d: null }; continue; }
@@ -154,42 +215,18 @@ async function main() {
       })),
     };
     lidas++;
-    await new Promise((ok) => setTimeout(ok, 2100)); // ~28 por minuto: abaixo do limite de 30/min da AppBarber
+    if (CARGA && lidas % 100 === 0) {
+      salvarCache(cache); await enviar(true);
+      log(`Carga inicial: ${lidas} de ${faltam.length} comandas lidas.`);
+    }
+    await new Promise((ok) => setTimeout(ok, PAUSA));
   }
+  if (CARGA) { try { writeFileSync(LOCK, "0"); } catch { /* opcional */ } }
   if (lidas) salvarCache(cache);
   const pend = faltam.length - lidas;
   if (lidas || pend) log(`Comandas: ${lidas} lidas agora${pend > 0 ? `, ${pend} ficam para as próximas sincronizações` : ""}${parou ? ` (parou: ${parou})` : ""}.`);
 
-  // Soma por profissional e dia. Comanda já lida: itens da comanda. Ainda não lida: valor do agendamento (provisório).
-  const acc = new Map();
-  const add = (nome, d) => { const k = nome + "|" + d; if (!acc.has(k)) acc.set(k, { nome, d, fat: 0, serv: 0, prod: 0, cli: new Set(), com: new Map() }); return acc.get(k); };
-  const usadas = new Set();
-  for (const c of codigos) {
-    const inv = cache[c]; if (!inv || !inv.itens) continue;
-    usadas.add(c);
-    const d = inv.d || dia((lista.find((a) => String(a.invoice_code) === c) || {}).scheduling_start);
-    if (!d || d < iso(ini)) continue;
-    for (const it of inv.itens) {
-      if (!it.p) continue;
-      const x = add(it.p, d);
-      x.fat += it.v; if (it.prod) x.prod += it.q; else x.serv += it.q;
-      x.cli.add(inv.cli); x.com.set(c, (x.com.get(c) || 0) + it.v);
-    }
-  }
-  for (const a of lista) {
-    if (a.invoice_code && usadas.has(String(a.invoice_code))) continue;
-    const d = dia(a.scheduling_start); const nome = String(a.employee_name || "").trim();
-    if (!d || !nome) continue;
-    const x = add(nome, d), v = num(a.service_value);
-    x.fat += v; x.serv += 1;
-    x.cli.add(String(a.client_phone || a.client_name || a.appointment_code).replace(/\D/g, "") || String(a.client_name));
-    const c = a.invoice_code || a.appointment_code; x.com.set(c, (x.com.get(c) || 0) + v);
-  }
-  const itens = [...acc.values()].map((x) => ({
-    data: x.d, barbeiro: NOMES[x.nome] || x.nome,
-    faturamento: Math.round(x.fat * 100) / 100, servicos: x.serv, clientes: x.cli.size, venda_produtos: x.prod,
-    maior_comanda: Math.round(Math.max(0, ...x.com.values()) * 100) / 100,
-  }));
+  const itens = calc();
   log(`AppBarber: ${lista.length} atendimentos realizados de ${iso(ini)} a ${iso(hoje)} → ${itens.length} dias de profissionais.`);
   if (TESTE) {
     const tot = new Map();
@@ -199,15 +236,6 @@ async function main() {
     log("Modo teste: nada foi enviado.");
     return;
   }
-  if (!itens.length) return log("Nada para enviar.");
-  const g = await fetch(GESTAO_URL, { method: "POST", headers: { Authorization: "Bearer " + cfg.gestao_api_key, "Content-Type": "application/json" }, body: JSON.stringify(itens) });
-  const res = await g.json().catch(() => ({}));
-  if (!g.ok && !res.recebidos) throw new Error(`Gestão Barber IA respondeu ${g.status}: ${res.erro || JSON.stringify(res).slice(0, 200)}`);
-  log(`Gestão Barber IA: ${res.recebidos} lançamentos gravados.`);
-  if (res.problemas?.length) {
-    const nomes = [...new Set(res.problemas.map((p) => (p.match(/barbeiro "([^"]*)"/) || [])[1]).filter(Boolean))];
-    if (nomes.length) log(`ATENÇÃO: profissionais da AppBarber sem cadastro igual no Gestão: ${nomes.join(", ")}. Ajuste em "nomes" no config.json.`);
-    else log("Problemas: " + res.problemas.slice(0, 5).join(" | "));
-  }
+  await enviar();
 }
 main().catch((e) => { log("ERRO: " + e.message); process.exit(1); });
