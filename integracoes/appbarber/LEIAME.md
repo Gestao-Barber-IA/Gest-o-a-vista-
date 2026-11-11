@@ -23,16 +23,24 @@ Reenviar o mesmo dia **substitui** o valor anterior, então nada é contado em d
 
 ## Instalação (Windows)
 1. Instale o **Node.js** (versão LTS) em https://nodejs.org.
-2. Copie esta pasta para o computador, por exemplo em `C:\GestaoBarberIA\appbarber`.
-3. Copie `config.exemplo.json` para **`config.json`** e preencha:
-   - `appbarber_api_key`: a chave da API enviada pela AppBarber;
-   - `codigo_estabelecimento`: o código do estabelecimento na AppBarber;
-   - `gestao_api_key`: a chave `gbia_...`, que fica no Gestão Barber IA em **Integração & API**;
-   - `nomes`: preencha só se o nome de algum profissional na AppBarber for diferente do cadastro no Gestão.
-     Use o formato `"Nome na AppBarber": "Nome no Gestão"`.
-4. Dê dois cliques em **`testar.bat`**. Ele mostra o total de cada profissional **sem enviar nada**.
-5. Se os números estiverem certos, dê dois cliques em **`instalar-agendamento.bat`**. Ele agenda a sincronização a
-   cada 1 hora, das 8h às 22h.
+2. Clique com o botão direito no botão Iniciar e abra o **Terminal** (ou o **Windows PowerShell**).
+3. Cole o comando abaixo e aperte Enter. Ele baixa o programa para `C:\GestaoBarberIA\appbarber` e abre o instalador.
+
+```powershell
+$d="C:\GestaoBarberIA\appbarber"; New-Item -ItemType Directory -Force $d | Out-Null; foreach($f in "sincronizar.mjs","instalar.bat","sincronizar.bat","testar.bat"){ Invoke-WebRequest "https://gest-o-a-vista.vercel.app/integracoes/appbarber/$f" -OutFile "$d\$f" -UseBasicParsing }; Start-Process "$d\instalar.bat"
+```
+
+4. O instalador pede, um de cada vez:
+   - a chave da API da AppBarber;
+   - o código do estabelecimento;
+   - a chave `gbia_...`, que fica no app em **Configurações › Integração & API**.
+5. Ele busca os números na AppBarber e mostra o total de cada profissional, **sem enviar nada**.
+6. Se os números estiverem certos, digite **S** e aperte Enter. A sincronização passa a rodar sozinha a cada 1 hora,
+   das 8h às 22h.
+
+Para trocar uma chave depois, dê dois cliques em `C:\GestaoBarberIA\appbarber\instalar.bat`.
+Se o nome de algum profissional na AppBarber for diferente do cadastro no Gestão, ajuste `nomes` no `config.json`,
+no formato `"Nome na AppBarber": "Nome no Gestão"`.
 
 O resultado de cada execução fica em `sincronizacao.log`, na mesma pasta.
 
