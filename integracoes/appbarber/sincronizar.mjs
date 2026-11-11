@@ -182,9 +182,13 @@ async function main() {
   const cache = lerCache();
   const codigos = [...new Set(lista.map((a) => a.invoice_code).filter((c) => c && Number(c) > 0).map(String))];
   // Comanda ainda não paga é relida no máximo 1 vez por hora (e depois que o dia vira, uma última vez).
-  const faltam = codigos.filter((c) => !cache[c] || (!cache[c].final && (Date.now() - (cache[c].lida || 0) > 3600000 || (cache[c].d && cache[c].d < iso(hoje)))));
-  // Mais novas primeiro (o mês atual fica certo antes).
+  let faltam = codigos.filter((c) => !cache[c] || (!cache[c].final && (Date.now() - (cache[c].lida || 0) > 3600000 || (cache[c].d && cache[c].d < iso(hoje)))));
+  // Só lê as comandas do mês atual (o ranking é por mês). Nos 3 primeiros dias, também as do mês anterior,
+  // para o fechamento sair com as comandas finais. Os outros dias ficam com o valor do agendamento.
   const diaDe = new Map(lista.map((a) => [String(a.invoice_code), dia(a.scheduling_start) || ""]));
+  const desde = iso(new Date(hoje.getFullYear(), hoje.getMonth() - (hoje.getDate() <= 3 ? 1 : 0), 1));
+  for (let i = faltam.length - 1; i >= 0; i--) if ((diaDe.get(faltam[i]) || "") < desde) faltam.splice(i, 1);
+  // Mais novas primeiro.
   faltam.sort((a, b) => (diaDe.get(b) || "").localeCompare(diaDe.get(a) || ""));
   // Durante a carga inicial, as sincronizações agendadas não leem comandas (para não passar do limite da AppBarber).
   const LOCK = join(DIR, "carga.lock");

@@ -20,7 +20,7 @@ echo Fora desse horario ela nao chama a AppBarber e nao gasta creditos.
 echo Deixe este computador ligado e conectado na internet da barbearia.
 echo.
 echo ==== CARGA INICIAL DAS COMANDAS ====
-echo Le todas as comandas dos ultimos 31 dias de uma vez (comecando por este mes), no ritmo maximo
+echo Le de uma vez as comandas deste mes (do dia 1 ate hoje), no ritmo maximo
 echo permitido pela AppBarber (1.000 por hora). Os numeros vao sendo atualizados no app durante a carga.
 set CG=S
 set /p CG=Fazer a carga inicial agora? [Enter = S]: 
