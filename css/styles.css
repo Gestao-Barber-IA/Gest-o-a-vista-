@@ -2448,3 +2448,30 @@ img { -webkit-user-drag: none; -webkit-touch-callout: none; }
 .evo .cmp-row > .cmp-v:first-child { order: 3; flex-direction: row-reverse; justify-content: flex-start; text-align: right; }
 .evo .cmp-row > .cmp-mid { order: 2; }
 .evo .cmp-row > .cmp-v.r { order: 1; flex-direction: row-reverse; justify-content: flex-end; text-align: left; }
+
+/* Menu com a marca da empresa cliente: logo e nome dela; o nome do sistema pequeno, em cima */
+.brand-co .brand-mark { object-fit: cover; background: #0b0b0f; }
+.brand-co .brand-text { gap: 2px; min-width: 0; }
+.brand-co .brand-sys { font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255, 255, 255, 0.6); white-space: nowrap; order: -1; }
+.drawer .brand-co .brand-co-name { font-size: 17px; white-space: normal; line-height: 1.15; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* Fechamento: só a marca d'água do sistema, bem sutil */
+.lic-sys { display: flex; align-items: center; gap: 6px; color: rgba(255, 255, 255, 0.28); letter-spacing: 0.08em; }
+.lic-sys .lic-logo { width: 18px; height: 18px; border-radius: 50%; opacity: 0.45; box-shadow: none; }
+.lic-sys { top: calc(10px + env(safe-area-inset-top, 0px)); bottom: auto; left: auto; right: 14px; }
+
+/* Fechamento nas cores do logo da empresa (classe aplicada quando há logo com cores definidas) */
+.fx.fx-brand { background: radial-gradient(80% 60% at 20% 10%, var(--fx-bg1) 0%, transparent 70%), radial-gradient(70% 60% at 85% 75%, var(--fx-bg2) 0%, transparent 70%), linear-gradient(170deg, var(--fx-bg3), #08080c 55%, var(--fx-bg3)); }
+.fx-brand .fx-title > span, .fx-brand .fx-open-d i { background-image: linear-gradient(180deg, #ffffff 8%, var(--fx-light) 50%, var(--fx-a)); }
+.fx-brand .fx-title.gold > span { background-image: linear-gradient(180deg, #fffaf0 5%, var(--fx-light) 45%, var(--fx-a)); }
+.fx-brand .fx-open-b i { background-image: linear-gradient(180deg, #fffaf0 8%, var(--fx-light) 48%, var(--fx-a)); }
+.fx-brand .fx-open { background: radial-gradient(60% 50% at 50% 50%, rgba(var(--fx-b-rgb), 0.35), rgba(5, 5, 12, 0.92)); }
+.fx-brand .fx-open-rays { background: repeating-conic-gradient(rgba(var(--fx-a-rgb), 0.18) 0 6deg, transparent 6deg 18deg); }
+.fx-brand .fx-open-flash { background: radial-gradient(closest-side, rgba(255, 255, 255, 0.9), rgba(var(--fx-a-rgb), 0.3) 30%, transparent 60%); }
+.fx-brand .fx-open-b::before, .fx-brand .fx-open-d::before, .fx-brand .fx-intro .fx-title::before { background: radial-gradient(closest-side, rgba(var(--fx-a-rgb), 0.4), rgba(var(--fx-a-rgb), 0.1) 55%, transparent 75%); }
+.fx-brand .fx-orbit { border-color: rgba(var(--fx-a-rgb), 0.65); }
+.fx-brand .fx-orbit.o2 { border-color: rgba(var(--fx-b-rgb), 0.45); }
+.fx-brand .fx-logo { box-shadow: 0 0 80px rgba(var(--fx-a-rgb), 0.55); }
+.fx-brand .fx-dot { background: rgba(var(--fx-a-rgb), 0.75); box-shadow: 0 0 8px rgba(var(--fx-a-rgb), 0.85); }
+.fx-brand .fx-kicker { color: var(--fx-a); }
+.fx-brand .fx-pages i.on { background: var(--fx-a); box-shadow: 0 0 12px rgba(var(--fx-a-rgb), 0.7); }
+.fx-brand .fx-ptitle i { background-image: linear-gradient(180deg, #fffaf0 5%, var(--fx-light) 45%, var(--fx-a)); }

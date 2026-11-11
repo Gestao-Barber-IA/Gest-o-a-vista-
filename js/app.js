@@ -207,6 +207,13 @@
       <span class="brand-sub">Sistema de performance</span></span>
     </span>`;
 
+  // Menu: com o logo da empresa cliente, mostra o logo e o nome dela; o nome do sistema fica pequeno, em cima.
+  const drawerBrand = () => state.company && state.company.logo
+    ? `<span class="brand brand-co"><img class="brand-mark" src="${esc(state.company.logo)}" alt="${esc(state.company.name || 'Logo da empresa')}">
+      <span class="brand-text"><span class="brand-sys">${esc(B().name)}</span><span class="brand-name brand-co-name">${esc(state.company.name || '')}</span></span></span>`
+    : brand();
+  // Logo da empresa cliente (ou o do sistema, se ainda não enviou).
+  const coLogo = cls => state.company && state.company.logo ? `<img class="brand-mark ${cls}" src="${esc(state.company.logo)}" alt="${esc(state.company.name || 'Logo')}">` : logo(cls);
   function toast(msg, ms = 2800, ic = '') {
     document.querySelectorAll('.toast').forEach(t => t.remove());
     const t = document.createElement('div');
@@ -383,6 +390,14 @@
   // ---------- Modo apresentação: marca do cliente (logo e nome da empresa visitada) ----------
   // O app troca o nome e o logo da empresa e se recolore com as cores do logo, para o dono já se ver no sistema.
   const KIT_VARS = ['--accent', '--accent-strong', '--accent-ink', '--accent-glow', '--line-accent', '--bg-glow-1', '--bg-glow-2', '--drawer-1', '--drawer-2', '--drawer-3', '--blue', '--blue-light', '--gold'];
+  // Guarda a marca do cliente na conta (e troca o logo local pelo endereço salvo, mais leve).
+  function kitToAccount(kit) {
+    if (!Cloud.demoMusic) return;
+    Cloud.demoMusic.kitSave(kit).then(url => {
+      if (url === undefined || !kit) return;
+      const loc = demoKit(); if (loc && url && loc.logo !== url) { loc.logo = url; try { DB.pref.set('demoKit', JSON.stringify(loc)); } catch (e) { /* segue */ } if (state.company.logo && /^data:/.test(state.company.logo)) { state.company.logo = url; save(); } }
+    }).catch(() => toast('A marca do cliente ficou salva só neste aparelho.'));
+  }
   const demoKit = () => { try { return JSON.parse(DB.pref.get('demoKit', '') || 'null'); } catch (e) { return null; } };
   const lumOf = h => { const [r, g, b] = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
   async function applyKitColors() {
@@ -688,7 +703,7 @@
     return `
       <div class="scrim" hidden data-action="closeDrawer"></div>
       <nav class="drawer" aria-label="Menu principal">
-        ${brand()}
+        ${drawerBrand()}
         ${groups}
         <div class="nav-sep"></div>
         ${!DEMO_ON && isGestor(user) ? `<button class="nav-item" data-action="startDemo" data-b="${MARCA}">${icon('monitor')}<span>Modo apresentação</span></button>` : ''}
@@ -3467,7 +3482,7 @@ Content-Type: application/json</pre>
     return `<section class="card fc-head">
         ${amNote}
         ${secretNote}
-        <div class="fc-brand">${logo('fc-logo')}<div><h2>Fechamento do mês</h2><p>Cada atendimento conta.</p></div></div>
+        <div class="fc-brand">${coLogo('fc-logo')}<div><h2>Fechamento do mês</h2><p>Cada atendimento conta.</p></div></div>
         <div class="fc-controls">
           <label class="field"><span>Mês do fechamento</span><select class="input" id="fc-month" data-change="teamMonth">${monthOptions(ym)}</select></label>
           <button class="btn btn-primary fc-start" data-action="fxStart" ${R.rows.length && R.active.length ? '' : 'disabled'}>${icon('monitor')} Iniciar fechamento</button>
@@ -3523,7 +3538,7 @@ Content-Type: application/json</pre>
   function fxSlideHtml(R, sl, ym) {
     const n = R.rows.length, month = esc(ymLabel(ym).replace(' de ', '/'));
     if (sl.k === 'intro') return `<div class="fx-slide fx-intro has-open">
-        <div class="fx-emblem"><span class="fx-orbit"></span><span class="fx-orbit o2"></span>${logo('fx-logo')}</div>
+        <div class="fx-emblem"><span class="fx-orbit"></span><span class="fx-orbit o2"></span>${coLogo('fx-logo')}</div>
         <p class="fx-kicker">${esc(state.company.name)}</p>
         <h1 class="fx-title"><span>Fechamento</span></h1>
         <p class="fx-month">${month}</p>
@@ -3644,9 +3659,10 @@ Content-Type: application/json</pre>
     if (!ov) {
       ov = document.createElement('div');
       ov.id = 'fx'; ov.className = 'fx'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Apresentação do fechamento do mês');
-      ov.innerHTML = `<div class="fx-bg">${fxDots(34)}</div><div class="fx-stage" aria-live="polite"></div><nav class="fx-ctrl"></nav>${licMark()}`;
+      ov.innerHTML = `<div class="fx-bg">${fxDots(34)}</div><div class="fx-stage" aria-live="polite"></div><nav class="fx-ctrl"></nav>${licMark('fx')}`;
       document.body.appendChild(ov);
       fxBind(ov);
+      fxBrandColors(ov);
     }
     const { R, s } = fxSlides(fx.ym);
     fx.total = s.length;
@@ -3693,6 +3709,31 @@ Content-Type: application/json</pre>
     if (sl) sl.querySelectorAll('img').forEach(im => { if (!im.complete) im.addEventListener('load', fxFit, { once: true }); });
   }
   window.addEventListener('resize', () => { if (ui.fx) fxFit(); });
+  // Fechamento nas cores do logo da empresa (com logo enviado e cores bem definidas).
+  async function fxBrandColors(ov) {
+    if (!state.company || !state.company.logo) return;
+    try {
+      const p = await brandPalette(); if (!ov.isConnected) return;
+      const sat = h => { const [r, g, b] = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255), mx = Math.max(r, g, b), mn = Math.min(r, g, b); return mx === mn ? 0 : (mx - mn) / (1 - Math.abs(mx + mn - 1)); };
+      if (sat(p.a) < 0.18) return; // logo preto e branco: mantém as cores do app
+      const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)).join(', ');
+      // Deixa o tom da marca vivo e claro o bastante para brilhar no fundo escuro.
+      const vivid = (h, lo, hi) => {
+        const [r, g, b] = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255), mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+        let hu = 0; if (d) hu = mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; hu *= 60;
+        const l0 = (mx + mn) / 2, s0 = d ? d / (1 - Math.abs(2 * l0 - 1)) : 0, sN = Math.max(s0, 0.6), lN = Math.min(hi, Math.max(lo, l0));
+        const f = n => { const k = (n + hu / 30) % 12, aa = sN * Math.min(lN, 1 - lN); return Math.round((lN - aa * Math.max(-1, Math.min(k - 3, 9 - k, 1))) * 255).toString(16).padStart(2, '0'); };
+        return '#' + f(0) + f(8) + f(4);
+      };
+      p.a = vivid(p.a, 0.58, 0.7);
+      const B2 = sat(p.b) < 0.18 ? mixHex(p.a, '#000000', 0.35) : vivid(p.b, 0.4, 0.55), st = ov.style;
+      st.setProperty('--fx-a', p.a); st.setProperty('--fx-b', B2); st.setProperty('--fx-light', mixHex(p.a, '#ffffff', 0.55));
+      st.setProperty('--fx-a-rgb', rgb(p.a)); st.setProperty('--fx-b-rgb', rgb(B2));
+      st.setProperty('--fx-bg1', mixHex(p.a, '#000000', 0.72)); st.setProperty('--fx-bg2', mixHex(B2, '#000000', 0.7)); st.setProperty('--fx-bg3', mixHex(B2, '#05050a', 0.9));
+      st.setProperty('--accent', p.a);
+      ov.classList.add('fx-brand');
+    } catch (e) { /* mantém as cores padrão */ }
+  }
   function fxReveal(slide, place) {
     if (!slide || !slide.classList.contains('is-suspense')) return;
     slide.classList.remove('is-suspense', 'is-drum'); slide.classList.add('is-revealed'); fxFitSoon(slide);
@@ -4903,7 +4944,7 @@ Content-Type: application/json</pre>
     });
     // Rodapé
     c.textAlign = 'center'; sp('3px'); c.font = `600 28px ${T}`; c.fillStyle = 'rgba(255,255,255,0.7)';
-    c.fillText(tt ? `PARABÉNS, ${first(r.barber.name).toUpperCase()}! · ${B().name.toUpperCase()}` : `${B().name.toUpperCase()} · CADA ATENDIMENTO CONTA`, W / 2, H - 54); sp('0px');
+    const coN = (state.company.name || B().name).toUpperCase(); c.fillText(tt ? `PARABÉNS, ${first(r.barber.name).toUpperCase()}! · ${coN}` : `${coN} · CADA ATENDIMENTO CONTA`, W / 2, H - 54); sp('0px');
     return cv;
   }
   // ---------- Cards de parabéns (sem números) e de aniversário, nas cores do logo da empresa ----------
@@ -5804,7 +5845,9 @@ Content-Type: application/json</pre>
   }
 
   // Marca d'água discreta: um print vazado mostra de qual empresa saiu.
-  const licMark = () => `<div class="lic-mark" aria-hidden="true">Licenciado para ${esc(state.company.name || 'esta empresa')} · ${esc(B().name)} © ${new Date().getFullYear()}</div>`;
+  const licMark = kind => kind === 'fx'
+    ? `<div class="lic-mark lic-sys" aria-hidden="true">${logo('lic-logo')}<span>${esc(B().name)}</span></div>`
+    : `<div class="lic-mark" aria-hidden="true">Licenciado para ${esc(state.company.name || 'esta empresa')} · ${esc(B().name)} © ${new Date().getFullYear()}</div>`;
   function renderTV() {
     if (!DB.demo) DB.pref.set('tvSeen', '1');
     document.body.classList.remove('has-nav');
@@ -6465,6 +6508,7 @@ Content-Type: application/json</pre>
       const kit = demoKit(); DB.pref.set('demoKit', '');
       if (kit && kit.orig) { state.company.name = kit.orig.name; state.company.logo = kit.orig.logo; save(); }
       applyKitColors(); ui.kitOpen = false; toast('Voltou ao padrão da demonstração.'); render();
+      kitToAccount(null);
     },
     demoReset() { state = DB.reset(); ensureKit(); rkCache = {}; demoLogin('dono'); toast('Demonstração reiniciada.'); location.hash = 'inicio'; render(); },
     demoExit() { try { sessionStorage.removeItem('gbia.demo'); } catch (e) { /* opcional */ } location.href = location.origin + location.pathname; },
@@ -6816,6 +6860,7 @@ Content-Type: application/json</pre>
       state.company.name = name || orig.name; state.company.logo = logo; save();
       await applyKitColors(); ui.kitOpen = false;
       toast(`Pronto! A demonstração agora é da ${name || 'empresa do cliente'}.`); render();
+      kitToAccount({ name, logo });
     },
     pdBday(f) {
       const v = val(f, 'bday');
@@ -7181,6 +7226,16 @@ Content-Type: application/json</pre>
   if (DEMO_ON) { try { ensureKit(); applyKitColors(); } catch (e) { /* opcional */ } }
   if (DEMO_ON) { let pf = null; try { pf = sessionStorage.getItem('gbia.pitch'); sessionStorage.removeItem('gbia.pitch'); } catch (e) { /* opcional */ } if (pf) setTimeout(() => { if (currentUser()) pitchOpen(); }, 2400); }
   if (DEMO_ON && Cloud.demoMusic) {
+    // Marca do cliente: a da conta vale em todos os aparelhos; a deste aparelho sobe para a conta se lá não houver.
+    Cloud.demoMusic.kitLoad().then(k => {
+      if (k === undefined) return;
+      const loc = demoKit();
+      if (!k) { if (loc && (loc.logo || loc.name)) kitToAccount({ name: loc.name, logo: loc.logo }); return; }
+      if (loc && loc.logo === k.logo && loc.name === k.name) return;
+      const orig = (loc && loc.orig) || { name: state.company.name, logo: state.company.logo || null };
+      try { DB.pref.set('demoKit', JSON.stringify({ name: k.name || '', logo: k.logo || null, orig })); } catch (e) { return; }
+      ensureKit(); applyKitColors(); render();
+    }).catch(() => { /* sem conta: só a marca deste aparelho */ });
     Cloud.demoMusic.load().then(m => { if (m && Object.keys(m).length) { ui.acctMusic = m; if (location.hash === '#fechamento') render(); } }).catch(() => { /* sem conta: só as músicas deste aparelho */ });
   }
   if (Cloud.enabled) {
