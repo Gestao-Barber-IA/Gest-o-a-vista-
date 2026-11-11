@@ -24,6 +24,30 @@
         return (co && co.settings && co.settings.music) || null;
       },
       async url(path) { const { data, error } = await cli().storage.from('musicas').createSignedUrl(path, 3600); if (error) throw error; return data.signedUrl; },
+      // Marca do cliente da demonstração, guardada na conta (vale em todos os aparelhos logados).
+      async ctx() {
+        const c3 = cli(), { data: { session } } = await c3.auth.getSession(); if (!session) return null;
+        const { data: prof } = await c3.from('profiles').select('company_id, role').eq('id', session.user.id).maybeSingle();
+        return prof && prof.role === 'gestor' && prof.company_id ? { c3, cid: prof.company_id } : null;
+      },
+      async kitLoad() {
+        const x = await this.ctx(); if (!x) return undefined;
+        const { data: co } = await x.c3.from('companies').select('settings').eq('id', x.cid).maybeSingle();
+        return co ? ((co.settings && co.settings.demoKit) || null) : undefined;
+      },
+      async kitSave(kit) {
+        const x = await this.ctx(); if (!x) return undefined;
+        let logo = kit && kit.logo;
+        if (logo && /^data:/.test(logo)) {
+          const blob = await (await fetch(logo)).blob(), path = `${x.cid}/kit-${Date.now().toString(36)}.jpg`;
+          const { error } = await x.c3.storage.from('fotos').upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: false });
+          if (!error) logo = x.c3.storage.from('fotos').getPublicUrl(path).data.publicUrl;
+        }
+        const { data: co } = await x.c3.from('companies').select('settings').eq('id', x.cid).maybeSingle();
+        const settings = { ...((co && co.settings) || {}), demoKit: kit ? { name: kit.name || '', logo: logo || null } : null };
+        const { error } = await x.c3.from('companies').update({ settings }).eq('id', x.cid); if (error) throw error;
+        return logo || null;
+      },
     };
   }
   if (!enabled) return;
@@ -226,7 +250,7 @@
       out.tables[t] = map;
     }
     const co = s.company;
-    out.company = JSON.stringify({ name: co.name, cnpj: co.cnpj || '', phone: co.phone || '', email: co.email || '', logo: co.logo || null, settings: { weights: s.weights, goals: s.goals, hidden: s.hidden, org: s.org || null, pop: s.popCfg || null, reveal: s.reveal || null, ocup: s.ocupCfg || null, pops: s.pops || null, brand: s.brand || null, theme: s.theme || null, houseGoals: s.houseGoals || null, houseGoalsM: s.houseGoalsM || null, music: s.podiumMusic || null, births: s.births || null, com: s.comCfg || null, dreams: s.dreams || null, units: s.units || null } });
+    out.company = JSON.stringify({ name: co.name, cnpj: co.cnpj || '', phone: co.phone || '', email: co.email || '', logo: co.logo || null, settings: { weights: s.weights, goals: s.goals, hidden: s.hidden, org: s.org || null, pop: s.popCfg || null, reveal: s.reveal || null, ocup: s.ocupCfg || null, pops: s.pops || null, brand: s.brand || null, theme: s.theme || null, houseGoals: s.houseGoals || null, houseGoalsM: s.houseGoalsM || null, music: s.podiumMusic || null, births: s.births || null, demoKit: s.demoKit || null, com: s.comCfg || null, dreams: s.dreams || null, units: s.units || null } });
     for (const u of s.users) out.users[u.id] = JSON.stringify({ name: u.name, phone: u.phone || '', status: u.status });
     return out;
   }
@@ -306,6 +330,7 @@
       podiumMusic: st.music || null,
       births: st.births || null,
       comCfg: st.com || null,
+      demoKit: st.demoKit || null,
       dreams: st.dreams || null,
       units: st.units || null,
       ocupCfg: st.ocup || null,

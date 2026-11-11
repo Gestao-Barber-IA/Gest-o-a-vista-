@@ -390,6 +390,14 @@
   // ---------- Modo apresentação: marca do cliente (logo e nome da empresa visitada) ----------
   // O app troca o nome e o logo da empresa e se recolore com as cores do logo, para o dono já se ver no sistema.
   const KIT_VARS = ['--accent', '--accent-strong', '--accent-ink', '--accent-glow', '--line-accent', '--bg-glow-1', '--bg-glow-2', '--drawer-1', '--drawer-2', '--drawer-3', '--blue', '--blue-light', '--gold'];
+  // Guarda a marca do cliente na conta (e troca o logo local pelo endereço salvo, mais leve).
+  function kitToAccount(kit) {
+    if (!Cloud.demoMusic) return;
+    Cloud.demoMusic.kitSave(kit).then(url => {
+      if (url === undefined || !kit) return;
+      const loc = demoKit(); if (loc && url && loc.logo !== url) { loc.logo = url; try { DB.pref.set('demoKit', JSON.stringify(loc)); } catch (e) { /* segue */ } if (state.company.logo && /^data:/.test(state.company.logo)) { state.company.logo = url; save(); } }
+    }).catch(() => toast('A marca do cliente ficou salva só neste aparelho.'));
+  }
   const demoKit = () => { try { return JSON.parse(DB.pref.get('demoKit', '') || 'null'); } catch (e) { return null; } };
   const lumOf = h => { const [r, g, b] = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
   async function applyKitColors() {
@@ -3474,7 +3482,7 @@ Content-Type: application/json</pre>
     return `<section class="card fc-head">
         ${amNote}
         ${secretNote}
-        <div class="fc-brand">${logo('fc-logo')}<div><h2>Fechamento do mês</h2><p>Cada atendimento conta.</p></div></div>
+        <div class="fc-brand">${coLogo('fc-logo')}<div><h2>Fechamento do mês</h2><p>Cada atendimento conta.</p></div></div>
         <div class="fc-controls">
           <label class="field"><span>Mês do fechamento</span><select class="input" id="fc-month" data-change="teamMonth">${monthOptions(ym)}</select></label>
           <button class="btn btn-primary fc-start" data-action="fxStart" ${R.rows.length && R.active.length ? '' : 'disabled'}>${icon('monitor')} Iniciar fechamento</button>
@@ -6500,6 +6508,7 @@ Content-Type: application/json</pre>
       const kit = demoKit(); DB.pref.set('demoKit', '');
       if (kit && kit.orig) { state.company.name = kit.orig.name; state.company.logo = kit.orig.logo; save(); }
       applyKitColors(); ui.kitOpen = false; toast('Voltou ao padrão da demonstração.'); render();
+      kitToAccount(null);
     },
     demoReset() { state = DB.reset(); ensureKit(); rkCache = {}; demoLogin('dono'); toast('Demonstração reiniciada.'); location.hash = 'inicio'; render(); },
     demoExit() { try { sessionStorage.removeItem('gbia.demo'); } catch (e) { /* opcional */ } location.href = location.origin + location.pathname; },
@@ -6851,6 +6860,7 @@ Content-Type: application/json</pre>
       state.company.name = name || orig.name; state.company.logo = logo; save();
       await applyKitColors(); ui.kitOpen = false;
       toast(`Pronto! A demonstração agora é da ${name || 'empresa do cliente'}.`); render();
+      kitToAccount({ name, logo });
     },
     pdBday(f) {
       const v = val(f, 'bday');
@@ -7216,6 +7226,16 @@ Content-Type: application/json</pre>
   if (DEMO_ON) { try { ensureKit(); applyKitColors(); } catch (e) { /* opcional */ } }
   if (DEMO_ON) { let pf = null; try { pf = sessionStorage.getItem('gbia.pitch'); sessionStorage.removeItem('gbia.pitch'); } catch (e) { /* opcional */ } if (pf) setTimeout(() => { if (currentUser()) pitchOpen(); }, 2400); }
   if (DEMO_ON && Cloud.demoMusic) {
+    // Marca do cliente: a da conta vale em todos os aparelhos; a deste aparelho sobe para a conta se lá não houver.
+    Cloud.demoMusic.kitLoad().then(k => {
+      if (k === undefined) return;
+      const loc = demoKit();
+      if (!k) { if (loc && (loc.logo || loc.name)) kitToAccount({ name: loc.name, logo: loc.logo }); return; }
+      if (loc && loc.logo === k.logo && loc.name === k.name) return;
+      const orig = (loc && loc.orig) || { name: state.company.name, logo: state.company.logo || null };
+      try { DB.pref.set('demoKit', JSON.stringify({ name: k.name || '', logo: k.logo || null, orig })); } catch (e) { return; }
+      ensureKit(); applyKitColors(); render();
+    }).catch(() => { /* sem conta: só a marca deste aparelho */ });
     Cloud.demoMusic.load().then(m => { if (m && Object.keys(m).length) { ui.acctMusic = m; if (location.hash === '#fechamento') render(); } }).catch(() => { /* sem conta: só as músicas deste aparelho */ });
   }
   if (Cloud.enabled) {
