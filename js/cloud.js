@@ -189,6 +189,16 @@
     upd: async (id, patch) => RES(await c.from('discipline').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)),
     del: async id => RES(await c.from('discipline').delete().eq('id', id)),
   };
+  // Checklist de rotina (Líder e Recepção): tarefas com horário e o que foi ticado em cada dia.
+  Cloud.rt = {
+    tasks: async () => RES(await c.from('routine_tasks').select('*').eq('company_id', Cloud.companyId).order('at').limit(500)) || [],
+    addTask: async row => RES(await c.from('routine_tasks').insert(row).select().single()),
+    updTask: async (id, patch) => RES(await c.from('routine_tasks').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)),
+    delTask: async id => RES(await c.from('routine_tasks').delete().eq('id', id)),
+    done: async (from, to) => RES(await c.from('routine_done').select('*').eq('company_id', Cloud.companyId).gte('day', from).lte('day', to).limit(5000)) || [],
+    tick: async row => RES(await c.from('routine_done').insert(row).select().single()),
+    untick: async id => RES(await c.from('routine_done').delete().eq('id', id)),
+  };
   Cloud.rotateKey = async () => { const { data, error } = await c.rpc('rotate_api_key'); if (error) throw error; return data; };
 
   // ---------- conversão entre o app e as tabelas ----------

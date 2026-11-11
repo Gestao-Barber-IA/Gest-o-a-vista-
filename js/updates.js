@@ -9,6 +9,11 @@ window.GB_UPDATES = [
     ['melhoria', 'A Tela da loja e o fechamento mostram discretamente o nome da empresa licenciada.'],
     ['melhoria', 'Mais proteção contra cópia do sistema. Campos de digitação e botões de copiar continuam funcionando normalmente.'],
   ] },
+  { id: '2026-11-10-rotina', date: '2026-11-10', title: 'Checklist Líder e Recepção', items: [
+    ['novo', 'Nova tela Checklist Líder e Recepção, em Gestão de pessoas: tarefas com horário para o líder de barbeiros e para a recepção marcarem ao longo do dia.'],
+    ['novo', 'Só o dono e quem tem acesso de Gestor criam e mudam as tarefas: horário, dias da semana e se a tarefa exige foto e descrição para ser confirmada.'],
+    ['novo', 'Tarefa que passou do horário sem ser marcada aparece como Atrasada. Escolha outro dia para ver o histórico com horários, quem fez e as fotos.'],
+  ] },
   { id: '2026-11-10-penalidade', date: '2026-11-10', title: 'Penalidade e folga remunerada', items: [
     ['melhoria', 'Na Fiscalização, a gravidade Suspensão passou a se chamar Penalidade.'],
     ['novo', 'Penalidade: a comissão do profissional cai 10 pontos % na quinta, sexta e sábado seguintes ao registro, com o desconto calculado sozinho em Comissões e prêmios.'],
