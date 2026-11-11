@@ -66,8 +66,16 @@ const dia = (s) => { const m = String(s || "").match(/^(\d{2})\/(\d{2})\/(\d{4})
 async function main() {
   const q = new URLSearchParams({ establishment_code: String(cfg.codigo_estabelecimento), start_date: iso(ini), end_date: iso(hoje), status_type: "2" });
   if (cfg.codigo_filial) q.set("branch_code", String(cfg.codigo_filial));
-  const r = await fetch((cfg.appbarber_url || "https://api.appbarber.com") + "/v1/appointments/history?" + q, { headers: { "X-API-Key": cfg.appbarber_api_key, Accept: "application/json" } });
+  const r = await fetch((cfg.appbarber_url || "https://api.appbarber.com") + "/v1/appointments/history?" + q, { headers: { "X-API-Key": cfg.appbarber_api_key, Accept: "application/json", "User-Agent": "GestaoBarberIA-Sync/1.1 (+https://gest-o-a-vista.vercel.app)" } });
   const txt = await r.text();
+  if (!r.ok && /<html/i.test(txt)) {
+    // Página de bloqueio do firewall (Cloudflare) da AppBarber: mostra o motivo e o IP deste computador.
+    const tit = (txt.match(/<title>([^<]*)<\/title>/i) || [])[1] || "";
+    const cod = (txt.match(/Error code:?\s*(\d{3,4})|error code (\d{3,4})|Error (10\d\d)/i) || []).slice(1).find(Boolean) || "";
+    const ray = (txt.match(/Ray ID:?\s*(?:<[^>]+>\s*)*([0-9a-f]{12,})/i) || [])[1] || "";
+    let ip = "?"; try { ip = (await (await fetch("https://api.ipify.org")).text()).trim(); } catch { /* sem IP */ }
+    throw new Error(`a AppBarber bloqueou o acesso no firewall (HTTP ${r.status}${cod ? ", código " + cod : ""}). ${tit.trim()}\n  IP deste computador: ${ip} (precisa ser o IP liberado pela AppBarber).${ray ? "\n  Ray ID: " + ray + " (informe à AppBarber)" : ""}`);
+  }
   if (!r.ok) {
     const dica = r.status === 401 || r.status === 403 ? " Confira a chave da AppBarber e se o IP deste computador é o liberado por eles." : r.status === 429 ? " Limite de chamadas atingido; tente mais tarde." : "";
     throw new Error(`AppBarber respondeu ${r.status}.${dica} ${txt.slice(0, 200)}`);
