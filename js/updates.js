@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-11-cores-logo', date: '2026-11-11', title: 'O app nas cores da sua marca', items: [
+    ['novo', 'Com o logo da empresa enviado, o app inteiro passa a usar as cores dele: botões, destaques, menu e fechamento, para toda a equipe.'],
+    ['melhoria', 'Para voltar às cores padrão, desmarque "Usar as cores do meu logo no app" em Configurações › Empresa.'],
+  ] },
   { id: '2026-11-11-tv-dono', date: '2026-11-11', title: 'Tela da loja só para o dono', items: [
     ['melhoria', 'A Tela da loja (TV) saiu do menu e do topo do app dos profissionais. Continua disponível para o dono.'],
   ] },
