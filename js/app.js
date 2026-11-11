@@ -440,7 +440,7 @@
   function renderAuth(mode, code) {
     document.body.classList.remove('has-nav');
     applyBrand(DB.pref.get('brand', '') || 'barber');
-    if (!DB.pref.get('brand', '') && !['convite', 'novaSenha', 'recusado', 'semEmpresa', 'confirmar', 'enviado', 'pendente'].includes(mode)) { root.innerHTML = brandChooser(); return; }
+    if (!DB.pref.get('brand', '') && !['aprovacao', 'convite', 'novaSenha', 'recusado', 'semEmpresa', 'confirmar', 'enviado', 'pendente'].includes(mode)) { root.innerHTML = brandChooser(); return; }
     let inner = '';
     if (mode === 'convite' && Cloud.enabled && (!ui.inviteInfo || ui.inviteInfo.code !== code)) {
       root.innerHTML = authShell(`<div class="empty" style="padding:10px 0">${icon('clock')}<h2>Abrindo convite…</h2></div>`);
@@ -469,13 +469,18 @@
             <button class="btn btn-primary btn-block" type="submit">${icon('check')} Enviar cadastro</button>
           </form>`;
       }
+    } else if (mode === 'aprovacao') {
+      inner = `<div class="empty" style="padding:10px 0">${icon('clock')}<h2>Cadastro em análise</h2>
+        <p>Recebemos o cadastro da sua empresa. Nossa equipe vai analisar e liberar o acesso em breve. Assim que for aprovado, o teste grátis de 7 dias começa a contar.</p>
+        <div class="btn-row" style="justify-content:center"><button class="btn btn-primary" data-action="checkApproval">${icon('check')} Já fui aprovado, entrar</button>
+          <button class="btn" data-action="logout">Sair</button></div></div>`;
     } else if (mode === 'pendente') {
       inner = `<div class="empty" style="padding:10px 0">${icon('clock')}<h2>Cadastro enviado</h2>
         <p>Agora é só aguardar. Assim que o gestor aprovar, você entra com seu e-mail e senha.</p>
         <button class="btn" data-action="authMode" data-mode="entrar">Voltar para o login</button></div>`;
     } else if (mode === 'confirmar') {
       inner = `<div class="empty" style="padding:10px 0">${icon('mail')}<h2>Confirme seu e-mail</h2>
-        <p>Enviamos uma mensagem para <b style="color:var(--fg)">${esc(ui.authEmail || 'o seu e-mail')}</b>. Abra o link para ativar a conta${ui.authInvite ? '. Depois, é só aguardar o gestor aprovar sua entrada' : ''}.</p>
+        <p>Enviamos uma mensagem para <b style="color:var(--fg)">${esc(ui.authEmail || 'o seu e-mail')}</b>. Abra o link para ativar a conta${ui.authInvite ? '. Depois, é só aguardar o gestor aprovar sua entrada' : '. Depois, nossa equipe analisa e aprova o cadastro da empresa'}.</p>
         <p class="section-note">Não chegou? Confira a pasta de spam ou lixo eletrônico.</p>
         <button class="btn" data-action="authMode" data-mode="entrar">Ir para o login</button></div>`;
     } else if (mode === 'bloqueado') {
@@ -3963,11 +3968,11 @@ Content-Type: application/json</pre>
     const pmap = Object.fromEntries(plans.map(p => [p.id, p]));
     const paying = list.filter(c => c.status !== 'courtesy' && c.access === 'paid' && ['active', 'canceled'].includes(c.sub_status));
     const mrr = paying.filter(c => c.sub_status === 'active').reduce((a, c) => a + (pmap[c.plan_id]?.price_cents || 0), 0) / 100;
-    const f = ui.adminFilter || 'todas';
+    const f = ui.adminFilter || (list.some(c => c.approved === false && c.sub_status !== 'blocked') ? 'aprovar' : 'todas');
     // Em risco: em teste ou pagando, com conta de mais de 3 dias e 10 dias ou mais sem lançar nada.
     const idle = c => Math.floor((Date.now() - new Date(c.last_activity || c.created_at).getTime()) / 864e5);
     const atRisk = c => (c.access === 'trial' || c.access === 'paid') && c.sub_status !== 'courtesy' && Date.now() - new Date(c.created_at).getTime() > 3 * 864e5 && idle(c) >= 10;
-    const groups = { todas: () => true, risco: atRisk, teste: c => c.access === 'trial', pagantes: c => c.access === 'paid' && c.sub_status !== 'courtesy', bloqueadas: c => c.access === 'blocked', cortesia: c => c.sub_status === 'courtesy' };
+    const groups = { todas: () => true, aprovar: c => c.approved === false && c.sub_status !== 'blocked', risco: atRisk, teste: c => c.access === 'trial', pagantes: c => c.access === 'paid' && c.sub_status !== 'courtesy', bloqueadas: c => c.access === 'blocked', cortesia: c => c.sub_status === 'courtesy' };
     const rows = list.filter(groups[f]);
     const kpi = (l, v) => `<div class="stat"><span>${l}</span><b class="num">${v}</b></div>`;
     if (ui.adminTab === 'leads') return adminTabs() + adminLeads();
@@ -3982,14 +3987,15 @@ Content-Type: application/json</pre>
         </div>
       </section>
       <section class="section">
-        <div class="btn-row">${Object.keys(groups).map(k => `<button class="btn btn-sm ${k === f ? 'btn-primary' : ''}" data-action="adminFilter" data-f="${k}">${k === 'risco' ? `Em risco (${list.filter(atRisk).length})` : k[0].toUpperCase() + k.slice(1)}</button>`).join('')}
+        <div class="btn-row">${Object.keys(groups).map(k => `<button class="btn btn-sm ${k === f ? 'btn-primary' : ''}" data-action="adminFilter" data-f="${k}">${k === 'risco' ? `Em risco (${list.filter(atRisk).length})` : k === 'aprovar' ? `Aguardando aprovação (${list.filter(groups.aprovar).length})` : k[0].toUpperCase() + k.slice(1)}</button>`).join('')}
           <button class="btn btn-sm" data-action="adminReload">${icon('check')} Atualizar</button></div>
         <ul class="list">${rows.map(c => `<li class="list-row adm-row">
           <div class="grow"><b>${esc(c.name)}</b><span class="muted">${esc(c.owner || '')} · ${esc(c.email || '')}${c.phone ? ' · ' + esc(c.phone) : ''}</span>
-            <div class="adm-meta"><span class="chip ${c.access === 'blocked' ? 'chip-bad' : c.access === 'trial' ? 'chip-warn' : 'chip-ok'}">${STATUS_TXT[c.sub_status] || c.sub_status}</span>${atRisk(c) ? `<span class="chip chip-bad">${icon('bell')} Em risco · ${idle(c)} dias sem lançar</span>` : ''}
+            <div class="adm-meta"><span class="chip ${c.access === 'blocked' ? 'chip-bad' : c.access === 'trial' ? 'chip-warn' : 'chip-ok'}">${STATUS_TXT[c.sub_status] || c.sub_status}</span>${c.approved === false ? `<span class="chip chip-warn">${icon('clock')} Aguardando aprovação</span>` : ''}${atRisk(c) ? `<span class="chip chip-bad">${icon('bell')} Em risco · ${idle(c)} dias sem lançar</span>` : ''}
             <span class="muted">${c.plan_id ? esc(pmap[c.plan_id]?.name || c.plan_id) : 'sem plano'} · ${c.barbers} barbeiros · ${c.users} acessos</span>
             <span class="muted">${c.access === 'trial' ? 'teste até ' + fmtDate(c.trial_ends_at) : c.paid_until ? 'pago até ' + fmtDate(c.paid_until) : ''} · cadastro ${fmtDate(c.created_at)}${c.last_activity ? ' · último lançamento ' + fmtDate(c.last_activity) : ''}</span></div></div>
           <div class="btn-row">
+            ${c.approved === false ? `<button class="btn btn-sm btn-primary" data-action="adminApprove" data-id="${esc(c.id)}">${icon('check')} Aprovar</button>` : ''}
             <button class="btn btn-sm" data-action="adminTrial" data-id="${esc(c.id)}">+7 dias de teste</button>
             <button class="btn btn-sm" data-action="adminCourtesy" data-id="${esc(c.id)}">Cortesia 30 dias</button>
             ${c.access === 'blocked' ? '' : `<button class="btn btn-sm btn-danger" data-action="adminBlock" data-id="${esc(c.id)}">${ui.confirm === 'blk' + c.id ? 'Confirmar bloqueio' : 'Bloquear'}</button>`}
@@ -6141,6 +6147,10 @@ Content-Type: application/json</pre>
     },
     adminFilter(el) { ui.adminFilter = el.dataset.f; render(); },
     adminReload() { ui.adminData = null; render(); },
+    async adminApprove(el) { // libera a empresa; o teste de 7 dias começa agora
+      await adminDo(el.dataset.id, { approved: true, sub_status: 'trial', trial_ends_at: new Date(Date.now() + 7 * 86400000).toISOString() }, 'Empresa aprovada. O teste grátis de 7 dias começou agora.');
+    },
+    async checkApproval() { if (await loadCloud()) { if (location.hash === '#inicio') render(); else location.hash = 'inicio'; } else { toast('Ainda em análise. Assim que for aprovado, você entra.'); render(); } },
     async adminTrial(el) {
       const c = ui.adminData.list.find(x => x.id === el.dataset.id);
       const base = Math.max(Date.now(), new Date(c.trial_ends_at).getTime());
@@ -6906,7 +6916,7 @@ Content-Type: application/json</pre>
       if (r.status === 'ativo') { state = r.state; rkCache = {}; Cloud.subscribe(); ui.authMode = 'entrar'; clearInterval(ui.blockPoll); setTimeout(movePhotos, 4000); return true; }
       state = blankState();
       if (r.status === 'bloqueado') ui.blockInfo = r;
-      ui.authMode = r.status === 'bloqueado' ? 'bloqueado' : r.status === 'pendente' ? 'pendente' : r.status === 'recusado' ? 'recusado' : r.status === 'sem-perfil' ? 'semPerfil' : 'entrar';
+      ui.authMode = r.status === 'aprovacao' ? 'aprovacao' : r.status === 'bloqueado' ? 'bloqueado' : r.status === 'pendente' ? 'pendente' : r.status === 'recusado' ? 'recusado' : r.status === 'sem-perfil' ? 'semPerfil' : 'entrar';
     } catch (e) {
       state = blankState();
       ui.authMsg = { text: 'Não foi possível carregar os dados: ' + Cloud.message(e) };

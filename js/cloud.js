@@ -260,6 +260,7 @@
     if (billing && billing.access === 'blocked') {
       const co = await q(c.from('companies').select('name, email, phone, logo').eq('id', cid).single());
       Cloud.last = null;
+      if (billing.approved === false) return { status: 'aprovacao', company: co, role: prof.role }; // cadastro aguardando o dono do SaaS
       return { status: 'bloqueado', billing, plans, company: co, role: prof.role };
     }
     const [co, profs, barbers, entries, monthly, invites, key, pop] = await Promise.all([
