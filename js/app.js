@@ -3310,6 +3310,7 @@ ${rows.length ? '' : emptyBarbers()}
         ${avatar(b, 48)}
         <div class="grow"><b>${esc(b.name)}</b>${status} ${b.active === false ? '<span class="chip chip-soft">inativo</span>' : ''}${u ? `<div class="muted" style="font-size:.88rem">${esc(u.email)}</div>` : ''}
           <div class="acc-edit">
+            <label class="field"><span>Nome</span><input class="input" name="name" value="${esc(b.name)}" maxlength="60" data-change="barberName" data-id="${esc(b.id)}" aria-label="Nome de ${esc(b.name)}"></label>
             <label class="field"><span>Função</span><input class="input" name="role" list="role-list" value="${esc(b.role || '')}" placeholder="Ex.: Barbeiro" maxlength="60" data-change="barberRole" data-id="${esc(b.id)}"></label>
             <label class="field"><span>Nascimento</span><input class="input" type="date" value="${esc((state.births || {})[b.id] || '')}" data-change="barberBirth" data-id="${esc(b.id)}" aria-label="Data de nascimento de ${esc(b.name)}"></label>
             ${unitsList().length ? `<label class="field"><span>Unidade</span><select class="input" data-change="barberUnit" data-id="${esc(b.id)}"><option value="">Sem unidade</option>${unitsList().map(u => `<option ${b.unit === u ? 'selected' : ''}>${esc(u)}</option>`).join('')}</select></label>` : ''}
@@ -3320,7 +3321,9 @@ ${rows.length ? '' : emptyBarbers()}
           ${u && u.status === 'ativo' ? `<button class="btn btn-sm" data-action="resetPass" data-id="${esc(u.id)}">${icon('lock')} ${Cloud.enabled ? 'Enviar redefinição de senha' : 'Nova senha'}</button>` : ''}
           <label class="btn btn-sm" style="cursor:pointer">${icon('camera')} Foto<input type="file" accept="image/*" hidden data-change="barberPhoto" data-id="${esc(b.id)}"></label>
           <button class="btn btn-sm" data-action="toggleBarber" data-id="${esc(b.id)}">${b.active === false ? 'Reativar' : 'Desativar'}</button>
+          <button class="btn btn-sm ${ui.confirm === 'delb' + b.id ? 'btn-danger' : ''}" data-action="delBarber" data-id="${esc(b.id)}">${icon('trash')} ${ui.confirm === 'delb' + b.id ? 'Confirmar: excluir de vez' : 'Excluir'}</button>
         </div>
+        ${ui.confirm === 'delb' + b.id ? `<p class="form-msg" role="alert">Excluir apaga ${first(b.name)} e todos os números, lançamentos e checklist dele. Não dá para desfazer. Se ele só saiu da equipe e você quer guardar o histórico, use <b>Desativar</b>.</p>` : ''}
         ${showInvite ? `<div class="invite-box">
           <span class="muted">Envie este link para ${esc(b.name)}. Ele faz o cadastro e você aprova aqui.</span>
           <div class="invite-link" id="inv-${esc(b.id)}">${esc(link)}</div>
@@ -6213,6 +6216,24 @@ Content-Type: application/json</pre>
     },
     copyInvite(el) { const inv = state.invites.find(i => i.barberId === el.dataset.id && !i.used); if (inv) copyText(inviteLink(inv.code), $('#inv-' + CSS.escape(el.dataset.id))); },
     cancelInvite(el) { state.invites = state.invites.filter(i => !(i.barberId === el.dataset.id && !i.used)); ui.invite = null; save(); render(); },
+    delBarber(el) {
+      if (!isGestor(currentUser())) return;
+      const id = el.dataset.id, b = barberById(id); if (!b) return;
+      const u = state.users.find(x => x.barberId === id && ['ativo', 'pendente'].includes(x.status));
+      if (u) { toast(`${first(b.name)} tem login no app (${u.email}). Para tirar do ranking, use Desativar.`); return; }
+      if (ui.confirm !== 'delb' + id) { ui.confirm = 'delb' + id; render(); return; }
+      ui.confirm = null;
+      state.barbers = state.barbers.filter(x => x.id !== id);
+      state.entries = state.entries.filter(e => e.barberId !== id);
+      state.monthly = (state.monthly || []).filter(m => m.barberId !== id);
+      state.invites = state.invites.filter(i => i.barberId !== id);
+      state.pop = (state.pop || []).filter(r => r.barberId !== id);
+      if (state.births) delete state.births[id];
+      if (state.goals?.byBarber) delete state.goals.byBarber[id];
+      if (state.comCfg?.pctBy) delete state.comCfg.pctBy[id];
+      if (ui.teamBarber === id) ui.teamBarber = null;
+      save(); toast(`${b.name} foi excluído.`); render();
+    },
     toggleBarber(el) {
       const b = barberById(el.dataset.id); if (!b) return;
       const lim = billing() && billing().max_barbers;
@@ -7133,6 +7154,15 @@ Content-Type: application/json</pre>
       const v = el.value, bs = { ...(state.births || {}) };
       if (/^\d{4}-\d{2}-\d{2}$/.test(v)) bs[b.id] = v; else delete bs[b.id];
       state.births = bs; save(); toast(v ? 'Data de nascimento salva.' : 'Data de nascimento removida.');
+    },
+    barberName(el) {
+      if (!isGestor(currentUser())) return;
+      const b = barberById(el.dataset.id); if (!b) return;
+      const v = el.value.replace(/\s+/g, ' ').trim().slice(0, 60);
+      if (v.length < 2) { el.value = b.name; toast('Digite o nome do profissional.'); return; }
+      if (state.barbers.some(x => x.id !== b.id && x.name.toLowerCase() === v.toLowerCase())) { el.value = b.name; toast('Já existe um profissional com esse nome.'); return; }
+      if (v === b.name) return;
+      b.name = v; save(); toast('Nome salvo. Integrações que identificam pelo nome passam a usar este.'); render();
     },
     barberRole(el) { const b = barberById(el.dataset.id); if (!b) return; b.role = el.value.trim().slice(0, 60) || B().role; save(); toast('Função salva.'); },
     selfField(el) {
