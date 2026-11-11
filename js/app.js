@@ -207,6 +207,13 @@
       <span class="brand-sub">Sistema de performance</span></span>
     </span>`;
 
+  // Menu: com o logo da empresa cliente, mostra o logo e o nome dela; o nome do sistema fica pequeno, em cima.
+  const drawerBrand = () => state.company && state.company.logo
+    ? `<span class="brand brand-co"><img class="brand-mark" src="${esc(state.company.logo)}" alt="${esc(state.company.name || 'Logo da empresa')}">
+      <span class="brand-text"><span class="brand-sys">${esc(B().name)}</span><span class="brand-name brand-co-name">${esc(state.company.name || '')}</span></span></span>`
+    : brand();
+  // Logo da empresa cliente (ou o do sistema, se ainda não enviou).
+  const coLogo = cls => state.company && state.company.logo ? `<img class="brand-mark ${cls}" src="${esc(state.company.logo)}" alt="${esc(state.company.name || 'Logo')}">` : logo(cls);
   function toast(msg, ms = 2800, ic = '') {
     document.querySelectorAll('.toast').forEach(t => t.remove());
     const t = document.createElement('div');
@@ -688,7 +695,7 @@
     return `
       <div class="scrim" hidden data-action="closeDrawer"></div>
       <nav class="drawer" aria-label="Menu principal">
-        ${brand()}
+        ${drawerBrand()}
         ${groups}
         <div class="nav-sep"></div>
         ${!DEMO_ON && isGestor(user) ? `<button class="nav-item" data-action="startDemo" data-b="${MARCA}">${icon('monitor')}<span>Modo apresentação</span></button>` : ''}
@@ -3523,7 +3530,7 @@ Content-Type: application/json</pre>
   function fxSlideHtml(R, sl, ym) {
     const n = R.rows.length, month = esc(ymLabel(ym).replace(' de ', '/'));
     if (sl.k === 'intro') return `<div class="fx-slide fx-intro has-open">
-        <div class="fx-emblem"><span class="fx-orbit"></span><span class="fx-orbit o2"></span>${logo('fx-logo')}</div>
+        <div class="fx-emblem"><span class="fx-orbit"></span><span class="fx-orbit o2"></span>${coLogo('fx-logo')}</div>
         <p class="fx-kicker">${esc(state.company.name)}</p>
         <h1 class="fx-title"><span>Fechamento</span></h1>
         <p class="fx-month">${month}</p>
@@ -3644,7 +3651,7 @@ Content-Type: application/json</pre>
     if (!ov) {
       ov = document.createElement('div');
       ov.id = 'fx'; ov.className = 'fx'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Apresentação do fechamento do mês');
-      ov.innerHTML = `<div class="fx-bg">${fxDots(34)}</div><div class="fx-stage" aria-live="polite"></div><nav class="fx-ctrl"></nav>${licMark()}`;
+      ov.innerHTML = `<div class="fx-bg">${fxDots(34)}</div><div class="fx-stage" aria-live="polite"></div><nav class="fx-ctrl"></nav>${licMark('fx')}`;
       document.body.appendChild(ov);
       fxBind(ov);
     }
@@ -4903,7 +4910,7 @@ Content-Type: application/json</pre>
     });
     // Rodapé
     c.textAlign = 'center'; sp('3px'); c.font = `600 28px ${T}`; c.fillStyle = 'rgba(255,255,255,0.7)';
-    c.fillText(tt ? `PARABÉNS, ${first(r.barber.name).toUpperCase()}! · ${B().name.toUpperCase()}` : `${B().name.toUpperCase()} · CADA ATENDIMENTO CONTA`, W / 2, H - 54); sp('0px');
+    const coN = (state.company.name || B().name).toUpperCase(); c.fillText(tt ? `PARABÉNS, ${first(r.barber.name).toUpperCase()}! · ${coN}` : `${coN} · CADA ATENDIMENTO CONTA`, W / 2, H - 54); sp('0px');
     return cv;
   }
   // ---------- Cards de parabéns (sem números) e de aniversário, nas cores do logo da empresa ----------
@@ -5804,7 +5811,9 @@ Content-Type: application/json</pre>
   }
 
   // Marca d'água discreta: um print vazado mostra de qual empresa saiu.
-  const licMark = () => `<div class="lic-mark" aria-hidden="true">Licenciado para ${esc(state.company.name || 'esta empresa')} · ${esc(B().name)} © ${new Date().getFullYear()}</div>`;
+  const licMark = kind => kind === 'fx'
+    ? `<div class="lic-mark lic-sys" aria-hidden="true">${logo('lic-logo')}<span>${esc(B().name)}</span></div>`
+    : `<div class="lic-mark" aria-hidden="true">Licenciado para ${esc(state.company.name || 'esta empresa')} · ${esc(B().name)} © ${new Date().getFullYear()}</div>`;
   function renderTV() {
     if (!DB.demo) DB.pref.set('tvSeen', '1');
     document.body.classList.remove('has-nav');
