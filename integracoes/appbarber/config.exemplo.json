@@ -1,0 +1,9 @@
+{
+  "appbarber_api_key": "COLE AQUI A CHAVE DA API DA APPBARBER",
+  "codigo_estabelecimento": "COLE AQUI O CÓDIGO DO ESTABELECIMENTO",
+  "gestao_api_key": "COLE AQUI A CHAVE gbia_ (Gestão Barber IA › Integração & API)",
+  "dias": 31,
+  "nomes": {
+    "Nome do profissional na AppBarber": "Nome dele no Gestão Barber IA"
+  }
+}
