@@ -49,6 +49,14 @@ for (const k of ["appbarber_api_key", "codigo_estabelecimento", "gestao_api_key"
 const DIAS = Math.min(31, Math.max(1, Number(cfg.dias) || 31));
 const GESTAO_URL = cfg.gestao_url || "https://sekkmnkajnaqubyhpxvd.supabase.co/functions/v1/lancamentos";
 const NOMES = cfg.nomes || {}; // "Nome na AppBarber": "Nome no Gestão Barber IA"
+const BASE = cfg.appbarber_url || "https://api.appbarber.com";
+const CACHE = join(DIR, "comandas.json");
+function lerCache() { try { return JSON.parse(readFileSync(CACHE, "utf8")); } catch { return {}; } }
+function salvarCache(c) {
+  const lim = Date.now() - 45 * 86400000; // guarda 45 dias
+  for (const [k, v] of Object.entries(c)) if (v.lida && v.lida < lim) delete c[k];
+  writeFileSync(CACHE, JSON.stringify(c));
+}
 
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const hoje = new Date();
@@ -99,8 +107,8 @@ async function main() {
   }
   const q = new URLSearchParams({ establishment_code: String(cfg.codigo_estabelecimento), start_date: iso(ini), end_date: iso(hoje), status_type: "2" });
   if (cfg.codigo_filial) q.set("branch_code", String(cfg.codigo_filial));
-  const url = (cfg.appbarber_url || "https://api.appbarber.com") + "/v1/appointments/history?" + q;
-  const HDR = { "X-API-Key": cfg.appbarber_api_key, Accept: "application/json", "User-Agent": "GestaoBarberIA-Sync/1.3" };
+  const url = BASE + "/v1/appointments/history?" + q;
+  const HDR = { "X-API-Key": cfg.appbarber_api_key, Accept: "application/json", "User-Agent": "GestaoBarberIA-Sync/1.4" };
   if (process.argv.includes("--diagnostico")) {
     let ip = "?"; try { ip = (await (await fetch("https://api.ipify.org")).text()).trim(); } catch { /* sem IP */ }
     const k = String(cfg.appbarber_api_key);
@@ -120,31 +128,74 @@ async function main() {
     const dica = r.status === 401 || r.status === 403 ? " Confira a chave da AppBarber e se o IP deste computador é o liberado por eles." : r.status === 429 ? " Limite de chamadas atingido; tente mais tarde." : "";
     throw new Error(`AppBarber respondeu ${r.status}.${dica} ${txt.slice(0, 200)}`);
   }
-  const lista = (JSON.parse(txt).data) || [];
+  const lista = ((JSON.parse(txt).data) || []).filter((a) => !a.scheduling_status || /realizad/i.test(a.scheduling_status));
 
-  // Soma por profissional e dia: faturamento, serviços, clientes (sem repetir) e maior comanda.
+  // Comandas: cada uma é lida UMA vez (1 chamada) e guardada em comandas.json. Elas têm os itens com o profissional,
+  // o valor final (preço ajustado no caixa), serviços extras e produtos — o mesmo "Total realizado/vendido" da AppBarber.
+  const cache = lerCache();
+  const codigos = [...new Set(lista.map((a) => a.invoice_code).filter((c) => c && Number(c) > 0).map(String))];
+  // Comanda ainda não paga é relida no máximo 1 vez por hora (e depois que o dia vira, uma última vez).
+  const faltam = codigos.filter((c) => !cache[c] || (!cache[c].final && (Date.now() - (cache[c].lida || 0) > 3600000 || (cache[c].d && cache[c].d < iso(hoje)))));
+  const MAX = TESTE ? 0 : Math.max(0, Number(cfg.max_comandas_por_vez ?? 120));
+  let lidas = 0, parou = "";
+  for (const c of faltam.slice(0, MAX)) {
+    const rr = await getExato(`${BASE}/v1/invoice/${encodeURIComponent(c)}?establishment_code=${encodeURIComponent(cfg.codigo_estabelecimento)}`, HDR).catch((e) => ({ ok: false, status: 0, text: e.message }));
+    if (rr.status === 429) { parou = "limite de chamadas da AppBarber"; break; }
+    if (rr.status === 404) { cache[c] = { final: true, itens: [], d: null }; continue; }
+    if (!rr.ok) { parou = `AppBarber respondeu ${rr.status} ao ler a comanda ${c}`; break; }
+    const inv = (JSON.parse(rr.text).data) || {};
+    const d = dia(inv.invoice_date) || null;
+    const pago = num(inv.invoice_payed_value) > 0 || !!inv.payment_type_code;
+    const antiga = d && d < iso(hoje);
+    cache[c] = {
+      d, cli: String(inv.person_code || inv.person_name || c), final: pago || !!antiga, lida: Date.now(),
+      itens: (inv.items || []).filter((it) => Number(it.product_is_tip) !== 1 && Number(it.product_is_cashback) !== 1).map((it) => ({
+        p: String(it.employee_name || "").trim(), v: num(it.item_value), q: Number(it.item_quantity) || 1, prod: !!it.product_code && !it.service_code,
+      })),
+    };
+    lidas++;
+    await new Promise((ok) => setTimeout(ok, 2100)); // ~28 por minuto: abaixo do limite de 30/min da AppBarber
+  }
+  if (lidas) salvarCache(cache);
+  const pend = faltam.length - lidas;
+  if (lidas || pend) log(`Comandas: ${lidas} lidas agora${pend > 0 ? `, ${pend} ficam para as próximas sincronizações` : ""}${parou ? ` (parou: ${parou})` : ""}.`);
+
+  // Soma por profissional e dia. Comanda já lida: itens da comanda. Ainda não lida: valor do agendamento (provisório).
   const acc = new Map();
+  const add = (nome, d) => { const k = nome + "|" + d; if (!acc.has(k)) acc.set(k, { nome, d, fat: 0, serv: 0, prod: 0, cli: new Set(), com: new Map() }); return acc.get(k); };
+  const usadas = new Set();
+  for (const c of codigos) {
+    const inv = cache[c]; if (!inv || !inv.itens) continue;
+    usadas.add(c);
+    const d = inv.d || dia((lista.find((a) => String(a.invoice_code) === c) || {}).scheduling_start);
+    if (!d || d < iso(ini)) continue;
+    for (const it of inv.itens) {
+      if (!it.p) continue;
+      const x = add(it.p, d);
+      x.fat += it.v; if (it.prod) x.prod += it.q; else x.serv += it.q;
+      x.cli.add(inv.cli); x.com.set(c, (x.com.get(c) || 0) + it.v);
+    }
+  }
   for (const a of lista) {
-    if (a.scheduling_status && !/realizad/i.test(a.scheduling_status)) continue;
+    if (a.invoice_code && usadas.has(String(a.invoice_code))) continue;
     const d = dia(a.scheduling_start); const nome = String(a.employee_name || "").trim();
     if (!d || !nome) continue;
-    const k = nome + "|" + d;
-    if (!acc.has(k)) acc.set(k, { nome, d, fat: 0, serv: 0, cli: new Set(), com: new Map() });
-    const x = acc.get(k), v = num(a.service_value);
+    const x = add(nome, d), v = num(a.service_value);
     x.fat += v; x.serv += 1;
     x.cli.add(String(a.client_phone || a.client_name || a.appointment_code).replace(/\D/g, "") || String(a.client_name));
     const c = a.invoice_code || a.appointment_code; x.com.set(c, (x.com.get(c) || 0) + v);
   }
   const itens = [...acc.values()].map((x) => ({
     data: x.d, barbeiro: NOMES[x.nome] || x.nome,
-    faturamento: Math.round(x.fat * 100) / 100, servicos: x.serv, clientes: x.cli.size,
+    faturamento: Math.round(x.fat * 100) / 100, servicos: x.serv, clientes: x.cli.size, venda_produtos: x.prod,
     maior_comanda: Math.round(Math.max(0, ...x.com.values()) * 100) / 100,
   }));
   log(`AppBarber: ${lista.length} atendimentos realizados de ${iso(ini)} a ${iso(hoje)} → ${itens.length} dias de profissionais.`);
   if (TESTE) {
     const tot = new Map();
-    for (const i of itens) { const t = tot.get(i.barbeiro) || { fat: 0, serv: 0, dias: 0 }; t.fat += i.faturamento; t.serv += i.servicos; t.dias++; tot.set(i.barbeiro, t); }
-    for (const [n, t] of tot) console.log(`  ${n}: R$ ${t.fat.toFixed(2)} · ${t.serv} serviços · ${t.dias} dias`);
+    for (const i of itens) { const t = tot.get(i.barbeiro) || { fat: 0, serv: 0, prod: 0, dias: 0 }; t.fat += i.faturamento; t.serv += i.servicos; t.prod += i.venda_produtos; t.dias++; tot.set(i.barbeiro, t); }
+    for (const [n, t] of tot) console.log(`  ${n}: R$ ${t.fat.toFixed(2)} · ${t.serv} serviços · ${t.prod} produtos · ${t.dias} dias`);
+    if (faltam.length) console.log(`  (${faltam.length} comandas ainda não lidas: nelas vale o valor do agendamento até a sincronização ler.)`);
     log("Modo teste: nada foi enviado.");
     return;
   }
