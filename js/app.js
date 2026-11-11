@@ -108,7 +108,7 @@
     applyTheme(getTheme());
   }
   let rkCache = {};
-  const save = () => { if (Cloud.enabled) Cloud.save(state); else DB.save(state); rkCache = {}; };
+  const save = () => { noticeDiff(); if (Cloud.enabled) Cloud.save(state); else DB.save(state); rkCache = {}; };
 
   // ---------- formatação ----------
   const nf0 = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
@@ -160,9 +160,20 @@
     access_lv: ['Nível de acesso', () => ACCESS_TIP()],
     leads: ['Interessados', 'Cadastros feitos na página de vendas (gest-o-a-vista.vercel.app/oferta) antes do quiz: nome, celular, e-mail e as respostas do quiz. Use a situação para organizar o contato: Novo, Contatado, Virou cliente ou Descartado. Só o dono do SaaS vê esta lista.'],
     pops: ['POPs · Guia do Sucesso', 'POP é o Procedimento Operacional Padrão: o jeito certo de fazer cada processo da barbearia. Cada POP tem o passo a passo em fotos (toque para ampliar) e, se houver, o link do vídeo. Só o dono cadastra e edita; toda a equipe consulta.'],
+    selfLan: ['Profissional lança os próprios números', 'Útil quando o sistema da barbearia não tem integração. Cada profissional entra no app, abre Lançamentos e preenche só os indicadores marcados aqui, e só dos próprios números. Tudo continua visível para você no histórico de lançamentos por dia, e você pode corrigir a qualquer momento.'],
     extras: ['Acessos extras do líder', 'Liberações opcionais que você dá a um líder: conferir e aprovar o checklist de toda a equipe e/ou lançar à mão os números de toda a equipe só nos indicadores marcados. Os outros campos ficam só para leitura para ele. Campos que vêm da integração continuam travados.'],
     fechamento: ['Fechamento do mês', 'Apresentação para a equipe: revela só os 3 primeiros colocados, do 3º ao 1º. Cada lugar do pódio só aparece quando o gestor toca em Revelar. O resumo esconde o resultado para não estragar a surpresa se a tela estiver na TV.'],
   };
+  // Configurações › Indicadores: o que cada profissional pode lançar dos próprios números.
+  function selfCard() {
+    const on = selfCfg();
+    return `<section class="section card" id="self-lan">
+      <h2 class="section-title">${icon('edit')} Profissional lança os próprios números ${tip('selfLan')}</h2>
+      <p class="section-note">Para quem usa um sistema sem integração: marque os indicadores que cada profissional pode preencher sozinho em <b>Lançamentos</b>. Ele só lança os <b>próprios</b> números; os de colegas nunca. Campos que vêm da integração continuam travados. Deixe tudo desmarcado para desligar.</p>
+      <div class="lx-grid">${EXTRA_FIELDS().map(f => `<label class="check"><input type="checkbox" data-change="selfField" data-k="${f.key}" ${on.includes(f.key) ? 'checked' : ''}><span>${esc(f.label)}</span></label>`).join('')}</div>
+      <p class="muted">${on.length ? `Ligado: cada profissional lança ${on.length} indicador${on.length > 1 ? 'es' : ''}.` : 'Desligado: só você (e quem tem acesso de gestor) lança os números.'}</p>
+    </section>`;
+  }
   function leaderExtrasBox(b) {
     const x = extrasOf(b.id), n = (x.review ? 1 : 0) + x.fields.length;
     return `<details class="lx" ${ui.lxOpen === b.id ? 'open' : ''} data-id="${esc(b.id)}">
@@ -644,6 +655,7 @@
       { r: 'inicio', t: 'Início', i: 'grid' },
       { r: 'performance', t: 'Minha performance', i: 'chart' },
       { r: 'lancamentos', t: 'Lançamentos', i: 'wallet', g: 1, a: 1 },
+      { r: 'avisos', t: 'Avisos e alterações', i: 'bell' },
     ] },
     { group: 'Apresentações', items: [
       { r: 'apresentacao', t: 'Tela da loja', i: 'monitor' },
@@ -690,9 +702,9 @@
     const g = isGestor(user);
     const groups = NAV.filter(gr => !gr.g || g || isAreaMgr(user)).map(gr => {
       const am = isAreaMgr(user), hg = hasGrants(user);
-      const lf = myExtras().fields.length > 0;
+      const lf = lanAny();
       const items = gr.items.filter(it => (!it.g || g || (it.a && am) || (it.r === 'lancamentos' && lf)) && (!it.rt || rtAuds(user).length) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
-        <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && (g || hg) ? (g || accessOf(user.barberId) !== 'profissional' ? 'Performance da empresa' : 'Performance da área') : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}${it.r === 'atualizacoes' && updUnseen() ? `<span class="nav-new" aria-label="${updUnseen()} novidades">${updUnseen()}</span>` : ''}</a>`).join('');
+        <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && (g || hg) ? (g || accessOf(user.barberId) !== 'profissional' ? 'Performance da empresa' : 'Performance da área') : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}${it.r === 'avisos' && avUnseen() ? `<span class="nav-new" aria-label="${avUnseen()} avisos novos">${avUnseen()}</span>` : ''}${it.r === 'atualizacoes' && updUnseen() ? `<span class="nav-new" aria-label="${updUnseen()} novidades">${updUnseen()}</span>` : ''}</a>`).join('');
       if (!gr.group || !items.trim()) return gr.group ? '' : items;
       // Conjunto que pode ser minimizado (fica lembrado neste aparelho); o conjunto da tela aberta aparece sempre.
       const shut = navShut().includes(gr.group) && !gr.items.some(it => it.r === route);
@@ -1926,6 +1938,84 @@
     </article>`).join('')}</div>`;
   }
 
+  // ---------- Avisos e alterações: o que o dono muda e importa para a equipe (gerado sozinho) ----------
+  // A cada salvamento do dono, compara as regras com a versão anterior e registra o que mudou.
+  let avBase = null, avState = null;
+  const pctOf = () => { const w = state.weights || {}, hid = state.hidden || [], act = INDICATORS.filter(i => !hid.includes(i.key) && Number(w[i.key] ?? i.weight) > 0), tot = act.reduce((a, i) => a + Number(w[i.key] ?? i.weight), 0) || 1; return act.map(i => [i, Math.round(Number(w[i.key] ?? i.weight) / tot * 100)]); };
+  const lbl = k => (EXTRA_FIELDS().concat(GB.MONTH_FIELDS).find(f => f.key === k) || { label: k }).label;
+  function avSnap() {
+    const o = org(), c = comCfg(), pop = GB.popCfgOf(state), oc = GB.ocupCfgOf(state), per = {};
+    for (const b of state.barbers) per[b.id] = {
+      access: JSON.stringify(accessOf(b.id)), extras: JSON.stringify(extrasOf(b.id)),
+      goals: JSON.stringify((state.goals?.byBarber || {})[b.id] || {}), com: JSON.stringify(c.pctBy[b.id] || 0) };
+    return {
+      pesos: JSON.stringify(pctOf().map(([i, p]) => [i.key, p])),
+      metas: JSON.stringify(INDICATORS.map(i => [i.key, GB.goalFor(state, '', i.key)])),
+      self: JSON.stringify([...selfCfg()].sort()),
+      com: JSON.stringify({ ...c, pctBy: null }),
+      ocup: JSON.stringify([oc.open, oc.close, oc.lunch, oc.days]),
+      pop: JSON.stringify((pop.items || []).map(x => [x.title, x.pts, x.target])),
+      pops: JSON.stringify(popsList().map(x => x.title || x.t || x.id)),
+      per };
+  }
+  const listTxt = a => a.filter(Boolean).join(' · ');
+  const AV_TXT = {
+    pesos: () => ['Pesos dos indicadores', 'Quanto cada indicador vale na sua nota agora: ' + listTxt(pctOf().map(([i, p]) => `${i.label} ${p}%`)) + '.' + ((state.hidden || []).length ? ' Fora da nota: ' + INDICATORS.filter(i => (state.hidden || []).includes(i.key)).map(i => i.label).join(', ') + '.' : '')],
+    metas: () => ['Metas mensais da equipe', 'Novas metas do mês: ' + listTxt(GB.visibleInds(state).map(i => `${i.label} ${fmtGoal(i, GB.goalFor(state, '', i.key))}`)) + '.'],
+    self: () => { const f = selfCfg(); return ['Lançamento dos próprios números', f.length ? 'Agora você pode lançar seus próprios números em Lançamentos: ' + f.map(lbl).join(', ') + '.' : 'O lançamento dos próprios números foi desligado. Os números passam a ser lançados pela gestão.']; },
+    com: () => { const c = comCfg(); return ['Comissões e prêmios', 'Regras atuais: ' + listTxt([c.pct > 0 && `comissão de ${nf1.format(c.pct)}% do faturamento`, c.plano > 0 && `${money0(c.plano)} por plano vendido`, c.prod > 0 && `${money0(c.prod)} por produto vendido`, [1, 2, 3].some(n => c.pos[n] > 0) && `pódio: ${[1, 2, 3].map(n => `${n}º ${money0(c.pos[n])}`).join(', ')}`, c.mvp > 0 && `MVP ${money0(c.mvp)}`, c.dest > 0 && `Destaque ${money0(c.dest)}`, c.meta > 0 && `bater a meta ${money0(c.meta)}`, c.pen > 0 && `penalidade de ${nf1.format(c.pen)}% por ocorrência`]) + '.']; },
+    ocup: () => { const oc = GB.ocupCfgOf(state); return ['Regra da taxa de ocupação', `Agora 100% de ocupação = ${nf1.format(GB.hoursPerDay(oc))} h por dia (${oc.open} às ${oc.close}${Number(oc.lunch) ? `, ${oc.lunch} min de almoço` : ''}) × ${oc.days} dias no mês.`]; },
+    pop: () => ['Checklist Agenda Cheia', 'Itens e pontos do checklist: ' + listTxt((GB.popCfgOf(state).items || []).map(x => `${x.title} (${x.pts} pt${x.pts == 1 ? '' : 's'})`)) + '.'],
+    pops: () => ['POPs · Guia do Sucesso', 'Os POPs foram atualizados. Confira em POPs · Guia do Sucesso: ' + popsList().map(x => x.title || x.t).filter(Boolean).slice(0, 8).join(', ') + '.'],
+    access: id => { const a = ACCESS.find(x => x[0] === accessOf(id)); return ['Seu nível de acesso', `Agora você tem acesso de ${a[1]}: ${a[2]}`]; },
+    extras: id => { const x = extrasOf(id); const t = [x.review && 'conferir e aprovar o checklist da equipe', x.fields.length && 'lançar os números da equipe em ' + x.fields.map(lbl).join(', ')].filter(Boolean); return ['Seus acessos extras', t.length ? 'Agora você pode: ' + t.join('; ') + '.' : 'Seus acessos extras de líder foram retirados.']; },
+    goals: id => { const g = (state.goals?.byBarber || {})[id] || {}, ks = GB.visibleInds(state).filter(i => isNum(g[i.key])); return ['Suas metas individuais', ks.length ? 'Suas metas do mês: ' + listTxt(GB.visibleInds(state).map(i => `${i.label} ${fmtGoal(i, GB.goalFor(state, id, i.key))}`)) + '.' : 'Suas metas voltaram a ser as metas da equipe.']; },
+    comp: id => { const v = comCfg().pctBy[id] || 0; return ['Sua comissão', v > 0 ? `Sua comissão agora é de ${nf1.format(v)}% do faturamento.` : 'Sua comissão volta a seguir a regra geral da equipe.']; },
+  };
+  function addNotice(key, to) {
+    const [t, d] = (AV_TXT[key])(to);
+    const list = Array.isArray(state.notices) ? state.notices : (state.notices = []);
+    const now = Date.now(), k = key + (to ? ':' + to : '');
+    // Vários ajustes seguidos no mesmo assunto viram um aviso só (o mais recente).
+    const i = list.findIndex(n => n.k === k && now - Date.parse(n.at) < 30 * 60000);
+    if (i >= 0) list.splice(i, 1);
+    list.unshift({ id: uid('av_'), k, t, d, at: new Date(now).toISOString(), ...(to ? { to } : {}) });
+    if (list.length > 80) list.length = 80;
+  }
+  function noticeDiff() {
+    const u = currentUser();
+    if (!u || !isGestor(u)) { avBase = null; return; }
+    const now = avSnap();
+    if (avState !== state || !avBase) { avBase = now; avState = state; return; }
+    for (const k of ['pesos', 'metas', 'self', 'com', 'ocup', 'pop', 'pops']) if (now[k] !== avBase[k]) addNotice(k);
+    for (const [id, p] of Object.entries(now.per)) {
+      const was = avBase.per[id]; if (!was) continue;
+      if (p.access !== was.access) addNotice('access', id);
+      if (p.extras !== was.extras && accessOf(id) === 'lider') addNotice('extras', id);
+      if (p.goals !== was.goals) addNotice('goals', id);
+      if (p.com !== was.com) addNotice('comp', id);
+    }
+    avBase = avSnap();
+  }
+  // Prepara a base de comparação assim que a tela abre (antes do dono mudar algo).
+  function avPrime() { const u = currentUser(); if (u && isGestor(u) && avState !== state) { avBase = avSnap(); avState = state; } }
+  const avFor = u => (state.notices || []).filter(n => !n.to || (u && (isGestor(u) || n.to === u.barberId)));
+  const avKey = () => 'avSeen.' + ((currentUser() || {}).id || '');
+  const avUnseen = () => { const u = currentUser(); if (!u || isGestor(u)) return 0; const seen = DB.pref.get(avKey(), ''); return avFor(u).filter(n => n.at > seen).length; };
+  function pageAvisos(user) {
+    const list = avFor(user), seen = DB.pref.get(avKey(), ''), own = isGestor(user);
+    if (list[0] && !own) setTimeout(() => DB.pref.set(avKey(), list[0].at), 1500);
+    const when = s => new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return `<section class="section card">
+      <h2 class="section-title">${icon('bell')} Avisos e alterações</h2>
+      <p class="muted">${own ? 'Tudo o que você muda e que importa para a equipe aparece aqui sozinho, e cada profissional vê no menu dele: pesos e pontos dos indicadores, metas, comissões, checklist, POPs e regras de acesso. Avisos marcados com um nome só aparecem para aquela pessoa.' : 'Mudanças feitas pela gestão que afetam você: pesos e pontos dos indicadores, metas, comissões, checklist, POPs e seus acessos.'}</p>
+    </section>
+    ${list.length ? `<div class="up-list">${list.map(n => { const nw = !own && n.at > seen, b = n.to && barberById(n.to); return `<article class="card up-item av-item ${nw ? 'is-new' : ''}">
+      <div class="up-head"><time datetime="${esc(n.at)}">${esc(when(n.at))}</time>${nw ? '<span class="chip chip-ok">Novo</span>' : ''}${n.to ? `<span class="chip chip-soft">${own ? 'Só para ' + esc(b ? first(b.name) : 'profissional') : 'Só para você'}</span>` : ''}</div>
+      <h3>${esc(n.t)}</h3><p>${esc(n.d)}</p></article>`; }).join('')}</div>`
+      : `<section class="section card"><p class="muted">Nenhum aviso ainda. ${own ? 'Quando você mudar pesos, metas, comissões, checklist ou acessos, o aviso aparece aqui e no menu da equipe.' : 'Quando a gestão mudar alguma regra, você vê aqui.'}</p></section>`}`;
+  }
+
   // Dados: na nuvem (todas as empresas) ou, na demonstração, só neste aparelho.
   const FB_DEMO = () => [
     { id: 'd1', created_at: '2026-10-28T12:00:00Z', title: 'Lembrete no WhatsApp para o profissional fazer o checklist', description: 'Seria ótimo o sistema mandar um lembrete automático no fim da tarde para quem ainda não completou o checklist do dia.', status: 'aberta', reply: '', votes: 14, voted: false, own: false, brand: 'barber' },
@@ -2324,7 +2414,7 @@
     }).join('')}</div>
     <section class="section card tm-edit">
       <h2 class="section-title">Editar métricas de ${esc(sel.name)} · ${esc(ymLabel(ym).replace(' de ', '/'))}</h2>
-      ${own ? '' : canEditB(sel.id) ? `<p class="section-note">Você lança os números das pessoas da sua área.</p>` : `<p class="section-note">Liberado pelo dono para você lançar: <b>${EXTRA_FIELDS().filter(f => myExtras().fields.includes(f.key)).map(f => esc(f.label)).join(', ')}</b>. Os outros campos ficam só para leitura.</p>`}
+      ${own ? '' : canEditB(sel.id) ? `<p class="section-note">Você lança os números das pessoas da sua área.</p>` : `<p class="section-note">Liberado pelo dono para você lançar${isMe(sel.id) && !myExtras().fields.length ? ' os seus números' : ''}: <b>${EXTRA_FIELDS().filter(f => myExtras().fields.includes(f.key) || (isMe(sel.id) && mySelf().includes(f.key))).map(f => esc(f.label)).join(', ')}</b>. Os outros campos ficam só para leitura. Lance com honestidade: o dono acompanha tudo.</p>`}
       <div class="tm-photo">${avatar(sel, 96)}${own ? '' : '</div><!--'}<label class="btn btn-sm" style="cursor:pointer">${icon('camera')} Trocar foto<input type="file" accept="image/*" hidden data-change="barberPhoto" data-id="${esc(sel.id)}"></label>${own ? '</div>' : '-->'}
       <div class="tm-fixed"><small>Nome (fixo)</small><b>${esc(sel.name)}</b></div>
       ${own ? `<div class="grid-2">
@@ -3326,6 +3416,7 @@ ${rows.length ? '' : emptyBarbers()}
           <button class="btn" type="button" data-action="defaultWeights">Voltar aos pesos padrão</button></div>
         </form>
       </section>
+      ${selfCard()}
       <section class="section card">
         <h2 class="section-title">Metas mensais da equipe ${tip('goals')}</h2>
         <p class="section-note">Valem para todos os barbeiros. Para ajustar a meta de alguém, abra o barbeiro em Lançamentos, em "Metas individuais". Percentuais em %, valores em R$.</p>
@@ -4264,6 +4355,7 @@ Content-Type: application/json</pre>
     o.grants = o.grants.filter(g => uids.has(g.userId) && (g.nodeId === null || o.nodes.some(n => n.id === g.nodeId)));
     if (!o.access || typeof o.access !== 'object') o.access = {};
     if (!o.extras || typeof o.extras !== 'object') o.extras = {};
+    if (!o.self || typeof o.self !== 'object' || !Array.isArray(o.self.fields)) o.self = { fields: [] };
     for (const k of Object.keys(o.extras)) if (!bids.has(k)) delete o.extras[k];
     for (const k of Object.keys(o.access)) if (!bids.has(k) || !['lider', 'gestor'].includes(o.access[k])) delete o.access[k];
     return o;
@@ -4329,8 +4421,13 @@ Content-Type: application/json</pre>
   // Quem pode lançar os números do mês de um barbeiro.
   function canEditB(bid) { const u = currentUser(); return !!u && (isGestor(u) || areaIds(u, ['gestor']).has(bid)); }
   // Lançamentos: quem lança tudo de alguém, ou o líder com métricas liberadas (só essas).
-  const canLanB = bid => canEditB(bid) || myExtras().fields.length > 0;
-  const fieldOk = (bid, key) => canEditB(bid) || myExtras().fields.includes(key);
+  // Autolançamento: indicadores que o dono libera para cada profissional lançar os próprios números.
+  const selfCfg = () => (org().self || {}).fields || [];
+  const mySelf = () => { const u = currentUser(); return u && !isGestor(u) && u.barberId ? selfCfg().filter(k => EXTRA_FIELDS().some(f => f.key === k)) : []; };
+  const isMe = bid => (currentUser() || {}).barberId === bid;
+  const lanAny = () => myExtras().fields.length > 0 || mySelf().length > 0;
+  const canLanB = bid => canEditB(bid) || myExtras().fields.length > 0 || (isMe(bid) && mySelf().length > 0);
+  const fieldOk = (bid, key) => canEditB(bid) || myExtras().fields.includes(key) || (isMe(bid) && mySelf().includes(key));
   // Ranking só com os barbeiros da área (fechamento do gestor de área).
   function scopedR(ym) {
     const u = currentUser();
@@ -5313,6 +5410,7 @@ Content-Type: application/json</pre>
     cadastro: { t: 'Meu cadastro', r: pageCadastro },
     ajuda: { t: 'Central de ajuda', r: pageAjuda },
     atualizacoes: { t: 'Atualizações', r: pageAtualizacoes, g: 1 },
+    avisos: { t: 'Avisos e alterações', r: pageAvisos },
     fiscalizacao: { t: 'Fiscalização', r: pageFiscalizacao, g: 1, a: 1 },
     comissoes: { t: 'Comissões e prêmios', r: pageComissoes, g: 1 },
     sonhos: { t: 'Sonhos', r: pageSonhos },
@@ -5973,6 +6071,7 @@ Content-Type: application/json</pre>
 
   // ---------- render principal ----------
   function render() {
+    avPrime();
     clearTimeout(ui.tvTimer);
     rkCache = {};
     const h = decodeURIComponent(location.hash.slice(1));
@@ -6002,7 +6101,7 @@ Content-Type: application/json</pre>
     } else if (SOON_TEXT[route]) {
       page = { r: () => pageSoon(route) }; title = NAV.flatMap(g => g.items).find(i => i.r === route).t;
     } else { route = 'inicio'; page = PAGES.inicio; title = page.t; }
-    if (page.g && !isGestor(user) && !(page.a && isAreaMgr(user)) && !(route === 'lancamentos' && myExtras().fields.length)) { route = 'inicio'; page = PAGES.inicio; title = page.t; }
+    if (page.g && !isGestor(user) && !(page.a && isAreaMgr(user)) && !(route === 'lancamentos' && lanAny())) { route = 'inicio'; page = PAGES.inicio; title = page.t; }
 
     const pending = isGestor(user) ? state.users.filter(u => u.status === 'pendente').length : 0;
     const who = isGestor(user) ? { name: state.company.name, photo: state.company.logo } : (barberById(user.barberId) || { name: user.name });
@@ -7033,6 +7132,12 @@ Content-Type: application/json</pre>
       state.births = bs; save(); toast(v ? 'Data de nascimento salva.' : 'Data de nascimento removida.');
     },
     barberRole(el) { const b = barberById(el.dataset.id); if (!b) return; b.role = el.value.trim().slice(0, 60) || B().role; save(); toast('Função salva.'); },
+    selfField(el) {
+      if (!isGestor(currentUser())) return;
+      const o = org(), k = el.dataset.k, f = o.self.fields;
+      o.self.fields = el.checked ? [...new Set([...f, k])] : f.filter(v => v !== k);
+      save(); toast(o.self.fields.length ? 'Autolançamento atualizado.' : 'Autolançamento desligado.'); render();
+    },
     leaderExtra(el) {
       if (!isGestor(currentUser())) return;
       const o = org(), id = el.dataset.id, k = el.dataset.k;
@@ -7239,7 +7344,7 @@ Content-Type: application/json</pre>
     }, 600000);
     Cloud.onRemote = next => {
       const apply = () => {
-        state = next; rkCache = {};
+        state = next; rkCache = {}; avPrime();
         setTimeout(maybeAutoReveal, 600);
         if (ui.fx) return;
         if (location.hash === '#apresentacao') renderTV();
