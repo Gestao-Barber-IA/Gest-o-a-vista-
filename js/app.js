@@ -3654,6 +3654,7 @@ Content-Type: application/json</pre>
       ov.innerHTML = `<div class="fx-bg">${fxDots(34)}</div><div class="fx-stage" aria-live="polite"></div><nav class="fx-ctrl"></nav>${licMark('fx')}`;
       document.body.appendChild(ov);
       fxBind(ov);
+      fxBrandColors(ov);
     }
     const { R, s } = fxSlides(fx.ym);
     fx.total = s.length;
@@ -3700,6 +3701,31 @@ Content-Type: application/json</pre>
     if (sl) sl.querySelectorAll('img').forEach(im => { if (!im.complete) im.addEventListener('load', fxFit, { once: true }); });
   }
   window.addEventListener('resize', () => { if (ui.fx) fxFit(); });
+  // Fechamento nas cores do logo da empresa (com logo enviado e cores bem definidas).
+  async function fxBrandColors(ov) {
+    if (!state.company || !state.company.logo) return;
+    try {
+      const p = await brandPalette(); if (!ov.isConnected) return;
+      const sat = h => { const [r, g, b] = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255), mx = Math.max(r, g, b), mn = Math.min(r, g, b); return mx === mn ? 0 : (mx - mn) / (1 - Math.abs(mx + mn - 1)); };
+      if (sat(p.a) < 0.18) return; // logo preto e branco: mantém as cores do app
+      const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)).join(', ');
+      // Deixa o tom da marca vivo e claro o bastante para brilhar no fundo escuro.
+      const vivid = (h, lo, hi) => {
+        const [r, g, b] = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255), mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+        let hu = 0; if (d) hu = mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; hu *= 60;
+        const l0 = (mx + mn) / 2, s0 = d ? d / (1 - Math.abs(2 * l0 - 1)) : 0, sN = Math.max(s0, 0.6), lN = Math.min(hi, Math.max(lo, l0));
+        const f = n => { const k = (n + hu / 30) % 12, aa = sN * Math.min(lN, 1 - lN); return Math.round((lN - aa * Math.max(-1, Math.min(k - 3, 9 - k, 1))) * 255).toString(16).padStart(2, '0'); };
+        return '#' + f(0) + f(8) + f(4);
+      };
+      p.a = vivid(p.a, 0.58, 0.7);
+      const B2 = sat(p.b) < 0.18 ? mixHex(p.a, '#000000', 0.35) : vivid(p.b, 0.4, 0.55), st = ov.style;
+      st.setProperty('--fx-a', p.a); st.setProperty('--fx-b', B2); st.setProperty('--fx-light', mixHex(p.a, '#ffffff', 0.55));
+      st.setProperty('--fx-a-rgb', rgb(p.a)); st.setProperty('--fx-b-rgb', rgb(B2));
+      st.setProperty('--fx-bg1', mixHex(p.a, '#000000', 0.72)); st.setProperty('--fx-bg2', mixHex(B2, '#000000', 0.7)); st.setProperty('--fx-bg3', mixHex(B2, '#05050a', 0.9));
+      st.setProperty('--accent', p.a);
+      ov.classList.add('fx-brand');
+    } catch (e) { /* mantém as cores padrão */ }
+  }
   function fxReveal(slide, place) {
     if (!slide || !slide.classList.contains('is-suspense')) return;
     slide.classList.remove('is-suspense', 'is-drum'); slide.classList.add('is-revealed'); fxFitSoon(slide);

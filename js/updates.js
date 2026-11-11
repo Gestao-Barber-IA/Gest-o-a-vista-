@@ -6,6 +6,7 @@ window.GB_UPDATES = [
     ['melhoria', 'Com o logo enviado, o menu mostra o logo e o nome da sua empresa (o nome do sistema fica pequeno, em cima).'],
     ['melhoria', 'O fechamento do mês abre com o logo da sua empresa; a marca do sistema aparece só de forma discreta.'],
     ['melhoria', 'Os cards dos profissionais levam o nome da sua empresa no rodapé.'],
+    ['melhoria', 'O fechamento do mês ganha as cores da identidade visual do seu logo: fundo, títulos, brilhos e detalhes.'],
   ] },
   { id: '2026-11-11-aprovacao', date: '2026-11-11', title: 'Cadastro com aprovação', items: [
     ['melhoria', 'Novas empresas passam por uma análise da nossa equipe antes do primeiro acesso. O teste grátis de 7 dias começa a contar na aprovação.'],
