@@ -414,9 +414,14 @@
   }
   const demoKit = () => { try { return JSON.parse(DB.pref.get('demoKit', '') || 'null'); } catch (e) { return null; } };
   const lumOf = h => { const [r, g, b] = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  // Cores do app pelo logo: na demonstração (marca do cliente) e na conta real (logo da empresa),
+  // a menos que o dono desligue em Configurações › Empresa.
+  let kitKey = '';
+  const logoColorsOn = () => DEMO_ON ? !!(demoKit() || {}).logo : !!(currentUser() && state.company && state.company.logo && state.logoColors !== false);
   async function applyKitColors() {
-    const st = document.documentElement.style, kit = DEMO_ON && demoKit();
-    if (!kit || !kit.logo) { KIT_VARS.forEach(v => st.removeProperty(v)); return; }
+    const st = document.documentElement.style;
+    kitKey = logoColorsOn() ? String(state.company.logo || (demoKit() || {}).logo || '').slice(-80) + '|' + String((state.company.logo || '').length) : '';
+    if (!kitKey) { KIT_VARS.forEach(v => st.removeProperty(v)); return; }
     const p = await brandPalette(), A = p.a, Bc = p.b;
     const set = (k, v) => st.setProperty(k, v);
     set('--accent', A); set('--accent-strong', mixHex(A, '#000000', 0.25)); set('--accent-ink', lumOf(A) > 0.5 ? '#14100a' : '#ffffff');
@@ -3506,6 +3511,7 @@ Content-Type: application/json</pre>
     return `<section class="section card">
       <h2 class="section-title">Dados da barbearia</h2>
       <div class="perf-head">${companyAvatar(72)}<label class="btn btn-sm" style="cursor:pointer">${icon('camera')} Trocar logo<input type="file" accept="image/*" hidden data-change="companyLogo"></label></div>
+      ${c.logo ? `<label class="check"><input type="checkbox" data-change="logoColors" ${state.logoColors !== false ? 'checked' : ''}><span><b>Usar as cores do meu logo no app</b><small>O app inteiro (botões, destaques, menu e fechamento) fica na identidade visual da sua marca, para toda a equipe. Desmarque para voltar às cores padrão.</small></span></label>` : '<p class="muted">Envie o logo e o app passa a usar as cores da sua marca.</p>'}
       <form class="form" data-form="company" novalidate>
         <label class="field"><span>Nome *</span><input class="input" id="co-name" name="name" required value="${esc(c.name)}"></label>
         <div class="grid-2">
@@ -6078,6 +6084,7 @@ Content-Type: application/json</pre>
   // ---------- render principal ----------
   function render() {
     avPrime();
+    { const k = logoColorsOn() ? String(state.company.logo || (demoKit() || {}).logo || '').slice(-80) + '|' + String((state.company.logo || '').length) : ''; if (k !== kitKey) applyKitColors().catch(() => {}); }
     clearTimeout(ui.tvTimer);
     rkCache = {};
     const h = decodeURIComponent(location.hash.slice(1));
@@ -7154,6 +7161,10 @@ Content-Type: application/json</pre>
       const v = el.value, bs = { ...(state.births || {}) };
       if (/^\d{4}-\d{2}-\d{2}$/.test(v)) bs[b.id] = v; else delete bs[b.id];
       state.births = bs; save(); toast(v ? 'Data de nascimento salva.' : 'Data de nascimento removida.');
+    },
+    logoColors(el) {
+      if (!isGestor(currentUser())) return;
+      state.logoColors = el.checked; save(); applyKitColors(); toast(el.checked ? 'O app agora usa as cores do seu logo.' : 'Cores padrão do app.');
     },
     barberName(el) {
       if (!isGestor(currentUser())) return;
