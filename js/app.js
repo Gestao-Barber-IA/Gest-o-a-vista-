@@ -160,9 +160,20 @@
     access_lv: ['Nível de acesso', () => ACCESS_TIP()],
     leads: ['Interessados', 'Cadastros feitos na página de vendas (gest-o-a-vista.vercel.app/oferta) antes do quiz: nome, celular, e-mail e as respostas do quiz. Use a situação para organizar o contato: Novo, Contatado, Virou cliente ou Descartado. Só o dono do SaaS vê esta lista.'],
     pops: ['POPs · Guia do Sucesso', 'POP é o Procedimento Operacional Padrão: o jeito certo de fazer cada processo da barbearia. Cada POP tem o passo a passo em fotos (toque para ampliar) e, se houver, o link do vídeo. Só o dono cadastra e edita; toda a equipe consulta.'],
+    selfLan: ['Profissional lança os próprios números', 'Útil quando o sistema da barbearia não tem integração. Cada profissional entra no app, abre Lançamentos e preenche só os indicadores marcados aqui, e só dos próprios números. Tudo continua visível para você no histórico de lançamentos por dia, e você pode corrigir a qualquer momento.'],
     extras: ['Acessos extras do líder', 'Liberações opcionais que você dá a um líder: conferir e aprovar o checklist de toda a equipe e/ou lançar à mão os números de toda a equipe só nos indicadores marcados. Os outros campos ficam só para leitura para ele. Campos que vêm da integração continuam travados.'],
     fechamento: ['Fechamento do mês', 'Apresentação para a equipe: revela só os 3 primeiros colocados, do 3º ao 1º. Cada lugar do pódio só aparece quando o gestor toca em Revelar. O resumo esconde o resultado para não estragar a surpresa se a tela estiver na TV.'],
   };
+  // Configurações › Indicadores: o que cada profissional pode lançar dos próprios números.
+  function selfCard() {
+    const on = selfCfg();
+    return `<section class="section card" id="self-lan">
+      <h2 class="section-title">${icon('edit')} Profissional lança os próprios números ${tip('selfLan')}</h2>
+      <p class="section-note">Para quem usa um sistema sem integração: marque os indicadores que cada profissional pode preencher sozinho em <b>Lançamentos</b>. Ele só lança os <b>próprios</b> números; os de colegas nunca. Campos que vêm da integração continuam travados. Deixe tudo desmarcado para desligar.</p>
+      <div class="lx-grid">${EXTRA_FIELDS().map(f => `<label class="check"><input type="checkbox" data-change="selfField" data-k="${f.key}" ${on.includes(f.key) ? 'checked' : ''}><span>${esc(f.label)}</span></label>`).join('')}</div>
+      <p class="muted">${on.length ? `Ligado: cada profissional lança ${on.length} indicador${on.length > 1 ? 'es' : ''}.` : 'Desligado: só você (e quem tem acesso de gestor) lança os números.'}</p>
+    </section>`;
+  }
   function leaderExtrasBox(b) {
     const x = extrasOf(b.id), n = (x.review ? 1 : 0) + x.fields.length;
     return `<details class="lx" ${ui.lxOpen === b.id ? 'open' : ''} data-id="${esc(b.id)}">
@@ -690,7 +701,7 @@
     const g = isGestor(user);
     const groups = NAV.filter(gr => !gr.g || g || isAreaMgr(user)).map(gr => {
       const am = isAreaMgr(user), hg = hasGrants(user);
-      const lf = myExtras().fields.length > 0;
+      const lf = lanAny();
       const items = gr.items.filter(it => (!it.g || g || (it.a && am) || (it.r === 'lancamentos' && lf)) && (!it.rt || rtAuds(user).length) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
         <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && (g || hg) ? (g || accessOf(user.barberId) !== 'profissional' ? 'Performance da empresa' : 'Performance da área') : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}${it.r === 'atualizacoes' && updUnseen() ? `<span class="nav-new" aria-label="${updUnseen()} novidades">${updUnseen()}</span>` : ''}</a>`).join('');
       if (!gr.group || !items.trim()) return gr.group ? '' : items;
@@ -2324,7 +2335,7 @@
     }).join('')}</div>
     <section class="section card tm-edit">
       <h2 class="section-title">Editar métricas de ${esc(sel.name)} · ${esc(ymLabel(ym).replace(' de ', '/'))}</h2>
-      ${own ? '' : canEditB(sel.id) ? `<p class="section-note">Você lança os números das pessoas da sua área.</p>` : `<p class="section-note">Liberado pelo dono para você lançar: <b>${EXTRA_FIELDS().filter(f => myExtras().fields.includes(f.key)).map(f => esc(f.label)).join(', ')}</b>. Os outros campos ficam só para leitura.</p>`}
+      ${own ? '' : canEditB(sel.id) ? `<p class="section-note">Você lança os números das pessoas da sua área.</p>` : `<p class="section-note">Liberado pelo dono para você lançar${isMe(sel.id) && !myExtras().fields.length ? ' os seus números' : ''}: <b>${EXTRA_FIELDS().filter(f => myExtras().fields.includes(f.key) || (isMe(sel.id) && mySelf().includes(f.key))).map(f => esc(f.label)).join(', ')}</b>. Os outros campos ficam só para leitura. Lance com honestidade: o dono acompanha tudo.</p>`}
       <div class="tm-photo">${avatar(sel, 96)}${own ? '' : '</div><!--'}<label class="btn btn-sm" style="cursor:pointer">${icon('camera')} Trocar foto<input type="file" accept="image/*" hidden data-change="barberPhoto" data-id="${esc(sel.id)}"></label>${own ? '</div>' : '-->'}
       <div class="tm-fixed"><small>Nome (fixo)</small><b>${esc(sel.name)}</b></div>
       ${own ? `<div class="grid-2">
@@ -3326,6 +3337,7 @@ ${rows.length ? '' : emptyBarbers()}
           <button class="btn" type="button" data-action="defaultWeights">Voltar aos pesos padrão</button></div>
         </form>
       </section>
+      ${selfCard()}
       <section class="section card">
         <h2 class="section-title">Metas mensais da equipe ${tip('goals')}</h2>
         <p class="section-note">Valem para todos os barbeiros. Para ajustar a meta de alguém, abra o barbeiro em Lançamentos, em "Metas individuais". Percentuais em %, valores em R$.</p>
@@ -4264,6 +4276,7 @@ Content-Type: application/json</pre>
     o.grants = o.grants.filter(g => uids.has(g.userId) && (g.nodeId === null || o.nodes.some(n => n.id === g.nodeId)));
     if (!o.access || typeof o.access !== 'object') o.access = {};
     if (!o.extras || typeof o.extras !== 'object') o.extras = {};
+    if (!o.self || typeof o.self !== 'object' || !Array.isArray(o.self.fields)) o.self = { fields: [] };
     for (const k of Object.keys(o.extras)) if (!bids.has(k)) delete o.extras[k];
     for (const k of Object.keys(o.access)) if (!bids.has(k) || !['lider', 'gestor'].includes(o.access[k])) delete o.access[k];
     return o;
@@ -4329,8 +4342,13 @@ Content-Type: application/json</pre>
   // Quem pode lançar os números do mês de um barbeiro.
   function canEditB(bid) { const u = currentUser(); return !!u && (isGestor(u) || areaIds(u, ['gestor']).has(bid)); }
   // Lançamentos: quem lança tudo de alguém, ou o líder com métricas liberadas (só essas).
-  const canLanB = bid => canEditB(bid) || myExtras().fields.length > 0;
-  const fieldOk = (bid, key) => canEditB(bid) || myExtras().fields.includes(key);
+  // Autolançamento: indicadores que o dono libera para cada profissional lançar os próprios números.
+  const selfCfg = () => (org().self || {}).fields || [];
+  const mySelf = () => { const u = currentUser(); return u && !isGestor(u) && u.barberId ? selfCfg().filter(k => EXTRA_FIELDS().some(f => f.key === k)) : []; };
+  const isMe = bid => (currentUser() || {}).barberId === bid;
+  const lanAny = () => myExtras().fields.length > 0 || mySelf().length > 0;
+  const canLanB = bid => canEditB(bid) || myExtras().fields.length > 0 || (isMe(bid) && mySelf().length > 0);
+  const fieldOk = (bid, key) => canEditB(bid) || myExtras().fields.includes(key) || (isMe(bid) && mySelf().includes(key));
   // Ranking só com os barbeiros da área (fechamento do gestor de área).
   function scopedR(ym) {
     const u = currentUser();
@@ -6002,7 +6020,7 @@ Content-Type: application/json</pre>
     } else if (SOON_TEXT[route]) {
       page = { r: () => pageSoon(route) }; title = NAV.flatMap(g => g.items).find(i => i.r === route).t;
     } else { route = 'inicio'; page = PAGES.inicio; title = page.t; }
-    if (page.g && !isGestor(user) && !(page.a && isAreaMgr(user)) && !(route === 'lancamentos' && myExtras().fields.length)) { route = 'inicio'; page = PAGES.inicio; title = page.t; }
+    if (page.g && !isGestor(user) && !(page.a && isAreaMgr(user)) && !(route === 'lancamentos' && lanAny())) { route = 'inicio'; page = PAGES.inicio; title = page.t; }
 
     const pending = isGestor(user) ? state.users.filter(u => u.status === 'pendente').length : 0;
     const who = isGestor(user) ? { name: state.company.name, photo: state.company.logo } : (barberById(user.barberId) || { name: user.name });
@@ -7033,6 +7051,12 @@ Content-Type: application/json</pre>
       state.births = bs; save(); toast(v ? 'Data de nascimento salva.' : 'Data de nascimento removida.');
     },
     barberRole(el) { const b = barberById(el.dataset.id); if (!b) return; b.role = el.value.trim().slice(0, 60) || B().role; save(); toast('Função salva.'); },
+    selfField(el) {
+      if (!isGestor(currentUser())) return;
+      const o = org(), k = el.dataset.k, f = o.self.fields;
+      o.self.fields = el.checked ? [...new Set([...f, k])] : f.filter(v => v !== k);
+      save(); toast(o.self.fields.length ? 'Autolançamento atualizado.' : 'Autolançamento desligado.'); render();
+    },
     leaderExtra(el) {
       if (!isGestor(currentUser())) return;
       const o = org(), id = el.dataset.id, k = el.dataset.k;
