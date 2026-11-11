@@ -5,7 +5,7 @@ title Gestao Barber IA - AppBarber
 where node >nul 2>nul || (echo O Node.js nao esta instalado. Instale em https://nodejs.org e rode de novo. & pause & exit /b)
 node sincronizar.mjs --configurar || (pause & exit /b)
 echo ==== TESTE: buscando os numeros na AppBarber (nada e enviado) ====
-node sincronizar.mjs --teste
+node sincronizar.mjs --teste --diagnostico
 if errorlevel 1 (echo. & echo Deu erro no teste. Tire um print desta tela e mande para o suporte. & pause & exit /b)
 echo.
 set /p OK=Os numeros estao certos? Digite S e Enter para ligar a sincronizacao automatica: 
