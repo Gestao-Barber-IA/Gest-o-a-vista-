@@ -78,7 +78,25 @@ async function getExato(url, headers) {
   });
 }
 
+// Horário de funcionamento: vem do app (Configurações › Indicadores e metas › Regra da taxa de ocupação).
+// Fora dele não chama a AppBarber (cada chamada é cobrada). Inclui 10 min depois do fechamento para pegar o fim do dia.
+async function dentroDoHorario() {
+  let h = null;
+  try {
+    const r = await fetch(GESTAO_URL, { headers: { Authorization: "Bearer " + cfg.gestao_api_key } });
+    if (r.ok) { const j = await r.json(); if (j.abertura && j.fechamento) h = j; }
+  } catch { /* sem internet ou servidor fora: usa o padrão */ }
+  h = h || { abertura: cfg.abertura || "08:00", fechamento: cfg.fechamento || "22:00" };
+  const min = (t) => { const [a, b] = String(t).split(":").map(Number); return (a || 0) * 60 + (b || 0); };
+  const agora = new Date(), m = agora.getHours() * 60 + agora.getMinutes();
+  return { ok: m >= min(h.abertura) && m <= min(h.fechamento) + 10, ...h };
+}
+
 async function main() {
+  if (!TESTE && !process.argv.includes("--agora")) {
+    const h = await dentroDoHorario();
+    if (!h.ok) { console.log(`Fora do horário de funcionamento (${h.abertura} às ${h.fechamento}, definido no app). Nada foi buscado.`); return; }
+  }
   const q = new URLSearchParams({ establishment_code: String(cfg.codigo_estabelecimento), start_date: iso(ini), end_date: iso(hoje), status_type: "2" });
   if (cfg.codigo_filial) q.set("branch_code", String(cfg.codigo_filial));
   const url = (cfg.appbarber_url || "https://api.appbarber.com") + "/v1/appointments/history?" + q;
