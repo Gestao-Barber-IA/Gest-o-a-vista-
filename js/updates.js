@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-11-sem-fidelizacao', date: '2026-11-11', title: 'Taxa de fidelização retirada por enquanto', items: [
+    ['melhoria', 'A Taxa de fidelização saiu dos indicadores, do ranking, das metas e dos lançamentos. Os pesos dos outros indicadores foram redistribuídos sozinhos.'],
+  ] },
   { id: '2026-11-11-avisos', date: '2026-11-11', title: 'Avisos e alterações para a equipe', items: [
     ['novo', 'Nova tela Avisos e alterações no menu de todos. Quando o dono muda algo que afeta a equipe, o aviso aparece sozinho, com a data.'],
     ['melhoria', 'Entram: pesos e % de cada indicador, metas, comissões e prêmios, checklist, POPs, regra de ocupação, autolançamento e mudanças de acesso. Avisos pessoais (acesso, metas individuais, comissão) só aparecem para a própria pessoa.'],

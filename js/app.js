@@ -1,7 +1,10 @@
 /* Gestão Barber IA — telas e interação. */
 (function () {
   'use strict';
-  const { DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, importEntries, upsertEntry, gapTo, emptyState, monthRange, addMonths, monthFromIntegration, levelOf, isNum, passHash, uid, iso, fromIso, hash, icon, logo } = window.GB;
+  const { DB, FIELDS, PERIOD_NAMES, periodRange, computeRanking, importEntries, upsertEntry, gapTo, emptyState, monthRange, addMonths, monthFromIntegration, levelOf, isNum, passHash, uid, iso, fromIso, hash, icon, logo } = window.GB;
+  // Indicadores em uso no sistema (os retirados por enquanto ficam de fora em todas as telas).
+  const INDICATORS = window.GB.INDICATORS.filter(i => !window.GB.RETIRED.includes(i.key));
+  const hidAll = () => [...(state.hidden || []), ...window.GB.RETIRED];
 
   const Cloud = window.GB.Cloud || { enabled: false };
   const blankState = () => ({ version: 2, demo: false, cloud: true, company: { name: '', cnpj: '', phone: '', email: '', logo: null }, users: [], barbers: [], entries: [], monthly: [], invites: [],
@@ -1941,7 +1944,7 @@
   // ---------- Avisos e alterações: o que o dono muda e importa para a equipe (gerado sozinho) ----------
   // A cada salvamento do dono, compara as regras com a versão anterior e registra o que mudou.
   let avBase = null, avState = null;
-  const pctOf = () => { const w = state.weights || {}, hid = state.hidden || [], act = INDICATORS.filter(i => !hid.includes(i.key) && Number(w[i.key] ?? i.weight) > 0), tot = act.reduce((a, i) => a + Number(w[i.key] ?? i.weight), 0) || 1; return act.map(i => [i, Math.round(Number(w[i.key] ?? i.weight) / tot * 100)]); };
+  const pctOf = () => { const w = state.weights || {}, hid = hidAll(), act = INDICATORS.filter(i => !hid.includes(i.key) && Number(w[i.key] ?? i.weight) > 0), tot = act.reduce((a, i) => a + Number(w[i.key] ?? i.weight), 0) || 1; return act.map(i => [i, Math.round(Number(w[i.key] ?? i.weight) / tot * 100)]); };
   const lbl = k => (EXTRA_FIELDS().concat(GB.MONTH_FIELDS).find(f => f.key === k) || { label: k }).label;
   function avSnap() {
     const o = org(), c = comCfg(), pop = GB.popCfgOf(state), oc = GB.ocupCfgOf(state), per = {};
@@ -2339,7 +2342,7 @@
     const integ = monthFromIntegration(state, b.id, ym);
     const R = monthR(ym);
     const row = R.rows.find(r => r.barber.id === b.id);
-    const hidden = state.hidden || [];
+    const hidden = hidAll();
     return GB.MONTH_FIELDS.filter(f => !hidden.includes(GB.FIELD_IND[f.key] || f.key)).map(f => {
       if (f.calc) {
         const t = row && row.sums.cli > 0 ? row.sums.fat / row.sums.cli : null;
@@ -3026,7 +3029,7 @@
   function houseGoalsFor(ym) {
     const m = (state.houseGoalsM || {})[ym];
     const g = m && Object.keys(m).length ? m : (state.houseGoals || {});
-    const vis = k => !['prod', 'planos', 'ocup'].includes(k) || GB.visibleInds(state).some(i => i.key === k);
+    const vis = k => !['prod', 'planos', 'ocup', 'fid'].includes(k) || GB.visibleInds(state).some(i => i.key === k);
     return Object.fromEntries(Object.entries(g).filter(([k, v]) => HG_KEYS.includes(k) && vis(k) && isNum(v) && v > 0));
   }
   // Totais do mês: soma de todos os profissionais (inclusive desligados com resultados no mês).
@@ -3229,7 +3232,7 @@
     const sugg = k => k === 'agend' ? null : ['ticket', 'ocup', 'fid'].includes(k) ? GB.goalFor(state, '', k) : act.reduce((a, b) => a + GB.goalFor(state, b.id, k), 0);
     const HG_FIELDS = [['fat', 'Faturamento total (R$)', '0.01'], ['agend', 'Agendamentos', '1'], ['cli', 'Clientes atendidos', '1'], ['serv', 'Serviços realizados', '1'],
       ...(vis('prod') ? [['prod', 'Produtos vendidos', '1']] : []), ...(vis('planos') ? [['planos', 'Planos mensais', '1']] : []),
-      ['ticket', 'Ticket médio da casa (R$)', '0.01'], ...(vis('ocup') ? [['ocup', 'Ocupação média (%)', '0.1']] : []), ...(vis('fid') || T.vals.fid != null ? [['fid', 'Fidelização da casa (%)', '0.1']] : [])];
+      ['ticket', 'Ticket médio da casa (R$)', '0.01'], ...(vis('ocup') ? [['ocup', 'Ocupação média (%)', '0.1']] : []), ...(vis('fid') ? [['fid', 'Fidelização da casa (%)', '0.1']] : [])];
     const goalForm = own && ui.hgEdit ? `<section class="section card">
         <h2 class="section-title">Metas mensais da empresa</h2>
         <p class="section-note">Deixe em branco o indicador que não tiver meta. A sugestão em cinza é a soma das metas individuais da equipe.</p>
@@ -3262,7 +3265,7 @@
         ${stat('Ticket médio da casa', cli > 0 ? money0(fat / cli) : '—', 'ticket', cli > 0 ? fat / cli : null)}
         ${all.some(r => r.sums.n.comanda) ? stat('Maior comanda do mês', money2(Math.max(...all.map(r => r.sums.n.comanda ? r.sums.comanda : 0)))) : ''}
         ${vis('ocup') ? stat('Ocupação média', ocups.length ? nf1.format(ocups.reduce((a, v) => a + v, 0) / ocups.length) + '%' : '—', 'ocup', ocups.length ? ocups.reduce((a, v) => a + v, 0) / ocups.length : null) : ''}
-        ${T.vals.fid != null || vis('fid') ? stat('Fidelização da casa', T.vals.fid != null ? nf1.format(T.vals.fid) + '%' : '—', 'fid', T.vals.fid) : ''}
+        ${vis('fid') ? stat('Fidelização da casa', T.vals.fid != null ? nf1.format(T.vals.fid) + '%' : '—', 'fid', T.vals.fid) : ''}
         ${stat('Profissionais', nf0.format(all.length))}
       </section>
       ${all.length ? `<p class="section-note">Cada número acima é a soma dos ${nf0.format(all.length)} profissionais ${scope ? 'da sua área' : 'da equipe'} no mês${gone.length ? `, incluindo ${gone.length === 1 ? '1 profissional desligado que tem' : `${gone.length} profissionais desligados que têm`} resultados lançados nesse mês` : ''}. O ticket médio da casa é o faturamento total dividido pelo total de clientes, e a ocupação é a média dos profissionais.</p>` : ''}
@@ -3356,7 +3359,7 @@ ${rows.length ? '' : emptyBarbers()}
   const W_PRESETS = {
     faturar: { t: 'Faturar mais', i: 'wallet', d: 'Faturamento, ticket médio e venda de produtos em primeiro lugar.', p: { fat: 3, ticket: 3, prod: 3, planos: 2, serv: 2, cli: 1, ocup: 1, check: 1, fid: 1 } },
     agenda: { t: 'Agenda cheia', i: 'clock', d: 'Ocupação, clientes atendidos e checklist em primeiro lugar.', p: { ocup: 3, cli: 3, check: 3, serv: 2, fat: 2, ticket: 1, planos: 1, prod: 1, fid: 1 } },
-    fidelizar: { t: 'Fidelizar clientes', i: 'users', d: 'Fidelização e planos mensais em primeiro lugar.', p: { fid: 3, planos: 3, cli: 2, check: 2, fat: 2, ticket: 1, serv: 1, ocup: 1, prod: 1 } },
+    fidelizar: { t: 'Clientes e planos', i: 'users', d: 'Planos mensais e clientes atendidos em primeiro lugar.', p: { planos: 3, cli: 3, check: 2, fat: 2, ticket: 1, serv: 1, ocup: 1, prod: 1 } },
     equilibrado: { t: 'Equilibrado', i: 'chart', d: 'Todos os indicadores com a mesma importância.', p: { fat: 2, ticket: 2, prod: 2, planos: 2, serv: 2, cli: 2, ocup: 2, check: 2, fid: 2 } },
   };
   // Converte prioridades em pesos que somam 100.
@@ -4397,7 +4400,7 @@ Content-Type: application/json</pre>
     return { review: !!e.review, fields: Array.isArray(e.fields) ? e.fields : [] };
   }
   const myExtras = () => { const u = currentUser(); return u && !isGestor(u) ? extrasOf(u.barberId) : { review: false, fields: [] }; };
-  const EXTRA_FIELDS = () => GB.MONTH_FIELDS.filter(f => !f.calc && !(state.hidden || []).includes(GB.FIELD_IND[f.key] || f.key));
+  const EXTRA_FIELDS = () => GB.MONTH_FIELDS.filter(f => !f.calc && !hidAll().includes(GB.FIELD_IND[f.key] || f.key));
   function areaIds(u, roles) {
     const s = new Set();
     if (!u) return s;
