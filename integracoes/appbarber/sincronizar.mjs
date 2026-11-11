@@ -5,10 +5,12 @@
 // Uso:  node sincronizar.mjs          (envia)
 //       node sincronizar.mjs --teste  (só mostra os números, não envia)
 // Precisa do Node.js 18 ou mais novo. Configuração em config.json (veja config.exemplo.json).
-import { readFileSync, appendFileSync, writeFileSync } from "node:fs";
+import { readFileSync, appendFileSync, writeFileSync, renameSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+const VERSAO = "1.6";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const TESTE = process.argv.includes("--teste");
 const CARGA = process.argv.includes("--carga"); // carga inicial: lê todas as comandas no ritmo máximo permitido
@@ -101,7 +103,29 @@ async function dentroDoHorario() {
   return { ok: m >= min(h.abertura) && m <= min(h.fechamento) + 10, ...h };
 }
 
+// Atualização automática: no máximo a cada 6 horas, baixa a versão mais nova do site do Gestão Barber IA.
+// Só troca o arquivo se a versão for outra e o código novo passar na checagem do Node. Vale a partir da próxima execução.
+async function autoAtualizar() {
+  if (cfg.auto_atualizar === false || cfg.appbarber_url) return;
+  const marca = join(DIR, "atualizacao.txt");
+  try { if (Date.now() - Number(readFileSync(marca, "utf8")) < 6 * 3600000) return; } catch { /* primeira vez */ }
+  try { writeFileSync(marca, String(Date.now())); } catch { /* opcional */ }
+  try {
+    const r = await fetch(cfg.atualizar_url || "https://gest-o-a-vista.vercel.app/integracoes/appbarber/sincronizar.mjs", { cache: "no-store" });
+    if (!r.ok) return;
+    const novo = await r.text();
+    const v = (novo.match(/const VERSAO = "([^"]+)"/) || [])[1];
+    if (!v || v === VERSAO || novo.length < 2000) return;
+    const tmp = join(DIR, "sincronizar.novo.mjs");
+    writeFileSync(tmp, novo);
+    if (spawnSync(process.execPath, ["--check", tmp]).status !== 0) return;
+    renameSync(tmp, fileURLToPath(import.meta.url));
+    log(`Programa atualizado sozinho: versão ${VERSAO} → ${v}.`);
+  } catch { /* sem internet: tenta na próxima */ }
+}
+
 async function main() {
+  await autoAtualizar();
   if (!TESTE && !CARGA && !process.argv.includes("--agora")) {
     const h = await dentroDoHorario();
     if (!h.ok) { console.log(`Fora do horário de funcionamento (${h.abertura} às ${h.fechamento}, definido no app). Nada foi buscado.`); return; }
@@ -109,7 +133,7 @@ async function main() {
   const q = new URLSearchParams({ establishment_code: String(cfg.codigo_estabelecimento), start_date: iso(ini), end_date: iso(hoje), status_type: "2" });
   if (cfg.codigo_filial) q.set("branch_code", String(cfg.codigo_filial));
   const url = BASE + "/v1/appointments/history?" + q;
-  const HDR = { "X-API-Key": cfg.appbarber_api_key, Accept: "application/json", "User-Agent": "GestaoBarberIA-Sync/1.5" };
+  const HDR = { "X-API-Key": cfg.appbarber_api_key, Accept: "application/json", "User-Agent": "GestaoBarberIA-Sync/" + VERSAO };
   if (process.argv.includes("--diagnostico")) {
     let ip = "?"; try { ip = (await (await fetch("https://api.ipify.org")).text()).trim(); } catch { /* sem IP */ }
     const k = String(cfg.appbarber_api_key);
