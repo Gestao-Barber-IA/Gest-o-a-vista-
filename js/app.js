@@ -661,7 +661,7 @@
       { r: 'avisos', t: 'Avisos e alterações', i: 'bell' },
     ] },
     { group: 'Apresentações', items: [
-      { r: 'apresentacao', t: 'Tela da loja', i: 'monitor' },
+      { r: 'apresentacao', t: 'Tela da loja', i: 'monitor', g: 1 },
       { r: 'fechamento', t: 'Fechamento do mês', i: 'clipboard', g: 1, a: 1 },
       { r: 'relatorios', t: 'Relatórios mensais', i: 'file' },
       { r: 'temas', t: 'Temas', i: 'palette', g: 1 },
@@ -6115,7 +6115,7 @@ Content-Type: application/json</pre>
       <header class="topbar">
         <button class="icon-btn" data-action="openDrawer" aria-label="Abrir menu">${icon('menu')}</button>
         <div class="topbar-title"><h1>${esc(title)}</h1><p>${esc(state.company.name || 'Gestão Barber IA')}</p></div>
-        <a class="icon-btn" href="#apresentacao" aria-label="Tela da loja" title="Tela da loja">${icon('monitor')}</a>
+        ${isGestor(user) ? `<a class="icon-btn" href="#apresentacao" aria-label="Tela da loja" title="Tela da loja">${icon('monitor')}</a>` : ''}
         <button class="icon-btn" data-action="fontSize" aria-label="Tamanho da letra" title="Tamanho da letra">${icon('type')}</button>
         <button class="icon-btn theme-btn" data-action="toggleTheme" aria-label="${getTheme() === 'light' ? 'Ativar modo escuro' : 'Ativar modo claro'}" title="${getTheme() === 'light' ? 'Modo escuro' : 'Modo claro'}">${icon(getTheme() === 'light' ? 'moon' : 'sun')}</button>
         ${(() => { const n = pending + unseenOvertakes(); return `<button class="icon-btn" data-action="notifOpen" aria-expanded="${!!ui.notifOpen}" aria-label="Notificações${n ? ': ' + n + ' novas' : ''}">${icon('bell')}${n ? `<span class="badge-dot">${n > 9 ? '9+' : n}</span>` : ''}</button>`; })()}

@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-11-tv-dono', date: '2026-11-11', title: 'Tela da loja só para o dono', items: [
+    ['melhoria', 'A Tela da loja (TV) saiu do menu e do topo do app dos profissionais. Continua disponível para o dono.'],
+  ] },
   { id: '2026-11-11-editar-excluir', date: '2026-11-11', title: 'Editar nome e excluir profissional', items: [
     ['novo', 'Em Adicionar profissional, o dono pode mudar o nome de cada profissional (útil para ficar igual ao do sistema de agenda).'],
     ['novo', 'Botão Excluir, com confirmação: apaga o profissional e todo o histórico dele. Para só tirar do ranking e guardar o histórico, continue usando Desativar.'],
