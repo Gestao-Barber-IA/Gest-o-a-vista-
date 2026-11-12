@@ -2610,7 +2610,7 @@ img { -webkit-user-drag: none; -webkit-touch-callout: none; }
 
 /* Tela da loja (TV): palco cinematográfico do pódio — holofotes, halo, névoa e piso espelhado (sem partículas) */
 .tv-lights { display: none; }
-.tv-full .tv-stage { background: none; border-radius: 0; overflow: hidden; padding-top: 3%; padding-bottom: 5%; }
+.tv-full .tv-stage { background: none; border-radius: 0; overflow: hidden; padding-top: 4.5%; padding-bottom: 5%; }
 .tv-full .tv-stage::before { display: none; }
 .tv-full .tv-stage .pd-fx { display: none; }
 .tv-full .tv-stage .podium-x { position: relative; z-index: 1; -webkit-box-reflect: below -2px linear-gradient(transparent 78%, rgba(255, 255, 255, 0.16)); }
@@ -2709,3 +2709,31 @@ html[data-pdl="escudo"] .tv-full .tv-stage .pd-row { padding-top: 21cqw; }
 .pd-float > *, .pd-card, .pd-frame, .pd-inner { min-width: 0; max-width: 100%; }
 .pd-title b.pd-t-long { font-size: max(9px, 2.6cqw); letter-spacing: 0; }
 .pd-title > span { max-width: 100%; }
+
+/* ---------- Modo leve da Tela da loja (navegador de Smart TV) ----------
+   Mantém o movimento (transform/opacity, que a TV desenha rápido) e tira o que pesa:
+   desfoque, sombras animadas, reflexo, mistura de cores e névoa. */
+html.tv-lite .tv *, html.tv-lite .tv *::before, html.tv-lite .tv *::after {
+  filter: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  mix-blend-mode: normal !important; -webkit-box-reflect: none !important; text-shadow: none !important; }
+html.tv-lite .tv { background: var(--bg); }
+html.tv-lite .tv :is(.pd-card, .pd-frame, .gd, .gd-ring, .tv-pz, .pd-fx span, .tl-glow, .tv-stage::before, .pd-photo, .pd-gem, .pd-inner::after, .pz-flame, .gd-eyebrow .ico, .pd-beam) { animation: none !important; }
+html.tv-lite .tv :is(.tl-fog, .tl-fog2, .tl-floor, .pd-fx, .gd::after, .tv-stage::before, .pd-beam) { display: none !important; }
+html.tv-lite .tv .gd, html.tv-lite .tv .tv-prize, html.tv-lite .tv .tv-pz, html.tv-lite .tv .pz-bar i { box-shadow: none !important; }
+html.tv-lite .tv .tl-beam { opacity: 0.55; }
+html.tv-lite .tv .tl-halo { background: radial-gradient(circle, rgba(255, 226, 150, 0.22), transparent 62%); }
+html.tv-lite .tv :is(.pd-float, .tl-beam, .tl-halo, .pd-crown, .gd-crown, .pz-rk, .tv-pz-bg) { will-change: transform; }
+html.tv-lite .tv .tv-pz-bg { animation-duration: 30s; }
+html.tv-lite .tv :is(.gd-crown, .pz-rk, .tv-pz-bg, .pd-crown .twinkle, .rk-now, .tv-body) { animation: none !important; }
+html.tv-lite .tv :is(.pd-float, .pd-crown) { animation-duration: 8s !important; }
+html.tv-lite .tv :is(.gd, .rank-row) { contain: paint; }
+html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, transparent 18%, #000 50%, transparent 82%); mask-image: linear-gradient(90deg, transparent 18%, #000 50%, transparent 82%); }
+
+/* Maior comanda com foto */
+.cm-list li { grid-template-columns: 56px minmax(0, 1fr) auto; }
+.cm-list li .cm-thumb { grid-row: 1; grid-column: 1; }
+.cm-list li .pl-who { grid-column: 2; }
+.cm-list li .icon-btn { grid-column: 3; grid-row: 1; }
+.cm-thumb { width: 56px; height: 56px; padding: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface-3, #222); cursor: zoom-in; }
+.cm-thumb .cm-ph { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pop-viewer figure .cm-ph { width: 100%; max-width: 100%; max-height: 70vh; object-fit: contain; border-radius: 12px; }
