@@ -2429,7 +2429,7 @@
       }
       if (f.key === 'planos' && planCat().length) {
         const n = (state.planSales || []).filter(v => v.barberId === b.id && v.date.slice(0, 7) === ym).length;
-        return `<div class="field"><span class="tm-flabel"><span class="tm-ft">${esc(f.label)}${tip(FIELD_TIP[f.key])}</span><span class="lock">${icon('idcard')} Pelos planos registrados</span></span>
+        return `<div class="field"><span class="tm-flabel"><span class="tm-ft">${esc(f.label)}${tip(FIELD_TIP[f.key])}</span><span class="lock">${icon('idcard')} Registrado pelos planos</span></span>
           <input class="input num" id="m-planos" value="${n}" readonly tabindex="-1"></div>`;
       }
       const fmtV = v => f.key.endsWith('Pct') ? nf2.format(v) + '%' : (f.step === '0.01' ? money2(v) : nf0.format(v));
