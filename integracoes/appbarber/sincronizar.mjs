@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSAO = "1.7";
+const VERSAO = "1.8";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const TESTE = process.argv.includes("--teste");
 const CARGA = process.argv.includes("--carga"); // carga inicial: lê todas as comandas no ritmo máximo permitido
@@ -194,6 +194,7 @@ async function main() {
       if (!d || d < iso(ini)) continue;
       for (const it of inv.itens) {
         if (!it.p) continue;
+        if (it.prod && consumo(it)) continue; // geladeira/bar: não é faturamento do profissional
         const x = add(nomeDe(it.p), d);
         x.fat += it.v; if (it.prod) x.prod += it.q; else x.serv += it.q;
         if (!it.prod && it.ini != null && it.fim > it.ini && it.fim - it.ini <= 600) x.int.push([it.ini, it.fim]);
@@ -233,9 +234,36 @@ async function main() {
   // Comandas: cada uma é lida UMA vez (1 chamada) e guardada em comandas.json. Elas têm os itens com o profissional,
   // o valor final (preço ajustado no caixa), serviços extras e produtos — o mesmo "Total realizado/vendido" da AppBarber.
   const cache = lerCache();
+
+  // Produtos: só contam no faturamento do profissional os produtos de salão/barbearia (pomada, shampoo, óleo…).
+  // Consumo de geladeira e bar (bebidas, comidas, doces) finalizado na comanda NÃO conta.
+  // A categoria vem do catálogo de produtos da AppBarber (1 chamada por dia, guardada em produtos.json).
+  const CAT = join(DIR, "produtos.json");
+  let cat = {}; try { cat = JSON.parse(readFileSync(CAT, "utf8")); } catch { /* primeira vez */ }
+  if (!TESTE && (!cat.lido || Date.now() - cat.lido > 86400000)) {
+    const rp = await getExato(`${BASE}/v1/products?establishment_code=${encodeURIComponent(cfg.codigo_estabelecimento)}`, HDR).catch(() => null);
+    if (rp && rp.ok) {
+      const itens = (JSON.parse(rp.text).data) || [];
+      cat = { lido: Date.now(), p: Object.fromEntries(itens.filter((x) => x.item_code).map((x) => [String(x.item_code), { c: String(x.category_code ?? ""), n: String(x.item_description || "").slice(0, 60) }])) };
+      try { writeFileSync(CAT, JSON.stringify(cat)); } catch { /* opcional */ }
+    }
+  }
+  const BAR = /\b(cerveja|chopp?|heineken|brahma|skol|budweiser|stella|corona|amstel|spaten|itaipava|antarctica|devassa|eisenbahn|long ?neck|lata|refri|refrigerante|coca|pepsi|guaran[aá]|fanta|sprite|soda|t[oô]nica|[aá]gua mineral|[aá]gua com g[aá]s|[aá]gua sem g[aá]s|suco|ch[aá] |energ[eé]tico|red ?bull|monster|gatorade|isot[oô]nico|whisk(e)?y|vodka|gin|rum|cacha[cç]a|tequila|dose|drink|caipirinha|vinho|espumante|caf[eé]|capuccino|cappuccino|achocolatado|salgad|salgadinho|chips|amendoim|bala|chiclete|chocolate|bombom|barra de cereal|biscoito|bolacha|lanche|sandu[ií]che|pastel|cigarro|gelo)\b/i;
+  const nomeProd = (it) => (it.pc && cat.p && cat.p[it.pc] && cat.p[it.pc].n) || it.nm || "";
+  // Categoria é "consumo" quando a maioria dos produtos dela tem nome de bebida/comida.
+  const catConsumo = {};
+  for (const x of Object.values(cat.p || {})) { const k = x.c; if (!k) continue; const o = catConsumo[k] || (catConsumo[k] = { bar: 0, tot: 0, ex: [] }); o.tot++; if (BAR.test(x.n)) o.bar++; if (o.ex.length < 3) o.ex.push(x.n); }
+  const incluir = new Set((cfg.categorias_salao || []).map(String)), excluir = new Set((cfg.categorias_consumo || []).map(String));
+  const consumo = (it) => {
+    const c = it.pc && cat.p && cat.p[it.pc] ? cat.p[it.pc].c : "";
+    if (c && incluir.has(c)) return false;
+    if (c && excluir.has(c)) return true;
+    if (c && catConsumo[c] && catConsumo[c].bar * 2 >= catConsumo[c].tot) return true;
+    return BAR.test(nomeProd(it));
+  };
   const codigos = [...new Set(lista.map((a) => a.invoice_code).filter((c) => c && Number(c) > 0).map(String))];
   // Comanda ainda não paga é relida no máximo 1 vez por hora (e depois que o dia vira, uma última vez).
-  let faltam = codigos.filter((c) => !cache[c] || (cache[c].itens && !cache[c].h) || (!cache[c].final && (Date.now() - (cache[c].lida || 0) > 3600000 || (cache[c].d && cache[c].d < iso(hoje)))));
+  let faltam = codigos.filter((c) => !cache[c] || (cache[c].itens && !cache[c].h) || (cache[c].h !== 2 && (cache[c].itens || []).some((it) => it.prod)) || (!cache[c].final && (Date.now() - (cache[c].lida || 0) > 3600000 || (cache[c].d && cache[c].d < iso(hoje)))));
   // Só lê as comandas do mês atual (o ranking é por mês). Nos 3 primeiros dias, também as do mês anterior,
   // para o fechamento sair com as comandas finais. Os outros dias ficam com o valor do agendamento.
   const diaDe = new Map(lista.map((a) => [String(a.invoice_code), dia(a.scheduling_start) || ""]));
@@ -262,9 +290,9 @@ async function main() {
     const pago = num(inv.invoice_payed_value) > 0 || !!inv.payment_type_code;
     const antiga = d && d < iso(hoje);
     cache[c] = {
-      d, cli: String(inv.person_code || inv.person_name || c), final: pago || !!antiga, lida: Date.now(), h: 1,
+      d, cli: String(inv.person_code || inv.person_name || c), final: pago || !!antiga, lida: Date.now(), h: 2,
       itens: (inv.items || []).filter((it) => Number(it.product_is_tip) !== 1 && Number(it.product_is_cashback) !== 1).map((it) => ({
-        p: String(it.employee_name || "").trim(), ag: it.scheduling_code ? String(it.scheduling_code) : undefined, ini: minutos(it.scheduling_start) ?? undefined, fim: minutos(it.scheduling_end) ?? undefined, v: num(it.item_value), q: Number(it.item_quantity) || 1, prod: !!it.product_code && !it.service_code,
+        p: String(it.employee_name || "").trim(), ag: it.scheduling_code ? String(it.scheduling_code) : undefined, ini: minutos(it.scheduling_start) ?? undefined, fim: minutos(it.scheduling_end) ?? undefined, v: num(it.item_value), q: Number(it.item_quantity) || 1, prod: !!it.product_code && !it.service_code, pc: it.product_code ? String(it.product_code) : undefined, nm: it.product_description ? String(it.product_description).slice(0, 60) : undefined,
       })),
     };
     lidas++;
@@ -287,6 +315,12 @@ async function main() {
     for (const i of itens) { const t = tot.get(i.barbeiro) || { fat: 0, serv: 0, prod: 0, h: 0, dias: 0 }; t.fat += i.faturamento; t.serv += i.servicos; t.prod += i.venda_produtos; t.h += i.horas_ocupadas || 0; t.dias++; tot.set(i.barbeiro, t); }
     for (const [n, t] of tot) console.log(`  ${n}: R$ ${t.fat.toFixed(2)} · ${t.serv} serviços · ${t.prod} produtos · ${t.h.toFixed(1)} h atendidas · ${t.dias} dias`);
     if (faltam.length) console.log(`  (${faltam.length} comandas ainda não lidas: nelas vale o valor do agendamento até a sincronização ler.)`);
+    const cats = Object.entries(catConsumo);
+    if (cats.length) {
+      console.log("  Categorias de produto (consumo de geladeira/bar NÃO conta no faturamento do profissional):");
+      for (const [k, o] of cats) { const sim = excluir.has(k) || (!incluir.has(k) && o.bar * 2 >= o.tot); console.log(`   - categoria ${k}: ${sim ? "CONSUMO (não conta)" : "salão (conta)"} · ex.: ${o.ex.join(", ")}`); }
+      console.log('  Para corrigir uma categoria, use no config.json: "categorias_salao": ["código"] ou "categorias_consumo": ["código"].');
+    }
     log("Modo teste: nada foi enviado.");
     return;
   }

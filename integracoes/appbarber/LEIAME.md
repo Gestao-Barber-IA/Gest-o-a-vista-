@@ -9,9 +9,9 @@ Depois envia ao Gestão Barber IA, por profissional e por dia:
 
 | AppBarber | Gestão Barber IA |
 |---|---|
-| total dos itens da comanda do profissional (serviços + produtos, valor final do caixa, sem gorjeta) | Faturamento (igual ao "Total realizado/vendido" da AppBarber) |
+| total dos itens da comanda do profissional (serviços + produtos de salão/barbearia, valor final do caixa, sem gorjeta e sem consumo de geladeira/bar) | Faturamento (igual ao "Total realizado/vendido" da AppBarber) |
 | serviços da comanda | Serviços realizados |
-| produtos da comanda (quantidade) | Venda de produtos |
+| produtos de salão/barbearia da comanda (quantidade) | Venda de produtos |
 | clientes diferentes atendidos no dia | Clientes atendidos |
 | maior comanda do profissional no dia | Maior comanda do mês |
 | horas de atendimento (início e fim de cada serviço da comanda; horários sobrepostos contam uma vez) | Taxa de ocupação (o app divide pelas horas da agenda definidas em Configurações) |
@@ -62,3 +62,12 @@ O resultado de cada execução fica em `sincronizacao.log`, na mesma pasta.
 - **Gestão respondeu 402:** a integração por API é dos planos pagos, com a assinatura em dia.
 
 **Segurança:** o `config.json` guarda as chaves. Não envie esse arquivo por WhatsApp ou e-mail.
+
+## Consumo de geladeira e bar não conta
+Bebidas, comidas e doces finalizados na comanda do profissional (cerveja, refrigerante, água, café, chiclete…)
+**não entram** no faturamento nem na venda de produtos dele. Só contam os produtos de salão/barbearia (pomada,
+shampoo, óleo…). O programa usa a **categoria** de cada produto no catálogo da AppBarber (1 chamada por dia):
+uma categoria em que a maioria dos produtos tem nome de bebida ou comida é tratada como consumo.
+
+O `testar.bat` mostra como cada categoria foi classificada. Para corrigir, use no `config.json`:
+`"categorias_salao": ["código"]` (sempre conta) ou `"categorias_consumo": ["código"]` (nunca conta).
