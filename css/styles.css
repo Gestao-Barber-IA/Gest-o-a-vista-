@@ -2535,3 +2535,10 @@ img { -webkit-user-drag: none; -webkit-touch-callout: none; }
 .gd-eyebrow .ico { color: #ffd36b; animation: gd-twinkle 2.4s ease-in-out infinite; }
 @keyframes gd-twinkle { 0%, 100% { opacity: 0.6; transform: scale(0.9) rotate(0deg); } 50% { opacity: 1; transform: scale(1.15) rotate(12deg); } }
 @media (prefers-reduced-motion: reduce) { html:not(.tv-motion) :is(.gd, .gd::before, .gd::after, .gd-ring, .gd-eyebrow .ico) { animation: none !important; } }
+
+/* Tela da loja na TV: Guardiões e Alertas ocupando a tela inteira */
+.tv-grid .tv-body { display: grid; align-content: start; }
+.tv-grid :is(.al-grid, .gd-grid) { grid-auto-rows: auto; align-content: stretch; align-items: stretch; }
+.tv-grid .al-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.tv-grid .al { align-items: center; }
+.tv-grid .gd { align-content: center; }

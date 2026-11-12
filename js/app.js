@@ -6064,7 +6064,7 @@ Content-Type: application/json</pre>
   function fitTV() {
     const tv = root.querySelector('.tv'), box = tv && tv.querySelector('.tv-fit');
     if (!box) return;
-    if (fitTVSplit(tv, box)) return;
+    if (fitTVSplit(tv, box) || fitTVGrid(tv, box)) return;
     const W = window.innerWidth, H = window.innerHeight;
     const on = W >= 900 && W > H;
     tv.classList.toggle('tv-fitted', on);
@@ -6140,6 +6140,39 @@ Content-Type: application/json</pre>
       }
       list.style.zoom = zl; list.style.width = (w / zl) + 'px';
     }
+    return true;
+  }
+  // Telas de cartões (Guardiões e Alertas) na TV: ocupam a tela inteira. A página é montada numa largura fixa e
+  // ampliada até a largura da TV; a grade ganha um zoom próprio para os cartões preencherem a altura (letra maior).
+  function fitTVGrid(tv, box) {
+    const grid = box.querySelector('.al-grid, .gd-grid'), W = window.innerWidth, H = window.innerHeight;
+    tv.classList.remove('tv-grid');
+    if (grid) { grid.style.zoom = grid.style.width = grid.style.height = ''; grid.style.removeProperty('--gr-rows'); }
+    if (!grid || W < 900 || W <= H || !(CSS.supports && CSS.supports('zoom', '2'))) return false;
+    tv.classList.add('tv-fitted', 'tv-full', 'tv-grid');
+    const cs = getComputedStyle(tv), pt = parseFloat(cs.paddingTop), pb = parseFloat(cs.paddingBottom), pl = parseFloat(cs.paddingLeft), pr = parseFloat(cs.paddingRight);
+    const V = 1600, z = (W - pl - pr) / V, hV = (H - pt - pb) / z;
+    box.style.transform = ''; box.style.zoom = z; box.style.width = V + 'px'; box.style.height = hV + 'px';
+    box.style.left = (pl / z) + 'px'; box.style.top = (pt / z) + 'px';
+    if (Math.abs(box.getBoundingClientRect().left - pl) > 2) { box.style.left = pl + 'px'; box.style.top = pt + 'px'; }
+    // Espaço da grade = do topo dela até as bolinhas de navegação.
+    const dots = box.querySelector('.tv-dots'), gTop = grid.getBoundingClientRect().top;
+    const room = (dots ? dots.getBoundingClientRect().top : box.getBoundingClientRect().bottom) - gTop - 18 * z;
+    const w = grid.offsetWidth;
+    let zg = 1;
+    for (let k = 0; k < 5; k++) {
+      grid.style.zoom = zg; grid.style.width = (w / zg) + 'px';
+      const h = grid.getBoundingClientRect().height; if (!h) break;
+      const nz = Math.max(0.6, Math.min(1.8, zg * room / h)); if (Math.abs(nz - zg) < 0.01) break; zg = nz;
+    }
+    grid.style.zoom = zg; grid.style.width = (w / zg) + 'px';
+    // Garantia: se algum cartão ainda passar do espaço, diminui um pouco até caber.
+    const fundo = () => Math.max(...[...grid.children].map(c => c.getBoundingClientRect().bottom));
+    for (let k = 0; k < 12 && fundo() > gTop + room + 1 && zg > 0.6; k++) { zg *= 0.97; grid.style.zoom = zg; grid.style.width = (w / zg) + 'px'; }
+    // Estica as linhas até o fim do espaço (cartões da mesma altura, sem sobra embaixo).
+    const rows = Math.max(1, getComputedStyle(grid).gridTemplateRows.split(' ').length);
+    grid.style.setProperty('--gr-rows', rows);
+    grid.style.height = (room / (z * zg)) + 'px';
     return true;
   }
   window.addEventListener('resize', () => { if (location.hash === '#apresentacao') fitTV(); });
