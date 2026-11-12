@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-13-chegada', date: '2026-11-13', title: 'Horário de chegada marcado pela gestão', items: [
+    ['melhoria', 'Tarefas como Horário de chegada só podem ser marcadas pelo dono, pelo gestor ou pelo líder (nunca pelo próprio profissional). Um toque já marca, aprovada, sem foto.'],
+    ['melhoria', 'O dono escolhe isso em cada tarefa do checklist: "Só o dono, o gestor ou o líder marcam".'],
+  ] },
   { id: '2026-11-13-checklist-botoes', date: '2026-11-13', title: 'Botões − e + no Checklist Agenda Cheia', items: [
     ['melhoria', 'Cada tarefa do checklist voltou a ter os botões − e + com as bolinhas de cada unidade. O + abre a prova da próxima unidade; o − tira a última que ainda não foi aprovada. Tarefas de uma vez só têm o botão Marcar como feito.'],
   ] },

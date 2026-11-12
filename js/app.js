@@ -4783,12 +4783,13 @@ Content-Type: application/json</pre>
   // Quem confere: o dono, ou o gestor de área para as pessoas dele (nunca a própria prova).
   function canReview(bid) { const u = currentUser(); if (!u) return false; if (isGestor(u)) return true; return u.barberId !== bid && (areaIds(u, ['gestor']).has(bid) || myExtras().review); }
   const popPendingCount = (bid, ym) => (state.pop || []).filter(r => r.barberId === bid && r.day.startsWith(ym) && r.day.length === 10).reduce((a, r) => a + popPendingOf(bid, r.day), 0);
-  const popPeople = () => state.barbers.filter(b => b.active !== false && (canEditB(b.id) || canReview(b.id) || (currentUser() || {}).barberId === b.id));
+  const popPeople = () => state.barbers.filter(b => b.active !== false && (canEditB(b.id) || canReview(b.id) || (currentUser() || {}).barberId === b.id || (!isGestor(currentUser()) && accessOf((currentUser() || {}).barberId) === 'lider' && popCfg().items.some(popGest))));
   const canPopEdit = bid => canEditB(bid) || (currentUser() || {}).barberId === bid;
 
   const EV_TXT = { pendente: 'Aguardando conferência', aprovado: 'Aprovada', recusado: 'Recusada' };
   const PROOF_DAYS = 7;
   function proofImg(e, cls = '') {
+    if (e.noPhoto) return `<span class="pop-ph pop-ph-none ${cls}">${icon('check')}<small>Marcado pela gestão</small></span>`;
     if (e.photoGone) return `<span class="pop-ph pop-ph-none ${cls}">${icon('clock')}<small>Foto apagada após ${PROOF_DAYS} dias</small></span>`;
     if (e.photo) return `<img class="pop-ph ${cls}" src="${esc(e.photo)}" alt="Prova" loading="lazy">`;
     if (e.path) return `<img class="pop-ph ${cls}" data-proof="${esc(e.path)}" alt="Prova" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">`;
@@ -4796,7 +4797,12 @@ Content-Type: application/json</pre>
   }
   // Botões − e + de cada tarefa (com as bolinhas de cada unidade). O + abre a prova da próxima unidade;
   // o − tira a última unidade que ainda não foi aprovada. "Marcar como feito" nas tarefas de uma vez só.
+  // Tarefa "só da gestão" (ex.: horário de chegada): marcada pelo dono, gestor ou líder, nunca pelo próprio profissional.
+  // Padrão: ligada nas tarefas de "Marcar como feito"; o dono muda em cada tarefa do checklist.
+  const popGest = it => it.gest !== undefined ? !!it.gest : it.type === 'check';
+  const popMarkOk = (it, bid) => { if (!popGest(it)) return canPopEdit(bid); const u = currentUser(); return !!u && (isGestor(u) || (u.barberId !== bid && (canEditB(bid) || accessOf(u.barberId) === 'lider'))); };
   function popStepper(it, list, t, bid, mayAdd) {
+    if (!popMarkOk(it, bid)) return `<p class="muted pop-gest">${icon('lock')} Marcado pelo dono, gestor ou líder.</p>`;
     const me = currentUser(), rev = canReview(bid);
     let delI = -1;
     for (let i = list.length - 1; i >= 0; i--) { const e = list[i]; if (e.status === 'pendente' && (!e.byUser || !me || e.byUser === me.id || rev)) { delI = i; break; } }
@@ -4848,7 +4854,7 @@ Content-Type: application/json</pre>
       <p class="pop-ist num"><b>${ok}/${t}</b> aprovadas${pend ? ` · <span class="pend">${pend} aguardando conferência (+${fmtPts(ppend)} pts)</span>` : ''}</p>
       ${list.length ? `<ul class="pop-evs">${evs}</ul>` : ''}
       ${composer}
-      ${!draft && canPopEdit(bid) ? popStepper(it, list, t, bid, mayAdd) : ''}
+      ${!draft && (canPopEdit(bid) || popMarkOk(it, bid)) ? popStepper(it, list, t, bid, popGest(it) ? popMarkOk(it, bid) && live < t : mayAdd) : ''}
       ${!canPopEdit(bid) && !list.length ? '<p class="muted">Sem registro.</p>' : ''}
       ${it.type === 'phones' ? `<label class="field"><span class="tm-flabel">Texto da mensagem enviada (prompt)</span><textarea class="input pop-ta" id="pm-${esc(it.id)}" data-pop="msg" data-it="${esc(it.id)}" placeholder="Cole aqui a mensagem ou abordagem que você enviou" ${canPopEdit(bid) ? '' : 'readonly'}>${esc(rec && rec.msg ? rec.msg[it.id] || '' : '')}</textarea></label>` : ''}
       <label class="field"><span class="tm-flabel">Resultado / observação por pessoa (opcional)</span><textarea class="input pop-ta" id="pn-${esc(it.id)}" data-pop="note" data-it="${esc(it.id)}" placeholder="Ex.: João agendou sábado, Pedro pediu preço" ${canPopEdit(bid) ? '' : 'readonly'}>${esc(rec && rec.notes ? rec.notes[it.id] || '' : '')}</textarea></label>
@@ -4916,6 +4922,7 @@ Content-Type: application/json</pre>
         <label class="field"><span class="tm-flabel">Descrição</span><input class="input" id="pei-d-${i}" value="${esc(it.desc || '')}" data-popitem="desc" data-i="${i}"></label>
         <div class="grid-2">${it.type === 'check' ? '' : `<label class="field"><span class="tm-flabel">Meta (quantidade)</span><input class="input num" type="number" min="1" id="pei-m-${i}" value="${it.target}" data-popitem="target" data-i="${i}"></label>`}
         <label class="field"><span class="tm-flabel">Pontos</span><input class="input num" type="number" min="0" step="0.5" id="pei-p-${i}" value="${it.pts}" data-popitem="pts" data-i="${i}"></label></div>
+        <label class="check"><input type="checkbox" data-popitem="gest" data-i="${i}" ${popGest(it) ? 'checked' : ''}><span><b>Só o dono, o gestor ou o líder marcam</b><small>O profissional vê a tarefa, mas não consegue marcar (ex.: horário de chegada).</small></span></label>
         <div class="btn-row"><button class="btn btn-sm" data-action="popItemMove" data-i="${i}" data-d="-1" ${i ? '' : 'disabled'}>${icon('up')} Subir</button>
           <button class="btn btn-sm" data-action="popItemMove" data-i="${i}" data-d="1" ${i < c.items.length - 1 ? '' : 'disabled'}>${icon('down')} Descer</button>
           <button class="btn btn-sm btn-danger" data-action="popItemDel" data-i="${i}">${ui.confirm === 'pitem' + i ? 'Confirmar exclusão' : 'Excluir'}</button></div>
@@ -6638,7 +6645,16 @@ Content-Type: application/json</pre>
     popPick(el) { ui.popBarber = el.dataset.id; ui.confirm = null; ui.popDraft = null; render(); },
     popDay(el) { ui.popDay = Number(el.dataset.d); ui.confirm = null; ui.popDraft = null; render(); },
     popAddOpen(el) {
-      if (!canPopEdit(ui.popBarber)) return;
+      const it0 = popCfg().items.find(x => x.id === el.dataset.it);
+      if (it0 && popGest(it0) ? !popMarkOk(it0, ui.popBarber) : !canPopEdit(ui.popBarber)) return;
+      // Tarefa da gestão (ex.: horário de chegada): um toque já marca, aprovada, sem precisar de foto.
+      if (it0 && popGest(it0)) {
+        const day = `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`, u = currentUser(), r = popRecW(ui.popBarber, day);
+        const l = r.ev[it0.id] = Array.isArray(r.ev[it0.id]) ? r.ev[it0.id] : [];
+        if (l.filter(GB.evLive).length >= (it0.type === 'check' ? 1 : Math.max(1, Number(it0.target) || 1))) return;
+        l.push({ id: uid('e_'), desc: '', at: Date.now(), by: 'gestao', byUser: u ? u.id : null, status: 'aprovado', reviewedBy: u ? u.id : null, reviewedAt: Date.now(), noPhoto: true });
+        save(); toast(`${it0.title}: marcado.`); render(); return;
+      }
       ui.popDraft = { it: el.dataset.it, bid: ui.popBarber, photo: null, phone: '', desc: '' }; ui.confirm = null; render();
       setTimeout(() => document.getElementById('pi-' + el.dataset.it)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 40);
     },
@@ -6646,6 +6662,7 @@ Content-Type: application/json</pre>
     async popConfirm() {
       const d = ui.popDraft; if (!d || d.busy) return;
       const it = popCfg().items.find(x => x.id === d.it), msg = $('#pd-msg');
+      if (it && popGest(it) && !popMarkOk(it, d.bid)) return;
       if (!d.photo) { if (msg) msg.textContent = 'Anexe a foto ou o print para confirmar.'; return; }
       if (it.type === 'phones' && !GB.validPhone(d.phone)) { if (msg) msg.textContent = 'Digite o telefone completo do cliente, com DDD.'; return; }
       const day = `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`, u = currentUser();
@@ -7744,7 +7761,7 @@ Content-Type: application/json</pre>
     if (pc) {
       const c = popCfgW(), v = pc.value;
       if (pc.dataset.popcfg) { const k = pc.dataset.popcfg; c[k] = k === 'minProfit' ? Number(v) || 0 : k === 'lose' ? v.split('\n').map(x => x.trim()).filter(Boolean) : v; }
-      if (pc.dataset.popitem) { const it = c.items[Number(pc.dataset.i)], k = pc.dataset.popitem; it[k] = ['target', 'pts'].includes(k) ? Math.max(k === 'target' ? 1 : 0, Number(v) || 0) : v; if (k === 'type' && v === 'check') it.target = 1; }
+      if (pc.dataset.popitem) { const it = c.items[Number(pc.dataset.i)], k = pc.dataset.popitem; it[k] = k === 'gest' ? pc.checked : ['target', 'pts'].includes(k) ? Math.max(k === 'target' ? 1 : 0, Number(v) || 0) : v; if (k === 'type' && v === 'check') it.target = 1; }
       if (pc.dataset.poplevel) { const l = c.levels[Number(pc.dataset.i)], k = pc.dataset.poplevel; l[k] = k === 'name' ? v : k === 'value' ? (v === '' ? null : Number(v)) : Number(v) || 0; }
       save(); render(); return;
     }
