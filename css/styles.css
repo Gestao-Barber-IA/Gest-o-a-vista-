@@ -2542,3 +2542,32 @@ img { -webkit-user-drag: none; -webkit-touch-callout: none; }
 .tv-grid .al-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .tv-grid .al { align-items: center; }
 .tv-grid .gd { align-content: center; }
+
+/* Início · Meta geral da loja: foto do prêmio em destaque + progresso */
+.pz-card { padding: 0; overflow: hidden; border: 1.5px solid rgba(214, 180, 106, 0.75); box-shadow: 0 0 28px rgba(214, 180, 106, 0.18); margin-bottom: 18px; }
+.pz-img { position: relative; aspect-ratio: 4 / 3; max-height: 68vh; background: #0d0d10; }
+@media (max-width: 640px) { .pz-img { aspect-ratio: 1 / 1; } }
+.pz-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pz-img::after { content: ''; position: absolute; inset: 55% 0 0; background: linear-gradient(transparent, rgba(12, 12, 14, 0.85)); }
+.pz-badge { position: absolute; left: 14px; top: 14px; z-index: 1; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: rgba(12, 12, 14, 0.72); backdrop-filter: blur(6px); color: var(--accent); font-family: var(--font-display); font-weight: 800; font-size: 0.74rem; letter-spacing: 0.14em; text-transform: uppercase; }
+.pz-badge .ico, .pz-eye .ico { width: 16px; height: 16px; }
+.pz-body { display: grid; gap: 6px; padding: 12px 16px 14px; }
+.pz-eye { margin: 0; display: flex; align-items: center; gap: 8px; color: var(--accent); font-family: var(--font-display); font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; font-size: 0.8rem; }
+.pz-t { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: clamp(1.3rem, 4.4vw, 2rem); line-height: 1.05; text-transform: uppercase; }
+.pz-d { margin: 0; display: flex; align-items: center; gap: 8px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+.pz-d .ico { width: 20px; height: 20px; flex: none; }
+.pz-bar { position: relative; height: 14px; border-radius: 999px; background: var(--surface-3, #2a2a30); overflow: hidden; margin-top: 4px;
+  background-image: linear-gradient(90deg, transparent calc(25% - 1px), rgba(0, 0, 0, 0.45) 25%, transparent calc(25% + 2px), transparent calc(50% - 1px), rgba(0, 0, 0, 0.45) 50%, transparent calc(50% + 2px), transparent calc(75% - 1px), rgba(0, 0, 0, 0.45) 75%, transparent calc(75% + 2px)); }
+.pz-bar i { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: linear-gradient(90deg, var(--accent-strong, #b8913f), var(--accent), #fff1c9); box-shadow: 0 0 14px var(--accent-glow, rgba(214, 180, 106, 0.4)); min-width: 16px; }
+.pz-bar i::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent); animation: pz-shine 2.6s ease-in-out infinite; }
+@keyframes pz-shine { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+.pz-foot { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 0.86rem; }
+.pz-foot span { color: var(--fg-soft, #c9c9cf); }
+.pz-left { margin: 0; color: var(--muted); font-size: 0.82rem; }
+.pz-done { border-color: var(--money, #2ecc71); box-shadow: 0 0 34px rgba(46, 204, 113, 0.3); }
+.pz-note { margin: 0; color: var(--muted); }
+.pz-edit { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: grid; gap: 10px; margin: 6px 0; }
+.pz-edit legend { padding: 0 6px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.pz-edit-row { display: flex; align-items: center; gap: 12px; }
+.pz-thumb { width: 96px; height: 60px; border-radius: 10px; object-fit: cover; display: grid; place-items: center; background: var(--surface-2); border: 1px solid var(--line); }
+@media (prefers-reduced-motion: reduce) { html:not(.tv-motion) .pz-bar i::after { animation: none; } }

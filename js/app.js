@@ -1263,6 +1263,35 @@
     document.querySelectorAll('[data-sus-end]').forEach(el => { const t = suspenseLeft({ end: el.dataset.susEnd }); if (t) el.textContent = t; else render(); });
   }, 30000);
 
+  // ---------- Meta geral da loja (Início): foto do prêmio em destaque + progresso ----------
+  function prizeEditor() {
+    const p = state.prize || {}, ks = Object.keys(houseGoalsFor(curYm()));
+    return `<fieldset class="pz-edit"><legend>${icon('gift')} Prêmio da meta (aparece no Início de toda a equipe)</legend>
+      <div class="pz-edit-row">${p.img ? `<img class="pz-thumb" src="${esc(p.img)}" alt="Foto do prêmio">` : '<span class="pz-thumb pz-empty">' + icon('camera') + '</span>'}
+        <label class="btn btn-sm" style="cursor:pointer">${icon('camera')} ${p.img ? 'Trocar foto' : 'Enviar foto do prêmio'}<input type="file" accept="image/*" hidden data-change="prizeImg"></label></div>
+      <label class="field"><span>Nome do prêmio</span><input class="input" maxlength="60" value="${esc(p.t || '')}" placeholder="Ex.: Praia" data-change="prizeField" data-k="t"></label>
+      <label class="field"><span>Descrição</span><input class="input" maxlength="120" value="${esc(p.d || '')}" placeholder="Ex.: 5 dias na praia de Ubatuba" data-change="prizeField" data-k="d"></label>
+      <label class="field"><span>Meta que libera o prêmio</span><select class="input" data-change="prizeField" data-k="k">${(ks.length ? ks : ['fat']).map(k => `<option value="${k}" ${(p.k || 'fat') === k ? 'selected' : ''}>${esc(HG_LABEL[k])}</option>`).join('')}</select></label>
+    </fieldset>`;
+  }
+  function prizeCard(user) {
+    const p = state.prize; if (!p || (!p.img && !p.t)) return '';
+    const ym = curYm(), k = p.k || 'fat', goal = houseGoalsFor(ym)[k];
+    if (!goal) return isGestor(user) ? `<div class="card pz-card pz-nogoal">${p.img ? `<div class="pz-img"><img src="${esc(p.img)}" alt=""></div>` : ''}<div class="pz-body"><p class="pz-eye">${icon('trophy')} Meta geral da loja</p><h2 class="pz-t">${esc(p.t || 'Prêmio')}</h2><p class="pz-note">Cadastre a meta de ${esc(HG_LABEL[k].toLowerCase())} do mês em Performance da empresa › Editar metas para mostrar o progresso.</p></div></div>` : '';
+    const v = houseTotals(ym).vals[k] || 0, pct = Math.max(0, Math.min(100, v / goal * 100)), done = v >= goal;
+    const lbl = HG_LABEL[k].replace(' total', '').replace(' da casa', '');
+    return `<section class="card pz-card ${done ? 'pz-done' : ''}">
+      ${p.img ? `<div class="pz-img"><img src="${esc(p.img)}" alt="${esc(p.t || 'Prêmio')}"><span class="pz-badge">${icon('trophy')} Meta geral da loja</span></div>` : ''}
+      <div class="pz-body">
+        ${p.img ? '' : `<p class="pz-eye">${icon('trophy')} Meta geral da loja</p>`}
+        <h2 class="pz-t">${esc(p.t || 'Prêmio da meta')}</h2>
+        ${p.d ? `<p class="pz-d">${icon('gift')} ${esc(p.d)}</p>` : ''}
+        <div class="pz-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(pct)}"><i style="width:${pct.toFixed(1)}%"></i></div>
+        <div class="pz-foot"><b>${done ? '🎉 Meta batida!' : `${nf0.format(Math.floor(pct))}% batido`}</b><span>${esc(lbl)}: ${hgFmt(k, v)} de ${hgFmt(k, goal)}</span></div>
+        ${done ? '' : `<p class="pz-left">Faltam <b>${hgFmt(k, goal - v)}</b> para o prêmio.</p>`}
+      </div>
+    </section>`;
+  }
   function pageInicio(user) {
     const R = computeRanking(rkState(), range());
     const w = darkFor(range());
@@ -1272,6 +1301,7 @@
       ${periodBar()}
       ${unitBar()}
       ${isGestor(user) ? suspenseNote() + gestorGuide() : ''}
+      ${prizeCard(user)}
       ${monthOnlyData(R) ? `<div class="card week-note"><p>${icon('help')}<span>Os resultados lançados à mão são <b>totais do mês</b>, por isso não aparecem na visão por semana. A Semana mostra só resultados diários (da integração ou do checklist).</span></p>
         <button class="btn btn-primary btn-sm" data-action="period" data-period="mes">Ver o mês</button></div>` : ''}
       <div class="home-cols">
@@ -3247,6 +3277,7 @@
           <label class="field hg-month"><span>Mês das metas</span><select class="input" name="hgYm" data-change="hgYm">${tgtOpts.map(o => `<option value="${o}" ${o === tgt ? 'selected' : ''}>${ymLabel(o).replace(' de ', '/')}</option>`).join('')}</select></label>
           <div class="grid-2">${HG_FIELDS.map(([k, l, st]) => { const sg = sugg(k); return `<label class="field"><span>${l}</span><input class="input num" type="number" min="0" step="${st}" name="${k}" id="hg-${k}" value="${isNum(tg[k]) ? tg[k] : ''}" placeholder="${sg ? 'Sugestão: ' + (st === '1' ? Math.round(sg) : Math.round(sg * 100) / 100) : ''}"></label>`; }).join('')}</div>
           <label class="ind-on"><input type="checkbox" name="dflt" checked> Usar estas metas também nos meses seguintes</label>
+          ${prizeEditor()}
           <p class="form-msg" data-msg></p>
           <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar metas</button><button class="btn" type="button" data-action="hgEdit">Cancelar</button></div>
         </form>
@@ -7364,6 +7395,14 @@ Content-Type: application/json</pre>
       } catch (e) {
         toast(/bucket|not found|policy|mime|row-level/i.test(String(e && e.message)) ? 'O armazenamento de músicas ainda não foi ativado no servidor.' : (e && e.message) || 'Não foi possível enviar a música.');
       }
+    },
+    async prizeImg(el) {
+      if (!isGestor(currentUser()) || !el.files[0]) return;
+      try { const p = { ...(state.prize || {}) }; p.img = await storeImage(await readImage(el.files[0], 1280, 0.85), 'premio', p.img); state.prize = p; save(); toast('Foto do prêmio salva.'); render(); } catch (e) { toast(e.message); }
+    },
+    prizeField(el) {
+      if (!isGestor(currentUser())) return;
+      const p = { ...(state.prize || {}) }; p[el.dataset.k] = el.value.trim().slice(0, el.dataset.k === 'd' ? 120 : 60); state.prize = p; save();
     },
     async companyLogo(el) {
       try { state.company.logo = await storeImage(await readImage(el.files[0], 512, 0.9), 'logo', state.company.logo); save(); toast('Logo atualizado.'); render(); } catch (e) { toast(e.message); }
