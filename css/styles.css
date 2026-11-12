@@ -2496,3 +2496,12 @@ img { -webkit-user-drag: none; -webkit-touch-callout: none; }
 .oc-row .grid-2 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 @media (max-width: 560px) { .oc-row .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 #horarios { scroll-margin-top: 90px; }
+
+/* Tela da loja na TV: pódio + ranking ocupando a tela inteira */
+.tv-full .tv-fit { display: flex; flex-direction: column; gap: 18px; }
+.tv-full :is(.tv-head, .tv-body) { max-width: none; }
+.tv-full .tv-body { flex: 1; min-height: 0; animation: none; display: flex; flex-direction: column; }
+.tv-full .tv-split { flex: 1; min-height: 0; grid-template-columns: var(--pdw, 1.15fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); align-items: stretch; }
+.tv-full .tv-split > .tv-panel { align-content: start; overflow: hidden; }
+.tv-full .tv-split > .tv-panel:first-child { align-content: center; }
+.tv-full .tv-dots { flex: none; }

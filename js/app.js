@@ -6064,6 +6064,7 @@ Content-Type: application/json</pre>
   function fitTV() {
     const tv = root.querySelector('.tv'), box = tv && tv.querySelector('.tv-fit');
     if (!box) return;
+    if (fitTVSplit(tv, box)) return;
     const W = window.innerWidth, H = window.innerHeight;
     const on = W >= 900 && W > H;
     tv.classList.toggle('tv-fitted', on);
@@ -6098,6 +6099,48 @@ Content-Type: application/json</pre>
     } else {
       box.style.left = pl + 'px'; box.style.top = top + 'px'; box.style.transform = `scale(${z})`;
     }
+  }
+  // Tela do pódio + ranking na TV: ocupa a tela inteira. A página é montada numa largura fixa (1600) e ampliada
+  // por zoom até a largura da TV; o pódio cresce até a altura disponível e o ranking ocupa o resto, com letra maior.
+  function fitTVSplit(tv, box) {
+    const split = box.querySelector('.tv-split'), W = window.innerWidth, H = window.innerHeight;
+    tv.classList.remove('tv-full');
+    [box, split].forEach(el => el && el.style.removeProperty('--pdw'));
+    const list = split && split.querySelector('.rank-list');
+    if (list) { list.style.zoom = list.style.width = ''; }
+    if (!split || W < 900 || W <= H || !(CSS.supports && CSS.supports('zoom', '2'))) return false;
+    tv.classList.add('tv-fitted', 'tv-full');
+    const cs = getComputedStyle(tv), pt = parseFloat(cs.paddingTop), pb = parseFloat(cs.paddingBottom), pl = parseFloat(cs.paddingLeft), pr = parseFloat(cs.paddingRight);
+    const V = 1600, z = (W - pl - pr) / V, hV = (H - pt - pb) / z;
+    box.style.transform = ''; box.style.zoom = z; box.style.width = V + 'px'; box.style.height = hV + 'px';
+    box.style.left = (pl / z) + 'px'; box.style.top = (pt / z) + 'px';
+    if (Math.abs(box.getBoundingClientRect().left - pl) > 2) { box.style.left = pl + 'px'; box.style.top = pt + 'px'; }
+    // Pódio: largura que faz ele caber exatamente na altura disponível.
+    const pan = split.children[0], stage = pan && pan.querySelector('.tv-stage'), pd = stage && stage.firstElementChild;
+    if (pd && pd.offsetWidth) {
+      // Altura que o pódio pode ocupar = altura do painel menos título e margens; a largura sai da proporção do próprio pódio.
+      for (let k = 0; k < 3; k++) {
+        const ratio = pd.offsetHeight / pd.offsetWidth;
+        const room = pan.clientHeight - (pd.getBoundingClientRect().top - pan.getBoundingClientRect().top) / z - parseFloat(getComputedStyle(pan).paddingBottom) - (stage.offsetHeight - pd.offsetHeight > 0 ? 0 : 0) - 6;
+        const extraW = pan.offsetWidth - pd.offsetWidth;
+        const want = Math.round(Math.max(V * 0.34, Math.min(V * 0.6, room / Math.max(0.3, ratio) + extraW)));
+        if (Math.abs(want - pan.offsetWidth) < 4) break;
+        split.style.setProperty('--pdw', want + 'px');
+      }
+    }
+    // Ranking: aumenta a letra para preencher a altura do painel (sem passar da largura).
+    if (list) {
+      const pan2 = split.children[1], pb2 = parseFloat(getComputedStyle(pan2).paddingBottom) * z, w = list.offsetWidth;
+      const room = pan2.getBoundingClientRect().bottom - pb2 - list.getBoundingClientRect().top - 4; // em pixels da tela
+      let zl = 1;
+      for (let k = 0; k < 5; k++) {
+        list.style.zoom = zl; list.style.width = (w / zl) + 'px';
+        const h = list.getBoundingClientRect().height; if (!h) break;
+        const nz = Math.max(0.55, Math.min(1.9, zl * room / h)); if (Math.abs(nz - zl) < 0.01) break; zl = nz;
+      }
+      list.style.zoom = zl; list.style.width = (w / zl) + 'px';
+    }
+    return true;
   }
   window.addEventListener('resize', () => { if (location.hash === '#apresentacao') fitTV(); });
 
