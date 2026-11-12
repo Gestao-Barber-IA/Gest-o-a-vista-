@@ -259,10 +259,11 @@
     </section>`;
   }
   function leaderExtrasBox(b) {
-    const x = extrasOf(b.id), n = (x.review ? 1 : 0) + x.fields.length;
+    const x = extrasOf(b.id), n = (x.review ? 1 : 0) + (x.disc ? 1 : 0) + x.fields.length;
     return `<details class="lx" ${ui.lxOpen === b.id ? 'open' : ''} data-id="${esc(b.id)}">
       <summary>${icon('plus')} Acessos extras do líder ${n ? `<span class="chip chip-ok">${n} liberado${n > 1 ? 's' : ''}</span>` : '<span class="chip chip-soft">nenhum</span>'}${tip('extras')}</summary>
       <label class="check"><input type="checkbox" data-change="leaderExtra" data-id="${esc(b.id)}" data-k="review" ${x.review ? 'checked' : ''}><span><b>Conferir e aprovar o checklist de toda a equipe</b><small>Aprova ou recusa as provas dos colegas (nunca as próprias).</small></span></label>
+      <label class="check"><input type="checkbox" data-change="leaderExtra" data-id="${esc(b.id)}" data-k="disc" ${x.disc ? 'checked' : ''}><span><b>Fiscalização (controle disciplinar)</b><small>Vê a página Fiscalização e registra atrasos, faltas e ocorrências da equipe (nunca as próprias). Apagar continua só com o dono.</small></span></label>
       <p class="lx-sub">Lançar à mão os números de toda a equipe, só nestes indicadores:</p>
       <div class="lx-grid">${EXTRA_FIELDS().map(f => `<label class="check"><input type="checkbox" data-change="leaderExtra" data-id="${esc(b.id)}" data-k="f:${f.key}" ${x.fields.includes(f.key) ? 'checked' : ''}><span>${esc(f.label)}</span></label>`).join('')}</div>
     </details>`;
@@ -789,10 +790,10 @@
   const navShut = () => { try { const v = JSON.parse(DB.pref.get('navShut', '[]')); return Array.isArray(v) ? v : []; } catch (e) { return []; } };
   function drawer(user, route) {
     const g = isGestor(user);
-    const groups = NAV.filter(gr => !gr.g || g || isAreaMgr(user)).map(gr => {
+    const groups = NAV.filter(gr => !gr.g || g || isAreaMgr(user) || (gr.items.some(it => it.r === 'fiscalizacao') && discOk(user))).map(gr => {
       const am = isAreaMgr(user), hg = hasGrants(user);
       const lf = lanAny();
-      const items = gr.items.filter(it => (!it.g || g || (it.a && am) || (it.r === 'lancamentos' && lf)) && (!it.rt || rtAuds(user).length) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
+      const items = gr.items.filter(it => (!it.g || g || (it.a && am) || (it.r === 'lancamentos' && lf) || (it.r === 'fiscalizacao' && discOk(user))) && (!it.rt || rtAuds(user).length) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
         <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && (g || hg) ? (g || accessOf(user.barberId) !== 'profissional' ? 'Performance da empresa' : 'Performance da área') : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}${it.r === 'avisos' && avUnseen() ? `<span class="nav-new" aria-label="${avUnseen()} avisos novos">${avUnseen()}</span>` : ''}${it.r === 'atualizacoes' && updUnseen() ? `<span class="nav-new" aria-label="${updUnseen()} novidades">${updUnseen()}</span>` : ''}</a>`).join('');
       if (!gr.group || !items.trim()) return gr.group ? '' : items;
       // Conjunto que pode ser minimizado (fica lembrado neste aparelho); o conjunto da tela aberta aparece sempre.
@@ -1831,7 +1832,7 @@
     del: async id => { if (Cloud.enabled) return Cloud.disc.del(id); discSave(discLocal().filter(x => x.id !== id)); },
   };
   // Quem o usuário pode fiscalizar: o gestor, todos; o líder, a equipe da área dele.
-  const discPeople = user => state.barbers.filter(b => isGestor(user) || (typeof areaIds === 'function' ? areaIds(user, ['gestor', 'membro']).includes(b.id) : false));
+  const discPeople = user => state.barbers.filter(b => isGestor(user) || (myExtras().disc && b.id !== user.barberId) || areaIds(user, ['gestor']).has(b.id));
   const fmtDayBR = d => { const [y, m, dd] = String(d).slice(0, 10).split('-').map(Number); return `${dd} de ${MONTH_NAMES[m - 1]} de ${y}`; };
   // Sugere a gravidade: mesma falta do mesmo profissional nos últimos 30 dias = reincidência.
   function discSuggest(list, bid, kind, day, skipId) {
@@ -2088,7 +2089,7 @@
     pop: () => ['Checklist Agenda Cheia', 'Itens e pontos do checklist: ' + listTxt((GB.popCfgOf(state).items || []).map(x => `${x.title} (${x.pts} pt${x.pts == 1 ? '' : 's'})`)) + '.'],
     pops: () => ['POPs · Guia do Sucesso', 'Os POPs foram atualizados. Confira em POPs · Guia do Sucesso: ' + popsList().map(x => x.title || x.t).filter(Boolean).slice(0, 8).join(', ') + '.'],
     access: id => { const a = ACCESS.find(x => x[0] === accessOf(id)); return ['Seu nível de acesso', `Agora você tem acesso de ${a[1]}: ${a[2]}`]; },
-    extras: id => { const x = extrasOf(id); const t = [x.review && 'conferir e aprovar o checklist da equipe', x.fields.length && 'lançar os números da equipe em ' + x.fields.map(lbl).join(', ')].filter(Boolean); return ['Seus acessos extras', t.length ? 'Agora você pode: ' + t.join('; ') + '.' : 'Seus acessos extras de líder foram retirados.']; },
+    extras: id => { const x = extrasOf(id); const t = [x.review && 'conferir e aprovar o checklist da equipe', x.disc && 'registrar ocorrências na Fiscalização', x.fields.length && 'lançar os números da equipe em ' + x.fields.map(lbl).join(', ')].filter(Boolean); return ['Seus acessos extras', t.length ? 'Agora você pode: ' + t.join('; ') + '.' : 'Seus acessos extras de líder foram retirados.']; },
     goals: id => { const g = (state.goals?.byBarber || {})[id] || {}, ks = GB.visibleInds(state).filter(i => isNum(g[i.key])); return ['Suas metas individuais', ks.length ? 'Suas metas do mês: ' + listTxt(GB.visibleInds(state).map(i => `${i.label} ${fmtGoal(i, GB.goalFor(state, id, i.key))}`)) + '.' : 'Suas metas voltaram a ser as metas da equipe.']; },
     comp: id => { const v = comCfg().pctBy[id] || 0; return ['Sua comissão', v > 0 ? `Sua comissão agora é de ${nf1.format(v)}% do faturamento.` : 'Sua comissão volta a seguir a regra geral da equipe.']; },
   };
@@ -4559,11 +4560,13 @@ Content-Type: application/json</pre>
   const accessOf = bid => (bid && (org().access || {})[bid]) || 'profissional';
   // Acessos extras que o dono pode dar a cada líder: conferir o checklist e lançar métricas específicas.
   function extrasOf(bid) {
-    if (accessOf(bid) !== 'lider') return { review: false, fields: [] };
+    if (accessOf(bid) !== 'lider') return { review: false, disc: false, fields: [] };
     const e = (org().extras || {})[bid] || {};
-    return { review: !!e.review, fields: Array.isArray(e.fields) ? e.fields : [] };
+    return { review: !!e.review, disc: !!e.disc, fields: Array.isArray(e.fields) ? e.fields : [] };
   }
-  const myExtras = () => { const u = currentUser(); return u && !isGestor(u) ? extrasOf(u.barberId) : { review: false, fields: [] }; };
+  const myExtras = () => { const u = currentUser(); return u && !isGestor(u) ? extrasOf(u.barberId) : { review: false, disc: false, fields: [] }; };
+  // Fiscalização: dono, gestor de área ou líder com o acesso extra "Fiscalização".
+  const discOk = u => !!u && (isGestor(u) || isAreaMgr(u) || (!isGestor(u) && extrasOf(u.barberId).disc));
   const EXTRA_FIELDS = () => GB.MONTH_FIELDS.filter(f => !f.calc && !hidAll().includes(GB.FIELD_IND[f.key] || f.key));
   function areaIds(u, roles) {
     const s = new Set();
@@ -4780,16 +4783,42 @@ Content-Type: application/json</pre>
   // Quem confere: o dono, ou o gestor de área para as pessoas dele (nunca a própria prova).
   function canReview(bid) { const u = currentUser(); if (!u) return false; if (isGestor(u)) return true; return u.barberId !== bid && (areaIds(u, ['gestor']).has(bid) || myExtras().review); }
   const popPendingCount = (bid, ym) => (state.pop || []).filter(r => r.barberId === bid && r.day.startsWith(ym) && r.day.length === 10).reduce((a, r) => a + popPendingOf(bid, r.day), 0);
-  const popPeople = () => state.barbers.filter(b => b.active !== false && (canEditB(b.id) || canReview(b.id) || (currentUser() || {}).barberId === b.id));
+  const popPeople = () => state.barbers.filter(b => b.active !== false && (canEditB(b.id) || canReview(b.id) || (currentUser() || {}).barberId === b.id || (!isGestor(currentUser()) && accessOf((currentUser() || {}).barberId) === 'lider' && popCfg().items.some(popGest))));
   const canPopEdit = bid => canEditB(bid) || (currentUser() || {}).barberId === bid;
 
   const EV_TXT = { pendente: 'Aguardando conferência', aprovado: 'Aprovada', recusado: 'Recusada' };
   const PROOF_DAYS = 7;
   function proofImg(e, cls = '') {
+    if (e.noPhoto) return `<span class="pop-ph pop-ph-none ${cls}">${icon('check')}<small>Marcado pela gestão</small></span>`;
     if (e.photoGone) return `<span class="pop-ph pop-ph-none ${cls}">${icon('clock')}<small>Foto apagada após ${PROOF_DAYS} dias</small></span>`;
     if (e.photo) return `<img class="pop-ph ${cls}" src="${esc(e.photo)}" alt="Prova" loading="lazy">`;
     if (e.path) return `<img class="pop-ph ${cls}" data-proof="${esc(e.path)}" alt="Prova" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">`;
     return `<span class="pop-ph pop-ph-none ${cls}">${icon('camera')}<small>Exemplo</small></span>`;
+  }
+  // Botões − e + de cada tarefa (com as bolinhas de cada unidade). O + abre a prova da próxima unidade;
+  // o − tira a última unidade que ainda não foi aprovada. "Marcar como feito" nas tarefas de uma vez só.
+  // Tarefa "só da gestão" (ex.: horário de chegada): marcada pelo dono, gestor ou líder, nunca pelo próprio profissional.
+  // Padrão: ligada nas tarefas de "Marcar como feito"; o dono muda em cada tarefa do checklist.
+  const popGest = it => it.gest !== undefined ? !!it.gest : it.type === 'check';
+  const popMarkOk = (it, bid) => { if (!popGest(it)) return canPopEdit(bid); const u = currentUser(); return !!u && (isGestor(u) || (u.barberId !== bid && (canEditB(bid) || accessOf(u.barberId) === 'lider'))); };
+  function popStepper(it, list, t, bid, mayAdd) {
+    if (!popMarkOk(it, bid)) return `<p class="muted pop-gest">${icon('lock')} Marcado pelo dono, gestor ou líder.</p>`;
+    const me = currentUser(), rev = canReview(bid);
+    let delI = -1;
+    for (let i = list.length - 1; i >= 0; i--) { const e = list[i]; if (e.status === 'pendente' && (!e.byUser || !me || e.byUser === me.id || rev)) { delI = i; break; } }
+    const live = list.filter(GB.evLive), ok = list.filter(e => GB.evOk(it, e)).length;
+    if (it.type === 'check') {
+      if (!mayAdd) return delI >= 0 ? `<button class="btn pop-add" data-action="popEvDel" data-it="${esc(it.id)}" data-i="${delI}">${icon('undo')} ${ui.confirm === 'ev' + it.id + delI ? 'Confirmar: desfazer' : 'Desfazer'}</button>` : '';
+      return `<button class="btn pop-add" data-action="popAddOpen" data-it="${esc(it.id)}">${icon('check')} Marcar como feito</button>`;
+    }
+    const dots = Array.from({ length: t }, (_, i) => { const e = live[i]; const cls = !e ? '' : e.status === 'aprovado' ? 'is-ok' : 'is-pend'; return `<span class="pst-dot ${cls}" aria-hidden="true">${i + 1}</span>`; }).join('');
+    const minusConfirm = ui.confirm === 'ev' + it.id + delI;
+    return `<div class="pop-stp" role="group" aria-label="${esc(it.title)}">
+      <button type="button" class="pst-btn ${minusConfirm ? 'btn-danger' : ''}" data-action="popEvDel" data-it="${esc(it.id)}" data-i="${delI}" ${delI < 0 ? 'disabled' : ''} aria-label="${minusConfirm ? 'Confirmar: tirar a última' : 'Tirar a última'}">${minusConfirm ? icon('check') : icon('dash')}</button>
+      <div class="pst-dots">${dots}</div>
+      <button type="button" class="pst-btn" data-action="popAddOpen" data-it="${esc(it.id)}" ${mayAdd ? '' : 'disabled'} aria-label="Adicionar a próxima (com prova)">${icon('plus')}</button>
+      <b class="pst-n num">${ok}/${t}</b>
+    </div>${minusConfirm ? '<p class="section-note">Toque de novo no ✓ para tirar a última unidade que ainda não foi aprovada.</p>' : ''}`;
   }
   function popItemCard(it, rec, bid) {
     const list = rec && rec.ev && Array.isArray(rec.ev[it.id]) ? rec.ev[it.id] : [];
@@ -4825,7 +4854,7 @@ Content-Type: application/json</pre>
       <p class="pop-ist num"><b>${ok}/${t}</b> aprovadas${pend ? ` · <span class="pend">${pend} aguardando conferência (+${fmtPts(ppend)} pts)</span>` : ''}</p>
       ${list.length ? `<ul class="pop-evs">${evs}</ul>` : ''}
       ${composer}
-      ${!draft && mayAdd ? `<button class="btn pop-add" data-action="popAddOpen" data-it="${esc(it.id)}">${icon('camera')} ${it.type === 'check' ? 'Anexar prova e confirmar' : `Adicionar prova ${live + 1} de ${t}`}</button>` : ''}
+      ${!draft && (canPopEdit(bid) || popMarkOk(it, bid)) ? popStepper(it, list, t, bid, popGest(it) ? popMarkOk(it, bid) && live < t : mayAdd) : ''}
       ${!canPopEdit(bid) && !list.length ? '<p class="muted">Sem registro.</p>' : ''}
       ${it.type === 'phones' ? `<label class="field"><span class="tm-flabel">Texto da mensagem enviada (prompt)</span><textarea class="input pop-ta" id="pm-${esc(it.id)}" data-pop="msg" data-it="${esc(it.id)}" placeholder="Cole aqui a mensagem ou abordagem que você enviou" ${canPopEdit(bid) ? '' : 'readonly'}>${esc(rec && rec.msg ? rec.msg[it.id] || '' : '')}</textarea></label>` : ''}
       <label class="field"><span class="tm-flabel">Resultado / observação por pessoa (opcional)</span><textarea class="input pop-ta" id="pn-${esc(it.id)}" data-pop="note" data-it="${esc(it.id)}" placeholder="Ex.: João agendou sábado, Pedro pediu preço" ${canPopEdit(bid) ? '' : 'readonly'}>${esc(rec && rec.notes ? rec.notes[it.id] || '' : '')}</textarea></label>
@@ -4893,6 +4922,7 @@ Content-Type: application/json</pre>
         <label class="field"><span class="tm-flabel">Descrição</span><input class="input" id="pei-d-${i}" value="${esc(it.desc || '')}" data-popitem="desc" data-i="${i}"></label>
         <div class="grid-2">${it.type === 'check' ? '' : `<label class="field"><span class="tm-flabel">Meta (quantidade)</span><input class="input num" type="number" min="1" id="pei-m-${i}" value="${it.target}" data-popitem="target" data-i="${i}"></label>`}
         <label class="field"><span class="tm-flabel">Pontos</span><input class="input num" type="number" min="0" step="0.5" id="pei-p-${i}" value="${it.pts}" data-popitem="pts" data-i="${i}"></label></div>
+        <label class="check"><input type="checkbox" data-popitem="gest" data-i="${i}" ${popGest(it) ? 'checked' : ''}><span><b>Só o dono, o gestor ou o líder marcam</b><small>O profissional vê a tarefa, mas não consegue marcar (ex.: horário de chegada).</small></span></label>
         <div class="btn-row"><button class="btn btn-sm" data-action="popItemMove" data-i="${i}" data-d="-1" ${i ? '' : 'disabled'}>${icon('up')} Subir</button>
           <button class="btn btn-sm" data-action="popItemMove" data-i="${i}" data-d="1" ${i < c.items.length - 1 ? '' : 'disabled'}>${icon('down')} Descer</button>
           <button class="btn btn-sm btn-danger" data-action="popItemDel" data-i="${i}">${ui.confirm === 'pitem' + i ? 'Confirmar exclusão' : 'Excluir'}</button></div>
@@ -6438,7 +6468,7 @@ Content-Type: application/json</pre>
     } else if (SOON_TEXT[route]) {
       page = { r: () => pageSoon(route) }; title = NAV.flatMap(g => g.items).find(i => i.r === route).t;
     } else { route = 'inicio'; page = PAGES.inicio; title = page.t; }
-    if (page.g && !isGestor(user) && !(page.a && isAreaMgr(user)) && !(route === 'lancamentos' && lanAny())) { route = 'inicio'; page = PAGES.inicio; title = page.t; }
+    if (page.g && !isGestor(user) && !(page.a && isAreaMgr(user)) && !(route === 'lancamentos' && lanAny()) && !(route === 'fiscalizacao' && discOk(user))) { route = 'inicio'; page = PAGES.inicio; title = page.t; }
 
     const pending = isGestor(user) ? state.users.filter(u => u.status === 'pendente').length : 0;
     const who = isGestor(user) ? { name: state.company.name, photo: state.company.logo } : (barberById(user.barberId) || { name: user.name });
@@ -6615,7 +6645,16 @@ Content-Type: application/json</pre>
     popPick(el) { ui.popBarber = el.dataset.id; ui.confirm = null; ui.popDraft = null; render(); },
     popDay(el) { ui.popDay = Number(el.dataset.d); ui.confirm = null; ui.popDraft = null; render(); },
     popAddOpen(el) {
-      if (!canPopEdit(ui.popBarber)) return;
+      const it0 = popCfg().items.find(x => x.id === el.dataset.it);
+      if (it0 && popGest(it0) ? !popMarkOk(it0, ui.popBarber) : !canPopEdit(ui.popBarber)) return;
+      // Tarefa da gestão (ex.: horário de chegada): um toque já marca, aprovada, sem precisar de foto.
+      if (it0 && popGest(it0)) {
+        const day = `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`, u = currentUser(), r = popRecW(ui.popBarber, day);
+        const l = r.ev[it0.id] = Array.isArray(r.ev[it0.id]) ? r.ev[it0.id] : [];
+        if (l.filter(GB.evLive).length >= (it0.type === 'check' ? 1 : Math.max(1, Number(it0.target) || 1))) return;
+        l.push({ id: uid('e_'), desc: '', at: Date.now(), by: 'gestao', byUser: u ? u.id : null, status: 'aprovado', reviewedBy: u ? u.id : null, reviewedAt: Date.now(), noPhoto: true });
+        save(); toast(`${it0.title}: marcado.`); render(); return;
+      }
       ui.popDraft = { it: el.dataset.it, bid: ui.popBarber, photo: null, phone: '', desc: '' }; ui.confirm = null; render();
       setTimeout(() => document.getElementById('pi-' + el.dataset.it)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 40);
     },
@@ -6623,6 +6662,7 @@ Content-Type: application/json</pre>
     async popConfirm() {
       const d = ui.popDraft; if (!d || d.busy) return;
       const it = popCfg().items.find(x => x.id === d.it), msg = $('#pd-msg');
+      if (it && popGest(it) && !popMarkOk(it, d.bid)) return;
       if (!d.photo) { if (msg) msg.textContent = 'Anexe a foto ou o print para confirmar.'; return; }
       if (it.type === 'phones' && !GB.validPhone(d.phone)) { if (msg) msg.textContent = 'Digite o telefone completo do cliente, com DDD.'; return; }
       const day = `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`, u = currentUser();
@@ -7589,6 +7629,7 @@ Content-Type: application/json</pre>
       const o = org(), id = el.dataset.id, k = el.dataset.k;
       const x = o.extras[id] = { review: false, fields: [], ...(o.extras[id] || {}) };
       if (k === 'review') x.review = el.checked;
+      else if (k === 'disc') x.disc = el.checked;
       else { const f = k.slice(2); x.fields = el.checked ? [...new Set([...x.fields, f])] : x.fields.filter(v => v !== f); }
       ui.lxOpen = id; save(); toast('Acesso do líder atualizado.'); render();
     },
@@ -7720,7 +7761,7 @@ Content-Type: application/json</pre>
     if (pc) {
       const c = popCfgW(), v = pc.value;
       if (pc.dataset.popcfg) { const k = pc.dataset.popcfg; c[k] = k === 'minProfit' ? Number(v) || 0 : k === 'lose' ? v.split('\n').map(x => x.trim()).filter(Boolean) : v; }
-      if (pc.dataset.popitem) { const it = c.items[Number(pc.dataset.i)], k = pc.dataset.popitem; it[k] = ['target', 'pts'].includes(k) ? Math.max(k === 'target' ? 1 : 0, Number(v) || 0) : v; if (k === 'type' && v === 'check') it.target = 1; }
+      if (pc.dataset.popitem) { const it = c.items[Number(pc.dataset.i)], k = pc.dataset.popitem; it[k] = k === 'gest' ? pc.checked : ['target', 'pts'].includes(k) ? Math.max(k === 'target' ? 1 : 0, Number(v) || 0) : v; if (k === 'type' && v === 'check') it.target = 1; }
       if (pc.dataset.poplevel) { const l = c.levels[Number(pc.dataset.i)], k = pc.dataset.poplevel; l[k] = k === 'name' ? v : k === 'value' ? (v === '' ? null : Number(v)) : Number(v) || 0; }
       save(); render(); return;
     }
