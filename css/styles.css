@@ -2605,3 +2605,5 @@ img { -webkit-user-drag: none; -webkit-touch-callout: none; }
 .tv-pzfull .tv-pz { flex: 1; min-height: 0; height: auto; }
 
 .tv-full .tv-split { grid-template-columns: var(--pdw, 1.15fr) var(--rkw, minmax(0, 1fr)); justify-content: center; }
+/* TV: pódio e ranking soltos na tela (sem o cartão grande em volta) */
+.tv-full .tv-split > .tv-panel { background: none; border: 0; box-shadow: none; padding: 0; border-radius: 0; }
