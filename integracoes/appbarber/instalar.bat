@@ -13,10 +13,11 @@ if /i not "%OK%"=="S" (echo Nada foi ligado. Quando quiser, rode o instalar.bat 
 echo.
 echo Enviando os numeros e lendo as primeiras comandas. Pode levar ate 5 minutos, aguarde...
 node sincronizar.mjs --agora
-schtasks /Create /F /TN "Gestao Barber IA - AppBarber" /SC MINUTE /MO 10 /TR "\"%~dp0sincronizar.bat\"" >nul
+node sincronizar.mjs --agendar
 if errorlevel 1 (echo Nao consegui agendar. Rode o instalar.bat clicando com o botao direito e "Executar como administrador". & pause & exit /b)
 echo.
-echo PRONTO! A sincronizacao roda a cada 10 minutos, SO no horario de funcionamento
+echo PRONTO! A sincronizacao roda sozinha a cada 10 minutos, SEM abrir janela e tambem na bateria,
+echo so no horario de funcionamento
 echo definido no app: Configuracoes - Indicadores e metas - Regra da taxa de ocupacao (abertura e fechamento).
 echo Fora desse horario ela nao chama a AppBarber e nao gasta creditos.
 echo Deixe este computador ligado e conectado na internet da barbearia.
