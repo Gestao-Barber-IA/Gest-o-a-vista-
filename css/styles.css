@@ -2704,3 +2704,8 @@ html[data-pdl="escudo"] .tv-full .tv-stage .pd-row { padding-top: 21cqw; }
 .pl-list li .icon-btn { grid-column: 2; grid-row: 1 / span 2; }
 .pl-who { min-width: 0; display: grid; }
 .pl-who small { color: var(--muted); }
+
+/* Pódio: o escudo nunca passa da própria coluna (ex.: "DESTAQUE" é mais longo que "MVP") */
+.pd-float > *, .pd-card, .pd-frame, .pd-inner { min-width: 0; max-width: 100%; }
+.pd-title b.pd-t-long { font-size: max(9px, 2.6cqw); letter-spacing: 0; }
+.pd-title > span { max-width: 100%; }
