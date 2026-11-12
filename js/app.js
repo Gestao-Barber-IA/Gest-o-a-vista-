@@ -1264,6 +1264,8 @@
   }, 30000);
 
   // ---------- Meta geral da loja (Início): foto do prêmio em destaque + progresso ----------
+  // Foguete na ponta da barra de progresso da meta (com rastro de fogo).
+  const pzRocket = pct => `<span class="pz-rocket" style="left:${Math.max(0, Math.min(100, pct)).toFixed(1)}%" aria-hidden="true"><b class="pz-flame"></b><span class="pz-rk">🚀</span></span>`;
   function prizeEditor() {
     const p = state.prize || {}, ks = Object.keys(houseGoalsFor(curYm()));
     return `<fieldset class="pz-edit"><legend>${icon('gift')} Prêmio da meta (aparece no Início de toda a equipe)</legend>
@@ -1286,7 +1288,7 @@
         ${p.img ? '' : `<p class="pz-eye">${icon('trophy')} Meta geral da loja</p>`}
         <h2 class="pz-t">${esc(p.t || 'Prêmio da meta')}</h2>
         ${p.d ? `<p class="pz-d">${icon('gift')} ${esc(p.d)}</p>` : ''}
-        <div class="pz-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(pct)}"><i style="width:${pct.toFixed(1)}%"></i></div>
+        <div class="pz-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(pct)}"><i style="width:${pct.toFixed(1)}%"></i>${pzRocket(pct)}</div>
         <div class="pz-foot"><b>${done ? '🎉 Meta batida!' : `${nf0.format(Math.floor(pct))}% batido`}</b><span>${esc(lbl)}: ${hgFmt(k, v)} de ${hgFmt(k, goal)}</span></div>
         ${done ? '' : `<p class="pz-left">Faltam <b>${hgFmt(k, goal - v)}</b> para o prêmio.</p>`}
       </div>
@@ -5979,7 +5981,7 @@ Content-Type: application/json</pre>
     const d = prizeData(); if (!d) return '';
     return `<div class="tv-goal ${d.done ? 'pz-done' : ''}"><img src="${esc(d.p.img)}" alt="">
       <span class="tvg-t">${icon('trophy')} ${esc(d.p.t || 'Meta da loja')}</span>
-      <div class="pz-bar tvg-bar"><i style="width:${d.pct.toFixed(1)}%"></i></div>
+      <div class="pz-bar tvg-bar"><i style="width:${d.pct.toFixed(1)}%"></i>${pzRocket(d.pct)}</div>
       <b class="tvg-pct">${d.done ? '🎉 Meta batida!' : nf0.format(Math.floor(d.pct)) + '%'}</b>
       ${d.done ? '' : `<small class="tvg-left">faltam ${hgFmt(d.k, d.goal - d.v)}</small>`}</div>`;
   }
@@ -5992,7 +5994,7 @@ Content-Type: application/json</pre>
         <p class="tv-pz-eye">${icon('trophy')} Meta geral da loja</p>
         <h2 class="tv-pz-t">${esc(d.p.t || 'Prêmio da meta')}</h2>
         ${d.p.d ? `<p class="tv-pz-d">${icon('gift')} ${esc(d.p.d)}</p>` : ''}
-        <div class="pz-bar tv-pz-bar"><i style="width:${d.pct.toFixed(1)}%"></i></div>
+        <div class="pz-bar tv-pz-bar"><i style="width:${d.pct.toFixed(1)}%"></i>${pzRocket(d.pct)}</div>
         <div class="tv-pz-nums"><b>${d.done ? '🎉 Meta batida! O prêmio é de vocês.' : nf0.format(Math.floor(d.pct)) + '% da meta'}</b><small>${esc(d.lbl)}: ${hgFmt(d.k, d.v)} de ${hgFmt(d.k, d.goal)}${d.done ? '' : ` · faltam ${hgFmt(d.k, d.goal - d.v)}`}</small></div>
       </div>
     </div>`;

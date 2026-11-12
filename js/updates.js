@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-12-foguete', date: '2026-11-12', title: 'Foguete na meta da loja', items: [
+    ['melhoria', 'Um foguete com rastro de fogo conduz a ponta da barra de progresso da meta da loja, no Início e na Tela da loja.'],
+  ] },
   { id: '2026-11-12-tv-palco', date: '2026-11-12', title: 'Tela da loja: palco do pódio e prêmio da meta', items: [
     ['novo', 'Na TV, o pódio ganhou um palco com holofotes, halo de luz no 1º lugar, névoa e piso espelhado, e ficou bem maior.'],
     ['novo', 'O prêmio da meta da loja aparece no topo da TV (foto, nome e barra de progresso) e ganhou uma tela própria no rodízio, com a foto em tela cheia.'],
