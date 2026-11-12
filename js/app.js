@@ -1013,7 +1013,7 @@
       const tier = place === 2 ? 'tier-silver' : place === 3 ? 'tier-bronze' : t === 'mvp' ? 'tier-mvp' : t === 'destaque' ? 'tier-gold' : 'tier-plat';
       const leadsTxt = `${row.leads.length} / ${R.N}`;
       const middle = t
-        ? `<div class="pd-title"><span>${icon(t === 'mvp' ? 'diamond' : 'crown')}<span><b>${t === 'mvp' ? 'MVP' : 'DESTAQUE'}</b><i class="num">${leadsTxt}</i></span></span></div>`
+        ? `<div class="pd-title"><span>${icon(t === 'mvp' ? 'diamond' : 'crown')}<span><b class="${t === 'mvp' ? '' : 'pd-t-long'}">${t === 'mvp' ? 'MVP' : 'DESTAQUE'}</b><i class="num">${leadsTxt}</i></span></span></div>`
         : '';
       const sn = activeSeason();
       const tierLbl = place === 2 ? 'Prata' : place === 3 ? 'Bronze' : t === 'mvp' ? 'MVP' : t === 'destaque' ? 'Destaque' : 'Ouro';
@@ -6191,7 +6191,7 @@ Content-Type: application/json</pre>
     if (!box) return;
     if (fitTVSplit(tv, box) || fitTVGrid(tv, box) || fitTVPrize(tv, box)) return;
     const W = window.innerWidth, H = window.innerHeight;
-    const on = W >= 900 && W > H;
+    const on = W >= 640 && W > H;
     tv.classList.toggle('tv-fitted', on);
     box.style.width = box.style.transform = box.style.left = box.style.top = box.style.zoom = '';
     if (!on) return;
@@ -6234,7 +6234,7 @@ Content-Type: application/json</pre>
     const list = split && split.querySelector('.rank-list');
     if (list) { list.style.zoom = list.style.width = ''; }
     const st0 = split && split.querySelector('.tv-stage'); if (st0) st0.style.maxWidth = st0.style.marginInline = '';
-    if (!split || W < 900 || W <= H || !(CSS.supports && CSS.supports('zoom', '2'))) return false;
+    if (!split || W < 640 || W <= H || !(CSS.supports && CSS.supports('zoom', '2'))) return false;
     tv.classList.add('tv-fitted', 'tv-full');
     const cs = getComputedStyle(tv), pt = parseFloat(cs.paddingTop), pb = parseFloat(cs.paddingBottom), pl = parseFloat(cs.paddingLeft), pr = parseFloat(cs.paddingRight);
     const V = 1600, z = (W - pl - pr) / V, hV = (H - pt - pb) / z;
@@ -6289,7 +6289,7 @@ Content-Type: application/json</pre>
   function fitTVPrize(tv, box) {
     const pz = box.querySelector('.tv-pz'), W = window.innerWidth, H = window.innerHeight;
     tv.classList.remove('tv-pzfull');
-    if (!pz || W < 900 || W <= H || !(CSS.supports && CSS.supports('zoom', '2'))) return false;
+    if (!pz || W < 640 || W <= H || !(CSS.supports && CSS.supports('zoom', '2'))) return false;
     tv.classList.add('tv-fitted', 'tv-full', 'tv-pzfull');
     const cs = getComputedStyle(tv), pt = parseFloat(cs.paddingTop), pb = parseFloat(cs.paddingBottom), pl = parseFloat(cs.paddingLeft), pr = parseFloat(cs.paddingRight);
     const V = 1600, z = (W - pl - pr) / V;
@@ -6304,7 +6304,7 @@ Content-Type: application/json</pre>
     const grid = box.querySelector('.al-grid, .gd-grid'), W = window.innerWidth, H = window.innerHeight;
     tv.classList.remove('tv-grid');
     if (grid) { grid.style.zoom = grid.style.width = grid.style.height = ''; grid.style.removeProperty('--gr-rows'); }
-    if (!grid || W < 900 || W <= H || !(CSS.supports && CSS.supports('zoom', '2'))) return false;
+    if (!grid || W < 640 || W <= H || !(CSS.supports && CSS.supports('zoom', '2'))) return false;
     tv.classList.add('tv-fitted', 'tv-full', 'tv-grid');
     const cs = getComputedStyle(tv), pt = parseFloat(cs.paddingTop), pb = parseFloat(cs.paddingBottom), pl = parseFloat(cs.paddingLeft), pr = parseFloat(cs.paddingRight);
     const V = 1600, z = (W - pl - pr) / V, hV = (H - pt - pb) / z;
