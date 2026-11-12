@@ -5963,29 +5963,42 @@ Content-Type: application/json</pre>
   }
 
   function tvRanking(R) {
-    const pz = tvPrize();
-    return `<div class="tv-split ${pz ? 'has-prize' : ''}">
+    return `<div class="tv-split">
       <section class="tv-panel"><h2 class="section-title">Pódio do período</h2><div class="tv-stage">${podium(R)}</div></section>
       <section class="tv-panel"><div class="tv-panel-head"><h2 class="section-title">Ranking em tempo real</h2><span class="tv-count">${R.rows.length} posições</span></div>${rankingList(R)}</section>
-      ${pz}
+    </div>${tvGoalStrip()}`;
+  }
+  // Prêmio da meta da loja na Tela da loja.
+  function prizeData() {
+    const p = state.prize; if (!p || !p.img) return null;
+    const ym = curYm(), k = p.k || 'fat', goal = houseGoalsFor(ym)[k]; if (!goal) return null;
+    const v = houseTotals(ym).vals[k] || 0;
+    return { p, k, goal, v, pct: Math.max(0, Math.min(100, v / goal * 100)), done: v >= goal, lbl: HG_LABEL[k].replace(' total', '').replace(' da casa', '') };
+  }
+  // Faixa fina embaixo do pódio: a meta sempre visível, sem dividir a atenção.
+  function tvGoalStrip() {
+    const d = prizeData(); if (!d) return '';
+    return `<div class="tv-goal ${d.done ? 'pz-done' : ''}"><img src="${esc(d.p.img)}" alt="">
+      <span class="tvg-t">${icon('trophy')} ${esc(d.p.t || 'Meta da loja')}</span>
+      <div class="pz-bar tvg-bar"><i style="width:${d.pct.toFixed(1)}%"></i></div>
+      <b class="tvg-pct">${d.done ? '🎉 Meta batida!' : nf0.format(Math.floor(d.pct)) + '%'}</b>
+      ${d.done ? '' : `<small class="tvg-left">faltam ${hgFmt(d.k, d.goal - d.v)}</small>`}</div>`;
+  }
+  // Tela própria do prêmio no rodízio: foto em tela cheia, nome e descrição em destaque.
+  function tvPrizeSlide() {
+    const d = prizeData(); if (!d) return '';
+    return `<div class="tv-pz ${d.done ? 'pz-done' : ''}">
+      <img class="tv-pz-bg" src="${esc(d.p.img)}" alt="">
+      <div class="tv-pz-in">
+        <p class="tv-pz-eye">${icon('trophy')} Meta geral da loja</p>
+        <h2 class="tv-pz-t">${esc(d.p.t || 'Prêmio da meta')}</h2>
+        ${d.p.d ? `<p class="tv-pz-d">${icon('gift')} ${esc(d.p.d)}</p>` : ''}
+        <div class="pz-bar tv-pz-bar"><i style="width:${d.pct.toFixed(1)}%"></i></div>
+        <div class="tv-pz-nums"><b>${d.done ? '🎉 Meta batida! O prêmio é de vocês.' : nf0.format(Math.floor(d.pct)) + '% da meta'}</b><small>${esc(d.lbl)}: ${hgFmt(d.k, d.v)} de ${hgFmt(d.k, d.goal)}${d.done ? '' : ` · faltam ${hgFmt(d.k, d.goal - d.v)}`}</small></div>
+      </div>
     </div>`;
   }
-  // Prêmio da meta da loja na Tela da loja: foto grande, nome, descrição e a barra de progresso logo abaixo da foto.
-  function tvPrize() {
-    const p = state.prize; if (!p || !p.img) return '';
-    const ym = curYm(), k = p.k || 'fat', goal = houseGoalsFor(ym)[k]; if (!goal) return '';
-    const v = houseTotals(ym).vals[k] || 0, pct = Math.max(0, Math.min(100, v / goal * 100)), done = v >= goal;
-    const lbl = HG_LABEL[k].replace(' total', '').replace(' da casa', '');
-    return `<section class="tv-panel tv-prize ${done ? 'pz-done' : ''}">
-      <h2 class="section-title">${icon('trophy')} Meta geral da loja</h2>
-      <div class="tvp-img"><img src="${esc(p.img)}" alt="${esc(p.t || 'Prêmio')}"></div>
-      <div class="pz-bar tvp-bar"><i style="width:${pct.toFixed(1)}%"></i></div>
-      <div class="tvp-nums"><b>${done ? '🎉 Meta batida!' : `${nf0.format(Math.floor(pct))}% batido`}</b>${done ? '' : `<span>Faltam <b>${hgFmt(k, goal - v)}</b></span>`}</div>
-      <p class="tvp-sub">${esc(lbl)}: ${hgFmt(k, v)} de ${hgFmt(k, goal)}</p>
-      ${p.t ? `<h3 class="tvp-t">${esc(p.t)}</h3>` : ''}
-      ${p.d ? `<p class="tvp-d">${icon('gift')} ${esc(p.d)}</p>` : ''}
-    </section>`;
-  }
+
 
   function tvGuardians(R) {
     const cards = R.active.map(ind => {
@@ -6075,7 +6088,7 @@ Content-Type: application/json</pre>
     const R = computeRanking(rkState(), tr);
     const dk = darkFor(tr, true);
     if (!dk) liveDetect(R);
-    const slides = dk ? [() => suspenseCard(dk, true)] : [tvRanking, tvGuardians, tvAlerts];
+    const slides = dk ? [() => suspenseCard(dk, true)] : [tvRanking, ...(prizeData() ? [tvPrizeSlide] : []), tvGuardians, tvAlerts];
     const i = ((ui.tvIndex % slides.length) + slides.length) % slides.length;
     const reduce = reduceMotion();
     root.innerHTML = `<div class="tv">${licMark()}
@@ -6113,7 +6126,7 @@ Content-Type: application/json</pre>
   function fitTV() {
     const tv = root.querySelector('.tv'), box = tv && tv.querySelector('.tv-fit');
     if (!box) return;
-    if (fitTVSplit(tv, box) || fitTVGrid(tv, box)) return;
+    if (fitTVSplit(tv, box) || fitTVGrid(tv, box) || fitTVPrize(tv, box)) return;
     const W = window.innerWidth, H = window.innerHeight;
     const on = W >= 900 && W > H;
     tv.classList.toggle('tv-fitted', on);
@@ -6154,9 +6167,10 @@ Content-Type: application/json</pre>
   function fitTVSplit(tv, box) {
     const split = box.querySelector('.tv-split'), W = window.innerWidth, H = window.innerHeight;
     tv.classList.remove('tv-full');
-    [box, split].forEach(el => el && el.style.removeProperty('--pdw'));
+    [box, split].forEach(el => el && (el.style.removeProperty('--pdw'), el.style.removeProperty('--rkw')));
     const list = split && split.querySelector('.rank-list');
     if (list) { list.style.zoom = list.style.width = ''; }
+    const st0 = split && split.querySelector('.tv-stage'); if (st0) st0.style.maxWidth = st0.style.marginInline = '';
     if (!split || W < 900 || W <= H || !(CSS.supports && CSS.supports('zoom', '2'))) return false;
     tv.classList.add('tv-fitted', 'tv-full');
     const cs = getComputedStyle(tv), pt = parseFloat(cs.paddingTop), pb = parseFloat(cs.paddingBottom), pl = parseFloat(cs.paddingLeft), pr = parseFloat(cs.paddingRight);
@@ -6167,16 +6181,22 @@ Content-Type: application/json</pre>
     // Pódio: largura que faz ele caber exatamente na altura disponível.
     const pan = split.children[0], stage = pan && pan.querySelector('.tv-stage'), pd = stage && stage.firstElementChild;
     if (pd && pd.offsetWidth) {
-      // Altura que o pódio pode ocupar = altura do painel menos título e margens; a largura sai da proporção do próprio pódio.
+      // Ranking mais estreito (36% da largura) para o pódio ganhar destaque. O pódio cresce até a altura disponível
+      // e fica centralizado no painel (a largura sai da proporção do próprio pódio, para nunca cortar embaixo).
+      split.style.setProperty('--pdw', Math.round(V * 0.64) + 'px');
+      stage.style.maxWidth = ''; stage.style.marginInline = 'auto';
       for (let k = 0; k < 3; k++) {
-        const ratio = pd.offsetHeight / pd.offsetWidth;
-        const room = pan.clientHeight - (pd.getBoundingClientRect().top - pan.getBoundingClientRect().top) / z - parseFloat(getComputedStyle(pan).paddingBottom) - (stage.offsetHeight - pd.offsetHeight > 0 ? 0 : 0) - 6;
-        const extraW = pan.offsetWidth - pd.offsetWidth;
-        const hasPz = split.classList.contains('has-prize');
-        const want = Math.round(Math.max(V * (hasPz ? 0.3 : 0.34), Math.min(V * (hasPz ? 0.42 : 0.6), room / Math.max(0.3, ratio) + extraW)));
-        if (Math.abs(want - pan.offsetWidth) < 4) break;
-        split.style.setProperty('--pdw', want + 'px');
+        const ratio = pd.offsetHeight / Math.max(1, pd.offsetWidth);
+        const room = pan.clientHeight - (pd.getBoundingClientRect().top - pan.getBoundingClientRect().top) / z - parseFloat(getComputedStyle(pan).paddingBottom) - 6;
+        const maxW = Math.floor(room / Math.max(0.3, ratio) + (stage.offsetWidth - pd.offsetWidth));
+        if (stage.style.maxWidth === maxW + 'px') break;
+        stage.style.maxWidth = maxW + 'px';
       }
+      // Painel do pódio do tamanho do pódio; ranking com no máximo 38% da largura; as duas colunas centralizadas.
+      const gap = parseFloat(getComputedStyle(split).columnGap) || 20;
+      const pdw = Math.min(Math.round(V * 0.64), stage.offsetWidth + (pan.offsetWidth - pan.clientWidth) + parseFloat(getComputedStyle(pan).paddingLeft) * 2);
+      split.style.setProperty('--pdw', pdw + 'px');
+      split.style.setProperty('--rkw', Math.round(Math.min(V - pdw - gap, V * 0.38)) + 'px');
     }
     // Ranking: aumenta a letra para preencher a altura do painel (sem passar da largura).
     if (list) {
@@ -6186,10 +6206,23 @@ Content-Type: application/json</pre>
       for (let k = 0; k < 5; k++) {
         list.style.zoom = zl; list.style.width = (w / zl) + 'px';
         const h = list.getBoundingClientRect().height; if (!h) break;
-        const nz = Math.max(0.55, Math.min(split.classList.contains('has-prize') ? 1.05 : 1.9, zl * room / h)); if (Math.abs(nz - zl) < 0.01) break; zl = nz;
+        const nz = Math.max(0.55, Math.min(1.35, zl * room / h)); if (Math.abs(nz - zl) < 0.01) break; zl = nz;
       }
       list.style.zoom = zl; list.style.width = (w / zl) + 'px';
     }
+    return true;
+  }
+  // Tela do prêmio na TV: a foto ocupa a tela inteira (abaixo do cabeçalho).
+  function fitTVPrize(tv, box) {
+    const pz = box.querySelector('.tv-pz'), W = window.innerWidth, H = window.innerHeight;
+    tv.classList.remove('tv-pzfull');
+    if (!pz || W < 900 || W <= H || !(CSS.supports && CSS.supports('zoom', '2'))) return false;
+    tv.classList.add('tv-fitted', 'tv-full', 'tv-pzfull');
+    const cs = getComputedStyle(tv), pt = parseFloat(cs.paddingTop), pb = parseFloat(cs.paddingBottom), pl = parseFloat(cs.paddingLeft), pr = parseFloat(cs.paddingRight);
+    const V = 1600, z = (W - pl - pr) / V;
+    box.style.transform = ''; box.style.zoom = z; box.style.width = V + 'px'; box.style.height = ((H - pt - pb) / z) + 'px';
+    box.style.left = (pl / z) + 'px'; box.style.top = (pt / z) + 'px';
+    if (Math.abs(box.getBoundingClientRect().left - pl) > 2) { box.style.left = pl + 'px'; box.style.top = pt + 'px'; }
     return true;
   }
   // Telas de cartões (Guardiões e Alertas) na TV: ocupam a tela inteira. A página é montada numa largura fixa e
