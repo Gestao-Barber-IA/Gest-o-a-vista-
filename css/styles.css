@@ -2648,6 +2648,5 @@ img { -webkit-user-drag: none; -webkit-touch-callout: none; }
 .tv.tv-idle .tv-controls { opacity: 0; pointer-events: none; }
 .tv.tv-idle { cursor: none; }
 .tv-full .tv-dots { position: absolute; right: 8px; bottom: 0; z-index: 3; opacity: 0.7; }
-.tv-full .tv-stage .pd-row { padding-top: 13cqw; }
-.tv-full .tv-stage .pd-crown { width: 16cqw; }
-html[data-pdl="escudo"] .tv-full .tv-stage .pd-row { padding-top: 12cqw; }
+.tv-full .tv-stage .pd-row { padding-top: 22cqw; grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr) minmax(0, 1fr); }
+html[data-pdl="escudo"] .tv-full .tv-stage .pd-row { padding-top: 21cqw; }
