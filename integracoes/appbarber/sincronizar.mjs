@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSAO = "1.9";
+const VERSAO = "2.0";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const TESTE = process.argv.includes("--teste");
 const CARGA = process.argv.includes("--carga"); // carga inicial: lê todas as comandas no ritmo máximo permitido
@@ -340,6 +340,28 @@ async function main() {
     for (const i of itens) { const t = tot.get(i.barbeiro) || { fat: 0, serv: 0, prod: 0, h: 0, dias: 0 }; t.fat += i.faturamento; t.serv += i.servicos; t.prod += i.venda_produtos; t.h += i.horas_ocupadas || 0; t.dias++; tot.set(i.barbeiro, t); }
     for (const [n, t] of tot) console.log(`  ${n}: R$ ${t.fat.toFixed(2)} · ${t.serv} serviços · ${t.prod} produtos · ${t.h.toFixed(1)} h atendidas · ${t.dias} dias`);
     if (faltam.length) console.log(`  (${faltam.length} comandas ainda não lidas: nelas vale o valor do agendamento até a sincronização ler.)`);
+    // Conferência com o "Total realizado/vendido" da AppBarber (só comandas já lidas, do mês atual):
+    // se o total deles bater com Serviços + Produtos + Consumo, a AppBarber conta o consumo; se bater com Serviços + Produtos, ela já separa.
+    {
+      const mes = iso(new Date(hoje.getFullYear(), hoje.getMonth(), 1)), soma = new Map();
+      let lidasMes = 0;
+      for (const c of codigos) {
+        const inv = cache[c]; if (!inv || !inv.itens || !inv.d || inv.d < mes) continue; lidasMes++;
+        for (const it of inv.itens) {
+          if (!it.p) continue;
+          const nome = NOMES[it.p] || it.p, t = soma.get(nome) || { serv: 0, prod: 0, cons: 0 };
+          if (!it.prod) t.serv += it.v; else if (consumo(it)) t.cons += it.v; else t.prod += it.v;
+          soma.set(nome, t);
+        }
+      }
+      if (soma.size) {
+        const R$ = (v) => "R$ " + v.toFixed(2).replace(".", ",");
+        console.log(`\n  Conferência do mês (${lidasMes} comandas lidas; compare com o Dashboard Profissional da AppBarber):`);
+        for (const [n, t] of [...soma].sort((a, b) => b[1].serv + b[1].prod - (a[1].serv + a[1].prod))) {
+          console.log(`   - ${n}: serviços ${R$(t.serv)} + produtos ${R$(t.prod)} = ${R$(t.serv + t.prod)} | consumo geladeira ${R$(t.cons)} | com consumo ${R$(t.serv + t.prod + t.cons)}`);
+        }
+      }
+    }
     const cats = Object.entries(catConsumo);
     if (cats.length) {
       console.log("  Categorias de produto (consumo de geladeira/bar NÃO conta no faturamento do profissional):");
