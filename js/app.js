@@ -203,6 +203,47 @@
         <button type="button" class="icon-btn ${ui.confirm === 'pl' + v.id ? 'btn-danger' : ''}" data-action="planDel" data-id="${esc(v.id)}" aria-label="Apagar registro de ${esc(v.nome)}">${ui.confirm === 'pl' + v.id ? icon('check') : icon('trash')}</button></li>`).join('')}</ul>` : `<p class="muted">Nenhum plano registrado em ${esc(ymLabel(ym).replace(' de ', '/'))}.</p>`}
     </section>`;
   }
+  // ---------- Maior comanda do mês com foto obrigatória ----------
+  const cmdRecs = (bid, ym) => (state.comandaRecs || []).filter(v => v.barberId === bid && v.date.slice(0, 7) === ym);
+  const cmdBest = (bid, ym) => Math.max(0, ...cmdRecs(bid, ym).map(v => Number(v.valor) || 0));
+  // Maior comanda atual do profissional no mês, de qualquer fonte (integração, lançamento ou registro com foto).
+  const cmdNow = (bid, ym) => { const r = monthR(ym).rows.find(x => x.barber.id === bid); return Math.max(cmdBest(bid, ym), r && r.sums.n.comanda ? Number(r.sums.comanda) || 0 : 0); };
+  const cmdImg = v => !v.foto ? '' : String(v.foto).startsWith('data:') ? `<img class="cm-ph" src="${esc(v.foto)}" alt="Foto da comanda">` : `<img class="cm-ph" data-proof="${esc(v.foto)}" alt="Foto da comanda" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">`;
+  function cmdSection(b, ym) {
+    if (!canCmd(b.id)) return '';
+    const recs = cmdRecs(b.id, ym).sort((a, c) => c.valor - a.valor), open = ui.cmdForm === b.id, r = monthRange(ym), now = cmdNow(b.id, ym);
+    const top = monthR(ym).bonus ? (monthR(ym).bonus.find(i => i.key === 'comanda') || null) : null;
+    const leader = top && top.leaders && top.leaders.length ? barberById(top.leaders[0]) : null;
+    return `<section class="pl-box cm-box">
+      <div class="pl-head"><h3>${icon('wallet')} Maior comanda do mês</h3>
+        ${open ? '' : `<button type="button" class="btn btn-sm btn-primary" data-action="cmdForm" data-id="${esc(b.id)}">${icon('camera')} Registrar comanda</button>`}</div>
+      <p class="section-note">A sua maior até agora: <b>${now ? money2(now) : '—'}</b>${leader && top.max ? ` · maior da equipe: <b>${money2(top.max)}</b>${leader.id === b.id ? ' (é sua!)' : ` (${esc(first(leader.name))})`}` : ''}. Para valer, registre o valor com a <b>foto da comanda</b>. Se alguém fizer uma maior, passa a ser o destaque.</p>
+      ${open ? `<form class="form pl-form" data-form="cmdRec" data-id="${esc(b.id)}" novalidate>
+        <label class="field"><span>Valor da comanda (R$) *</span><input class="input num" name="valor" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Maior que ${now ? money2(now) : 'R$ 0,00'}"></label>
+        <label class="field"><span>Foto da comanda *</span><input class="input" name="foto" type="file" accept="image/*" capture="environment"></label>
+        <label class="field"><span>Data</span><input class="input" type="date" name="date" value="${lanDate(ym)}" min="${r.start}" max="${r.end}"></label>
+        <p class="form-msg" data-msg></p>
+        <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar comanda</button><button type="button" class="btn" data-action="cmdForm" data-id="">Cancelar</button></div>
+      </form>` : ''}
+      ${recs.length ? `<ul class="pl-list cm-list">${recs.map(v => `<li><button type="button" class="cm-thumb" data-action="cmdView" data-id="${esc(v.id)}" aria-label="Ver foto da comanda">${cmdImg(v)}</button>
+        <span class="pl-who"><b class="num">${money2(v.valor)}</b><small>${dateBR(v.date).slice(0, 5)}${v.by ? ' · ' + esc(v.by) : ''}</small></span>
+        <button type="button" class="icon-btn ${ui.confirm === 'cm' + v.id ? 'btn-danger' : ''}" data-action="cmdDel" data-id="${esc(v.id)}" aria-label="Apagar registro">${ui.confirm === 'cm' + v.id ? icon('check') : icon('trash')}</button></li>`).join('')}</ul>` : ''}
+    </section>`;
+  }
+  function cmdViewer() {
+    const v = ui.cmdView && (state.comandaRecs || []).find(x => x.id === ui.cmdView);
+    if (!v) return '';
+    return `<div class="pop-viewer" role="dialog" aria-modal="true" aria-label="Foto da comanda"><div class="inst-scrim" data-action="cmdView" data-id=""></div>
+      <figure>${cmdImg(v)}<figcaption><b>${money2(v.valor)}</b><span>${esc((barberById(v.barberId) || {}).name || '')} · ${dateBR(v.date)}</span></figcaption>
+      <button class="btn" data-action="cmdView" data-id="">${icon('x')} Fechar</button></figure></div>`;
+  }
+  // O valor do dia nos lançamentos = maior comanda registrada com foto naquele dia.
+  function syncCmd(bid, date) {
+    const best = Math.max(0, ...(state.comandaRecs || []).filter(v => v.barberId === bid && v.date === date).map(v => Number(v.valor) || 0));
+    const e = state.entries.find(x => x.source === 'manual' && x.barberId === bid && x.date === date);
+    if (best > 0) { const en = e || { id: 'm_' + bid + '_' + date, barberId: bid, date, source: 'manual' }; if (!e) state.entries.push(en); en.comanda = best; }
+    else if (e) delete e.comanda;
+  }
   // Contagem do indicador = registros do mês (a diferença entra no dia do registro).
   function syncPlanCount(bid, ym, date) {
     const n = (state.planSales || []).filter(v => v.barberId === bid && v.date.slice(0, 7) === ym).length;
@@ -2427,6 +2468,11 @@
         return `<div class="field"><span class="tm-flabel"><span class="tm-ft">${esc(f.label)}${tip(FIELD_TIP[f.key])}</span><span class="lock">${icon('chart')} Calculado</span></span>
           <input class="input num" id="m-${f.key}" value="${t == null ? '' : nf2.format(t)}" readonly tabindex="-1" placeholder="Faturamento ÷ clientes"></div>`;
       }
+      if (f.key === 'comanda' && (cmdRecs(b.id, ym).length || (!canEditB(b.id) && !(f.daily && isNum(integ.comanda))))) {
+        const v = cmdNow(b.id, ym);
+        return `<div class="field"><span class="tm-flabel"><span class="tm-ft">${esc(f.label)}${tip(FIELD_TIP[f.key])}</span><span class="lock">${icon('camera')} Registrado com foto</span></span>
+          <input class="input num" id="m-comanda" value="${v ? money2(v) : ''}" placeholder="—" readonly tabindex="-1"></div>`;
+      }
       if (f.key === 'planos' && planCat().length) {
         const n = (state.planSales || []).filter(v => v.barberId === b.id && v.date.slice(0, 7) === ym).length;
         return `<div class="field"><span class="tm-flabel"><span class="tm-ft">${esc(f.label)}${tip(FIELD_TIP[f.key])}</span><span class="lock">${icon('idcard')} Registrado pelos planos</span></span>
@@ -2522,6 +2568,7 @@
         <p class="section-note">Os campos mostram o total do mês. Ao mudar um total, a diferença entra nesta data e já aparece na visão por semana.</p></div>
       <div class="grid-2" id="tm-fields">${editorFields(sel, ym)}</div>
       ${planSection(sel, ym)}
+      ${cmdSection(sel, ym)}
       <div id="tm-hist">${lanHistory(sel, ym)}</div>
       ${own ? `<details class="tm-goals"><summary>Metas individuais de ${esc(sel.name.split(' ')[0])} <span class="muted">(em branco = meta da equipe)</span></summary>
         <div class="grid-2">${GB.visibleInds(state).map(i => `<label class="field"><span class="tm-flabel">${esc(i.label)}</span><input class="input input-edit num" id="g-${i.key}" name="${i.key}" type="number" min="0" step="any" value="${isNum(goals[i.key]) ? goals[i.key] : ''}" placeholder="Equipe: ${esc(fmtGoal(i, GB.goalFor(state, '', i.key)))}" data-auto="goal" data-id="${esc(sel.id)}"></label>`).join('')}</div>
@@ -2951,6 +2998,7 @@
     return `${monthPicker(ym, user)}
       <p class="section-note">Lance os totais do mês de cada barbeiro. Campos com cadeado vêm da integração e não podem ser editados aqui.</p>
       <div id="tm-editor" class="tm-block">${teamEditor(ym)}</div>
+      ${cmdViewer()}
       ${isGestor(user) ? `<a class="btn" href="#integracao">${icon('plug')} Integração com outro sistema</a>` : ''}`;
   }
 
@@ -4545,8 +4593,9 @@ Content-Type: application/json</pre>
   const mySelf = () => { const u = currentUser(); return u && !isGestor(u) && u.barberId ? selfCfg().filter(k => EXTRA_FIELDS().some(f => f.key === k)) : []; };
   const isMe = bid => (currentUser() || {}).barberId === bid;
   const planCat = () => (Array.isArray(state.planCatalog) ? state.planCatalog : []);
-  const lanAny = () => myExtras().fields.length > 0 || mySelf().length > 0 || (!!(currentUser() || {}).barberId && planCat().length > 0);
-  const canLanB = bid => canEditB(bid) || myExtras().fields.length > 0 || (isMe(bid) && (mySelf().length > 0 || planCat().length > 0));
+  const lanAny = () => myExtras().fields.length > 0 || mySelf().length > 0 || !!(currentUser() || {}).barberId;
+  const canLanB = bid => canEditB(bid) || myExtras().fields.length > 0 || isMe(bid);
+  const canCmd = bid => canEditB(bid) || isMe(bid);
   // Registrar planos vendidos: o dono/gestão de área para quem cuidam; o profissional, os próprios (com planos cadastrados).
   const canPlan = bid => planCat().length > 0 && (canEditB(bid) || isMe(bid));
   const fieldOk = (bid, key) => canEditB(bid) || myExtras().fields.includes(key) || (isMe(bid) && mySelf().includes(key));
@@ -6516,6 +6565,15 @@ Content-Type: application/json</pre>
       if (ui.teamBarber === id) ui.teamBarber = null;
       save(); toast(`${b.name} foi excluído.`); render();
     },
+    cmdForm(el) { ui.cmdForm = el.dataset.id || null; render(); },
+    cmdView(el) { ui.cmdView = el.dataset.id || null; render(); },
+    cmdDel(el) {
+      const v = (state.comandaRecs || []).find(x => x.id === el.dataset.id); if (!v || !canCmd(v.barberId)) return;
+      if (ui.confirm !== 'cm' + v.id) { ui.confirm = 'cm' + v.id; render(); toast('Toque de novo para apagar esta comanda.'); return; }
+      ui.confirm = null; state.comandaRecs = state.comandaRecs.filter(x => x.id !== v.id);
+      if (Cloud.enabled && v.foto && !String(v.foto).startsWith('data:')) Cloud.removeProof(v.foto);
+      syncCmd(v.barberId, v.date); save(); toast('Registro apagado.'); render();
+    },
     planForm(el) { ui.planForm = el.dataset.id || null; render(); if (ui.planForm) setTimeout(() => { const i = document.querySelector('[data-form="planSale"] [name=nome]'); if (i) i.focus(); }, 50); },
     planDel(el) {
       const v = (state.planSales || []).find(x => x.id === el.dataset.id); if (!v || !canPlan(v.barberId)) return;
@@ -7266,6 +7324,22 @@ Content-Type: application/json</pre>
       if (INDICATORS.length - hidden.length < 2) return setMsg(f, 'Deixe pelo menos 2 indicadores em uso.');
       INDICATORS.forEach(i => { if (w[i.key] <= 0) w[i.key] = (state.weights || {})[i.key] || i.weight; }); // guarda o peso para quando voltar a usar
       state.weights = w; state.hidden = hidden; save(); toast('Indicadores salvos. O ranking já usa os novos pesos.'); render();
+    },
+    async cmdRec(f) {
+      const bid = f.dataset.id; if (!canCmd(bid)) return;
+      const valor = Math.round(Number(String(val(f, 'valor')).replace(',', '.')) * 100) / 100, date = val(f, 'date'), file = f.elements.foto.files[0];
+      const ym = ui.teamMonth || curYm(), r = monthRange(ym), now = cmdNow(bid, ym);
+      if (!(valor > 0)) return setMsg(f, 'Digite o valor da comanda.');
+      if (valor <= now) return setMsg(f, `Registre só uma comanda maior que a sua atual (${money2(now)}).`);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < r.start || date > r.end) return setMsg(f, 'Escolha uma data dentro do mês.');
+      if (!file) return setMsg(f, 'A foto da comanda é obrigatória.');
+      const btn = f.querySelector('[type=submit]'); btn.disabled = true; setMsg(f, 'Enviando a foto…', true);
+      try {
+        const data = await readImage(file, 1600, 0.82), id = uid('cm_');
+        const foto = Cloud.enabled ? await Cloud.uploadProof(`${Cloud.companyId}/${bid}/comanda-${id}.jpg`, data) : data;
+        state.comandaRecs = [...(state.comandaRecs || []), { id, barberId: bid, date, valor, foto, by: (currentUser() || {}).name || '' }];
+        syncCmd(bid, date); ui.cmdForm = null; save(); toast(`Comanda de ${money2(valor)} registrada.`); render();
+      } catch (e) { btn.disabled = false; setMsg(f, 'Não foi possível enviar a foto: ' + (Cloud.enabled ? Cloud.message(e) : e.message)); }
     },
     planCat(f) {
       if (!isGestor(currentUser())) return;

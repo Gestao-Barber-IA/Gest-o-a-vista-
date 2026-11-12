@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-12-maior-comanda', date: '2026-11-12', title: 'Maior comanda com foto', items: [
+    ['novo', 'Em Lançamentos, cada profissional registra a maior comanda do mês. A foto da comanda é obrigatória e o valor só vale se for maior que a atual dele.'],
+    ['melhoria', 'O destaque Maior comanda vai para quem tiver a maior: se outro profissional registrar uma maior, ele passa a ser o destaque. O dono e a gestão veem a foto e podem apagar um registro errado.'],
+  ] },
   { id: '2026-11-12-tv-leve', date: '2026-11-12', title: 'Tela da loja leve no navegador da TV', items: [
     ['melhoria', 'Aberta direto no navegador da Smart TV, a Tela da loja entra sozinha no modo leve: tira os efeitos pesados (desfoque, sombras animadas, reflexo e névoa) e mantém o movimento, para não travar.'],
     ['melhoria', 'Também liga se perceber a animação lenta. Para forçar: adicione ?leve=1 (ligar) ou ?leve=0 (desligar) ao endereço.'],
