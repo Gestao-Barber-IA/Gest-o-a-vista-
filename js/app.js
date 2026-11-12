@@ -5949,7 +5949,7 @@ Content-Type: application/json</pre>
         <div class="gd-photos"><span class="gd-crown">${crownSvg('tier-gold')}</span>${leaders.slice(0, 3).map(b => `<span class="gd-photo">${pdPhoto(b).replace('pd-photo', 'gd-ring')}</span>`).join('')}</div>
         <b class="gd-name">${names}</b>
         <span class="gd-val num">${fmt(ind, row.values[ind.key])}${ind.key === 'check' ? ' pts' : ''}</span>
-        ${leaders.length > 1 ? '<span class="chip chip-destaque">Empate na liderança</span>' : ''}
+        ${leaders.length > 1 ? '<span class="gd-tie-chip">Empate na liderança</span>' : ''}
       </div>`;
     }).join('');
     const extra = (R.bonus || []).map(ind => {
@@ -5965,7 +5965,7 @@ Content-Type: application/json</pre>
       </div>`;
     }).join('');
     const nCards = R.active.length + (R.bonus || []).filter(i => i.leaders.length).length;
-    return `<p class="tv-eyebrow gold">${icon('crown')} Líderes do período</p>
+    return `<p class="tv-eyebrow gold gd-eyebrow">${icon('sparkle')} Os guardiões ${tvRange().type === 'mes' ? 'do mês' : 'do período'}</p>
       <h2 class="tv-h">Quem está puxando cada resultado</h2>
       ${cards ? `<div class="gd-grid" style="--gd-cols:${Math.min(5, Math.max(3, Math.ceil(nCards / 2)))}">${cards}${extra}</div>` : '<div class="card muted">Ainda não há lançamentos neste período.</div>'}`;
   }
