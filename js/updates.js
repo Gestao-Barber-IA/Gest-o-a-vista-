@@ -2,6 +2,13 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-12-tv-nitida', date: '2026-11-12', title: 'Tela da loja nítida em qualquer TV', items: [
+    ['melhoria', 'A Tela da loja agora é desenhada na resolução real da TV (Full HD ou 4K): textos, fotos e pódio ficam nítidos, com as animações rodando.'],
+  ] },
+  { id: '2026-11-11-horarios', date: '2026-11-11', title: 'Horário de funcionamento e dos profissionais', items: [
+    ['novo', 'Em Configurações › Indicadores e metas › Horário de funcionamento e taxa de ocupação, dá para cadastrar um horário próprio para cada profissional (entrada, saída, almoço e dias no mês). A taxa de ocupação de cada um passa a usar o horário dele.'],
+    ['melhoria', 'Enquanto o horário não for cadastrado, o Início mostra o lembrete em Primeiros passos e em Pendências, com o botão que leva direto ao lugar certo.'],
+  ] },
   { id: '2026-11-11-cores-logo', date: '2026-11-11', title: 'O app nas cores da sua marca', items: [
     ['novo', 'Com o logo da empresa enviado, o app inteiro passa a usar as cores dele: botões, destaques, menu e fechamento, para toda a equipe.'],
     ['melhoria', 'Para voltar às cores padrão, desmarque "Usar as cores do meu logo no app" em Configurações › Empresa.'],

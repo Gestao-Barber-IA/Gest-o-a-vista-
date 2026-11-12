@@ -35,7 +35,13 @@ Deno.serve(async (req) => {
     const { data: c } = await db.from("companies").select("settings").eq("id", k.company_id).single();
     const o = (c?.settings as any)?.ocup || {};
     const hm = (v: unknown, d: string) => (typeof v === "string" && /^\d{2}:\d{2}$/.test(v) ? v : d);
-    return json({ abertura: hm(o.open, "09:00"), fechamento: hm(o.close, "20:00") });
+    // Janela de busca: a abertura mais cedo e o fechamento mais tarde entre a empresa e os profissionais com horário próprio.
+    let ab = hm(o.open, "09:00"), fe = hm(o.close, "20:00");
+    for (const h of Object.values((o.by || {}) as Record<string, any>)) {
+      if (h && typeof h.open === "string" && /^\d{2}:\d{2}$/.test(h.open) && h.open < ab) ab = h.open;
+      if (h && typeof h.close === "string" && /^\d{2}:\d{2}$/.test(h.close) && h.close > fe) fe = h.close;
+    }
+    return json({ abertura: ab, fechamento: fe });
   }
   // A integração por API só vale nos planos pagos e com a assinatura em dia.
   const { data: co } = await db.from("companies").select("sub_status, paid_until, plan_id").eq("id", k.company_id).single();

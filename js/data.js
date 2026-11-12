@@ -154,6 +154,8 @@
   // Atendimentos fora do horário compensam o tempo ocioso; acima da capacidade passa de 100%.
   const OCUP_DEFAULT = { open: '09:00', close: '20:00', lunch: 60, days: 22 };
   const ocupCfgOf = state => ({ ...OCUP_DEFAULT, ...((state && state.ocupCfg) || {}) });
+  // Horário do profissional: o dele, se o dono cadastrou um diferente; senão, o da empresa.
+  const ocupCfgFor = (state, barberId) => { const c = ocupCfgOf(state), o = (c.by || {})[barberId] || {}; const r = { open: c.open, close: c.close, lunch: c.lunch, days: c.days }; for (const k of ['open', 'close', 'lunch', 'days']) if (o[k] !== undefined && o[k] !== '' && o[k] !== null) r[k] = o[k]; return r; };
   const toMin = t => { const [h, m] = String(t || '0:0').split(':').map(Number); return (h || 0) * 60 + (m || 0); };
   const hoursPerDay = cfg => Math.max(0, (toMin(cfg.close) - toMin(cfg.open) - Number(cfg.lunch || 0)) / 60);
   function ausOf(state, barberId, ym) {
@@ -162,7 +164,7 @@
   }
   // Horas de capacidade do barbeiro entre start e end (só dias até hoje).
   function ocupCapacity(state, barberId, start, end, today = iso(new Date())) {
-    const cfg = ocupCfgOf(state), hpd = hoursPerDay(cfg), days = Number(cfg.days) || 0;
+    const cfg = ocupCfgFor(state, barberId), hpd = hoursPerDay(cfg), days = Number(cfg.days) || 0;
     const last = end < today ? end : today;
     let total = 0, ym = monthKey(start);
     while (start <= last && ym <= monthKey(last)) {
@@ -765,5 +767,5 @@
   const visibleInds = state => INDICATORS.filter(i => !RETIRED.includes(i.key) && !(state.hidden || []).includes(i.key));
   const FIELD_IND = { fidPct: 'fid', ocupPct: 'ocup', aus: 'ocup' };
 
-  window.GB = Object.assign(window.GB || {}, { RETIRED, BONUS_INDS, OCUP_DEFAULT, ocupCfgOf, hoursPerDay, ocupCapacity, SUM_KEYS, manualEntries, manualTotal, applyManualTotal, evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
+  window.GB = Object.assign(window.GB || {}, { RETIRED, BONUS_INDS, OCUP_DEFAULT, ocupCfgOf, ocupCfgFor, hoursPerDay, ocupCapacity, SUM_KEYS, manualEntries, manualTotal, applyManualTotal, evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
 })();
