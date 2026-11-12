@@ -6158,7 +6158,7 @@ Content-Type: application/json</pre>
       <header class="tv-head">
         ${state.company.logo ? `<img class="brand-mark tv-logo" src="${esc(state.company.logo)}" alt="${esc(state.company.name || 'Logo')}">` : logo('tv-logo')}
         <div class="tv-title"><b>${esc(state.company.name)}</b><span>Tela da loja · ${esc(tr.type === 'mes' ? 'Mês' : PERIOD_NAMES[ui.period])}: ${esc(tr.label)}</span></div>
-        ${dk ? '' : tvGoalStrip()}
+        ${dk || slides[i] === tvPrizeSlide ? '' : tvGoalStrip()}
         <div class="tv-controls">
           <button class="btn btn-sm" data-action="tvSound" aria-pressed="${Sound.on}">${icon('sound')} ${Sound.on ? 'Sons ativos' : 'Sons desligados'}</button>
           <select class="input tv-select" id="tv-sound" data-change="tvSoundKind" aria-label="Escolher e testar som">
