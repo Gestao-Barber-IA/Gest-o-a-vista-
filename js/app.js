@@ -6138,7 +6138,25 @@ Content-Type: application/json</pre>
   const licMark = kind => kind === 'fx'
     ? `<div class="lic-mark lic-sys" aria-hidden="true">${logo('lic-logo')}<span>${esc(B().name)}</span></div>`
     : `<div class="lic-mark" aria-hidden="true">Licenciado para ${esc(state.company.name || 'esta empresa')} · ${esc(B().name)} © ${new Date().getFullYear()}</div>`;
+  // Modo leve da Tela da loja: navegador de Smart TV (Tizen, webOS, Android TV, Fire TV, VIDAA…) ou animação lenta.
+  // Troca efeitos pesados (desfoque, sombras animadas, reflexo, névoa) por versões leves e mantém o movimento.
+  // Forçar: ?leve=1 (liga) ou ?leve=0 (desliga) no endereço; fica lembrado neste aparelho.
+  function tvLiteInit() {
+    const q = new URLSearchParams(location.search).get('leve');
+    if (q === '1' || q === '0') DB.pref.set('tvLite', q);
+    const pref = DB.pref.get('tvLite', '');
+    const tvUA = /SMART-?TV|SmartTV|Tizen|Web0S|webOS|NetCast|HbbTV|BRAVIA|AFT[A-Z]|Android TV|GoogleTV|CrKey|VIDAA|Hisense|Roku|TCL|Philips|Viera|Vizio|DTV|Opera TV|Espial/i.test(navigator.userAgent);
+    const on = pref === '1' || (pref !== '0' && (tvUA || ui.tvSlow));
+    document.documentElement.classList.toggle('tv-lite', on);
+    if (on || pref === '0' || ui.tvFpsDone) return;
+    // Mede a fluidez nos primeiros segundos: abaixo de ~40 quadros por segundo, liga o modo leve.
+    ui.tvFpsDone = true;
+    let n = 0, t0 = 0;
+    const tick = t => { if (!t0) t0 = t; n++; if (t - t0 < 3000) requestAnimationFrame(tick); else if (n / ((t - t0) / 1000) < 40 && location.hash === '#apresentacao') { ui.tvSlow = true; document.documentElement.classList.add('tv-lite'); } };
+    setTimeout(() => requestAnimationFrame(tick), 1500);
+  }
   function renderTV() {
+    tvLiteInit();
     if (!DB.demo) DB.pref.set('tvSeen', '1');
     document.body.classList.remove('has-nav');
     document.documentElement.classList.add('tv-motion');
@@ -6361,7 +6379,7 @@ Content-Type: application/json</pre>
     if (alias[route]) { ui.cfgTab = alias[route]; route = 'configuracoes'; }
     if (route === 'gestao-visual') route = 'inicio';
     if (route === 'apresentacao') { renderTV(); return; }
-    document.documentElement.classList.remove('tv-motion');
+    document.documentElement.classList.remove('tv-motion', 'tv-lite');
     let page, title;
     if (route.startsWith('perfil-')) {
       const id = route.slice(7);
