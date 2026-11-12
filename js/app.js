@@ -6171,7 +6171,7 @@ Content-Type: application/json</pre>
     tv.classList.remove('tv-full');
     [box, split].forEach(el => el && (el.style.removeProperty('--pdw'), el.style.removeProperty('--rkw')));
     const list = split && split.querySelector('.rank-list');
-    if (list) { list.style.zoom = list.style.width = list.style.height = ''; list.classList.remove('rk-spread'); }
+    if (list) { list.style.zoom = list.style.width = ''; }
     const st0 = split && split.querySelector('.tv-stage'); if (st0) st0.style.maxWidth = st0.style.marginInline = '';
     if (!split || W < 900 || W <= H || !(CSS.supports && CSS.supports('zoom', '2'))) return false;
     tv.classList.add('tv-fitted', 'tv-full');
@@ -6198,7 +6198,7 @@ Content-Type: application/json</pre>
       const gap = parseFloat(getComputedStyle(split).columnGap) || 20;
       const pdw = Math.min(Math.round(V * 0.64), stage.offsetWidth + (pan.offsetWidth - pan.clientWidth) + parseFloat(getComputedStyle(pan).paddingLeft) * 2);
       split.style.setProperty('--pdw', pdw + 'px');
-      split.style.setProperty('--rkw', Math.round(Math.min(V - pdw - gap * 2, V * 0.44)) + 'px');
+      split.style.setProperty('--rkw', Math.round(Math.min(V - pdw - gap, V * 0.38)) + 'px');
     }
     // Ranking: aumenta a letra para preencher a altura do painel (sem passar da largura).
     if (list) {
@@ -6211,10 +6211,6 @@ Content-Type: application/json</pre>
         const nz = Math.max(0.55, Math.min(1.22, zl * room / h)); if (Math.abs(nz - zl) < 0.01) break; zl = nz;
       }
       list.style.zoom = zl; list.style.width = (w / zl) + 'px';
-      // Ranking da mesma altura do pódio (do topo da coroa à base), com as linhas distribuídas por igual.
-      const pr = (stage.querySelector('.podium-x') || stage).getBoundingClientRect(), lr = list.getBoundingClientRect();
-      const want = (pr.bottom - lr.top) / (z * zl);
-      if (want * z * zl > lr.height + 8) { list.style.height = want + 'px'; list.classList.add('rk-spread'); }
     }
     return true;
   }
