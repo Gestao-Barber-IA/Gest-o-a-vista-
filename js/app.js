@@ -5966,7 +5966,7 @@ Content-Type: application/json</pre>
     return `<div class="tv-split">
       <section class="tv-panel"><h2 class="section-title">Pódio do período</h2><div class="tv-stage"><div class="tv-lights" aria-hidden="true"><i class="tl-glow"></i><i class="tl-beam tl-b2"></i><i class="tl-beam tl-b3"></i><i class="tl-beam tl-b1"></i><i class="tl-halo"></i><i class="tl-floor"></i><i class="tl-fog"></i><i class="tl-fog tl-fog2"></i></div>${podium(R)}</div></section>
       <section class="tv-panel"><div class="tv-panel-head"><h2 class="section-title">Ranking em tempo real</h2><span class="tv-count">${R.rows.length} posições</span></div>${rankingList(R)}</section>
-    </div>${tvGoalStrip()}`;
+    </div>`;
   }
   // Prêmio da meta da loja na Tela da loja.
   function prizeData() {
@@ -6097,6 +6097,7 @@ Content-Type: application/json</pre>
       <header class="tv-head">
         ${state.company.logo ? `<img class="brand-mark tv-logo" src="${esc(state.company.logo)}" alt="${esc(state.company.name || 'Logo')}">` : logo('tv-logo')}
         <div class="tv-title"><b>${esc(state.company.name)}</b><span>Tela da loja · ${esc(tr.type === 'mes' ? 'Mês' : PERIOD_NAMES[ui.period])}: ${esc(tr.label)}</span></div>
+        ${dk ? '' : tvGoalStrip()}
         <div class="tv-controls">
           <button class="btn btn-sm" data-action="tvSound" aria-pressed="${Sound.on}">${icon('sound')} ${Sound.on ? 'Sons ativos' : 'Sons desligados'}</button>
           <select class="input tv-select" id="tv-sound" data-change="tvSoundKind" aria-label="Escolher e testar som">
@@ -6110,6 +6111,7 @@ Content-Type: application/json</pre>
       <nav class="tv-dots" aria-label="Telas">${slides.map((_, k) => `<button class="${k === i ? 'on' : ''}" data-action="tvGo" data-i="${k}" aria-label="Tela ${k + 1}"></button>`).join('')}</nav>
       </div>
     </div>`;
+    tvIdleSetup();
     fitTV();
     root.querySelectorAll('.tv img').forEach(im => { if (!im.complete) im.addEventListener('load', fitTV, { once: true }); });
     [300, 900, 2000, 4000].forEach(ms => setTimeout(fitTV, ms));
@@ -6206,11 +6208,19 @@ Content-Type: application/json</pre>
       for (let k = 0; k < 5; k++) {
         list.style.zoom = zl; list.style.width = (w / zl) + 'px';
         const h = list.getBoundingClientRect().height; if (!h) break;
-        const nz = Math.max(0.55, Math.min(1.35, zl * room / h)); if (Math.abs(nz - zl) < 0.01) break; zl = nz;
+        const nz = Math.max(0.55, Math.min(1.22, zl * room / h)); if (Math.abs(nz - zl) < 0.01) break; zl = nz;
       }
       list.style.zoom = zl; list.style.width = (w / zl) + 'px';
     }
     return true;
+  }
+  // Botões da TV (som, tela cheia, sair) somem sozinhos depois de alguns segundos e voltam ao mexer o mouse ou tocar.
+  function tvIdleSetup() {
+    const tv = root.querySelector('.tv'); if (!tv) return;
+    const wake = () => { tv.classList.remove('tv-idle'); clearTimeout(ui.tvIdleT); ui.tvIdleT = setTimeout(() => tv.classList.add('tv-idle'), 4000); };
+    if (!ui.tvIdleBound) { ui.tvIdleBound = true; ['mousemove', 'pointerdown', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, () => { const t = root.querySelector('.tv'); if (t) { t.classList.remove('tv-idle'); clearTimeout(ui.tvIdleT); ui.tvIdleT = setTimeout(() => { const t2 = root.querySelector('.tv'); if (t2) t2.classList.add('tv-idle'); }, 4000); } }, { passive: true })); }
+    if (ui.tvWasIdle) tv.classList.add('tv-idle'); else wake();
+    ui.tvWasIdle = false; setTimeout(() => { ui.tvWasIdle = tv.classList.contains('tv-idle'); }, 0);
   }
   // Tela do prêmio na TV: a foto ocupa a tela inteira (abaixo do cabeçalho).
   function fitTVPrize(tv, box) {
