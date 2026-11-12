@@ -2,6 +2,15 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-12-planos', date: '2026-11-12', title: 'Registro de planos mensais vendidos', items: [
+    ['novo', 'O dono cadastra os planos da empresa em Configurações › Indicadores e metas › Planos mensais da empresa.'],
+    ['novo', 'Cada profissional registra em Lançamentos os planos que fechou: nome e sobrenome do cliente, WhatsApp válido e qual plano. O indicador Planos mensais conta esses registros.'],
+    ['melhoria', 'Os dados do cliente só aparecem para o dono, a gestão e o próprio profissional.'],
+  ] },
+  { id: '2026-11-12-ausencia', date: '2026-11-12', title: 'Dias de ausência com − e +', items: [
+    ['melhoria', 'Em Lançamentos, os dias de ausência (férias, atestado) agora mudam só pelos botões − e +, um dia por vez, sem digitar.'],
+    ['melhoria', 'O indicador Agendamentos saiu de Lançamentos, das metas e dos totais da empresa por enquanto.'],
+  ] },
   { id: '2026-11-12-foguete', date: '2026-11-12', title: 'Foguete na meta da loja', items: [
     ['melhoria', 'Um foguete com rastro de fogo conduz a ponta da barra de progresso da meta da loja, no Início e na Tela da loja.'],
   ] },
