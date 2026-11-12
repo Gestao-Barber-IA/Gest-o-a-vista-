@@ -2513,13 +2513,16 @@ img { -webkit-user-drag: none; -webkit-touch-callout: none; }
 @keyframes gd-glow { 0%, 100% { box-shadow: 0 0 16px rgba(246, 194, 74, 0.2), inset 0 0 22px rgba(246, 194, 74, 0.05); border-color: rgba(246, 194, 74, 0.65); }
   50% { box-shadow: 0 0 48px rgba(246, 194, 74, 0.55), inset 0 0 34px rgba(246, 194, 74, 0.12); border-color: rgba(255, 214, 120, 1); } }
 .gd::before { content: ''; position: absolute; inset: -30% -70%; z-index: -1; pointer-events: none;
-  background: linear-gradient(105deg, transparent 42%, rgba(255, 226, 150, 0.18) 50%, transparent 58%); animation: gd-sweep 6s ease-in-out infinite; }
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 214, 120, 0.22) 50%, transparent 62%); animation: gd-sweep 6s ease-in-out infinite; }
 .gd:nth-child(3n+2)::before { animation-delay: -2s; } .gd:nth-child(3n)::before { animation-delay: -4s; }
 @keyframes gd-sweep { 0%, 55% { transform: translateX(-60%); } 100% { transform: translateX(60%); } }
-.gd::after { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: 0.9;
-  background-image: radial-gradient(circle, rgba(255, 210, 120, 0.9) 0 1.5px, transparent 2.5px), radial-gradient(circle, rgba(255, 236, 190, 0.7) 0 1px, transparent 2px);
-  background-size: 70px 90px, 110px 70px; background-position: 12px 40px, 60px 10px; animation: gd-rise 9s linear infinite; }
-@keyframes gd-rise { to { background-position: 12px -140px, 60px -200px; } }
+/* Luz dourada suave atrás da foto: respira e se move devagar (sem pontinhos). */
+.gd::after { content: ''; position: absolute; left: 50%; top: 42%; width: 120%; aspect-ratio: 1; z-index: -1; pointer-events: none;
+  background: radial-gradient(circle, rgba(255, 205, 100, 0.6) 0%, rgba(246, 170, 50, 0.26) 34%, transparent 64%);
+  filter: blur(6px); transform: translate(-50%, -50%) scale(0.85); animation: gd-light 5s ease-in-out infinite; }
+.gd:nth-child(3n+2)::after { animation-delay: -1.7s; } .gd:nth-child(3n)::after { animation-delay: -3.4s; }
+@keyframes gd-light { 0%, 100% { opacity: 0.55; transform: translate(-50%, -50%) scale(0.8); }
+  50% { opacity: 1; transform: translate(-50%, -54%) scale(1.05); } }
 .gd-label { color: var(--gd-gold); font-size: 0.82rem; text-shadow: 0 0 10px rgba(246, 194, 74, 0.45); }
 .gd-photo { width: min(150px, 72%); --tc: #ffd36b; --tc2: #c78a1e; --glow: rgba(255, 200, 80, 0.75); }
 .gd-ring { padding: 4px; box-shadow: 0 0 22px var(--glow), 0 0 4px rgba(255, 220, 140, 0.9); animation: gd-ring 3.2s ease-in-out infinite; }
