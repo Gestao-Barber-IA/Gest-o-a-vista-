@@ -2,8 +2,14 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-12-tv-cores', date: '2026-11-12', title: 'Tela da loja inteira nas cores da sua marca', items: [
+    ['melhoria', 'As telas Os guardiões do mês e Quanto falta para subir de posição também seguem as cores do logo da empresa (luzes, bordas, valores e fundo).'],
+  ] },
+  { id: '2026-11-12-tv-cartoes', date: '2026-11-12', title: 'Alertas e Guardiões ocupando a TV inteira', items: [
+    ['melhoria', 'Na Tela da loja, as telas "Quanto falta para subir de posição" e "Os guardiões do mês" agora usam toda a tela da TV: cartões maiores e letras ampliadas para leitura de longe.'],
+  ] },
   { id: '2026-11-12-guardioes', date: '2026-11-12', title: 'Os guardiões do mês com luzes animadas', items: [
-    ['melhoria', 'Na Tela da loja, a tela "Quem está puxando cada resultado" ganhou cartões dourados com brilho pulsando, reflexo de luz, partículas subindo, fotos maiores e valores em destaque.'],
+    ['melhoria', 'Na Tela da loja, a tela "Quem está puxando cada resultado" ganhou cartões dourados com brilho pulsando, reflexo e luz dourada animada atrás das fotos, fotos maiores e valores em destaque.'],
   ] },
   { id: '2026-11-12-tv-cheia', date: '2026-11-12', title: 'Tela da loja ocupando a TV inteira', items: [
     ['melhoria', 'Em computador ou TV, a tela do pódio usa toda a largura e altura: o pódio cresce até a altura da tela e o ranking ocupa o resto, com letras maiores (e se ajusta sozinho quando há muitos profissionais).'],
