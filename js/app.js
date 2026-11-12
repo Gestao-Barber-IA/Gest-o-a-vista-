@@ -6196,9 +6196,11 @@ Content-Type: application/json</pre>
       }
       // Painel do pódio do tamanho do pódio; ranking com no máximo 38% da largura; as duas colunas centralizadas.
       const gap = parseFloat(getComputedStyle(split).columnGap) || 20;
-      const pdw = Math.min(Math.round(V * 0.64), stage.offsetWidth + (pan.offsetWidth - pan.clientWidth) + parseFloat(getComputedStyle(pan).paddingLeft) * 2);
-      split.style.setProperty('--pdw', pdw + 'px');
-      split.style.setProperty('--rkw', Math.round(Math.min(V - pdw - gap, V * 0.38)) + 'px');
+      // Ranking encostado na lateral direita (37% da largura); o pódio fica com todo o resto, centralizado nele.
+      // Assim a tela fica cheia em qualquer formato de pódio (Padrão, Escudo, Tecnológico, Minimalista).
+      const rkw = Math.round(V * 0.37);
+      split.style.setProperty('--rkw', rkw + 'px');
+      split.style.setProperty('--pdw', Math.round(V - rkw - gap) + 'px');
     }
     // Ranking: aumenta a letra para preencher a altura do painel (sem passar da largura).
     if (list) {
