@@ -2607,3 +2607,34 @@ img { -webkit-user-drag: none; -webkit-touch-callout: none; }
 .tv-full .tv-split { grid-template-columns: var(--pdw, 1.15fr) var(--rkw, minmax(0, 1fr)); justify-content: center; }
 /* TV: pódio e ranking soltos na tela (sem o cartão grande em volta) */
 .tv-full .tv-split > .tv-panel { background: none; border: 0; box-shadow: none; padding: 0; border-radius: 0; }
+
+/* Tela da loja (TV): palco cinematográfico do pódio — holofotes, halo, névoa e piso espelhado (sem partículas) */
+.tv-lights { display: none; }
+.tv-full .tv-stage { background: none; border-radius: 0; overflow: hidden; padding-bottom: 5%; }
+.tv-full .tv-stage::before { display: none; }
+.tv-full .tv-stage .pd-fx { display: none; }
+.tv-full .tv-stage .podium-x { position: relative; z-index: 1; -webkit-box-reflect: below -2px linear-gradient(transparent 78%, rgba(255, 255, 255, 0.16)); }
+.tv-full .tv-lights { display: block; position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent), linear-gradient(180deg, transparent, #000 10%); mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent); }
+.tv-lights i { position: absolute; display: block; }
+.tl-glow { inset: 0; background: radial-gradient(55% 45% at 50% 38%, rgba(214, 180, 106, 0.16), transparent 70%), radial-gradient(35% 40% at 18% 55%, rgba(150, 185, 255, 0.1), transparent 70%), radial-gradient(35% 40% at 82% 55%, rgba(244, 160, 90, 0.1), transparent 70%); animation: tl-pulse 6s ease-in-out infinite; }
+@keyframes tl-pulse { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
+.tl-beam { top: -6%; width: 34%; height: 104%; transform-origin: 50% 0; filter: blur(18px); mix-blend-mode: screen; }
+.tl-beam::before { content: ''; position: absolute; inset: 0; clip-path: polygon(46% 0, 54% 0, 92% 100%, 8% 100%); background: var(--bm); }
+.tl-b1 { left: 33%; --bm: linear-gradient(180deg, rgba(255, 236, 180, 0.6), rgba(255, 214, 130, 0.2) 55%, transparent 92%); animation: tl-sweep1 9s ease-in-out infinite; }
+.tl-b2 { left: 4%; width: 30%; --bm: linear-gradient(180deg, rgba(200, 220, 255, 0.42), rgba(170, 195, 255, 0.12) 55%, transparent 90%); animation: tl-sweep2 11s ease-in-out infinite; }
+.tl-b3 { right: 4%; width: 30%; --bm: linear-gradient(180deg, rgba(255, 205, 160, 0.42), rgba(244, 165, 100, 0.12) 55%, transparent 90%); animation: tl-sweep3 10s ease-in-out infinite; }
+@keyframes tl-sweep1 { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
+@keyframes tl-sweep2 { 0%, 100% { transform: rotate(14deg); } 50% { transform: rotate(4deg); } }
+@keyframes tl-sweep3 { 0%, 100% { transform: rotate(-14deg); } 50% { transform: rotate(-4deg); } }
+.tl-halo { left: 50%; top: 40%; width: 46%; aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 226, 150, 0.32), rgba(214, 170, 80, 0.12) 40%, transparent 68%); filter: blur(8px); animation: tl-halo 4.5s ease-in-out infinite; }
+@keyframes tl-halo { 0%, 100% { opacity: 0.65; transform: translate(-50%, -50%) scale(0.92); } 50% { opacity: 1; transform: translate(-50%, -50%) scale(1.06); } }
+.tl-floor { left: -5%; right: -5%; bottom: 0; height: 26%; background: linear-gradient(180deg, transparent, rgba(255, 220, 160, 0.05) 30%, rgba(10, 10, 14, 0.6)),
+  radial-gradient(60% 30% at 50% 22%, rgba(255, 220, 150, 0.22), transparent 70%); }
+.tl-floor::before { content: ''; position: absolute; left: 8%; right: 8%; top: 18%; height: 2px; background: linear-gradient(90deg, transparent, rgba(255, 225, 160, 0.55), transparent); filter: blur(1px); }
+.tl-fog { left: -20%; right: -20%; bottom: -4%; height: 24%; opacity: 0.55; filter: blur(14px);
+  background: radial-gradient(30% 60% at 20% 70%, rgba(220, 225, 240, 0.32), transparent 70%), radial-gradient(28% 55% at 55% 75%, rgba(230, 230, 240, 0.28), transparent 70%), radial-gradient(30% 60% at 85% 70%, rgba(220, 225, 240, 0.3), transparent 70%);
+  animation: tl-fog 16s ease-in-out infinite alternate; }
+.tl-fog2 { bottom: 2%; height: 18%; opacity: 0.35; animation-duration: 22s; animation-direction: alternate-reverse; }
+@keyframes tl-fog { from { transform: translateX(-6%); } to { transform: translateX(6%); } }

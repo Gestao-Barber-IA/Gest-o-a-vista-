@@ -5964,7 +5964,7 @@ Content-Type: application/json</pre>
 
   function tvRanking(R) {
     return `<div class="tv-split">
-      <section class="tv-panel"><h2 class="section-title">Pódio do período</h2><div class="tv-stage">${podium(R)}</div></section>
+      <section class="tv-panel"><h2 class="section-title">Pódio do período</h2><div class="tv-stage"><div class="tv-lights" aria-hidden="true"><i class="tl-glow"></i><i class="tl-beam tl-b2"></i><i class="tl-beam tl-b3"></i><i class="tl-beam tl-b1"></i><i class="tl-halo"></i><i class="tl-floor"></i><i class="tl-fog"></i><i class="tl-fog tl-fog2"></i></div>${podium(R)}</div></section>
       <section class="tv-panel"><div class="tv-panel-head"><h2 class="section-title">Ranking em tempo real</h2><span class="tv-count">${R.rows.length} posições</span></div>${rankingList(R)}</section>
     </div>${tvGoalStrip()}`;
   }
@@ -6179,7 +6179,7 @@ Content-Type: application/json</pre>
     box.style.left = (pl / z) + 'px'; box.style.top = (pt / z) + 'px';
     if (Math.abs(box.getBoundingClientRect().left - pl) > 2) { box.style.left = pl + 'px'; box.style.top = pt + 'px'; }
     // Pódio: largura que faz ele caber exatamente na altura disponível.
-    const pan = split.children[0], stage = pan && pan.querySelector('.tv-stage'), pd = stage && stage.firstElementChild;
+    const pan = split.children[0], stage = pan && pan.querySelector('.tv-stage'), pd = stage && (stage.querySelector('.podium-x') || stage.lastElementChild);
     if (pd && pd.offsetWidth) {
       // Ranking mais estreito (36% da largura) para o pódio ganhar destaque. O pódio cresce até a altura disponível
       // e fica centralizado no painel (a largura sai da proporção do próprio pódio, para nunca cortar embaixo).
@@ -6187,7 +6187,7 @@ Content-Type: application/json</pre>
       stage.style.maxWidth = ''; stage.style.marginInline = 'auto';
       for (let k = 0; k < 3; k++) {
         const ratio = pd.offsetHeight / Math.max(1, pd.offsetWidth);
-        const room = pan.clientHeight - (pd.getBoundingClientRect().top - pan.getBoundingClientRect().top) / z - parseFloat(getComputedStyle(pan).paddingBottom) - 6;
+        const room = pan.clientHeight - (pd.getBoundingClientRect().top - pan.getBoundingClientRect().top) / z - parseFloat(getComputedStyle(pan).paddingBottom) - parseFloat(getComputedStyle(stage).paddingBottom) - 6;
         const maxW = Math.floor(room / Math.max(0.3, ratio) + (stage.offsetWidth - pd.offsetWidth));
         if (stage.style.maxWidth === maxW + 'px') break;
         stage.style.maxWidth = maxW + 'px';
