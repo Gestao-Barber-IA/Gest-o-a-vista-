@@ -2,6 +2,11 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-12-tv-palco', date: '2026-11-12', title: 'Tela da loja: palco do pódio e prêmio da meta', items: [
+    ['novo', 'Na TV, o pódio ganhou um palco com holofotes, halo de luz no 1º lugar, névoa e piso espelhado, e ficou bem maior.'],
+    ['novo', 'O prêmio da meta da loja aparece no topo da TV (foto, nome e barra de progresso) e ganhou uma tela própria no rodízio, com a foto em tela cheia.'],
+    ['melhoria', 'Ranking mais estreito para destacar o pódio, e os botões de som e tela cheia somem sozinhos depois de alguns segundos.'],
+  ] },
   { id: '2026-11-12-premio', date: '2026-11-12', title: 'Prêmio da meta da loja no Início', items: [
     ['novo', 'Cadastre a foto, o nome e a descrição do prêmio da meta (ex.: 5 dias na praia) em Performance da empresa › Editar metas. Ele aparece em destaque no Início de toda a equipe, com a foto grande e a barra de quanto falta.'],
   ] },
