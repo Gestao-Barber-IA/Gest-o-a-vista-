@@ -1304,10 +1304,9 @@
       ${monthOnlyData(R) ? `<div class="card week-note"><p>${icon('help')}<span>Os resultados lançados à mão são <b>totais do mês</b>, por isso não aparecem na visão por semana. A Semana mostra só resultados diários (da integração ou do checklist).</span></p>
         <button class="btn btn-primary btn-sm" data-action="period" data-period="mes">Ver o mês</button></div>` : ''}
       <div class="home-cols">
-        <section class="section"><h2 class="section-title">Pódio do período ${tip('score')}</h2>${podium(R)}</section>
+        <section class="section"><h2 class="section-title">Pódio do período ${tip('score')}</h2>${podium(R)}${prizeCard(user)}</section>
         <section class="section"><h2 class="section-title">Ranking em tempo real ${tip('live')}</h2>${rankingList(R)}${R.N ? '' : '<p class="section-note">Ainda não há resultados lançados neste período.</p>'}</section>
       </div>
-      ${prizeCard(user)}
       ${R.rows.length ? titleCard(R) : ''}
       ${howLink()}`;
   }
