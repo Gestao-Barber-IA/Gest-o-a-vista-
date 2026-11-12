@@ -5963,10 +5963,28 @@ Content-Type: application/json</pre>
   }
 
   function tvRanking(R) {
-    return `<div class="tv-split">
+    const pz = tvPrize();
+    return `<div class="tv-split ${pz ? 'has-prize' : ''}">
       <section class="tv-panel"><h2 class="section-title">Pódio do período</h2><div class="tv-stage">${podium(R)}</div></section>
       <section class="tv-panel"><div class="tv-panel-head"><h2 class="section-title">Ranking em tempo real</h2><span class="tv-count">${R.rows.length} posições</span></div>${rankingList(R)}</section>
+      ${pz}
     </div>`;
+  }
+  // Prêmio da meta da loja na Tela da loja: foto grande, nome, descrição e a barra de progresso logo abaixo da foto.
+  function tvPrize() {
+    const p = state.prize; if (!p || !p.img) return '';
+    const ym = curYm(), k = p.k || 'fat', goal = houseGoalsFor(ym)[k]; if (!goal) return '';
+    const v = houseTotals(ym).vals[k] || 0, pct = Math.max(0, Math.min(100, v / goal * 100)), done = v >= goal;
+    const lbl = HG_LABEL[k].replace(' total', '').replace(' da casa', '');
+    return `<section class="tv-panel tv-prize ${done ? 'pz-done' : ''}">
+      <h2 class="section-title">${icon('trophy')} Meta geral da loja</h2>
+      <div class="tvp-img"><img src="${esc(p.img)}" alt="${esc(p.t || 'Prêmio')}"></div>
+      <div class="pz-bar tvp-bar"><i style="width:${pct.toFixed(1)}%"></i></div>
+      <div class="tvp-nums"><b>${done ? '🎉 Meta batida!' : `${nf0.format(Math.floor(pct))}% batido`}</b>${done ? '' : `<span>Faltam <b>${hgFmt(k, goal - v)}</b></span>`}</div>
+      <p class="tvp-sub">${esc(lbl)}: ${hgFmt(k, v)} de ${hgFmt(k, goal)}</p>
+      ${p.t ? `<h3 class="tvp-t">${esc(p.t)}</h3>` : ''}
+      ${p.d ? `<p class="tvp-d">${icon('gift')} ${esc(p.d)}</p>` : ''}
+    </section>`;
   }
 
   function tvGuardians(R) {
@@ -6154,7 +6172,8 @@ Content-Type: application/json</pre>
         const ratio = pd.offsetHeight / pd.offsetWidth;
         const room = pan.clientHeight - (pd.getBoundingClientRect().top - pan.getBoundingClientRect().top) / z - parseFloat(getComputedStyle(pan).paddingBottom) - (stage.offsetHeight - pd.offsetHeight > 0 ? 0 : 0) - 6;
         const extraW = pan.offsetWidth - pd.offsetWidth;
-        const want = Math.round(Math.max(V * 0.34, Math.min(V * 0.6, room / Math.max(0.3, ratio) + extraW)));
+        const hasPz = split.classList.contains('has-prize');
+        const want = Math.round(Math.max(V * (hasPz ? 0.3 : 0.34), Math.min(V * (hasPz ? 0.42 : 0.6), room / Math.max(0.3, ratio) + extraW)));
         if (Math.abs(want - pan.offsetWidth) < 4) break;
         split.style.setProperty('--pdw', want + 'px');
       }
@@ -6167,7 +6186,7 @@ Content-Type: application/json</pre>
       for (let k = 0; k < 5; k++) {
         list.style.zoom = zl; list.style.width = (w / zl) + 'px';
         const h = list.getBoundingClientRect().height; if (!h) break;
-        const nz = Math.max(0.55, Math.min(1.9, zl * room / h)); if (Math.abs(nz - zl) < 0.01) break; zl = nz;
+        const nz = Math.max(0.55, Math.min(split.classList.contains('has-prize') ? 1.05 : 1.9, zl * room / h)); if (Math.abs(nz - zl) < 0.01) break; zl = nz;
       }
       list.style.zoom = zl; list.style.width = (w / zl) + 'px';
     }

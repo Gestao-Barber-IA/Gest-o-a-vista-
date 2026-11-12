@@ -2571,3 +2571,20 @@ img { -webkit-user-drag: none; -webkit-touch-callout: none; }
 .pz-edit-row { display: flex; align-items: center; gap: 12px; }
 .pz-thumb { width: 96px; height: 60px; border-radius: 10px; object-fit: cover; display: grid; place-items: center; background: var(--surface-2); border: 1px solid var(--line); }
 @media (prefers-reduced-motion: reduce) { html:not(.tv-motion) .pz-bar i::after { animation: none; } }
+
+/* Tela da loja: prêmio da meta ao lado do pódio e do ranking */
+.tv-full .tv-split.has-prize { grid-template-columns: var(--pdw, 1fr) minmax(0, 1.05fr) minmax(0, 0.78fr); }
+.tv-prize { display: flex; flex-direction: column; gap: 12px; border-color: rgba(214, 180, 106, 0.7); box-shadow: 0 0 30px rgba(214, 180, 106, 0.16); }
+.tv-prize .section-title { display: flex; align-items: center; gap: 8px; color: var(--accent); }
+.tv-prize .section-title .ico { width: 20px; height: 20px; }
+.tvp-img { flex: 1; min-height: 0; border-radius: 18px; overflow: hidden; box-shadow: 0 0 0 2px rgba(214, 180, 106, 0.55), 0 0 26px rgba(214, 180, 106, 0.25); }
+.tvp-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tvp-bar { height: 18px; margin-top: 2px; }
+.tvp-nums { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 1.15rem; }
+.tvp-nums b { color: #fff; } .tvp-nums span { color: var(--fg-soft, #c9c9cf); } .tvp-nums span b { color: var(--accent); }
+.tvp-sub { margin: -6px 0 0; color: var(--muted); font-size: 0.95rem; }
+.tvp-t { margin: 2px 0 0; font-family: var(--font-display); font-weight: 800; font-size: 1.9rem; line-height: 1.05; text-transform: uppercase; }
+.tvp-d { margin: 0; display: flex; align-items: center; gap: 8px; color: var(--accent); font-weight: 800; font-size: 1.1rem; text-transform: uppercase; letter-spacing: 0.03em; }
+.tvp-d .ico { width: 22px; height: 22px; flex: none; }
+
+@media (max-aspect-ratio: 1/1) { .tvp-img { flex: none; aspect-ratio: 4 / 3; } }
