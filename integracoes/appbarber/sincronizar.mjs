@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSAO = "1.8";
+const VERSAO = "1.9";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const TESTE = process.argv.includes("--teste");
 const CARGA = process.argv.includes("--carga"); // carga inicial: lê todas as comandas no ritmo máximo permitido
@@ -131,7 +131,32 @@ async function autoAtualizar() {
   } catch { /* sem internet: tenta na próxima */ }
 }
 
+// Agendamento do Windows: a cada 10 minutos, SEM janela preta, inclusive na bateria e logo que o notebook ligar
+// (o padrão do Windows não roda tarefas na bateria). Ajustado sozinho uma vez (chega pela atualização automática).
+const TAREFA = "Gestao Barber IA - AppBarber";
+function agendar(forcar) {
+  if (process.platform !== "win32") return false;
+  const ok = join(DIR, "agendamento-v2.ok");
+  try { if (!forcar && readFileSync(ok, "utf8")) return true; } catch { /* ainda não ajustado */ }
+  const vbs = join(DIR, "oculto.vbs"), bat = join(DIR, "sincronizar.bat"), q = '"';
+  writeFileSync(vbs, 'CreateObject("WScript.Shell").Run ' + q + q + q + bat + q + q + q + ', 0, False\r\n');
+  const sq = (x) => String(x).replace(/'/g, "''");
+  const ps = [
+    `$a = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument '"${sq(vbs)}"' -WorkingDirectory '${sq(DIR)}'`,
+    "$t = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 10) -RepetitionDuration (New-TimeSpan -Days 3650)",
+    "$l = New-ScheduledTaskTrigger -AtLogOn",
+    "$s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 2)",
+    `Register-ScheduledTask -TaskName '${TAREFA}' -Action $a -Trigger @($t, $l) -Settings $s -Force | Out-Null`,
+  ].join("; ");
+  const r = spawnSync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps], { encoding: "utf8" });
+  if (r.status === 0) { try { writeFileSync(ok, new Date().toISOString()); } catch { /* opcional */ } log("Agendamento ajustado: a cada 10 minutos, sem janela e também na bateria."); return true; }
+  log("Não consegui ajustar o agendamento do Windows: " + String(r.stderr || r.error || "").trim().slice(0, 200));
+  return false;
+}
+
 async function main() {
+  if (process.argv.includes("--agendar")) { process.exit(agendar(true) ? 0 : 1); }
+  agendar(false);
   await autoAtualizar();
   if (!TESTE && !CARGA && !process.argv.includes("--agora")) {
     const h = await dentroDoHorario();
