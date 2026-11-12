@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-12-fisc-lider', date: '2026-11-12', title: 'Fiscalização para o líder', items: [
+    ['novo', 'Em Adicionar profissional › Acessos extras do líder, o dono pode liberar a Fiscalização para o líder: ele vê a página e registra ocorrências da equipe (nunca as próprias). Apagar continua só com o dono.'],
+  ] },
   { id: '2026-11-12-maior-comanda', date: '2026-11-12', title: 'Maior comanda com foto', items: [
     ['novo', 'Em Lançamentos, cada profissional registra a maior comanda do mês. A foto da comanda é obrigatória e o valor só vale se for maior que a atual dele.'],
     ['melhoria', 'O destaque Maior comanda vai para quem tiver a maior: se outro profissional registrar uma maior, ele passa a ser o destaque. O dono e a gestão veem a foto e podem apagar um registro errado.'],

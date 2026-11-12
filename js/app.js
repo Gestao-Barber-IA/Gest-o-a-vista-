@@ -259,10 +259,11 @@
     </section>`;
   }
   function leaderExtrasBox(b) {
-    const x = extrasOf(b.id), n = (x.review ? 1 : 0) + x.fields.length;
+    const x = extrasOf(b.id), n = (x.review ? 1 : 0) + (x.disc ? 1 : 0) + x.fields.length;
     return `<details class="lx" ${ui.lxOpen === b.id ? 'open' : ''} data-id="${esc(b.id)}">
       <summary>${icon('plus')} Acessos extras do líder ${n ? `<span class="chip chip-ok">${n} liberado${n > 1 ? 's' : ''}</span>` : '<span class="chip chip-soft">nenhum</span>'}${tip('extras')}</summary>
       <label class="check"><input type="checkbox" data-change="leaderExtra" data-id="${esc(b.id)}" data-k="review" ${x.review ? 'checked' : ''}><span><b>Conferir e aprovar o checklist de toda a equipe</b><small>Aprova ou recusa as provas dos colegas (nunca as próprias).</small></span></label>
+      <label class="check"><input type="checkbox" data-change="leaderExtra" data-id="${esc(b.id)}" data-k="disc" ${x.disc ? 'checked' : ''}><span><b>Fiscalização (controle disciplinar)</b><small>Vê a página Fiscalização e registra atrasos, faltas e ocorrências da equipe (nunca as próprias). Apagar continua só com o dono.</small></span></label>
       <p class="lx-sub">Lançar à mão os números de toda a equipe, só nestes indicadores:</p>
       <div class="lx-grid">${EXTRA_FIELDS().map(f => `<label class="check"><input type="checkbox" data-change="leaderExtra" data-id="${esc(b.id)}" data-k="f:${f.key}" ${x.fields.includes(f.key) ? 'checked' : ''}><span>${esc(f.label)}</span></label>`).join('')}</div>
     </details>`;
@@ -789,10 +790,10 @@
   const navShut = () => { try { const v = JSON.parse(DB.pref.get('navShut', '[]')); return Array.isArray(v) ? v : []; } catch (e) { return []; } };
   function drawer(user, route) {
     const g = isGestor(user);
-    const groups = NAV.filter(gr => !gr.g || g || isAreaMgr(user)).map(gr => {
+    const groups = NAV.filter(gr => !gr.g || g || isAreaMgr(user) || (gr.items.some(it => it.r === 'fiscalizacao') && discOk(user))).map(gr => {
       const am = isAreaMgr(user), hg = hasGrants(user);
       const lf = lanAny();
-      const items = gr.items.filter(it => (!it.g || g || (it.a && am) || (it.r === 'lancamentos' && lf)) && (!it.rt || rtAuds(user).length) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
+      const items = gr.items.filter(it => (!it.g || g || (it.a && am) || (it.r === 'lancamentos' && lf) || (it.r === 'fiscalizacao' && discOk(user))) && (!it.rt || rtAuds(user).length) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
         <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && (g || hg) ? (g || accessOf(user.barberId) !== 'profissional' ? 'Performance da empresa' : 'Performance da área') : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}${it.r === 'avisos' && avUnseen() ? `<span class="nav-new" aria-label="${avUnseen()} avisos novos">${avUnseen()}</span>` : ''}${it.r === 'atualizacoes' && updUnseen() ? `<span class="nav-new" aria-label="${updUnseen()} novidades">${updUnseen()}</span>` : ''}</a>`).join('');
       if (!gr.group || !items.trim()) return gr.group ? '' : items;
       // Conjunto que pode ser minimizado (fica lembrado neste aparelho); o conjunto da tela aberta aparece sempre.
@@ -1831,7 +1832,7 @@
     del: async id => { if (Cloud.enabled) return Cloud.disc.del(id); discSave(discLocal().filter(x => x.id !== id)); },
   };
   // Quem o usuário pode fiscalizar: o gestor, todos; o líder, a equipe da área dele.
-  const discPeople = user => state.barbers.filter(b => isGestor(user) || (typeof areaIds === 'function' ? areaIds(user, ['gestor', 'membro']).includes(b.id) : false));
+  const discPeople = user => state.barbers.filter(b => isGestor(user) || (myExtras().disc && b.id !== user.barberId) || areaIds(user, ['gestor']).has(b.id));
   const fmtDayBR = d => { const [y, m, dd] = String(d).slice(0, 10).split('-').map(Number); return `${dd} de ${MONTH_NAMES[m - 1]} de ${y}`; };
   // Sugere a gravidade: mesma falta do mesmo profissional nos últimos 30 dias = reincidência.
   function discSuggest(list, bid, kind, day, skipId) {
@@ -2088,7 +2089,7 @@
     pop: () => ['Checklist Agenda Cheia', 'Itens e pontos do checklist: ' + listTxt((GB.popCfgOf(state).items || []).map(x => `${x.title} (${x.pts} pt${x.pts == 1 ? '' : 's'})`)) + '.'],
     pops: () => ['POPs · Guia do Sucesso', 'Os POPs foram atualizados. Confira em POPs · Guia do Sucesso: ' + popsList().map(x => x.title || x.t).filter(Boolean).slice(0, 8).join(', ') + '.'],
     access: id => { const a = ACCESS.find(x => x[0] === accessOf(id)); return ['Seu nível de acesso', `Agora você tem acesso de ${a[1]}: ${a[2]}`]; },
-    extras: id => { const x = extrasOf(id); const t = [x.review && 'conferir e aprovar o checklist da equipe', x.fields.length && 'lançar os números da equipe em ' + x.fields.map(lbl).join(', ')].filter(Boolean); return ['Seus acessos extras', t.length ? 'Agora você pode: ' + t.join('; ') + '.' : 'Seus acessos extras de líder foram retirados.']; },
+    extras: id => { const x = extrasOf(id); const t = [x.review && 'conferir e aprovar o checklist da equipe', x.disc && 'registrar ocorrências na Fiscalização', x.fields.length && 'lançar os números da equipe em ' + x.fields.map(lbl).join(', ')].filter(Boolean); return ['Seus acessos extras', t.length ? 'Agora você pode: ' + t.join('; ') + '.' : 'Seus acessos extras de líder foram retirados.']; },
     goals: id => { const g = (state.goals?.byBarber || {})[id] || {}, ks = GB.visibleInds(state).filter(i => isNum(g[i.key])); return ['Suas metas individuais', ks.length ? 'Suas metas do mês: ' + listTxt(GB.visibleInds(state).map(i => `${i.label} ${fmtGoal(i, GB.goalFor(state, id, i.key))}`)) + '.' : 'Suas metas voltaram a ser as metas da equipe.']; },
     comp: id => { const v = comCfg().pctBy[id] || 0; return ['Sua comissão', v > 0 ? `Sua comissão agora é de ${nf1.format(v)}% do faturamento.` : 'Sua comissão volta a seguir a regra geral da equipe.']; },
   };
@@ -4559,11 +4560,13 @@ Content-Type: application/json</pre>
   const accessOf = bid => (bid && (org().access || {})[bid]) || 'profissional';
   // Acessos extras que o dono pode dar a cada líder: conferir o checklist e lançar métricas específicas.
   function extrasOf(bid) {
-    if (accessOf(bid) !== 'lider') return { review: false, fields: [] };
+    if (accessOf(bid) !== 'lider') return { review: false, disc: false, fields: [] };
     const e = (org().extras || {})[bid] || {};
-    return { review: !!e.review, fields: Array.isArray(e.fields) ? e.fields : [] };
+    return { review: !!e.review, disc: !!e.disc, fields: Array.isArray(e.fields) ? e.fields : [] };
   }
-  const myExtras = () => { const u = currentUser(); return u && !isGestor(u) ? extrasOf(u.barberId) : { review: false, fields: [] }; };
+  const myExtras = () => { const u = currentUser(); return u && !isGestor(u) ? extrasOf(u.barberId) : { review: false, disc: false, fields: [] }; };
+  // Fiscalização: dono, gestor de área ou líder com o acesso extra "Fiscalização".
+  const discOk = u => !!u && (isGestor(u) || isAreaMgr(u) || (!isGestor(u) && extrasOf(u.barberId).disc));
   const EXTRA_FIELDS = () => GB.MONTH_FIELDS.filter(f => !f.calc && !hidAll().includes(GB.FIELD_IND[f.key] || f.key));
   function areaIds(u, roles) {
     const s = new Set();
@@ -6438,7 +6441,7 @@ Content-Type: application/json</pre>
     } else if (SOON_TEXT[route]) {
       page = { r: () => pageSoon(route) }; title = NAV.flatMap(g => g.items).find(i => i.r === route).t;
     } else { route = 'inicio'; page = PAGES.inicio; title = page.t; }
-    if (page.g && !isGestor(user) && !(page.a && isAreaMgr(user)) && !(route === 'lancamentos' && lanAny())) { route = 'inicio'; page = PAGES.inicio; title = page.t; }
+    if (page.g && !isGestor(user) && !(page.a && isAreaMgr(user)) && !(route === 'lancamentos' && lanAny()) && !(route === 'fiscalizacao' && discOk(user))) { route = 'inicio'; page = PAGES.inicio; title = page.t; }
 
     const pending = isGestor(user) ? state.users.filter(u => u.status === 'pendente').length : 0;
     const who = isGestor(user) ? { name: state.company.name, photo: state.company.logo } : (barberById(user.barberId) || { name: user.name });
@@ -7589,6 +7592,7 @@ Content-Type: application/json</pre>
       const o = org(), id = el.dataset.id, k = el.dataset.k;
       const x = o.extras[id] = { review: false, fields: [], ...(o.extras[id] || {}) };
       if (k === 'review') x.review = el.checked;
+      else if (k === 'disc') x.disc = el.checked;
       else { const f = k.slice(2); x.fields = el.checked ? [...new Set([...x.fields, f])] : x.fields.filter(v => v !== f); }
       ui.lxOpen = id; save(); toast('Acesso do líder atualizado.'); render();
     },
