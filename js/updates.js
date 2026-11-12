@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-13-checklist-botoes', date: '2026-11-13', title: 'Botões − e + no Checklist Agenda Cheia', items: [
+    ['melhoria', 'Cada tarefa do checklist voltou a ter os botões − e + com as bolinhas de cada unidade. O + abre a prova da próxima unidade; o − tira a última que ainda não foi aprovada. Tarefas de uma vez só têm o botão Marcar como feito.'],
+  ] },
   { id: '2026-11-12-fisc-lider', date: '2026-11-12', title: 'Fiscalização para o líder', items: [
     ['novo', 'Em Adicionar profissional › Acessos extras do líder, o dono pode liberar a Fiscalização para o líder: ele vê a página e registra ocorrências da equipe (nunca as próprias). Apagar continua só com o dono.'],
   ] },

@@ -4794,6 +4794,26 @@ Content-Type: application/json</pre>
     if (e.path) return `<img class="pop-ph ${cls}" data-proof="${esc(e.path)}" alt="Prova" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">`;
     return `<span class="pop-ph pop-ph-none ${cls}">${icon('camera')}<small>Exemplo</small></span>`;
   }
+  // Botões − e + de cada tarefa (com as bolinhas de cada unidade). O + abre a prova da próxima unidade;
+  // o − tira a última unidade que ainda não foi aprovada. "Marcar como feito" nas tarefas de uma vez só.
+  function popStepper(it, list, t, bid, mayAdd) {
+    const me = currentUser(), rev = canReview(bid);
+    let delI = -1;
+    for (let i = list.length - 1; i >= 0; i--) { const e = list[i]; if (e.status === 'pendente' && (!e.byUser || !me || e.byUser === me.id || rev)) { delI = i; break; } }
+    const live = list.filter(GB.evLive), ok = list.filter(e => GB.evOk(it, e)).length;
+    if (it.type === 'check') {
+      if (!mayAdd) return delI >= 0 ? `<button class="btn pop-add" data-action="popEvDel" data-it="${esc(it.id)}" data-i="${delI}">${icon('undo')} ${ui.confirm === 'ev' + it.id + delI ? 'Confirmar: desfazer' : 'Desfazer'}</button>` : '';
+      return `<button class="btn pop-add" data-action="popAddOpen" data-it="${esc(it.id)}">${icon('check')} Marcar como feito</button>`;
+    }
+    const dots = Array.from({ length: t }, (_, i) => { const e = live[i]; const cls = !e ? '' : e.status === 'aprovado' ? 'is-ok' : 'is-pend'; return `<span class="pst-dot ${cls}" aria-hidden="true">${i + 1}</span>`; }).join('');
+    const minusConfirm = ui.confirm === 'ev' + it.id + delI;
+    return `<div class="pop-stp" role="group" aria-label="${esc(it.title)}">
+      <button type="button" class="pst-btn ${minusConfirm ? 'btn-danger' : ''}" data-action="popEvDel" data-it="${esc(it.id)}" data-i="${delI}" ${delI < 0 ? 'disabled' : ''} aria-label="${minusConfirm ? 'Confirmar: tirar a última' : 'Tirar a última'}">${minusConfirm ? icon('check') : icon('dash')}</button>
+      <div class="pst-dots">${dots}</div>
+      <button type="button" class="pst-btn" data-action="popAddOpen" data-it="${esc(it.id)}" ${mayAdd ? '' : 'disabled'} aria-label="Adicionar a próxima (com prova)">${icon('plus')}</button>
+      <b class="pst-n num">${ok}/${t}</b>
+    </div>${minusConfirm ? '<p class="section-note">Toque de novo no ✓ para tirar a última unidade que ainda não foi aprovada.</p>' : ''}`;
+  }
   function popItemCard(it, rec, bid) {
     const list = rec && rec.ev && Array.isArray(rec.ev[it.id]) ? rec.ev[it.id] : [];
     const t = it.type === 'check' ? 1 : Math.max(1, Number(it.target) || 1);
@@ -4828,7 +4848,7 @@ Content-Type: application/json</pre>
       <p class="pop-ist num"><b>${ok}/${t}</b> aprovadas${pend ? ` · <span class="pend">${pend} aguardando conferência (+${fmtPts(ppend)} pts)</span>` : ''}</p>
       ${list.length ? `<ul class="pop-evs">${evs}</ul>` : ''}
       ${composer}
-      ${!draft && mayAdd ? `<button class="btn pop-add" data-action="popAddOpen" data-it="${esc(it.id)}">${icon('camera')} ${it.type === 'check' ? 'Anexar prova e confirmar' : `Adicionar prova ${live + 1} de ${t}`}</button>` : ''}
+      ${!draft && canPopEdit(bid) ? popStepper(it, list, t, bid, mayAdd) : ''}
       ${!canPopEdit(bid) && !list.length ? '<p class="muted">Sem registro.</p>' : ''}
       ${it.type === 'phones' ? `<label class="field"><span class="tm-flabel">Texto da mensagem enviada (prompt)</span><textarea class="input pop-ta" id="pm-${esc(it.id)}" data-pop="msg" data-it="${esc(it.id)}" placeholder="Cole aqui a mensagem ou abordagem que você enviou" ${canPopEdit(bid) ? '' : 'readonly'}>${esc(rec && rec.msg ? rec.msg[it.id] || '' : '')}</textarea></label>` : ''}
       <label class="field"><span class="tm-flabel">Resultado / observação por pessoa (opcional)</span><textarea class="input pop-ta" id="pn-${esc(it.id)}" data-pop="note" data-it="${esc(it.id)}" placeholder="Ex.: João agendou sábado, Pedro pediu preço" ${canPopEdit(bid) ? '' : 'readonly'}>${esc(rec && rec.notes ? rec.notes[it.id] || '' : '')}</textarea></label>

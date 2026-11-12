@@ -2737,3 +2737,15 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .cm-thumb { width: 56px; height: 56px; padding: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface-3, #222); cursor: zoom-in; }
 .cm-thumb .cm-ph { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pop-viewer figure .cm-ph { width: 100%; max-width: 100%; max-height: 70vh; object-fit: contain; border-radius: 12px; }
+
+/* Checklist Agenda Cheia: botões − e + com as bolinhas de cada unidade */
+.pop-stp { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px auto; align-items: center; gap: 6px; margin: 4px 0 2px; }
+.pst-btn { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 13px; border: 1px solid var(--line); background: var(--surface-2); color: var(--fg); cursor: pointer; padding: 0; }
+.pst-btn .ico { width: 20px; height: 20px; }
+.pst-btn:disabled { opacity: 0.35; cursor: default; }
+.pst-btn.btn-danger { background: var(--danger, #cf3d3d); color: #fff; border-color: transparent; }
+.pst-dots { display: flex; gap: 4px; min-width: 0; }
+.pst-dot { flex: 1 1 0; min-width: 0; max-width: 38px; aspect-ratio: 1; display: grid; place-items: center; border-radius: 50%; border: 1.5px solid var(--line); font-weight: 700; font-size: 0.85rem; color: var(--muted); }
+.pst-dot.is-ok { background: var(--accent); border-color: var(--accent); color: var(--accent-ink, #111); }
+.pst-dot.is-pend { border-color: var(--gold, #f2c14e); color: var(--gold, #f2c14e); border-style: dashed; }
+.pst-n { color: var(--fg-soft); white-space: nowrap; }
