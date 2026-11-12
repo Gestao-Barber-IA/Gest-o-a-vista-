@@ -2686,3 +2686,21 @@ html[data-pdl="escudo"] .tv-full .tv-stage .pd-row { padding-top: 21cqw; }
 .aus-btn:disabled { opacity: 0.35; }
 .aus-n { display: flex; align-items: baseline; justify-content: center; gap: 6px; height: 48px; align-items: center; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2); font-size: 1.4rem; font-weight: 700; }
 .aus-n small { font-size: 0.85rem; font-weight: 500; color: var(--muted); }
+
+/* Planos mensais: catálogo e registro de planos vendidos */
+.pc-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
+.pc-list li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.pc-list li b { flex: 1; min-width: 0; }
+.pc-list li .link-btn { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.pc-list li .link-btn .ico { width: 16px; height: 16px; }
+.pl-box { margin: 14px 0; padding: 14px; border: 1px solid var(--line-accent, var(--line)); border-radius: 16px; display: grid; gap: 10px; }
+.pl-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pl-head h3 { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 1.05rem; }
+.pl-head .ico { width: 20px; height: 20px; }
+.pl-form { display: grid; gap: 10px; }
+.pl-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pl-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 10px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
+.pl-list li .chip { grid-column: 1; justify-self: start; text-transform: none; letter-spacing: 0.02em; font-size: 0.78rem; }
+.pl-list li .icon-btn { grid-column: 2; grid-row: 1 / span 2; }
+.pl-who { min-width: 0; display: grid; }
+.pl-who small { color: var(--muted); }

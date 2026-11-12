@@ -168,6 +168,46 @@
     fechamento: ['Fechamento do mês', 'Apresentação para a equipe: revela só os 3 primeiros colocados, do 3º ao 1º. Cada lugar do pódio só aparece quando o gestor toca em Revelar. O resumo esconde o resultado para não estragar a surpresa se a tela estiver na TV.'],
   };
   // Configurações › Indicadores: o que cada profissional pode lançar dos próprios números.
+  // ---------- Planos mensais: catálogo do dono e registro de cada plano vendido ----------
+  const fmtFone = d => { d = String(d || '').replace(/\D/g, ''); return d.length === 11 ? `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}` : d.length === 10 ? `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}` : d; };
+  function planCatalogCard() {
+    const list = planCat();
+    return `<section class="section card" id="planos-cat">
+      <h2 class="section-title">${icon('idcard')} Planos mensais da empresa</h2>
+      <p class="section-note">Cadastre os planos que a barbearia vende. Com os planos cadastrados, cada profissional registra em <b>Lançamentos</b> os planos que fechou: nome e sobrenome do cliente, WhatsApp e qual plano. O indicador Planos mensais conta esses registros.</p>
+      ${list.length ? `<ul class="pc-list">${list.map(p => `<li><b>${esc(p.n)}</b>${p.v ? `<span class="muted num">${money2(p.v)}</span>` : ''}<button type="button" class="link-btn" data-action="planCatDel" data-id="${esc(p.id)}" aria-label="Remover ${esc(p.n)}">${icon('trash')} Remover</button></li>`).join('')}</ul>` : '<p class="muted">Nenhum plano cadastrado ainda.</p>'}
+      <form class="form pc-add" data-form="planCat" novalidate>
+        <div class="grid-2"><label class="field"><span>Nome do plano</span><input class="input" name="n" maxlength="60" placeholder="Ex.: Plano Barba e Cabelo"></label>
+        <label class="field"><span>Valor mensal (opcional)</span><input class="input num" name="v" type="number" min="0" step="0.01" placeholder="Ex.: 149,90"></label></div>
+        <p class="form-msg" data-msg></p>
+        <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('plus')} Adicionar plano</button></div>
+      </form>
+    </section>`;
+  }
+  function planSection(b, ym) {
+    if (!canPlan(b.id)) return '';
+    const sales = (state.planSales || []).filter(v => v.barberId === b.id && v.date.slice(0, 7) === ym).sort((a, c) => c.date.localeCompare(a.date));
+    const open = ui.planForm === b.id, r = monthRange(ym);
+    return `<section class="pl-box">
+      <div class="pl-head"><h3>${icon('idcard')} Planos mensais vendidos <span class="chip chip-soft">${sales.length}</span></h3>
+        ${open ? '' : `<button type="button" class="btn btn-sm btn-primary" data-action="planForm" data-id="${esc(b.id)}">${icon('plus')} Registrar plano</button>`}</div>
+      ${open ? `<form class="form pl-form" data-form="planSale" data-id="${esc(b.id)}" novalidate>
+        <label class="field"><span>Nome e sobrenome do cliente *</span><input class="input" name="nome" maxlength="80" autocomplete="off" placeholder="Ex.: João da Silva"></label>
+        <label class="field"><span>WhatsApp do cliente *</span><input class="input" name="fone" type="tel" inputmode="tel" maxlength="20" placeholder="(11) 91234-5678"></label>
+        <label class="field"><span>Plano que o cliente fechou *</span><select class="input" name="plano"><option value="">Escolha o plano</option>${planCat().map(p => `<option value="${esc(p.id)}">${esc(p.n)}${p.v ? ' · ' + money2(p.v) : ''}</option>`).join('')}</select></label>
+        <label class="field"><span>Data</span><input class="input" type="date" name="date" value="${lanDate(ym)}" min="${r.start}" max="${r.end}"></label>
+        <p class="form-msg" data-msg></p>
+        <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar plano</button><button type="button" class="btn" data-action="planForm" data-id="">Cancelar</button></div>
+      </form>` : ''}
+      ${sales.length ? `<ul class="pl-list">${sales.map(v => `<li><span class="pl-who"><b>${esc(v.nome)}</b><small>${esc(fmtFone(v.fone))} · ${dateBR(v.date).slice(0, 5)}</small></span><span class="chip chip-ok">${esc(v.plano)}</span>
+        <button type="button" class="icon-btn ${ui.confirm === 'pl' + v.id ? 'btn-danger' : ''}" data-action="planDel" data-id="${esc(v.id)}" aria-label="Apagar registro de ${esc(v.nome)}">${ui.confirm === 'pl' + v.id ? icon('check') : icon('trash')}</button></li>`).join('')}</ul>` : `<p class="muted">Nenhum plano registrado em ${esc(ymLabel(ym).replace(' de ', '/'))}.</p>`}
+    </section>`;
+  }
+  // Contagem do indicador = registros do mês (a diferença entra no dia do registro).
+  function syncPlanCount(bid, ym, date) {
+    const n = (state.planSales || []).filter(v => v.barberId === bid && v.date.slice(0, 7) === ym).length;
+    GB.applyManualTotal(state, bid, ym, 'planos', n, date);
+  }
   function selfCard() {
     const on = selfCfg();
     return `<section class="section card" id="self-lan">
@@ -2387,6 +2427,11 @@
         return `<div class="field"><span class="tm-flabel"><span class="tm-ft">${esc(f.label)}${tip(FIELD_TIP[f.key])}</span><span class="lock">${icon('chart')} Calculado</span></span>
           <input class="input num" id="m-${f.key}" value="${t == null ? '' : nf2.format(t)}" readonly tabindex="-1" placeholder="Faturamento ÷ clientes"></div>`;
       }
+      if (f.key === 'planos' && planCat().length) {
+        const n = (state.planSales || []).filter(v => v.barberId === b.id && v.date.slice(0, 7) === ym).length;
+        return `<div class="field"><span class="tm-flabel"><span class="tm-ft">${esc(f.label)}${tip(FIELD_TIP[f.key])}</span><span class="lock">${icon('idcard')} Pelos planos registrados</span></span>
+          <input class="input num" id="m-planos" value="${n}" readonly tabindex="-1"></div>`;
+      }
       const fmtV = v => f.key.endsWith('Pct') ? nf2.format(v) + '%' : (f.step === '0.01' ? money2(v) : nf0.format(v));
       if (f.key === 'check' && integ._pop) {
         return `<div class="field"><span class="tm-flabel"><span class="tm-ft">${esc(f.label)}${tip(FIELD_TIP[f.key])}</span><span class="lock">${icon('lock')} Vindo do checklist</span></span>
@@ -2476,6 +2521,7 @@
         <input class="input" type="date" id="m-date" value="${lanDate(ym)}" min="${monthRange(ym).start}" max="${monthRange(ym).end}" data-change="lanDate"></label>
         <p class="section-note">Os campos mostram o total do mês. Ao mudar um total, a diferença entra nesta data e já aparece na visão por semana.</p></div>
       <div class="grid-2" id="tm-fields">${editorFields(sel, ym)}</div>
+      ${planSection(sel, ym)}
       <div id="tm-hist">${lanHistory(sel, ym)}</div>
       ${own ? `<details class="tm-goals"><summary>Metas individuais de ${esc(sel.name.split(' ')[0])} <span class="muted">(em branco = meta da equipe)</span></summary>
         <div class="grid-2">${GB.visibleInds(state).map(i => `<label class="field"><span class="tm-flabel">${esc(i.label)}</span><input class="input input-edit num" id="g-${i.key}" name="${i.key}" type="number" min="0" step="any" value="${isNum(goals[i.key]) ? goals[i.key] : ''}" placeholder="Equipe: ${esc(fmtGoal(i, GB.goalFor(state, '', i.key)))}" data-auto="goal" data-id="${esc(sel.id)}"></label>`).join('')}</div>
@@ -3472,6 +3518,7 @@ ${rows.length ? '' : emptyBarbers()}
         </form>
       </section>
       ${selfCard()}
+      ${planCatalogCard()}
       <section class="section card">
         <h2 class="section-title">Metas mensais da equipe ${tip('goals')}</h2>
         <p class="section-note">Valem para todos os barbeiros. Para ajustar a meta de alguém, abra o barbeiro em Lançamentos, em "Metas individuais". Percentuais em %, valores em R$.</p>
@@ -4497,8 +4544,11 @@ Content-Type: application/json</pre>
   const selfCfg = () => (org().self || {}).fields || [];
   const mySelf = () => { const u = currentUser(); return u && !isGestor(u) && u.barberId ? selfCfg().filter(k => EXTRA_FIELDS().some(f => f.key === k)) : []; };
   const isMe = bid => (currentUser() || {}).barberId === bid;
-  const lanAny = () => myExtras().fields.length > 0 || mySelf().length > 0;
-  const canLanB = bid => canEditB(bid) || myExtras().fields.length > 0 || (isMe(bid) && mySelf().length > 0);
+  const planCat = () => (Array.isArray(state.planCatalog) ? state.planCatalog : []);
+  const lanAny = () => myExtras().fields.length > 0 || mySelf().length > 0 || (!!(currentUser() || {}).barberId && planCat().length > 0);
+  const canLanB = bid => canEditB(bid) || myExtras().fields.length > 0 || (isMe(bid) && (mySelf().length > 0 || planCat().length > 0));
+  // Registrar planos vendidos: o dono/gestão de área para quem cuidam; o profissional, os próprios (com planos cadastrados).
+  const canPlan = bid => planCat().length > 0 && (canEditB(bid) || isMe(bid));
   const fieldOk = (bid, key) => canEditB(bid) || myExtras().fields.includes(key) || (isMe(bid) && mySelf().includes(key));
   // Ranking só com os barbeiros da área (fechamento do gestor de área).
   function scopedR(ym) {
@@ -6448,6 +6498,17 @@ Content-Type: application/json</pre>
       if (ui.teamBarber === id) ui.teamBarber = null;
       save(); toast(`${b.name} foi excluído.`); render();
     },
+    planForm(el) { ui.planForm = el.dataset.id || null; render(); if (ui.planForm) setTimeout(() => { const i = document.querySelector('[data-form="planSale"] [name=nome]'); if (i) i.focus(); }, 50); },
+    planDel(el) {
+      const v = (state.planSales || []).find(x => x.id === el.dataset.id); if (!v || !canPlan(v.barberId)) return;
+      if (ui.confirm !== 'pl' + v.id) { ui.confirm = 'pl' + v.id; render(); toast('Toque de novo para apagar este plano.'); return; }
+      ui.confirm = null; state.planSales = state.planSales.filter(x => x.id !== v.id);
+      syncPlanCount(v.barberId, v.date.slice(0, 7), v.date); save(); toast('Registro apagado.'); render();
+    },
+    planCatDel(el) {
+      if (!isGestor(currentUser())) return;
+      state.planCatalog = planCat().filter(p => p.id !== el.dataset.id); save(); toast('Plano removido.'); render();
+    },
     ausStep(el) {
       const id = el.dataset.id, d = Number(el.dataset.d) || 0, ym = ui.teamMonth || curYm();
       if (!fieldOk(id, 'aus')) return;
@@ -7187,6 +7248,26 @@ Content-Type: application/json</pre>
       if (INDICATORS.length - hidden.length < 2) return setMsg(f, 'Deixe pelo menos 2 indicadores em uso.');
       INDICATORS.forEach(i => { if (w[i.key] <= 0) w[i.key] = (state.weights || {})[i.key] || i.weight; }); // guarda o peso para quando voltar a usar
       state.weights = w; state.hidden = hidden; save(); toast('Indicadores salvos. O ranking já usa os novos pesos.'); render();
+    },
+    planCat(f) {
+      if (!isGestor(currentUser())) return;
+      const n = val(f, 'n').replace(/\s+/g, ' ').slice(0, 60), v = Number(String(val(f, 'v')).replace(',', '.')) || 0;
+      if (n.length < 2) return setMsg(f, 'Digite o nome do plano.');
+      if (planCat().some(p => p.n.toLowerCase() === n.toLowerCase())) return setMsg(f, 'Já existe um plano com esse nome.');
+      state.planCatalog = [...planCat(), { id: uid('pl_'), n, ...(v > 0 ? { v: Math.round(v * 100) / 100 } : {}) }]; save(); toast('Plano cadastrado.'); render();
+    },
+    planSale(f) {
+      const bid = f.dataset.id; if (!canPlan(bid)) return;
+      const nome = val(f, 'nome').replace(/\s+/g, ' ').trim(), fone = val(f, 'fone').replace(/\D/g, ''), pid = val(f, 'plano'), date = val(f, 'date');
+      const partes = nome.split(' ').filter(x => x.replace(/[^A-Za-zÀ-ÿ]/g, '').length >= 2);
+      if (partes.length < 2) return setMsg(f, 'Digite o nome e o sobrenome do cliente.');
+      const tel = fone.replace(/^55(?=\d{10,11}$)/, '');
+      if (!/^[1-9]{2}9?\d{8}$/.test(tel) || (tel.length === 11 && tel[2] !== '9')) return setMsg(f, 'Digite um WhatsApp válido com DDD. Ex.: (11) 91234-5678.');
+      const p = planCat().find(x => x.id === pid); if (!p) return setMsg(f, 'Escolha qual plano o cliente fechou.');
+      const ym = ui.teamMonth || curYm(), r = monthRange(ym);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < r.start || date > r.end) return setMsg(f, 'Escolha uma data dentro do mês.');
+      state.planSales = [...(state.planSales || []), { id: uid('ps_'), barberId: bid, date, nome: nome.slice(0, 80), fone: tel, plano: p.n, by: (currentUser() || {}).name || '' }];
+      syncPlanCount(bid, ym, date); ui.planForm = null; save(); toast(`Plano de ${nome.split(' ')[0]} registrado.`); render();
     },
     ocup(f) {
       const open = val(f, 'open'), close = val(f, 'close');

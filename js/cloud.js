@@ -236,11 +236,12 @@
     entries: { key: e => e.id, row: (e, cid) => ({ id: e.id, company_id: cid, barber_id: e.barberId, date: e.date, data: pick(e, ENTRY_KEYS), source: e.source || 'api' }), list: s => s.entries, pk: r => ({ id: r.id }) },
     pop: { key: r => r.barberId + '|' + r.day, row: (r, cid) => ({ id: r.barberId + '|' + r.day, company_id: cid, barber_id: r.barberId, day: r.day, data: { ev: r.ev || {}, notes: r.notes || {}, msg: r.msg || {}, res: r.res || null, by: r.by || null, at: r.at || null } }), list: s => s.pop || [], pk: r => ({ id: r.id }) },
     monthly: { key: m => m.barberId + '|' + m.month, row: (m, cid) => ({ company_id: cid, barber_id: m.barberId, month: m.month, data: { ...pick(m, MONTH_KEYS), ...(m._adj && Object.keys(m._adj).length ? { _adj: m._adj } : {}) } }), list: s => s.monthly || [], pk: r => ({ barber_id: r.barber_id, month: r.month }) },
+    planSales: { key: v => v.id, row: (v, cid) => ({ id: v.id, company_id: cid, barber_id: v.barberId, date: v.date, data: { nome: v.nome, fone: v.fone, plano: v.plano, by: v.by || null } }), list: s => s.planSales || [], pk: r => ({ id: r.id }) },
   };
-  const TNAME = { pop: 'pop_records' };
+  const TNAME = { pop: 'pop_records', planSales: 'plan_sales' };
   const tbl = t => TNAME[t] || t;
-  const ORDER_UP = ['barbers', 'invites', 'entries', 'monthly', 'pop'];
-  const ORDER_DEL = ['pop', 'monthly', 'entries', 'invites', 'barbers'];
+  const ORDER_UP = ['barbers', 'invites', 'entries', 'monthly', 'pop', 'planSales'];
+  const ORDER_DEL = ['planSales', 'pop', 'monthly', 'entries', 'invites', 'barbers'];
 
   function snapshot(s, cid) {
     const out = { tables: {}, company: '', users: {} };
@@ -250,7 +251,7 @@
       out.tables[t] = map;
     }
     const co = s.company;
-    out.company = JSON.stringify({ name: co.name, cnpj: co.cnpj || '', phone: co.phone || '', email: co.email || '', logo: co.logo || null, settings: { weights: s.weights, goals: s.goals, hidden: s.hidden, org: s.org || null, pop: s.popCfg || null, reveal: s.reveal || null, ocup: s.ocupCfg || null, pops: s.pops || null, brand: s.brand || null, theme: s.theme || null, houseGoals: s.houseGoals || null, houseGoalsM: s.houseGoalsM || null, music: s.podiumMusic || null, births: s.births || null, demoKit: s.demoKit || null, com: s.comCfg || null, dreams: s.dreams || null, units: s.units || null, prize: s.prize || null, notices: s.notices || null, logoColors: s.logoColors === false ? false : null } });
+    out.company = JSON.stringify({ name: co.name, cnpj: co.cnpj || '', phone: co.phone || '', email: co.email || '', logo: co.logo || null, settings: { weights: s.weights, goals: s.goals, hidden: s.hidden, org: s.org || null, pop: s.popCfg || null, reveal: s.reveal || null, ocup: s.ocupCfg || null, pops: s.pops || null, brand: s.brand || null, theme: s.theme || null, houseGoals: s.houseGoals || null, houseGoalsM: s.houseGoalsM || null, music: s.podiumMusic || null, births: s.births || null, demoKit: s.demoKit || null, com: s.comCfg || null, dreams: s.dreams || null, units: s.units || null, prize: s.prize || null, planos: s.planCatalog || null, notices: s.notices || null, logoColors: s.logoColors === false ? false : null } });
     for (const u of s.users) out.users[u.id] = JSON.stringify({ name: u.name, phone: u.phone || '', status: u.status });
     return out;
   }
@@ -297,7 +298,7 @@
       if (billing.approved === false) return { status: 'aprovacao', company: co, role: prof.role }; // cadastro aguardando o dono do SaaS
       return { status: 'bloqueado', billing, plans, company: co, role: prof.role };
     }
-    const [co, profs, barbers, entries, monthly, invites, key, pop] = await Promise.all([
+    const [co, profs, barbers, entries, monthly, invites, key, pop, sales] = await Promise.all([
       q(c.from('companies').select('*').eq('id', cid).single()),
       q(c.from('profiles').select('*').eq('company_id', cid)),
       q(c.from('barbers').select('*').eq('company_id', cid).order('created_at')),
@@ -306,6 +307,7 @@
       gestor ? q(c.from('invites').select('*').eq('company_id', cid)) : Promise.resolve([]),
       gestor ? q(c.from('api_keys').select('key').eq('company_id', cid).maybeSingle()) : Promise.resolve(null),
       fetchAll('pop_records', cid).catch(() => []),
+      fetchAll('plan_sales', cid).catch(() => []),
     ]);
     const st = co.settings || {};
     const state = {
@@ -338,6 +340,8 @@
       logoColors: st.logoColors === false ? false : undefined,
       ocupCfg: st.ocup || null,
       pop: pop.map(r => ({ barberId: r.barber_id, day: r.day, ...(r.data || {}) })),
+      planSales: sales.map(r => ({ id: r.id, barberId: r.barber_id, date: r.date, ...(r.data || {}) })),
+      planCatalog: Array.isArray(st.planos) ? st.planos : [],
       apiKey: key ? key.key : '',
       billing, plans,
     };
@@ -413,7 +417,7 @@
     Cloud.unsubscribe();
     const cid = Cloud.companyId;
     channel = c.channel('company-' + cid);
-    for (const t of ['entries', 'monthly', 'barbers', 'profiles', 'pop_records']) channel.on('postgres_changes', { event: '*', schema: 'public', table: t, filter: 'company_id=eq.' + cid }, remote);
+    for (const t of ['entries', 'monthly', 'barbers', 'profiles', 'pop_records', 'plan_sales']) channel.on('postgres_changes', { event: '*', schema: 'public', table: t, filter: 'company_id=eq.' + cid }, remote);
     channel.on('postgres_changes', { event: '*', schema: 'public', table: 'companies', filter: 'id=eq.' + cid }, remote);
     // Revelação do pódio ao vivo: o gestor avisa cada passo e os celulares da equipe acompanham.
     channel.on('broadcast', { event: 'reveal' }, ({ payload }) => { if (Cloud.onReveal) Cloud.onReveal(payload); });
