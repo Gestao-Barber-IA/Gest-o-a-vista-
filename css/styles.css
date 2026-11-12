@@ -2678,3 +2678,11 @@ html[data-pdl="escudo"] .tv-full .tv-stage .pd-row { padding-top: 21cqw; }
 .tvg-bar { font-size: 12px; }
 .pz-card .pz-bar, .tv-pz-in .pz-bar, .tv-goal .tvg-bar { margin-right: 1.4em; }
 @media (prefers-reduced-motion: reduce) { html:not(.tv-motion) :is(.pz-rk, .pz-flame) { animation: none; } }
+
+/* Lançamentos: dias de ausência só com − e + */
+.aus-step { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 6px; max-width: 260px; }
+.aus-btn { height: 48px; min-width: 0; padding: 0; justify-content: center; font-size: 1.4rem; }
+.aus-btn .ico { width: 22px; height: 22px; }
+.aus-btn:disabled { opacity: 0.35; }
+.aus-n { display: flex; align-items: baseline; justify-content: center; gap: 6px; height: 48px; align-items: center; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2); font-size: 1.4rem; font-weight: 700; }
+.aus-n small { font-size: 0.85rem; font-weight: 500; color: var(--muted); }

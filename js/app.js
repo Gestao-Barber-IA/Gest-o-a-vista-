@@ -2381,7 +2381,7 @@
     const R = monthR(ym);
     const row = R.rows.find(r => r.barber.id === b.id);
     const hidden = hidAll();
-    return GB.MONTH_FIELDS.filter(f => !hidden.includes(GB.FIELD_IND[f.key] || f.key)).map(f => {
+    return GB.MONTH_FIELDS.filter(f => f.key !== 'agend' && !hidden.includes(GB.FIELD_IND[f.key] || f.key)).map(f => {
       if (f.calc) {
         const t = row && row.sums.cli > 0 ? row.sums.fat / row.sums.cli : null;
         return `<div class="field"><span class="tm-flabel"><span class="tm-ft">${esc(f.label)}${tip(FIELD_TIP[f.key])}</span><span class="lock">${icon('chart')} Calculado</span></span>
@@ -2419,6 +2419,16 @@
       if (!fieldOk(b.id, f.key)) {
         return `<div class="field"><span class="tm-flabel"><span class="tm-ft">${esc(f.label)}${tip(FIELD_TIP[f.key])}</span><span class="lock">${icon('eye')} Só leitura</span></span>
           <input class="input num" id="m-${f.key}" value="${shownV === '' ? '' : fmtV(shownV)}" placeholder="—" readonly tabindex="-1"></div>`;
+      }
+      if (f.key === 'aus') {
+        // Dias de ausência: só com os botões − e + (sem digitar), para não errar o número.
+        const n = isNum(rec.aus) ? Number(rec.aus) : 0, mx = Number(f.max) || 31;
+        return `<div class="field"><span class="tm-flabel"><span class="tm-ft">${esc(f.label)}${tip(FIELD_TIP[f.key])}</span></span>
+          <div class="aus-step" role="group" aria-label="${esc(f.label)}">
+            <button type="button" class="btn aus-btn" data-action="ausStep" data-id="${esc(b.id)}" data-d="-1" ${n <= 0 ? 'disabled' : ''} aria-label="Diminuir 1 dia">${icon('dash')}</button>
+            <output class="aus-n num" id="m-aus">${n}<small>${n === 1 ? 'dia' : 'dias'}</small></output>
+            <button type="button" class="btn aus-btn" data-action="ausStep" data-id="${esc(b.id)}" data-d="1" ${n >= mx ? 'disabled' : ''} aria-label="Aumentar 1 dia">${icon('plus')}</button>
+          </div></div>`;
       }
       return `<label class="field"><span class="tm-flabel"><span class="tm-ft">${esc(f.label)}${tip(FIELD_TIP[f.key])}</span>${isSum ? '<span class="lock lock-sum">Total do mês</span>' : ''}</span>
         <input class="input input-edit num" id="m-${f.key}" name="${f.key}" type="number" inputmode="decimal" min="0" ${f.max ? `max="${f.max}"` : ''} step="${f.step}" value="${shownV}" placeholder="—" data-auto="month" ${isSum ? 'data-sum="1"' : ''} data-id="${esc(b.id)}"></label>`;
@@ -2748,7 +2758,7 @@
     }
     return S;
   }
-  const HOUSE_EXTRA = [{ key: 'agend', label: 'Agendamentos', fmt: 'int' }, { key: 'comanda', label: 'Maior comanda do mês', fmt: 'money2' }];
+  const HOUSE_EXTRA = [{ key: 'comanda', label: 'Maior comanda do mês', fmt: 'money2' }];
   function houseVals(S) {
     const o = {};
     for (const ind of GB.visibleInds(state)) o[ind.key] = ind.calc(S);
@@ -3061,7 +3071,8 @@
   // Visão da barbearia inteira (gestor): totais do mês, detalhe por profissional e radar.
   // ---------- Metas da empresa ----------
   // Padrão (state.houseGoals) para todos os meses; um mês pode ter metas próprias (state.houseGoalsM[ym]).
-  const HG_KEYS = ['fat', 'agend', 'cli', 'serv', 'prod', 'planos', 'ticket', 'ocup', 'fid'];
+  // Agendamentos: indicador retirado por enquanto (não aparece em lançamentos, metas nem totais).
+  const HG_KEYS = ['fat', 'cli', 'serv', 'prod', 'planos', 'ticket', 'ocup', 'fid'];
   const HG_LABEL = { fat: 'Faturamento total', agend: 'Agendamentos', cli: 'Clientes atendidos', serv: 'Serviços realizados', prod: 'Produtos vendidos', planos: 'Planos mensais', ticket: 'Ticket médio da casa', ocup: 'Ocupação média', fid: 'Fidelização da casa' };
   const hgFmt = (k, v) => k === 'fat' || k === 'ticket' ? money0(v) : k === 'ocup' || k === 'fid' ? nf1.format(v) + '%' : nf0.format(v);
   function houseGoalsFor(ym) {
@@ -3268,7 +3279,7 @@
     // Sugestão: soma das metas individuais dos profissionais ativos.
     const act = state.barbers.filter(b => b.active !== false);
     const sugg = k => k === 'agend' ? null : ['ticket', 'ocup', 'fid'].includes(k) ? GB.goalFor(state, '', k) : act.reduce((a, b) => a + GB.goalFor(state, b.id, k), 0);
-    const HG_FIELDS = [['fat', 'Faturamento total (R$)', '0.01'], ['agend', 'Agendamentos', '1'], ['cli', 'Clientes atendidos', '1'], ['serv', 'Serviços realizados', '1'],
+    const HG_FIELDS = [['fat', 'Faturamento total (R$)', '0.01'], ['cli', 'Clientes atendidos', '1'], ['serv', 'Serviços realizados', '1'],
       ...(vis('prod') ? [['prod', 'Produtos vendidos', '1']] : []), ...(vis('planos') ? [['planos', 'Planos mensais', '1']] : []),
       ['ticket', 'Ticket médio da casa (R$)', '0.01'], ...(vis('ocup') ? [['ocup', 'Ocupação média (%)', '0.1']] : []), ...(vis('fid') ? [['fid', 'Fidelização da casa (%)', '0.1']] : [])];
     const goalForm = own && ui.hgEdit ? `<section class="section card">
@@ -3296,7 +3307,6 @@
       ${has ? '' : `<div class="pc-empty">Nenhum dado lançado ainda. Assim que você cadastrar profissionais e lançar as métricas do mês, os totais e o comparativo aparecem aqui automaticamente.</div>`}
       <section class="section card pc-totals">
         ${stat('Faturamento total', money0(fat), 'fat', fat)}
-        ${stat('Agendamentos', nf0.format(agend), 'agend', agend)}
         ${stat('Clientes atendidos', nf0.format(cli), 'cli', cli)}
         ${stat('Serviços realizados', nf0.format(sum('serv')), 'serv', sum('serv'))}
         ${vis('prod') ? stat('Produtos vendidos', nf0.format(sum('prod')), 'prod', sum('prod')) : ''}
@@ -6437,6 +6447,16 @@ Content-Type: application/json</pre>
       if (state.comCfg?.pctBy) delete state.comCfg.pctBy[id];
       if (ui.teamBarber === id) ui.teamBarber = null;
       save(); toast(`${b.name} foi excluído.`); render();
+    },
+    ausStep(el) {
+      const id = el.dataset.id, d = Number(el.dataset.d) || 0, ym = ui.teamMonth || curYm();
+      if (!fieldOk(id, 'aus')) return;
+      state.monthly = state.monthly || [];
+      let rec = state.monthly.find(m => m.barberId === id && m.month === ym);
+      if (!rec) { rec = { barberId: id, month: ym }; state.monthly.push(rec); }
+      const n = Math.max(0, Math.min(31, (isNum(rec.aus) ? Number(rec.aus) : 0) + d));
+      if (n === 0) delete rec.aus; else rec.aus = n;
+      save(); refreshEditorFields(); refreshTeam();
     },
     toggleBarber(el) {
       const b = barberById(el.dataset.id); if (!b) return;
