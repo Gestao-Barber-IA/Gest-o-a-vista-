@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-12-tv-cheia', date: '2026-11-12', title: 'Tela da loja ocupando a TV inteira', items: [
+    ['melhoria', 'Em computador ou TV, a tela do pódio usa toda a largura e altura: o pódio cresce até a altura da tela e o ranking ocupa o resto, com letras maiores (e se ajusta sozinho quando há muitos profissionais).'],
+  ] },
   { id: '2026-11-12-tv-nitida', date: '2026-11-12', title: 'Tela da loja nítida em qualquer TV', items: [
     ['melhoria', 'A Tela da loja agora é desenhada na resolução real da TV (Full HD ou 4K): textos, fotos e pódio ficam nítidos, com as animações rodando.'],
   ] },
