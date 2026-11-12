@@ -6067,7 +6067,7 @@ Content-Type: application/json</pre>
     const W = window.innerWidth, H = window.innerHeight;
     const on = W >= 900 && W > H;
     tv.classList.toggle('tv-fitted', on);
-    box.style.width = box.style.transform = box.style.left = box.style.top = '';
+    box.style.width = box.style.transform = box.style.left = box.style.top = box.style.zoom = '';
     if (!on) return;
     const cs = getComputedStyle(tv);
     const pt = parseFloat(cs.paddingTop), pb = parseFloat(cs.paddingBottom), pl = parseFloat(cs.paddingLeft), pr = parseFloat(cs.paddingRight);
@@ -6089,9 +6089,15 @@ Content-Type: application/json</pre>
     if (h * z > availH) z = availH / h;
     box.style.width = (availW / z) + 'px';
     h = box.offsetHeight;
-    box.style.left = pl + 'px';
-    box.style.top = (pt + Math.max(0, (availH - h * z) / 2)) + 'px';
-    box.style.transform = `scale(${z})`;
+    const top = pt + Math.max(0, (availH - h * z) / 2);
+    // Com "zoom", o navegador redesenha tudo na resolução real da TV (texto e imagens nítidos, mesmo em 4K).
+    // Sem suporte (navegadores antigos de Smart TV), usa a ampliação por transform.
+    if (CSS.supports && CSS.supports('zoom', '2')) {
+      box.style.zoom = z; box.style.left = (pl / z) + 'px'; box.style.top = (top / z) + 'px';
+      if (Math.abs(box.getBoundingClientRect().left - pl) > 2) { box.style.left = pl + 'px'; box.style.top = top + 'px'; } // navegador que não multiplica o deslocamento
+    } else {
+      box.style.left = pl + 'px'; box.style.top = top + 'px'; box.style.transform = `scale(${z})`;
+    }
   }
   window.addEventListener('resize', () => { if (location.hash === '#apresentacao') fitTV(); });
 
