@@ -1263,6 +1263,35 @@
     document.querySelectorAll('[data-sus-end]').forEach(el => { const t = suspenseLeft({ end: el.dataset.susEnd }); if (t) el.textContent = t; else render(); });
   }, 30000);
 
+  // ---------- Meta geral da loja (Início): foto do prêmio em destaque + progresso ----------
+  function prizeEditor() {
+    const p = state.prize || {}, ks = Object.keys(houseGoalsFor(curYm()));
+    return `<fieldset class="pz-edit"><legend>${icon('gift')} Prêmio da meta (aparece no Início de toda a equipe)</legend>
+      <div class="pz-edit-row">${p.img ? `<img class="pz-thumb" src="${esc(p.img)}" alt="Foto do prêmio">` : '<span class="pz-thumb pz-empty">' + icon('camera') + '</span>'}
+        <label class="btn btn-sm" style="cursor:pointer">${icon('camera')} ${p.img ? 'Trocar foto' : 'Enviar foto do prêmio'}<input type="file" accept="image/*" hidden data-change="prizeImg"></label></div>
+      <label class="field"><span>Nome do prêmio</span><input class="input" maxlength="60" value="${esc(p.t || '')}" placeholder="Ex.: Praia" data-change="prizeField" data-k="t"></label>
+      <label class="field"><span>Descrição</span><input class="input" maxlength="120" value="${esc(p.d || '')}" placeholder="Ex.: 5 dias na praia de Ubatuba" data-change="prizeField" data-k="d"></label>
+      <label class="field"><span>Meta que libera o prêmio</span><select class="input" data-change="prizeField" data-k="k">${(ks.length ? ks : ['fat']).map(k => `<option value="${k}" ${(p.k || 'fat') === k ? 'selected' : ''}>${esc(HG_LABEL[k])}</option>`).join('')}</select></label>
+    </fieldset>`;
+  }
+  function prizeCard(user) {
+    const p = state.prize; if (!p || (!p.img && !p.t)) return '';
+    const ym = curYm(), k = p.k || 'fat', goal = houseGoalsFor(ym)[k];
+    if (!goal) return isGestor(user) ? `<div class="card pz-card pz-nogoal">${p.img ? `<div class="pz-img"><img src="${esc(p.img)}" alt=""></div>` : ''}<div class="pz-body"><p class="pz-eye">${icon('trophy')} Meta geral da loja</p><h2 class="pz-t">${esc(p.t || 'Prêmio')}</h2><p class="pz-note">Cadastre a meta de ${esc(HG_LABEL[k].toLowerCase())} do mês em Performance da empresa › Editar metas para mostrar o progresso.</p></div></div>` : '';
+    const v = houseTotals(ym).vals[k] || 0, pct = Math.max(0, Math.min(100, v / goal * 100)), done = v >= goal;
+    const lbl = HG_LABEL[k].replace(' total', '').replace(' da casa', '');
+    return `<section class="card pz-card ${done ? 'pz-done' : ''}">
+      ${p.img ? `<div class="pz-img"><img src="${esc(p.img)}" alt="${esc(p.t || 'Prêmio')}"><span class="pz-badge">${icon('trophy')} Meta geral da loja</span></div>` : ''}
+      <div class="pz-body">
+        ${p.img ? '' : `<p class="pz-eye">${icon('trophy')} Meta geral da loja</p>`}
+        <h2 class="pz-t">${esc(p.t || 'Prêmio da meta')}</h2>
+        ${p.d ? `<p class="pz-d">${icon('gift')} ${esc(p.d)}</p>` : ''}
+        <div class="pz-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(pct)}"><i style="width:${pct.toFixed(1)}%"></i></div>
+        <div class="pz-foot"><b>${done ? '🎉 Meta batida!' : `${nf0.format(Math.floor(pct))}% batido`}</b><span>${esc(lbl)}: ${hgFmt(k, v)} de ${hgFmt(k, goal)}</span></div>
+        ${done ? '' : `<p class="pz-left">Faltam <b>${hgFmt(k, goal - v)}</b> para o prêmio.</p>`}
+      </div>
+    </section>`;
+  }
   function pageInicio(user) {
     const R = computeRanking(rkState(), range());
     const w = darkFor(range());
@@ -1272,6 +1301,7 @@
       ${periodBar()}
       ${unitBar()}
       ${isGestor(user) ? suspenseNote() + gestorGuide() : ''}
+      ${prizeCard(user)}
       ${monthOnlyData(R) ? `<div class="card week-note"><p>${icon('help')}<span>Os resultados lançados à mão são <b>totais do mês</b>, por isso não aparecem na visão por semana. A Semana mostra só resultados diários (da integração ou do checklist).</span></p>
         <button class="btn btn-primary btn-sm" data-action="period" data-period="mes">Ver o mês</button></div>` : ''}
       <div class="home-cols">
@@ -3247,6 +3277,7 @@
           <label class="field hg-month"><span>Mês das metas</span><select class="input" name="hgYm" data-change="hgYm">${tgtOpts.map(o => `<option value="${o}" ${o === tgt ? 'selected' : ''}>${ymLabel(o).replace(' de ', '/')}</option>`).join('')}</select></label>
           <div class="grid-2">${HG_FIELDS.map(([k, l, st]) => { const sg = sugg(k); return `<label class="field"><span>${l}</span><input class="input num" type="number" min="0" step="${st}" name="${k}" id="hg-${k}" value="${isNum(tg[k]) ? tg[k] : ''}" placeholder="${sg ? 'Sugestão: ' + (st === '1' ? Math.round(sg) : Math.round(sg * 100) / 100) : ''}"></label>`; }).join('')}</div>
           <label class="ind-on"><input type="checkbox" name="dflt" checked> Usar estas metas também nos meses seguintes</label>
+          ${prizeEditor()}
           <p class="form-msg" data-msg></p>
           <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar metas</button><button class="btn" type="button" data-action="hgEdit">Cancelar</button></div>
         </form>
@@ -5933,10 +5964,41 @@ Content-Type: application/json</pre>
 
   function tvRanking(R) {
     return `<div class="tv-split">
-      <section class="tv-panel"><h2 class="section-title">Pódio do período</h2><div class="tv-stage">${podium(R)}</div></section>
+      <section class="tv-panel"><h2 class="section-title">Pódio do período</h2><div class="tv-stage"><div class="tv-lights" aria-hidden="true"><i class="tl-glow"></i><i class="tl-beam tl-b2"></i><i class="tl-beam tl-b3"></i><i class="tl-beam tl-b1"></i><i class="tl-halo"></i><i class="tl-floor"></i><i class="tl-fog"></i><i class="tl-fog tl-fog2"></i></div>${podium(R)}</div></section>
       <section class="tv-panel"><div class="tv-panel-head"><h2 class="section-title">Ranking em tempo real</h2><span class="tv-count">${R.rows.length} posições</span></div>${rankingList(R)}</section>
     </div>`;
   }
+  // Prêmio da meta da loja na Tela da loja.
+  function prizeData() {
+    const p = state.prize; if (!p || !p.img) return null;
+    const ym = curYm(), k = p.k || 'fat', goal = houseGoalsFor(ym)[k]; if (!goal) return null;
+    const v = houseTotals(ym).vals[k] || 0;
+    return { p, k, goal, v, pct: Math.max(0, Math.min(100, v / goal * 100)), done: v >= goal, lbl: HG_LABEL[k].replace(' total', '').replace(' da casa', '') };
+  }
+  // Faixa fina embaixo do pódio: a meta sempre visível, sem dividir a atenção.
+  function tvGoalStrip() {
+    const d = prizeData(); if (!d) return '';
+    return `<div class="tv-goal ${d.done ? 'pz-done' : ''}"><img src="${esc(d.p.img)}" alt="">
+      <span class="tvg-t">${icon('trophy')} ${esc(d.p.t || 'Meta da loja')}</span>
+      <div class="pz-bar tvg-bar"><i style="width:${d.pct.toFixed(1)}%"></i></div>
+      <b class="tvg-pct">${d.done ? '🎉 Meta batida!' : nf0.format(Math.floor(d.pct)) + '%'}</b>
+      ${d.done ? '' : `<small class="tvg-left">faltam ${hgFmt(d.k, d.goal - d.v)}</small>`}</div>`;
+  }
+  // Tela própria do prêmio no rodízio: foto em tela cheia, nome e descrição em destaque.
+  function tvPrizeSlide() {
+    const d = prizeData(); if (!d) return '';
+    return `<div class="tv-pz ${d.done ? 'pz-done' : ''}">
+      <img class="tv-pz-bg" src="${esc(d.p.img)}" alt="">
+      <div class="tv-pz-in">
+        <p class="tv-pz-eye">${icon('trophy')} Meta geral da loja</p>
+        <h2 class="tv-pz-t">${esc(d.p.t || 'Prêmio da meta')}</h2>
+        ${d.p.d ? `<p class="tv-pz-d">${icon('gift')} ${esc(d.p.d)}</p>` : ''}
+        <div class="pz-bar tv-pz-bar"><i style="width:${d.pct.toFixed(1)}%"></i></div>
+        <div class="tv-pz-nums"><b>${d.done ? '🎉 Meta batida! O prêmio é de vocês.' : nf0.format(Math.floor(d.pct)) + '% da meta'}</b><small>${esc(d.lbl)}: ${hgFmt(d.k, d.v)} de ${hgFmt(d.k, d.goal)}${d.done ? '' : ` · faltam ${hgFmt(d.k, d.goal - d.v)}`}</small></div>
+      </div>
+    </div>`;
+  }
+
 
   function tvGuardians(R) {
     const cards = R.active.map(ind => {
@@ -6026,7 +6088,7 @@ Content-Type: application/json</pre>
     const R = computeRanking(rkState(), tr);
     const dk = darkFor(tr, true);
     if (!dk) liveDetect(R);
-    const slides = dk ? [() => suspenseCard(dk, true)] : [tvRanking, tvGuardians, tvAlerts];
+    const slides = dk ? [() => suspenseCard(dk, true)] : [tvRanking, ...(prizeData() ? [tvPrizeSlide] : []), tvGuardians, tvAlerts];
     const i = ((ui.tvIndex % slides.length) + slides.length) % slides.length;
     const reduce = reduceMotion();
     root.innerHTML = `<div class="tv">${licMark()}
@@ -6035,6 +6097,7 @@ Content-Type: application/json</pre>
       <header class="tv-head">
         ${state.company.logo ? `<img class="brand-mark tv-logo" src="${esc(state.company.logo)}" alt="${esc(state.company.name || 'Logo')}">` : logo('tv-logo')}
         <div class="tv-title"><b>${esc(state.company.name)}</b><span>Tela da loja · ${esc(tr.type === 'mes' ? 'Mês' : PERIOD_NAMES[ui.period])}: ${esc(tr.label)}</span></div>
+        ${dk ? '' : tvGoalStrip()}
         <div class="tv-controls">
           <button class="btn btn-sm" data-action="tvSound" aria-pressed="${Sound.on}">${icon('sound')} ${Sound.on ? 'Sons ativos' : 'Sons desligados'}</button>
           <select class="input tv-select" id="tv-sound" data-change="tvSoundKind" aria-label="Escolher e testar som">
@@ -6048,6 +6111,7 @@ Content-Type: application/json</pre>
       <nav class="tv-dots" aria-label="Telas">${slides.map((_, k) => `<button class="${k === i ? 'on' : ''}" data-action="tvGo" data-i="${k}" aria-label="Tela ${k + 1}"></button>`).join('')}</nav>
       </div>
     </div>`;
+    tvIdleSetup();
     fitTV();
     root.querySelectorAll('.tv img').forEach(im => { if (!im.complete) im.addEventListener('load', fitTV, { once: true }); });
     [300, 900, 2000, 4000].forEach(ms => setTimeout(fitTV, ms));
@@ -6064,7 +6128,7 @@ Content-Type: application/json</pre>
   function fitTV() {
     const tv = root.querySelector('.tv'), box = tv && tv.querySelector('.tv-fit');
     if (!box) return;
-    if (fitTVSplit(tv, box) || fitTVGrid(tv, box)) return;
+    if (fitTVSplit(tv, box) || fitTVGrid(tv, box) || fitTVPrize(tv, box)) return;
     const W = window.innerWidth, H = window.innerHeight;
     const on = W >= 900 && W > H;
     tv.classList.toggle('tv-fitted', on);
@@ -6105,9 +6169,10 @@ Content-Type: application/json</pre>
   function fitTVSplit(tv, box) {
     const split = box.querySelector('.tv-split'), W = window.innerWidth, H = window.innerHeight;
     tv.classList.remove('tv-full');
-    [box, split].forEach(el => el && el.style.removeProperty('--pdw'));
+    [box, split].forEach(el => el && (el.style.removeProperty('--pdw'), el.style.removeProperty('--rkw')));
     const list = split && split.querySelector('.rank-list');
     if (list) { list.style.zoom = list.style.width = ''; }
+    const st0 = split && split.querySelector('.tv-stage'); if (st0) st0.style.maxWidth = st0.style.marginInline = '';
     if (!split || W < 900 || W <= H || !(CSS.supports && CSS.supports('zoom', '2'))) return false;
     tv.classList.add('tv-fitted', 'tv-full');
     const cs = getComputedStyle(tv), pt = parseFloat(cs.paddingTop), pb = parseFloat(cs.paddingBottom), pl = parseFloat(cs.paddingLeft), pr = parseFloat(cs.paddingRight);
@@ -6116,17 +6181,24 @@ Content-Type: application/json</pre>
     box.style.left = (pl / z) + 'px'; box.style.top = (pt / z) + 'px';
     if (Math.abs(box.getBoundingClientRect().left - pl) > 2) { box.style.left = pl + 'px'; box.style.top = pt + 'px'; }
     // Pódio: largura que faz ele caber exatamente na altura disponível.
-    const pan = split.children[0], stage = pan && pan.querySelector('.tv-stage'), pd = stage && stage.firstElementChild;
+    const pan = split.children[0], stage = pan && pan.querySelector('.tv-stage'), pd = stage && (stage.querySelector('.podium-x') || stage.lastElementChild);
     if (pd && pd.offsetWidth) {
-      // Altura que o pódio pode ocupar = altura do painel menos título e margens; a largura sai da proporção do próprio pódio.
+      // Ranking mais estreito (36% da largura) para o pódio ganhar destaque. O pódio cresce até a altura disponível
+      // e fica centralizado no painel (a largura sai da proporção do próprio pódio, para nunca cortar embaixo).
+      split.style.setProperty('--pdw', Math.round(V * 0.64) + 'px');
+      stage.style.maxWidth = ''; stage.style.marginInline = 'auto';
       for (let k = 0; k < 3; k++) {
-        const ratio = pd.offsetHeight / pd.offsetWidth;
-        const room = pan.clientHeight - (pd.getBoundingClientRect().top - pan.getBoundingClientRect().top) / z - parseFloat(getComputedStyle(pan).paddingBottom) - (stage.offsetHeight - pd.offsetHeight > 0 ? 0 : 0) - 6;
-        const extraW = pan.offsetWidth - pd.offsetWidth;
-        const want = Math.round(Math.max(V * 0.34, Math.min(V * 0.6, room / Math.max(0.3, ratio) + extraW)));
-        if (Math.abs(want - pan.offsetWidth) < 4) break;
-        split.style.setProperty('--pdw', want + 'px');
+        const ratio = pd.offsetHeight / Math.max(1, pd.offsetWidth);
+        const room = pan.clientHeight - (pd.getBoundingClientRect().top - pan.getBoundingClientRect().top) / z - parseFloat(getComputedStyle(pan).paddingBottom) - parseFloat(getComputedStyle(stage).paddingBottom) - 6;
+        const maxW = Math.floor(room / Math.max(0.3, ratio) + (stage.offsetWidth - pd.offsetWidth));
+        if (stage.style.maxWidth === maxW + 'px') break;
+        stage.style.maxWidth = maxW + 'px';
       }
+      // Painel do pódio do tamanho do pódio; ranking com no máximo 38% da largura; as duas colunas centralizadas.
+      const gap = parseFloat(getComputedStyle(split).columnGap) || 20;
+      const pdw = Math.min(Math.round(V * 0.64), stage.offsetWidth + (pan.offsetWidth - pan.clientWidth) + parseFloat(getComputedStyle(pan).paddingLeft) * 2);
+      split.style.setProperty('--pdw', pdw + 'px');
+      split.style.setProperty('--rkw', Math.round(Math.min(V - pdw - gap, V * 0.38)) + 'px');
     }
     // Ranking: aumenta a letra para preencher a altura do painel (sem passar da largura).
     if (list) {
@@ -6136,10 +6208,31 @@ Content-Type: application/json</pre>
       for (let k = 0; k < 5; k++) {
         list.style.zoom = zl; list.style.width = (w / zl) + 'px';
         const h = list.getBoundingClientRect().height; if (!h) break;
-        const nz = Math.max(0.55, Math.min(1.9, zl * room / h)); if (Math.abs(nz - zl) < 0.01) break; zl = nz;
+        const nz = Math.max(0.55, Math.min(1.22, zl * room / h)); if (Math.abs(nz - zl) < 0.01) break; zl = nz;
       }
       list.style.zoom = zl; list.style.width = (w / zl) + 'px';
     }
+    return true;
+  }
+  // Botões da TV (som, tela cheia, sair) somem sozinhos depois de alguns segundos e voltam ao mexer o mouse ou tocar.
+  function tvIdleSetup() {
+    const tv = root.querySelector('.tv'); if (!tv) return;
+    const wake = () => { tv.classList.remove('tv-idle'); clearTimeout(ui.tvIdleT); ui.tvIdleT = setTimeout(() => tv.classList.add('tv-idle'), 4000); };
+    if (!ui.tvIdleBound) { ui.tvIdleBound = true; ['mousemove', 'pointerdown', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, () => { const t = root.querySelector('.tv'); if (t) { t.classList.remove('tv-idle'); clearTimeout(ui.tvIdleT); ui.tvIdleT = setTimeout(() => { const t2 = root.querySelector('.tv'); if (t2) t2.classList.add('tv-idle'); }, 4000); } }, { passive: true })); }
+    if (ui.tvWasIdle) tv.classList.add('tv-idle'); else wake();
+    ui.tvWasIdle = false; setTimeout(() => { ui.tvWasIdle = tv.classList.contains('tv-idle'); }, 0);
+  }
+  // Tela do prêmio na TV: a foto ocupa a tela inteira (abaixo do cabeçalho).
+  function fitTVPrize(tv, box) {
+    const pz = box.querySelector('.tv-pz'), W = window.innerWidth, H = window.innerHeight;
+    tv.classList.remove('tv-pzfull');
+    if (!pz || W < 900 || W <= H || !(CSS.supports && CSS.supports('zoom', '2'))) return false;
+    tv.classList.add('tv-fitted', 'tv-full', 'tv-pzfull');
+    const cs = getComputedStyle(tv), pt = parseFloat(cs.paddingTop), pb = parseFloat(cs.paddingBottom), pl = parseFloat(cs.paddingLeft), pr = parseFloat(cs.paddingRight);
+    const V = 1600, z = (W - pl - pr) / V;
+    box.style.transform = ''; box.style.zoom = z; box.style.width = V + 'px'; box.style.height = ((H - pt - pb) / z) + 'px';
+    box.style.left = (pl / z) + 'px'; box.style.top = (pt / z) + 'px';
+    if (Math.abs(box.getBoundingClientRect().left - pl) > 2) { box.style.left = pl + 'px'; box.style.top = pt + 'px'; }
     return true;
   }
   // Telas de cartões (Guardiões e Alertas) na TV: ocupam a tela inteira. A página é montada numa largura fixa e
@@ -7364,6 +7457,14 @@ Content-Type: application/json</pre>
       } catch (e) {
         toast(/bucket|not found|policy|mime|row-level/i.test(String(e && e.message)) ? 'O armazenamento de músicas ainda não foi ativado no servidor.' : (e && e.message) || 'Não foi possível enviar a música.');
       }
+    },
+    async prizeImg(el) {
+      if (!isGestor(currentUser()) || !el.files[0]) return;
+      try { const p = { ...(state.prize || {}) }; p.img = await storeImage(await readImage(el.files[0], 1280, 0.85), 'premio', p.img); state.prize = p; save(); toast('Foto do prêmio salva.'); render(); } catch (e) { toast(e.message); }
+    },
+    prizeField(el) {
+      if (!isGestor(currentUser())) return;
+      const p = { ...(state.prize || {}) }; p[el.dataset.k] = el.value.trim().slice(0, el.dataset.k === 'd' ? 120 : 60); state.prize = p; save();
     },
     async companyLogo(el) {
       try { state.company.logo = await storeImage(await readImage(el.files[0], 512, 0.9), 'logo', state.company.logo); save(); toast('Logo atualizado.'); render(); } catch (e) { toast(e.message); }
