@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-13-sync-nuvem', date: '2026-11-13', title: 'Sincronização AppBarber pela nuvem, 24 horas', items: [
+    ['novo', 'Em Integração & API, o dono coloca o código do estabelecimento e a chave da API da AppBarber. O servidor do sistema busca os atendimentos e as comandas a cada 10 minutos, 24 horas por dia.'],
+    ['melhoria', 'Não precisa mais deixar computador ligado na barbearia. O cartão mostra se está funcionando e a hora da última sincronização.'],
+  ] },
   { id: '2026-11-13-chegada', date: '2026-11-13', title: 'Horário de chegada marcado pela gestão', items: [
     ['melhoria', 'Tarefas como Horário de chegada só podem ser marcadas pelo dono, pelo gestor ou pelo líder (nunca pelo próprio profissional). Um toque já marca, aprovada, sem foto.'],
     ['melhoria', 'O dono escolhe isso em cada tarefa do checklist: "Só o dono, o gestor ou o líder marcam".'],

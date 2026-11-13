@@ -2749,3 +2749,9 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .pst-dot.is-ok { background: var(--accent); border-color: var(--accent); color: var(--accent-ink, #111); }
 .pst-dot.is-pend { border-color: var(--gold, #f2c14e); color: var(--gold, #f2c14e); border-style: dashed; }
 .pst-n { color: var(--fg-soft); white-space: nowrap; }
+
+/* Integração › Sincronização automática AppBarber */
+.as-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 10px; }
+.as-msg { flex-basis: 100%; margin: 0; font-size: 0.85rem; overflow-wrap: anywhere; }
+.as-steps { margin: 0 0 14px; padding-left: 20px; display: grid; gap: 8px; line-height: 1.5; }
+.as-ip { display: inline-block; padding: 2px 10px; margin: 0 4px; font-weight: 700; }

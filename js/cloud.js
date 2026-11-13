@@ -223,6 +223,11 @@
     tick: async row => RES(await c.from('routine_done').insert(row).select().single()),
     untick: async id => RES(await c.from('routine_done').delete().eq('id', id)),
   };
+  // Sincronização automática pela nuvem (AppBarber): só o gestor vê e altera.
+  Cloud.integ = {
+    get: async () => RES(await c.from('integrations').select('*').eq('company_id', Cloud.companyId).maybeSingle()),
+    save: async row => RES(await c.from('integrations').upsert({ ...row, company_id: Cloud.companyId, updated_at: new Date().toISOString() }).select().single()),
+  };
   Cloud.rotateKey = async () => { const { data, error } = await c.rpc('rotate_api_key'); if (error) throw error; return data; };
 
   // ---------- conversão entre o app e as tabelas ----------

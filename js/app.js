@@ -3623,7 +3623,7 @@ ${rows.length ? '' : emptyBarbers()}
     const ex = JSON.stringify([
       { data: iso(new Date()), barbeiro: state.barbers[0]?.name || 'Nome do barbeiro', faturamento: 420.5, servicos: 9, clientes: 8, checklist_pop: 1, horas_disponiveis: 8, horas_ocupadas: 6.5, planos_mensais: 1, clientes_retorno: 5, venda_produtos: 2 },
     ], null, 2);
-    return `
+    return `${autoSyncCard()}
       <section class="section card">
         <h2 class="section-title">Como funciona ${tip('api')}</h2>
         <p class="section-note">Outro sistema (agenda, caixa, ERP) envia os resultados de cada barbeiro por dia. Os números entram no ranking na hora, junto com os lançados à mão.</p>
@@ -3647,6 +3647,43 @@ Content-Type: application/json</pre>
       </section>${csvImportCard()}`;
   }
 
+  // Integração & API › Sincronização automática: o servidor do Gestão (IP fixo) busca na AppBarber
+  // a cada 10 minutos, 24 horas por dia, sem computador ligado na barbearia.
+  function autoSyncCard() {
+    if (Cloud.enabled && ui.integ === undefined) {
+      ui.integ = null;
+      Cloud.integ.get().then(r => { ui.integ = r || {}; render(); }).catch(() => { ui.integ = { erro: true }; render(); });
+    }
+    const it = Cloud.enabled ? ui.integ : (state.integ || {});
+    if (!it) return `<section class="section card"><h2 class="section-title">${icon('plug')} Sincronização automática AppBarber</h2><p class="muted">Carregando…</p></section>`;
+    if (it.erro) return '';
+    const ip = (window.GB_CONFIG || {}).syncIp || '';
+    const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const st = String(it.last_status || ''), bad = /^erro/.test(st), on = !!it.est_code && it.active !== false;
+    const status = !it.est_code ? '<span class="chip">Desligada</span>'
+      : it.active === false ? '<span class="chip">Pausada</span>'
+      : !it.last_sync_at ? '<span class="chip">Aguardando a primeira sincronização</span>'
+      : `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">Última: ${when(it.last_sync_at)}</small>`;
+    return `<section class="section card as-card">
+      <h2 class="section-title">${icon('plug')} Sincronização automática AppBarber</h2>
+      <p class="section-note">O servidor do ${esc(B().name)} busca os atendimentos e as comandas na AppBarber a cada 10 minutos, 24 horas por dia. <b>Não precisa deixar nenhum computador ligado na barbearia.</b></p>
+      <div class="as-status">${status}${st && it.est_code ? `<p class="muted as-msg">${esc(st.replace(/^(ok|erro): /, ''))}</p>` : ''}</div>
+      <ol class="as-steps">
+        <li>Peça à AppBarber a <b>chave da API</b> e a liberação deste IP: ${ip ? `<span class="invite-link as-ip" id="as-ip">${esc(ip)}</span> <button class="btn btn-sm" type="button" data-action="copyIp">${icon('copy')} Copiar IP</button>` : '<i>o IP do servidor aparece aqui assim que ele estiver no ar.</i>'}</li>
+        <li>Preencha abaixo e salve. Em até 10 minutos os números começam a entrar.</li>
+        ${on ? '<li>Se o computador da barbearia ainda roda a sincronização antiga, pode desinstalar: o servidor assume.</li>' : ''}
+      </ol>
+      <form class="form" data-form="autoSync" novalidate>
+        <div class="grid-2">
+          <label class="field"><span>Código do estabelecimento na AppBarber *</span><input class="input" name="est" inputmode="numeric" value="${esc(it.est_code || '')}" placeholder="Ex.: 17820245"></label>
+          <label class="field"><span>Código da filial <small class="muted">(opcional)</small></span><input class="input" name="branch" value="${esc(it.branch_code || '')}"></label>
+        </div>
+        <label class="field"><span>Chave da API da AppBarber *</span><input class="input" name="key" type="password" autocomplete="off" value="" placeholder="${it.api_key ? 'Guardada (…' + esc(String(it.api_key).slice(-4)) + '). Deixe vazio para manter' : 'Cole a chave enviada pela AppBarber'}"></label>
+        <label class="check"><input type="checkbox" name="active" ${it.active !== false ? 'checked' : ''}><span><b>Sincronização ligada</b><small>Desmarque para pausar sem apagar os dados.</small></span></label>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
+      </form></section>`;
+  }
   // Configurações › Regra da taxa de ocupação: horário próprio de cada profissional (vazio = o da empresa).
   function ocupByBarber(oc) {
     const by = oc.by || {}, list = state.barbers.filter(b => b.active !== false);
@@ -7104,6 +7141,7 @@ Content-Type: application/json</pre>
       ui.confirm = null; save(); toast('Equipe e lançamentos apagados.'); render();
     },
     copyKey() { copyText(state.apiKey, $('#api-key')); },
+    copyIp() { copyText((window.GB_CONFIG || {}).syncIp || '', $('#as-ip')); },
     newKey() {
       if (ui.confirm !== 'key') { ui.confirm = 'key'; render(); return; }
       if (Cloud.enabled) {
@@ -7510,6 +7548,18 @@ Content-Type: application/json</pre>
         const res = importEntries(state, Array.isArray(data) ? data : [data]); save();
         setMsg(f, `${res.ok} lançamento(s) importado(s).${res.errors.length ? ' Problemas: ' + res.errors.join(' ') : ''}`, res.errors.length === 0);
       } catch (e) { setMsg(f, e.message); }
+    },
+    autoSync(f) {
+      const est = val(f, 'est').replace(/\s/g, ''), key = val(f, 'key'), cur = (Cloud.enabled ? ui.integ : state.integ) || {};
+      if (!/^\d{3,12}$/.test(est)) return setMsg(f, 'Digite o código do estabelecimento (só números).');
+      if (!key && !cur.api_key) return setMsg(f, 'Cole a chave da API da AppBarber.');
+      if (key && key.length < 10) return setMsg(f, 'A chave da API parece incompleta. Copie de novo.');
+      const row = { provider: 'appbarber', est_code: est, branch_code: val(f, 'branch'), active: f.elements.active.checked };
+      if (key) row.api_key = key;
+      if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Sincronização automática salva.'); return render(); }
+      setMsg(f, 'Salvando…', true);
+      Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(row.active ? 'Salvo. Em até 10 minutos os números começam a entrar.' : 'Sincronização pausada.'); render(); })
+        .catch(e => setMsg(f, Cloud.message(e)));
     },
     company(f) {
       const name = val(f, 'name');
