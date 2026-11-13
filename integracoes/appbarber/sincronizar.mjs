@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSAO = "2.1";
+const VERSAO = "2.2";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const TESTE = process.argv.includes("--teste");
 const CARGA = process.argv.includes("--carga"); // carga inicial: lê todas as comandas no ritmo máximo permitido
@@ -194,7 +194,8 @@ async function main() {
     return Math.round((tot + e0 - s0) / 60 * 100) / 100;
   }
   function calc() {
-    // Soma por profissional e dia. Comanda já lida: itens da comanda. Ainda não lida: valor do agendamento (provisório).
+    // Soma por profissional e dia SÓ com comandas finalizadas (pagas, ou de um dia que já passou), como na AppBarber.
+    // Sem valor provisório: atendimento com comanda aberta ou ainda não lida entra quando a comanda for finalizada e lida.
     const acc = new Map();
     const add = (nome, d) => { const k = nome + "|" + d; if (!acc.has(k)) acc.set(k, { nome, d, fat: 0, serv: 0, prod: 0, sv: 0, pv: 0, cli: new Set(), com: new Map(), int: [] }); return acc.get(k); };
     const usadas = new Set();
@@ -213,7 +214,7 @@ async function main() {
     const nomeAgenda = new Set(lista.map((a) => String(a.employee_name || "").trim()));
     const nomeDe = (p) => (nomeAgenda.has(p) ? p : alias.get(p) || p);
     for (const c of codigos) {
-      const inv = cache[c]; if (!inv || !inv.itens) continue;
+      const inv = cache[c]; if (!inv || !inv.itens || !inv.final) continue;
       usadas.add(c);
       const d = inv.d || dia((lista.find((a) => String(a.invoice_code) === c) || {}).scheduling_start);
       if (!d || d < iso(ini)) continue;
@@ -226,16 +227,13 @@ async function main() {
         x.cli.add(inv.cli); x.com.set(c, (x.com.get(c) || 0) + it.v);
       }
     }
+    // Profissional com atendimento no dia mas sem comanda finalizada ainda: envia zero, para não ficar um valor antigo.
     for (const a of lista) {
-      if (a.invoice_code && usadas.has(String(a.invoice_code))) continue;
       const d = dia(a.scheduling_start); const nome = String(a.employee_name || "").trim();
-      if (!d || !nome) continue;
-      const x = add(nome, d), v = num(a.service_value);
-      x.fat += v; x.serv += 1; x.sv += v;
-      x.cli.add(String(a.client_phone || a.client_name || a.appointment_code).replace(/\D/g, "") || String(a.client_name));
-      const c = a.invoice_code || a.appointment_code; x.com.set(c, (x.com.get(c) || 0) + v);
+      if (d && nome) add(nomeDe(nome), d);
     }
-    return [...acc.values()].map((x) => ({
+    // Só os dias do mês atual (nos 3 primeiros dias, também o anterior): os meses passados ficam como estão.
+    return [...acc.values()].filter((x) => x.d >= desde).map((x) => ({
       data: x.d, barbeiro: NOMES[x.nome] || x.nome,
       faturamento: Math.round(x.fat * 100) / 100, servicos: x.serv, clientes: x.cli.size, venda_produtos: x.prod,
       valor_servicos: Math.round(x.sv * 100) / 100, valor_produtos: Math.round(x.pv * 100) / 100,
@@ -288,10 +286,10 @@ async function main() {
     return BAR.test(nomeProd(it));
   };
   const codigos = [...new Set(lista.map((a) => a.invoice_code).filter((c) => c && Number(c) > 0).map(String))];
-  // Comanda ainda não paga é relida no máximo 1 vez por hora (e depois que o dia vira, uma última vez).
-  let faltam = codigos.filter((c) => !cache[c] || (cache[c].itens && !cache[c].h) || (cache[c].h !== 2 && (cache[c].itens || []).some((it) => it.prod)) || (!cache[c].final && (Date.now() - (cache[c].lida || 0) > 3600000 || (cache[c].d && cache[c].d < iso(hoje)))));
+  // Comanda ainda não paga é relida a cada 20 minutos (e depois que o dia vira, uma última vez).
+  let faltam = codigos.filter((c) => !cache[c] || (cache[c].itens && !cache[c].h) || (cache[c].h !== 2 && (cache[c].itens || []).some((it) => it.prod)) || (!cache[c].final && (Date.now() - (cache[c].lida || 0) > 20 * 60000 || (cache[c].d && cache[c].d < iso(hoje)))));
   // Só lê as comandas do mês atual (o ranking é por mês). Nos 3 primeiros dias, também as do mês anterior,
-  // para o fechamento sair com as comandas finais. Os outros dias ficam com o valor do agendamento.
+  // para o fechamento sair com as comandas finais. Os meses anteriores não são reenviados.
   const diaDe = new Map(lista.map((a) => [String(a.invoice_code), dia(a.scheduling_start) || ""]));
   const desde = iso(new Date(hoje.getFullYear(), hoje.getMonth() - (hoje.getDate() <= 3 ? 1 : 0), 1));
   for (let i = faltam.length - 1; i >= 0; i--) if ((diaDe.get(faltam[i]) || "") < desde) faltam.splice(i, 1);
@@ -340,14 +338,15 @@ async function main() {
     const tot = new Map();
     for (const i of itens) { const t = tot.get(i.barbeiro) || { fat: 0, serv: 0, prod: 0, h: 0, dias: 0 }; t.fat += i.faturamento; t.serv += i.servicos; t.prod += i.venda_produtos; t.h += i.horas_ocupadas || 0; t.dias++; tot.set(i.barbeiro, t); }
     for (const [n, t] of tot) console.log(`  ${n}: R$ ${t.fat.toFixed(2)} · ${t.serv} serviços · ${t.prod} produtos · ${t.h.toFixed(1)} h atendidas · ${t.dias} dias`);
-    if (faltam.length) console.log(`  (${faltam.length} comandas ainda não lidas: nelas vale o valor do agendamento até a sincronização ler.)`);
+    { const ab = codigos.filter((c) => cache[c] && cache[c].itens && !cache[c].final).length;
+      if (faltam.length || ab) console.log(`  (Ainda não contam: ${faltam.length} comandas não lidas e ${ab} abertas/não pagas. Entram quando forem finalizadas e lidas.)`); }
     // Conferência com o "Total realizado/vendido" da AppBarber (só comandas já lidas, do mês atual):
     // se o total deles bater com Serviços + Produtos + Consumo, a AppBarber conta o consumo; se bater com Serviços + Produtos, ela já separa.
     {
       const mes = iso(new Date(hoje.getFullYear(), hoje.getMonth(), 1)), soma = new Map();
       let lidasMes = 0;
       for (const c of codigos) {
-        const inv = cache[c]; if (!inv || !inv.itens || !inv.d || inv.d < mes) continue; lidasMes++;
+        const inv = cache[c]; if (!inv || !inv.itens || !inv.final || !inv.d || inv.d < mes) continue; lidasMes++;
         for (const it of inv.itens) {
           if (!it.p) continue;
           const nome = NOMES[it.p] || it.p, t = soma.get(nome) || { serv: 0, prod: 0, cons: 0 };
