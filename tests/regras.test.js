@@ -131,3 +131,12 @@ test('níveis de carreira: Bronze < 70 ≤ Prata < 85 ≤ Ouro < 95 ≤ Diamante
   assert.equal(GB.levelOf(80).next, 'Ouro');
   assert.equal(GB.levelOf(80).need, 5);
 });
+
+test('horário de chegada: só "no horário combinado" vale pontos', () => {
+  const it = { id: 'chegada', type: 'check', target: 1, pts: 3 };
+  const ok = { status: 'aprovado', noPhoto: true };
+  assert.equal(GB.popItemPts(it, [{ ...ok, arr: 'ok' }]), 3);
+  assert.equal(GB.popItemPts(it, [ok]), 3);
+  assert.equal(GB.popItemPts(it, [{ ...ok, arr: 'apos' }]), 0);
+  assert.equal(GB.popItemPts(it, [{ ...ok, arr: 'atraso' }]), 0);
+});

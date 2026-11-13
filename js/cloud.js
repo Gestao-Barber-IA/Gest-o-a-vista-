@@ -212,6 +212,9 @@
     add: async row => RES(await c.from('discipline').insert(row).select().single()),
     upd: async (id, patch) => RES(await c.from('discipline').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)),
     del: async id => RES(await c.from('discipline').delete().eq('id', id)),
+    // Horário de chegada › Chegou atrasado: o servidor calcula a gravidade do mês e grava o registro.
+    late: async (barber, day, author) => { const { data, error } = await c.rpc('registrar_atraso', { p_barber: barber, p_day: day, p_author: author || '' }); if (error) throw error; return data; },
+    unlate: async id => { const { data, error } = await c.rpc('desfazer_atraso', { p_id: id }); if (error) throw error; return data; },
   };
   // Checklist de rotina (Líder e Recepção): tarefas com horário e o que foi ticado em cada dia.
   Cloud.rt = {
@@ -222,6 +225,11 @@
     done: async (from, to) => RES(await c.from('routine_done').select('*').eq('company_id', Cloud.companyId).gte('day', from).lte('day', to).limit(5000)) || [],
     tick: async row => RES(await c.from('routine_done').insert(row).select().single()),
     untick: async id => RES(await c.from('routine_done').delete().eq('id', id)),
+  };
+  // Sincronização automática pela nuvem (AppBarber): só o gestor vê e altera.
+  Cloud.integ = {
+    get: async () => RES(await c.from('integrations').select('*').eq('company_id', Cloud.companyId).maybeSingle()),
+    save: async row => RES(await c.from('integrations').upsert({ ...row, company_id: Cloud.companyId, updated_at: new Date().toISOString() }).select().single()),
   };
   Cloud.rotateKey = async () => { const { data, error } = await c.rpc('rotate_api_key'); if (error) throw error; return data; };
 

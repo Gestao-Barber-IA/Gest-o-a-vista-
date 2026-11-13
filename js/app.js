@@ -341,8 +341,8 @@
     });
   }
 
-  async function copyText(text, fallbackEl) {
-    try { await navigator.clipboard.writeText(text); toast('Link copiado.'); }
+  async function copyText(text, fallbackEl, msg) {
+    try { await navigator.clipboard.writeText(text); toast(msg || 'Link copiado.'); }
     catch (e) {
       if (fallbackEl) {
         const r = document.createRange(); r.selectNodeContents(fallbackEl);
@@ -450,6 +450,7 @@
     return `<div class="notif-panel" role="dialog" aria-label="Notificações">
       <div class="notif-head"><b>Notificações</b><button class="icon-btn" data-action="notifOpen" aria-label="Fechar">${icon('x')}</button></div>
       ${pending ? `<a class="notif-item notif-app" href="#barbeiros">${icon('users')}<span><b>${pending} aprovação${pending > 1 ? 'ões' : ''} pendente${pending > 1 ? 's' : ''}</b><small>Toque para aprovar em Adicionar profissional</small></span></a>` : ''}
+      ${(() => { const pu = penUnseen(user); if (!pu) return ''; const l = penList().slice().sort((a, b) => String(b.created_at || b.day).localeCompare(String(a.created_at || a.day))).slice(0, pu); return `<p class="notif-sub">${icon('alert')} Penalidades novas</p><ul class="notif-list">${l.map(x => `<li class="notif-item new notif-pen"><button class="notif-penbtn" data-action="penOpen">${avatar(barberById(x.barber_id) || { name: '?' }, 36)}<span><span><b>${esc((barberById(x.barber_id) || { name: 'Profissional' }).name)}</b> levou penalidade (${esc((DISC_KIND[x.kind] || ['falta'])[0].toLowerCase())})</span><small>${dayLabel(String(x.day).slice(0, 10))} · toque para ver em Fiscalização</small></span></button></li>`).join('')}</ul>`; })()}
       <p class="notif-sub">${icon('trophy')} Ultrapassagens no ranking</p>
       ${f.length ? `<ul class="notif-list">${f.map((e, i) => `<li class="notif-item ${cut === -1 ? (seen ? 'new' : (i < 3 ? 'new' : '')) : (i < cut ? 'new' : '')}">
         ${avatar(e.up, 36)}<span><span>${ovtText(e, true)}</span><small>${dayLabel(e.day)}</small></span></li>`).join('')}</ul>`
@@ -1831,6 +1832,32 @@
     upd: async (id, patch) => { if (Cloud.enabled) return Cloud.disc.upd(id, patch); const v = discLocal(), r = v.find(x => x.id === id); if (r) Object.assign(r, patch); discSave(v); },
     del: async id => { if (Cloud.enabled) return Cloud.disc.del(id); discSave(discLocal().filter(x => x.id !== id)); },
   };
+  // Horário de chegada › Chegou atrasado: registro automático (tipo falta). No mês: 1ª ocorrência, 2ª reincidência, 3ª em diante penalidade.
+  const LATE_NOTE = 'Chegou atrasado, depois do horário combinado (marcado no Checklist › Horário de chegada).';
+  const lateSev = (list, bid, day) => { const n = list.filter(x => x.barber_id === bid && x.kind === 'falta' && String(x.day).slice(0, 7) === day.slice(0, 7)).length; return n === 0 ? 'ocorrencia' : n === 1 ? 'reincidencia' : 'penalidade'; };
+  async function lateRegister(bid, day, author) {
+    if (Cloud.enabled) {
+      try { return await Cloud.disc.late(bid, day, author); }
+      catch (e) {
+        if (!/registrar_atraso|function|schema cache/i.test(String(e.message || e))) throw e;
+        const severity = lateSev(await Cloud.disc.list(), bid, day); // servidor ainda sem a função: grava direto
+        const row = await Cloud.disc.add({ barber_id: bid, day, severity, kind: 'falta', note: LATE_NOTE, author: String(author || '').slice(0, 80) });
+        return { id: row.id, severity };
+      }
+    }
+    const v = discLocal(), severity = lateSev(v, bid, day), id = uid('dc_');
+    v.unshift({ id, barber_id: bid, day, severity, kind: 'falta', note: LATE_NOTE, author: String(author || ''), created_at: new Date().toISOString() });
+    discSave(v); return { id, severity };
+  }
+  async function lateUndo(id) {
+    if (!Cloud.enabled) return discSave(discLocal().filter(x => x.id !== id));
+    try { await Cloud.disc.unlate(id); } catch (e) { if (!/desfazer_atraso|function|schema cache/i.test(String(e.message || e))) throw e; await Cloud.disc.del(id); }
+  }
+  // Penalidades: aba na Fiscalização e aviso no sino para o dono, o gestor e os líderes com acesso à Fiscalização.
+  const penList = () => discAll().filter(x => x.severity === 'penalidade');
+  const penSeenKey = () => 'penSeen.' + ((currentUser() || {}).id || '');
+  const penUnseen = u => { if (!discOk(u)) return 0; const seen = DB.pref.get(penSeenKey(), ''); return penList().filter(x => String(x.created_at || x.day) > seen).length; };
+  const penMarkSeen = () => { const l = penList(); if (l.length) DB.pref.set(penSeenKey(), l.map(x => String(x.created_at || x.day)).sort().pop()); };
   // Quem o usuário pode fiscalizar: o gestor, todos; o líder, a equipe da área dele.
   const discPeople = user => state.barbers.filter(b => isGestor(user) || (myExtras().disc && b.id !== user.barberId) || areaIds(user, ['gestor']).has(b.id));
   const fmtDayBR = d => { const [y, m, dd] = String(d).slice(0, 10).split('-').map(Number); return `${dd} de ${MONTH_NAMES[m - 1]} de ${y}`; };
@@ -1855,10 +1882,16 @@
     const cnt = {}; list.forEach(x => { const c = cnt[x.barber_id] || (cnt[x.barber_id] = { n: 0, adv: 0, rei: 0, sus: 0 }); c.n++; if (x.severity === 'advertencia') c.adv++; if (x.severity === 'reincidencia') c.rei++; if (x.severity === 'penalidade') c.sus++; });
     const top = Object.entries(cnt).sort((a, b) => b[1].n - a[1].n).slice(0, 6);
     const opt = (v, l, cur) => `<option value="${esc(v)}" ${cur === v ? 'selected' : ''}>${esc(l)}</option>`;
-    return `<section class="section disc-hero">
+    const pens = r.list.filter(x => x.severity === 'penalidade' && (ids.has(x.barber_id) || isGestor(user))), tab = ui.discTab === 'pen' ? 'pen' : 'reg';
+    if (tab === 'pen') setTimeout(() => { if (penUnseen(user)) { penMarkSeen(); render(); } }, 1200);
+    const head = `<section class="section disc-hero">
       <h2 class="disc-title">${icon('alert')} Controle disciplinar</h2>
       <p class="muted">Registre atrasos, faltas e problemas de atendimento, higiene ou uniforme com o relato do líder. Só o gestor e os líderes veem esta página.</p>
-    </section>
+      <div class="disc-tabs" role="tablist"><button role="tab" class="disc-tab ${tab === 'reg' ? 'on' : ''}" aria-selected="${tab === 'reg'}" data-action="discTab" data-t="reg">${icon('file')} Registros</button>
+        <button role="tab" class="disc-tab ${tab === 'pen' ? 'on' : ''}" aria-selected="${tab === 'pen'}" data-action="discTab" data-t="pen">${icon('alert')} Penalidades${pens.length ? ` <span class="disc-tabn">${pens.length}</span>` : ''}${penUnseen(user) ? ' <span class="nav-new">novo</span>' : ''}</button></div>
+    </section>`;
+    if (tab === 'pen') return head + discPenTab(pens, name) + discModal(user, r.list);
+    return `${head}
     ${top.length ? `<section class="section"><div class="disc-sum">${top.map(([id, c]) => `<button class="card disc-sumc ${f.b === id ? 'on' : ''}" data-action="discPick" data-b="${esc(id)}">${avatar(barberById(id) || { name: name(id) }, 36)}<span><b>${esc(name(id).split(' ')[0])}</b><small>${c.n} ${c.n === 1 ? 'registro' : 'registros'}${c.rei ? ` · ${c.rei} reincid.` : ''}${c.adv ? ` · ${c.adv} advert.` : ''}${c.sus ? ` · ${c.sus} penal.` : ''}</small></span></button>`).join('')}</div></section>` : ''}
     <section class="section">
       <div class="disc-bar">
@@ -1881,6 +1914,17 @@
       : `<div class="card muted">${r.list.length ? 'Nenhum registro com esses filtros.' : 'Nenhum registro ainda. Toque em Novo registro para começar.'}</div>`}
     </section>
     ${discModal(user, r.list)}`;
+  }
+  function discPenTab(pens, name) {
+    if (!pens.length) return `<section class="section"><div class="card muted">Nenhuma penalidade registrada. A penalidade aparece aqui sozinha quando um profissional chega à 3ª falta no mês (Checklist › Horário de chegada › Chegou atrasado) ou quando alguém registra uma.</div></section>`;
+    const by = {};
+    pens.forEach(x => (by[x.barber_id] = by[x.barber_id] || []).push(x));
+    const rows = Object.entries(by).sort((a, b) => b[1].length - a[1].length);
+    return `<section class="section"><p class="section-note">Profissionais que levaram penalidade. A penalidade reduz a comissão nos dias definidos em Comissões e prêmios.</p>
+      <div class="pen-list">${rows.map(([id, l]) => { l.sort((a, b) => (a.day < b.day ? 1 : -1)); return `<article class="card pen-card">
+        <div class="pen-head">${avatar(barberById(id) || { name: name(id) }, 44)}<div><b>${esc(name(id))}</b><small>${l.length} ${l.length === 1 ? 'penalidade' : 'penalidades'} · última em ${esc(fmtDayBR(l[0].day))}</small></div><span class="dtag sev-sus">${l.length}</span></div>
+        <ul class="pen-items">${l.map(x => `<li><button class="link-btn" data-action="discOpen" data-id="${esc(x.id)}">${esc(fmtDayBR(x.day))}</button> ${discTag(DISC_KIND, x.kind)} <span class="muted">${esc(x.note || '')}</span></li>`).join('')}</ul>
+      </article>`; }).join('')}</div></section>`;
   }
   function discModal(user, all) {
     const m = ui.discEdit; if (!m) return '';
@@ -3623,8 +3667,8 @@ ${rows.length ? '' : emptyBarbers()}
     const ex = JSON.stringify([
       { data: iso(new Date()), barbeiro: state.barbers[0]?.name || 'Nome do barbeiro', faturamento: 420.5, servicos: 9, clientes: 8, checklist_pop: 1, horas_disponiveis: 8, horas_ocupadas: 6.5, planos_mensais: 1, clientes_retorno: 5, venda_produtos: 2 },
     ], null, 2);
-    return `
-      <section class="section card">
+    return `${apiTutorial()}${autoSyncCard()}
+      <section class="section card" id="api-ref">
         <h2 class="section-title">Como funciona ${tip('api')}</h2>
         <p class="section-note">Outro sistema (agenda, caixa, ERP) envia os resultados de cada barbeiro por dia. Os números entram no ranking na hora, junto com os lançados à mão.</p>
         <div class="field"><span>Chave da API</span><div class="invite-link" id="api-key">${esc(state.apiKey)}</div></div>
@@ -3633,7 +3677,7 @@ ${rows.length ? '' : emptyBarbers()}
         <pre class="code">POST ${esc(Cloud.enabled ? Cloud.apiUrl : '/api/v1/lancamentos')}
 Authorization: Bearer ${esc(state.apiKey)}
 Content-Type: application/json</pre>
-        <p class="section-note">Campos aceitos: <code>data</code> (AAAA-MM-DD), <code>barbeiro</code> (nome) ou <code>barbeiro_id</code>, ${FIELDS.filter(f => !f.legacy).map(f => `<code>${f.api}</code>`).join(', ')}. Campos ausentes ficam em branco. Enviar a mesma data e barbeiro de novo substitui os números.</p>
+        <p class="section-note">Campos aceitos: <code>data</code> (AAAA-MM-DD), <code>${U('barbeiro')}</code> (nome) ou <code>${U('barbeiro_id')}</code>, ${FIELDS.filter(f => !f.legacy).map(f => `<code>${f.api}</code>`).join(', ')}. Campos ausentes ficam em branco. Enviar a mesma data e barbeiro de novo substitui os números.</p>
         <p class="section-note"><code>horas_ocupadas</code>: soma das horas das comandas finalizadas do barbeiro no dia, inclusive fora do horário da agenda. A taxa de ocupação é calculada pela regra em Configurações → Indicadores e metas.</p>
         <p class="section-note">${Cloud.enabled ? 'O endereço acima funciona depois que a função <code>lancamentos</code> for publicada no Supabase (veja o guia em <code>supabase/LEIAME.md</code>). Abaixo dá para importar os dados colando o JSON.' : '<b>Atenção:</b> o endereço acima passa a receber dados quando o app for publicado com servidor. Até lá, teste o formato colando os dados abaixo.'}</p>
       </section>
@@ -3647,6 +3691,128 @@ Content-Type: application/json</pre>
       </section>${csvImportCard()}`;
   }
 
+  // Integração & API › Passo a passo: o que o dono faz (AppBarber, outro sistema ou sem integração)
+  // e um guia técnico pronto para mandar ao suporte do sistema que ele usa.
+  const API_DESC = {
+    faturamento: ['Total vendido pelo profissional no dia (serviços e produtos do salão, sem consumo de bar ou geladeira)', 420.5],
+    servicos: ['Quantidade de serviços realizados', 9], clientes: ['Clientes diferentes atendidos', 8],
+    checklist_pop: ['Pontos do Checklist Agenda Cheia (se o seu sistema controlar)', 1],
+    horas_ocupadas: ['Horas em comandas finalizadas (para a taxa de ocupação)', 6.5],
+    planos_mensais: ['Planos mensais vendidos no dia', 1], clientes_retorno: ['Clientes que já tinham vindo antes', 5],
+    venda_produtos: ['Quantidade de produtos vendidos', 2], maior_comanda: ['Valor da maior comanda do dia', 180],
+  };
+  function apiUrl() { return Cloud.enabled ? Cloud.apiUrl : location.origin + '/api/v1/lancamentos'; }
+  function apiGuideText() {
+    const pro = state.barbers.filter(b => b.active !== false);
+    const ex = [{ data: iso(new Date()), barbeiro: pro[0]?.name || 'Nome do profissional', faturamento: 420.5, servicos: 9, clientes: 8, horas_ocupadas: 6.5 }];
+    return [
+      `INTEGRAÇÃO COM O ${B().name.toUpperCase()} (${state.company.name || ''})`,
+      '',
+      'Objetivo: enviar, para cada profissional e cada dia, os totais do dia (faturamento, serviços, clientes etc.).',
+      'Envie ao longo do dia (ex.: a cada 10 a 30 minutos) ou pelo menos uma vez por dia, depois do fechamento.',
+      'Reenviar o mesmo dia e o mesmo profissional SUBSTITUI os números (não soma). Pode reenviar os últimos dias sem medo.',
+      '',
+      `Endereço:  POST ${apiUrl()}`,
+      `Cabeçalho: Authorization: Bearer ${state.apiKey}`,
+      'Cabeçalho: Content-Type: application/json',
+      '',
+      'Corpo: um objeto ou uma lista (até 1000 itens por envio). Exemplo:',
+      JSON.stringify(ex, null, 2),
+      '',
+      'Campos:',
+      '- data (obrigatório): dia no formato AAAA-MM-DD',
+      '- barbeiro (obrigatório): nome do profissional exatamente como cadastrado (ou barbeiro_id com o código abaixo)',
+      ...FIELDS.filter(f => !f.legacy && API_DESC[f.api]).map(f => `- ${f.api}: ${API_DESC[f.api][0]} (número)`),
+      'Campos que o seu sistema não tiver podem ser omitidos.',
+      '',
+      'Profissionais cadastrados (nome → barbeiro_id):',
+      ...pro.map(b => `- ${b.name} → ${b.id}`),
+      '',
+      'Respostas: 200 {"recebidos": n, "problemas": [...]} · 400 formato inválido · 401 chave inválida · 402 plano sem integração.',
+      'Teste com curl:',
+      `curl -X POST "${apiUrl()}" -H "Authorization: Bearer ${state.apiKey}" -H "Content-Type: application/json" -d '${JSON.stringify(ex[0])}'`,
+    ].join('\n');
+  }
+  function apiTutorial() {
+    const pro = state.barbers.filter(b => b.active !== false);
+    const wa = 'https://wa.me/?text=' + encodeURIComponent(`Olá! Quero integrar meu sistema com o ${B().name}. Segue o guia técnico:\n\n` + apiGuideText());
+    return `<section class="section card tut-card">
+      <h2 class="section-title">${icon('book')} Passo a passo da integração</h2>
+      <p class="section-note">Com a integração, os números de cada profissional entram sozinhos no ranking, sem ninguém digitar. Escolha o seu caso:</p>
+      <details class="tut" open><summary><b>Uso a AppBarber</b><small>O jeito mais fácil: tudo pela nuvem, sem computador ligado.</small></summary>
+        <ol class="tut-steps">
+          <li><b>Peça à AppBarber</b> (suporte ou gerente de conta) a <b>chave da API</b> do seu estabelecimento e a liberação do IP que aparece no cartão <i>Sincronização automática</i> logo abaixo.</li>
+          <li><b>Confira os nomes.</b> Cada profissional precisa estar com o mesmo nome aqui e na AppBarber (ex.: "Carlos Silva" nos dois).</li>
+          <li><b>Preencha o cartão abaixo</b> com o código do estabelecimento e a chave, e toque em Salvar.</li>
+          <li><b>Pronto.</b> Em até 10 minutos o cartão mostra <i>Funcionando</i> e os números aparecem no ranking e em Lançamentos. Depois disso, tudo se atualiza sozinho a cada 10 minutos, no horário de funcionamento.</li>
+        </ol></details>
+      <details class="tut"><summary><b>Uso outro sistema de agenda ou caixa</b><small>O seu sistema envia os números para cá pela API.</small></summary>
+        <ol class="tut-steps">
+          <li><b>Pergunte ao suporte do seu sistema</b> se ele consegue enviar dados para outro sistema por API (também chamado de integração ou webhook).</li>
+          <li><b>Mande o guia técnico</b> para o suporte ou para quem cuida do sistema. Ele já vai com a sua chave, o endereço, o formato e a lista dos seus profissionais:
+            <div class="btn-row tut-btns"><button class="btn btn-sm btn-primary" type="button" data-action="copyGuide">${icon('copy')} Copiar guia técnico</button>
+            <a class="btn btn-sm" href="${esc(wa)}" target="_blank" rel="noopener">${icon('share')} Enviar por WhatsApp</a></div></li>
+          <li><b>Eles fazem o envio</b> dos totais de cada profissional por dia, ao longo do dia ou uma vez por dia depois do fechamento.</li>
+          <li><b>Confira.</b> Quando chegar o primeiro envio, os números aparecem em Lançamentos marcados como <i>API</i>. Se faltar algum profissional, confira se o nome é igual nos dois sistemas.</li>
+        </ol>
+        <p class="tut-warn">${icon('lock')} A chave da API funciona como uma senha da sua empresa: envie só para quem vai fazer a integração. Se ela vazar, gere uma nova em <a href="#api-ref">Chave da API</a> (a antiga para de funcionar).</p></details>
+      <details class="tut"><summary><b>Meu sistema não tem integração</b><small>Dá para usar do mesmo jeito.</small></summary>
+        <ul class="tut-steps">
+          <li><b>Importe uma planilha</b>: exporte o relatório do seu sistema em CSV e use <i>Importar planilha</i> no fim desta página.</li>
+          <li><b>Ou lance à mão</b> em <a href="#lancamentos">Lançamentos</a>, uma vez por dia.</li>
+        </ul></details>
+      <details class="tut"><summary><b>Guia técnico (para o desenvolvedor)</b><small>Endereço, formato, campos e códigos dos profissionais.</small></summary>
+        <pre class="code">POST ${esc(apiUrl())}
+Authorization: Bearer ${esc(state.apiKey)}
+Content-Type: application/json</pre>
+        <div class="tut-table"><table class="table"><thead><tr><th>Campo</th><th>O que é</th></tr></thead><tbody>
+          <tr><td><code>data</code> *</td><td>Dia, no formato AAAA-MM-DD (ex.: ${iso(new Date())})</td></tr>
+          <tr><td><code>${U('barbeiro')}</code> *</td><td>Nome do profissional como está cadastrado (ou <code>${U('barbeiro_id')}</code>)</td></tr>
+          ${FIELDS.filter(f => !f.legacy && API_DESC[f.api]).map(f => `<tr><td><code>${f.api}</code></td><td>${esc(API_DESC[f.api][0])}</td></tr>`).join('')}
+        </tbody></table></div>
+        <p class="section-note">Reenviar o mesmo dia e profissional substitui os números (não soma). Até 1000 itens por envio. Respostas: <code>200</code> recebidos · <code>400</code> formato · <code>401</code> chave inválida · <code>402</code> plano sem integração.</p>
+        ${pro.length ? `<div class="tut-table"><table class="table"><thead><tr><th>Profissional</th><th><code>${U('barbeiro_id')}</code></th></tr></thead><tbody>${pro.map(b => `<tr><td>${esc(b.name)}</td><td><code>${esc(b.id)}</code></td></tr>`).join('')}</tbody></table></div>` : ''}
+        <div class="btn-row tut-btns"><button class="btn btn-sm" type="button" data-action="copyGuide">${icon('copy')} Copiar guia técnico completo</button></div>
+      </details>
+    </section>`;
+  }
+  // Integração & API › Sincronização automática: o servidor do Gestão (IP fixo) busca na AppBarber
+  // a cada 10 minutos, 24 horas por dia, sem computador ligado na barbearia.
+  function autoSyncCard() {
+    if (Cloud.enabled && ui.integ === undefined) {
+      ui.integ = null;
+      Cloud.integ.get().then(r => { ui.integ = r || {}; render(); }).catch(() => { ui.integ = { erro: true }; render(); });
+    }
+    const it = Cloud.enabled ? ui.integ : (state.integ || {});
+    if (!it) return `<section class="section card"><h2 class="section-title">${icon('plug')} Sincronização automática AppBarber</h2><p class="muted">Carregando…</p></section>`;
+    if (it.erro) return '';
+    const ip = (window.GB_CONFIG || {}).syncIp || '';
+    const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const st = String(it.last_status || ''), bad = /^erro/.test(st), on = !!it.est_code && it.active !== false;
+    const status = !it.est_code ? '<span class="chip">Desligada</span>'
+      : it.active === false ? '<span class="chip">Pausada</span>'
+      : !it.last_sync_at ? '<span class="chip">Aguardando a primeira sincronização</span>'
+      : `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">Última: ${when(it.last_sync_at)}</small>`;
+    return `<section class="section card as-card">
+      <h2 class="section-title">${icon('plug')} Sincronização automática AppBarber</h2>
+      <p class="section-note">O servidor do ${esc(B().name)} busca os atendimentos e as comandas na AppBarber a cada 10 minutos, 24 horas por dia. <b>Não precisa deixar nenhum computador ligado na barbearia.</b></p>
+      <div class="as-status">${status}${st && it.est_code ? `<p class="muted as-msg">${esc(st.replace(/^(ok|erro): /, ''))}</p>` : ''}</div>
+      <ol class="as-steps">
+        <li>Peça à AppBarber a <b>chave da API</b> e a liberação deste IP: ${ip ? `<span class="invite-link as-ip" id="as-ip">${esc(ip)}</span> <button class="btn btn-sm" type="button" data-action="copyIp">${icon('copy')} Copiar IP</button>` : '<i>o IP do servidor aparece aqui assim que ele estiver no ar.</i>'}</li>
+        <li>Preencha abaixo e salve. Em até 10 minutos os números começam a entrar.</li>
+        ${on ? '<li>Se o computador da barbearia ainda roda a sincronização antiga, pode desinstalar: o servidor assume.</li>' : ''}
+      </ol>
+      <form class="form" data-form="autoSync" novalidate>
+        <div class="grid-2">
+          <label class="field"><span>Código do estabelecimento na AppBarber *</span><input class="input" name="est" inputmode="numeric" value="${esc(it.est_code || '')}" placeholder="Ex.: 17820245"></label>
+          <label class="field"><span>Código da filial <small class="muted">(opcional)</small></span><input class="input" name="branch" value="${esc(it.branch_code || '')}"></label>
+        </div>
+        <label class="field"><span>Chave da API da AppBarber *</span><input class="input" name="key" type="password" autocomplete="off" value="" placeholder="${it.api_key ? 'Guardada (…' + esc(String(it.api_key).slice(-4)) + '). Deixe vazio para manter' : 'Cole a chave enviada pela AppBarber'}"></label>
+        <label class="check"><input type="checkbox" name="active" ${it.active !== false ? 'checked' : ''}><span><b>Sincronização ligada</b><small>Desmarque para pausar sem apagar os dados.</small></span></label>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
+      </form></section>`;
+  }
   // Configurações › Regra da taxa de ocupação: horário próprio de cada profissional (vazio = o da empresa).
   function ocupByBarber(oc) {
     const by = oc.by || {}, list = state.barbers.filter(b => b.active !== false);
@@ -4801,6 +4967,25 @@ Content-Type: application/json</pre>
   // Padrão: ligada nas tarefas de "Marcar como feito"; o dono muda em cada tarefa do checklist.
   const popGest = it => it.gest !== undefined ? !!it.gest : it.type === 'check';
   const popMarkOk = (it, bid) => { if (!popGest(it)) return canPopEdit(bid); const u = currentUser(); return !!u && (isGestor(u) || (u.barberId !== bid && (canEditB(bid) || accessOf(u.barberId) === 'lider'))); };
+  // Horário de chegada: três botões (no horário, depois do horário, atrasado), sem prova. Fica no topo do checklist.
+  // O dono pode ligar ou desligar em cada tarefa ("arr"); sem escolha, vale para tarefas da gestão com "chegada" no nome.
+  const popArr = it => it.arr !== undefined ? !!it.arr : popGest(it) && it.type === 'check' && /chegad|pontualid/i.test(`${it.title || ''} ${it.desc || ''}`);
+  const ARR = {
+    ok: ['Chegou no horário combinado', 'arr-ok', 'check'],
+    apos: ['Chegou após o horário combinado', 'arr-apos', 'clock'],
+    atraso: ['Chegou atrasado', 'arr-atraso', 'alert'],
+  };
+  function arrBlock(it, list, bid) {
+    const e = list.find(GB.evLive), can = popMarkOk(it, bid);
+    if (e) {
+      const a = ARR[e.arr || 'ok'], sev = e.sev && DISC_SEV[e.sev];
+      const undo = can && (isGestor(currentUser()) || e.byUser === (currentUser() || {}).id);
+      return `<div class="arr-done ${a[1]}">${icon(a[2])}<span><b>${a[0]}</b><small>${e.arr && e.arr !== 'ok' ? 'Sem bônus' : `+${fmtPts(it.pts)} pts`}${sev ? ` · Fiscalização: falta, ${sev[0].toLowerCase()}` : ''}</small></span></div>
+        ${undo ? `<button class="link-btn arr-undo" data-action="arrUndo" data-it="${esc(it.id)}">${ui.confirm === 'arr' + it.id ? 'Confirmar: desfazer' + (e.disc ? ' e apagar a ocorrência' : '') : 'Desfazer'}</button>` : ''}`;
+    }
+    if (!can) return `<p class="muted pop-gest">${icon('lock')} Marcado pelo dono, gestor ou líder.</p>`;
+    return `<div class="arr-btns">${Object.entries(ARR).map(([k, [l, c, i]]) => `<button class="btn arr-btn ${c}" data-action="arrMark" data-it="${esc(it.id)}" data-v="${k}" ${ui.arrBusy ? 'disabled' : ''}>${icon(i)} <span>${l}${k === 'ok' ? '' : '<small>sem bônus' + (k === 'atraso' ? ' · gera ocorrência' : '') + '</small>'}</span></button>`).join('')}</div>`;
+  }
   function popStepper(it, list, t, bid, mayAdd) {
     if (!popMarkOk(it, bid)) return `<p class="muted pop-gest">${icon('lock')} Marcado pelo dono, gestor ou líder.</p>`;
     const me = currentUser(), rev = canReview(bid);
@@ -4848,6 +5033,13 @@ Content-Type: application/json</pre>
           <button class="btn" data-action="popAddCancel">Cancelar</button></div>
         <p class="section-note">${rev ? 'Como você confere esta pessoa, a prova já entra aprovada.' : 'Os pontos entram depois que a gestão aprovar a prova.'}</p>
       </div>` : '';
+    if (popArr(it)) {
+      const e = list.find(GB.evLive);
+      return `<article class="pop-item pop-arr ${e ? (!e.arr || e.arr === 'ok' ? 'is-done' : 'arr-st-' + e.arr) : ''}" id="pi-${esc(it.id)}">
+      <div class="pop-ihead"><div><h3>${icon('clock')} ${esc(it.title)}</h3><p>${esc(it.desc || 'Sem prova: o dono, o gestor ou o líder marca quando o profissional chega.')}</p></div><span class="pop-badge num">${fmtPts(pts)}/${fmtPts(it.pts)} pts</span></div>
+      ${arrBlock(it, list, bid)}
+    </article>`;
+    }
     return `<article class="pop-item ${pct >= 100 ? 'is-done' : ''}" id="pi-${esc(it.id)}">
       <div class="pop-ihead"><div><h3>${esc(it.title)}</h3><p>${esc(it.desc || '')}</p></div><span class="pop-badge num">${fmtPts(pts)}/${fmtPts(it.pts)} pts</span></div>
       <div class="pop-bar"><i style="width:${pct}%"></i><i class="pend" style="width:${pctP}%"></i></div>
@@ -4923,6 +5115,7 @@ Content-Type: application/json</pre>
         <div class="grid-2">${it.type === 'check' ? '' : `<label class="field"><span class="tm-flabel">Meta (quantidade)</span><input class="input num" type="number" min="1" id="pei-m-${i}" value="${it.target}" data-popitem="target" data-i="${i}"></label>`}
         <label class="field"><span class="tm-flabel">Pontos</span><input class="input num" type="number" min="0" step="0.5" id="pei-p-${i}" value="${it.pts}" data-popitem="pts" data-i="${i}"></label></div>
         <label class="check"><input type="checkbox" data-popitem="gest" data-i="${i}" ${popGest(it) ? 'checked' : ''}><span><b>Só o dono, o gestor ou o líder marcam</b><small>O profissional vê a tarefa, mas não consegue marcar (ex.: horário de chegada).</small></span></label>
+        ${it.type === 'check' ? `<label class="check"><input type="checkbox" data-popitem="arr" data-i="${i}" ${popArr(it) ? 'checked' : ''}><span><b>É o horário de chegada (3 botões)</b><small>Fica no topo, sem prova: no horário (verde, com pontos), depois do horário (amarelo, sem bônus) e atrasado (vermelho, sem bônus e gera ocorrência na Fiscalização).</small></span></label>` : ''}
         <div class="btn-row"><button class="btn btn-sm" data-action="popItemMove" data-i="${i}" data-d="-1" ${i ? '' : 'disabled'}>${icon('up')} Subir</button>
           <button class="btn btn-sm" data-action="popItemMove" data-i="${i}" data-d="1" ${i < c.items.length - 1 ? '' : 'disabled'}>${icon('down')} Descer</button>
           <button class="btn btn-sm btn-danger" data-action="popItemDel" data-i="${i}">${ui.confirm === 'pitem' + i ? 'Confirmar exclusão' : 'Excluir'}</button></div>
@@ -5009,7 +5202,7 @@ Content-Type: application/json</pre>
         <p class="pop-sum"><b class="num" id="pop-daypts">${fmtPts(dayPts)}/${fmtPts(dayMax)} pts aprovados no dia</b>${GB.popDayPts(cfg, rec, true) ? ` · <span class="pend num">+${fmtPts(GB.popDayPts(cfg, rec, true))} pts aguardando conferência</span>` : ''}</p>
         <p class="section-note">Cada unidade precisa de uma prova: foto ou print. Anexe, escreva uma descrição se quiser e toque em Confirmar. As fotos são apagadas ${PROOF_DAYS} dias depois do envio (as que ainda aguardam conferência ficam até serem conferidas); a prova e os pontos continuam.</p>
         ${ro ? '<p class="section-note">Você está vendo este checklist sem poder editar.</p>' : ''}
-        <div class="pop-items">${cfg.items.map(it => popItemCard(it, rec, bid)).join('')}</div>
+        <div class="pop-items">${[...cfg.items.filter(popArr), ...cfg.items.filter(it => !popArr(it))].map(it => popItemCard(it, rec, bid)).join('')}</div>
       </section>
       <section class="section card pop-rem">
         <div class="pop-dhead"><div><h2 class="pop-h2">${icon('bell')} Lembretes de posts</h2><p class="muted">Aviso diário para preencher o checklist enquanto a meta do dia não for batida.</p></div>
@@ -6479,7 +6672,7 @@ Content-Type: application/json</pre>
         ${isGestor(user) ? `<a class="icon-btn" href="#apresentacao" aria-label="Tela da loja" title="Tela da loja">${icon('monitor')}</a>` : ''}
         <button class="icon-btn" data-action="fontSize" aria-label="Tamanho da letra" title="Tamanho da letra">${icon('type')}</button>
         <button class="icon-btn theme-btn" data-action="toggleTheme" aria-label="${getTheme() === 'light' ? 'Ativar modo escuro' : 'Ativar modo claro'}" title="${getTheme() === 'light' ? 'Modo escuro' : 'Modo claro'}">${icon(getTheme() === 'light' ? 'moon' : 'sun')}</button>
-        ${(() => { const n = pending + unseenOvertakes(); return `<button class="icon-btn" data-action="notifOpen" aria-expanded="${!!ui.notifOpen}" aria-label="Notificações${n ? ': ' + n + ' novas' : ''}">${icon('bell')}${n ? `<span class="badge-dot">${n > 9 ? '9+' : n}</span>` : ''}</button>`; })()}
+        ${(() => { if (discOk(user) && !ui.discData) fbLoad('discData', DISC.list); const n = pending + unseenOvertakes() + penUnseen(user); return `<button class="icon-btn" data-action="notifOpen" aria-expanded="${!!ui.notifOpen}" aria-label="Notificações${n ? ': ' + n + ' novas' : ''}">${icon('bell')}${n ? `<span class="badge-dot">${n > 9 ? '9+' : n}</span>` : ''}</button>`; })()}
         <button class="avatar-btn" data-action="togglePopover" aria-label="Perfil e conta">${avatar(who, 40)}</button>
       </header>
       ${demoBar(user)}
@@ -6658,6 +6851,42 @@ Content-Type: application/json</pre>
       ui.popDraft = { it: el.dataset.it, bid: ui.popBarber, photo: null, phone: '', desc: '' }; ui.confirm = null; render();
       setTimeout(() => document.getElementById('pi-' + el.dataset.it)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 40);
     },
+    async arrMark(el) {
+      const it = popCfg().items.find(x => x.id === el.dataset.it), v = el.dataset.v, bid = ui.popBarber;
+      if (!it || !ARR[v] || ui.arrBusy || !popMarkOk(it, bid)) return;
+      const day = `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`, u = currentUser();
+      if (popRec(bid, day)?.ev?.[it.id]?.some(GB.evLive)) return;
+      const e = { id: uid('e_'), desc: '', at: Date.now(), by: 'gestao', byUser: u ? u.id : null, status: 'aprovado', reviewedBy: u ? u.id : null, reviewedAt: Date.now(), noPhoto: true, arr: v };
+      if (v === 'atraso') {
+        ui.arrBusy = true; render();
+        try { const r = await lateRegister(bid, day, u ? u.name : ''); e.disc = r.id; e.sev = r.severity; }
+        catch (err) { ui.arrBusy = false; render(); toast('Não foi possível gerar a ocorrência: ' + (Cloud.enabled ? Cloud.message(err) : err.message)); return; }
+        ui.arrBusy = false; ui.discData = null;
+      }
+      const r = popRecW(bid, day); (r.ev[it.id] = Array.isArray(r.ev[it.id]) ? r.ev[it.id] : []).push(e);
+      save();
+      const nm = ((barberById(bid) || {}).name || 'Profissional').split(' ')[0];
+      if (e.sev === 'penalidade') toast(`${nm}: PENALIDADE registrada na Fiscalização (3ª falta no mês). O dono, o gestor e os líderes com acesso foram avisados.`, 7000, 'alert');
+      else if (e.sev) toast(`${nm}: ${DISC_SEV[e.sev][0].toLowerCase()} registrada na Fiscalização (falta).`, 5000, 'alert');
+      else toast(`${nm}: ${ARR[v][0].toLowerCase()}.`);
+      render();
+    },
+    async arrUndo(el) {
+      const it = popCfg().items.find(x => x.id === el.dataset.it), bid = ui.popBarber;
+      if (!it || !popMarkOk(it, bid)) return;
+      if (ui.confirm !== 'arr' + it.id) { ui.confirm = 'arr' + it.id; render(); return; }
+      ui.confirm = null;
+      const day = `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`, r = popRecW(bid, day), l = r.ev[it.id] || [];
+      const i = l.findIndex(GB.evLive); if (i < 0) return render();
+      const e = l[i];
+      if (e.disc) {
+        try { await lateUndo(e.disc); ui.discData = null; }
+        catch (err) { toast('Não foi possível apagar a ocorrência na Fiscalização: ' + (Cloud.enabled ? Cloud.message(err) : err.message)); return render(); }
+      }
+      l.splice(i, 1); save(); toast('Marcação desfeita.'); render();
+    },
+    discTab(el) { ui.discTab = el.dataset.t; render(); },
+    penOpen() { ui.discTab = 'pen'; ui.notifOpen = false; if (location.hash === '#fiscalizacao') render(); else location.hash = '#fiscalizacao'; },
     popAddCancel() { ui.popDraft = null; render(); },
     async popConfirm() {
       const d = ui.popDraft; if (!d || d.busy) return;
@@ -7104,6 +7333,8 @@ Content-Type: application/json</pre>
       ui.confirm = null; save(); toast('Equipe e lançamentos apagados.'); render();
     },
     copyKey() { copyText(state.apiKey, $('#api-key')); },
+    copyGuide() { copyText(apiGuideText(), null, 'Guia técnico copiado. Cole no WhatsApp ou no e-mail do suporte.'); },
+    copyIp() { copyText((window.GB_CONFIG || {}).syncIp || '', $('#as-ip')); },
     newKey() {
       if (ui.confirm !== 'key') { ui.confirm = 'key'; render(); return; }
       if (Cloud.enabled) {
@@ -7511,6 +7742,18 @@ Content-Type: application/json</pre>
         setMsg(f, `${res.ok} lançamento(s) importado(s).${res.errors.length ? ' Problemas: ' + res.errors.join(' ') : ''}`, res.errors.length === 0);
       } catch (e) { setMsg(f, e.message); }
     },
+    autoSync(f) {
+      const est = val(f, 'est').replace(/\s/g, ''), key = val(f, 'key'), cur = (Cloud.enabled ? ui.integ : state.integ) || {};
+      if (!/^\d{3,12}$/.test(est)) return setMsg(f, 'Digite o código do estabelecimento (só números).');
+      if (!key && !cur.api_key) return setMsg(f, 'Cole a chave da API da AppBarber.');
+      if (key && key.length < 10) return setMsg(f, 'A chave da API parece incompleta. Copie de novo.');
+      const row = { provider: 'appbarber', est_code: est, branch_code: val(f, 'branch'), active: f.elements.active.checked };
+      if (key) row.api_key = key;
+      if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Sincronização automática salva.'); return render(); }
+      setMsg(f, 'Salvando…', true);
+      Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(row.active ? 'Salvo. Em até 10 minutos os números começam a entrar.' : 'Sincronização pausada.'); render(); })
+        .catch(e => setMsg(f, Cloud.message(e)));
+    },
     company(f) {
       const name = val(f, 'name');
       if (!name) return setMsg(f, 'O nome da barbearia é obrigatório.');
@@ -7761,7 +8004,7 @@ Content-Type: application/json</pre>
     if (pc) {
       const c = popCfgW(), v = pc.value;
       if (pc.dataset.popcfg) { const k = pc.dataset.popcfg; c[k] = k === 'minProfit' ? Number(v) || 0 : k === 'lose' ? v.split('\n').map(x => x.trim()).filter(Boolean) : v; }
-      if (pc.dataset.popitem) { const it = c.items[Number(pc.dataset.i)], k = pc.dataset.popitem; it[k] = k === 'gest' ? pc.checked : ['target', 'pts'].includes(k) ? Math.max(k === 'target' ? 1 : 0, Number(v) || 0) : v; if (k === 'type' && v === 'check') it.target = 1; }
+      if (pc.dataset.popitem) { const it = c.items[Number(pc.dataset.i)], k = pc.dataset.popitem; it[k] = k === 'gest' || k === 'arr' ? pc.checked : ['target', 'pts'].includes(k) ? Math.max(k === 'target' ? 1 : 0, Number(v) || 0) : v; if (k === 'type' && v === 'check') it.target = 1; if (k === 'arr' && pc.checked) it.gest = true; }
       if (pc.dataset.poplevel) { const l = c.levels[Number(pc.dataset.i)], k = pc.dataset.poplevel; l[k] = k === 'name' ? v : k === 'value' ? (v === '' ? null : Number(v)) : Number(v) || 0; }
       save(); render(); return;
     }

@@ -328,7 +328,8 @@
   };
   const validPhone = p => String(p || '').replace(/\D/g, '').length >= 10;
   // Cada unidade do checklist é uma prova (foto/print). Só as aprovadas pela gestão contam pontos.
-  const evOk = (it, e) => e && e.status === 'aprovado' && (it.type !== 'phones' || validPhone(e.phone));
+  // Horário de chegada: só "Chegou no horário combinado" (arr = 'ok') vale pontos; depois do horário ou atrasado, sem bônus.
+  const evOk = (it, e) => e && e.status === 'aprovado' && (!e.arr || e.arr === 'ok') && (it.type !== 'phones' || validPhone(e.phone));
   const evLive = e => e && e.status !== 'recusado';
   function popItemPts(it, ev, pending) {
     const list = Array.isArray(ev) ? ev : [];

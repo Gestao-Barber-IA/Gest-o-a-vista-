@@ -1202,3 +1202,68 @@ create policy disc_ins on public.discipline for insert to authenticated
 create policy disc_upd on public.discipline for update
   using (company_id = my_company() and (is_gestor() or can_edit_barber(barber_id) or lider_disc(barber_id)))
   with check (company_id = my_company() and (is_gestor() or can_edit_barber(barber_id) or lider_disc(barber_id)));
+
+-- Sincronização automática pela nuvem (AppBarber): o servidor do Gestão Barber IA, com IP fixo,
+-- busca os dados de cada barbearia 24 horas por dia, sem computador ligado na loja.
+-- Cada empresa guarda aqui o código do estabelecimento e a chave da API da AppBarber.
+-- Só o gestor (dono) da empresa vê e altera. O servidor lê pela função sync-servidor (service_role).
+create table if not exists public.integrations (
+  company_id uuid primary key references public.companies on delete cascade,
+  provider text not null default 'appbarber',
+  est_code text not null default '',
+  api_key text not null default '',
+  branch_code text not null default '',
+  active boolean not null default true,
+  names jsonb not null default '{}'::jsonb,
+  last_sync_at timestamptz,
+  last_status text,
+  updated_at timestamptz not null default now()
+);
+grant select, insert, update, delete on public.integrations to authenticated;
+grant select, insert, update, delete on public.integrations to service_role;
+alter table public.integrations enable row level security;
+drop policy if exists integrations_gestor on public.integrations;
+create policy integrations_gestor on public.integrations for all
+  using (company_id = my_company() and is_gestor())
+  with check (company_id = my_company() and is_gestor());
+
+-- Checklist › Horário de chegada: o botão vermelho "Chegou atrasado" gera sozinho um registro na Fiscalização.
+-- Tipo: falta. Gravidade no mês: 1ª vez ocorrência, 2ª reincidência, 3ª em diante penalidade.
+-- Quem marca: dono, gestor (de área ou nível Gestor) ou líder; nunca o próprio profissional.
+-- Funciona mesmo para o líder sem o acesso extra "Fiscalização" (ele só não vê a página). Pode rodar mais de uma vez.
+create or replace function public.registrar_atraso(p_barber text, p_day date, p_author text default '')
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  cid uuid := my_company();
+  lider boolean;
+  n int;
+  sev text;
+  rid uuid;
+begin
+  if cid is null then raise exception 'Sem empresa.'; end if;
+  select coalesce(c.settings->'org'->'access'->>my_barber() = 'lider', false) into lider from companies c where c.id = cid;
+  if not (is_gestor() or ((can_edit_barber(p_barber) or lider) and p_barber is distinct from my_barber())) then
+    raise exception 'Só o dono, o gestor ou o líder marcam o horário de chegada.';
+  end if;
+  if not exists (select 1 from barbers where company_id = cid and id = p_barber) then raise exception 'Profissional não encontrado.'; end if;
+  select count(*) into n from discipline
+    where company_id = cid and barber_id = p_barber and kind = 'falta'
+      and date_trunc('month', day) = date_trunc('month', p_day);
+  sev := case when n = 0 then 'ocorrencia' when n = 1 then 'reincidencia' else 'penalidade' end;
+  insert into discipline (company_id, user_id, barber_id, day, severity, kind, note, author)
+    values (cid, auth.uid(), p_barber, p_day, sev, 'falta',
+      'Chegou atrasado, depois do horário combinado (marcado no Checklist › Horário de chegada).', left(coalesce(p_author, ''), 80))
+    returning id into rid;
+  return jsonb_build_object('id', rid, 'severity', sev);
+end $$;
+grant execute on function public.registrar_atraso(text, date, text) to authenticated;
+
+-- Desfazer a marcação vermelha: apaga o registro gerado (só quem marcou, ou o dono).
+create or replace function public.desfazer_atraso(p_id uuid) returns boolean
+language plpgsql security definer set search_path = public as $$
+begin
+  delete from discipline where id = p_id and company_id = my_company() and kind = 'falta'
+    and note like 'Chegou atrasado, depois do horário combinado%' and (is_gestor() or user_id = auth.uid());
+  return found;
+end $$;
+grant execute on function public.desfazer_atraso(uuid) to authenticated;
