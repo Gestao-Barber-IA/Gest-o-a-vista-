@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-13-so-finalizadas', date: '2026-11-13', title: 'AppBarber: só comandas finalizadas', items: [
+    ['melhoria', 'A sincronização com a AppBarber passa a contar só as comandas finalizadas, com o valor real cobrado, igual ao Dashboard Profissional da AppBarber. Sem valor provisório do agendamento.'],
+    ['melhoria', 'Atendimento com comanda ainda aberta entra no ranking assim que a comanda for paga (a sincronização confere as comandas abertas a cada 20 minutos).'],
+  ] },
   { id: '2026-11-13-qtd-valor', date: '2026-11-13', title: 'Serviços e produtos por quantidade ou por valor', items: [
     ['novo', 'Em Configurações › Indicadores e metas, o dono escolhe se Serviços realizados e Venda de produtos contam a quantidade ou o valor em R$ (Valor em serviços, Valor em produtos vendidos).'],
     ['melhoria', 'A sincronização AppBarber já envia os dois. O valor em produtos não inclui o consumo de geladeira ou bar. Em Lançamentos aparece o campo do modo escolhido.'],

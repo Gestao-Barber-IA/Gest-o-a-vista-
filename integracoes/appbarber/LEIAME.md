@@ -17,8 +17,10 @@ Depois envia ao Gestão Barber IA, por profissional e por dia:
 | horas de atendimento (início e fim de cada serviço da comanda; horários sobrepostos contam uma vez) | Taxa de ocupação (o app divide pelas horas da agenda definidas em Configurações) |
 
 Cada comanda é lida **uma única vez** (1 chamada) e guardada em `comandas.json`. Só são lidas as comandas do **mês atual**
-(nos 3 primeiros dias do mês, também as do mês anterior, para o fechamento). Enquanto a comanda não é lida, e nos
-dias de meses anteriores, vale o valor do agendamento. Comanda ainda não paga é relida no máximo 1 vez por hora. No fim da instalação, a **carga inicial** lê de uma vez as
+(nos 3 primeiros dias do mês, também as do mês anterior, para o fechamento). **Só contam comandas finalizadas**
+(pagas, ou de um dia que já passou), como no Dashboard da AppBarber: não há valor provisório do agendamento. Comanda aberta
+ou ainda não lida entra quando for finalizada e lida. Comanda ainda não paga é relida a cada 20 minutos. Os meses anteriores
+não são reenviados. No fim da instalação, a **carga inicial** lê de uma vez as
 comandas do mês atual (do dia 1º até hoje), no ritmo máximo da AppBarber (1.000 chamadas por
 hora: cerca de 35 minutos para 550 comandas). Os números vão sendo atualizados no app
 durante a carga. Para rodar de novo: `node sincronizar.mjs --carga` na pasta.
