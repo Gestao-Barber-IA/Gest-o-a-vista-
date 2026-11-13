@@ -4,6 +4,14 @@
   const { DB, FIELDS, PERIOD_NAMES, periodRange, computeRanking, importEntries, upsertEntry, gapTo, emptyState, monthRange, addMonths, monthFromIntegration, levelOf, isNum, passHash, uid, iso, fromIso, hash, icon, logo } = window.GB;
   // Indicadores em uso no sistema (os retirados por enquanto ficam de fora em todas as telas).
   const INDICATORS = window.GB.INDICATORS.filter(i => !window.GB.RETIRED.includes(i.key));
+  // Indicadores personalizados do dono: atualiza as listas (mesmos arrays usados em todas as telas).
+  function syncInds() {
+    window.GB.applyCustom(state);
+    const now = window.GB.INDICATORS.filter(i => !window.GB.RETIRED.includes(i.key));
+    if (now.length !== INDICATORS.length || now.some((x, i) => x !== INDICATORS[i])) { INDICATORS.length = 0; INDICATORS.push(...now); }
+    HG_LABEL.serv = GB.indMode('serv') === 'valor' ? 'Valor em serviços' : 'Serviços realizados';
+    HG_LABEL.prod = GB.indMode('prod') === 'valor' ? 'Valor em produtos vendidos' : 'Produtos vendidos';
+  }
   const hidAll = () => [...(state.hidden || []), ...window.GB.RETIRED];
 
   const Cloud = window.GB.Cloud || { enabled: false };
@@ -2507,7 +2515,7 @@
     const R = monthR(ym);
     const row = R.rows.find(r => r.barber.id === b.id);
     const hidden = hidAll();
-    return GB.MONTH_FIELDS.filter(f => f.key !== 'agend' && !hidden.includes(GB.FIELD_IND[f.key] || f.key)).map(f => {
+    return GB.MONTH_FIELDS.filter(f => f.key !== 'agend' && !GB.fieldOff(f.key) && !hidden.includes(GB.FIELD_IND[f.key] || f.key)).map(f => {
       if (f.calc) {
         const t = row && row.sums.cli > 0 ? row.sums.fat / row.sums.cli : null;
         return `<div class="field"><span class="tm-flabel"><span class="tm-ft">${esc(f.label)}${tip(FIELD_TIP[f.key])}</span><span class="lock">${icon('chart')} Calculado</span></span>
@@ -2579,11 +2587,11 @@
   }
   // Histórico do mês: o que entrou à mão em cada dia.
   function lanHistory(b, ym) {
-    const L = { fat: v => money0(v), cli: v => nf0.format(v) + ' clientes', serv: v => nf0.format(v) + ' serviços', prod: v => nf0.format(v) + ' produtos', check: v => nf1.format(v) + ' pts checklist', planos: v => nf0.format(v) + ' planos' };
+    const L = { servV: v => money0(v) + ' em serviços', prodV: v => money0(v) + ' em produtos', fat: v => money0(v), cli: v => nf0.format(v) + ' clientes', serv: v => nf0.format(v) + ' serviços', prod: v => nf0.format(v) + ' produtos', check: v => nf1.format(v) + ' pts checklist', planos: v => nf0.format(v) + ' planos' };
     const days = GB.manualEntries(state, b.id, ym).filter(e => GB.SUM_KEYS.some(k => isNum(e[k]) && Number(e[k]) !== 0)).sort((a, c) => c.date.localeCompare(a.date));
     if (!days.length) return '';
     return `<details class="lan-hist" ${ui.lanHistOpen ? 'open' : ''}><summary>Lançamentos por dia em ${esc(ymLabel(ym).replace(' de ', '/'))} (${days.length})</summary>
-      <ul>${days.map(e => `<li><b class="num">${dateBR(e.date).slice(0, 5)}</b><span>${GB.SUM_KEYS.filter(k => isNum(e[k]) && Number(e[k]) !== 0).map(k => L[k](Number(e[k]))).join(' · ')}</span></li>`).join('')}</ul></details>`;
+      <ul>${days.map(e => `<li><b class="num">${dateBR(e.date).slice(0, 5)}</b><span>${GB.SUM_KEYS.filter(k => isNum(e[k]) && Number(e[k]) !== 0).map(k => L[k] ? L[k](Number(e[k])) : (INDICATORS.find(i => i.key === k) || {}).fmt === 'money' ? money0(Number(e[k])) + ' ' + esc((INDICATORS.find(i => i.key === k) || { label: '' }).label.toLowerCase()) : nf1.format(Number(e[k])) + ' ' + esc((INDICATORS.find(i => i.key === k) || { label: '' }).label.toLowerCase())).join(' · ')}</span></li>`).join('')}</ul></details>`;
   }
 
   function teamEditor(ym) {
@@ -3213,7 +3221,7 @@
   // Agendamentos: indicador retirado por enquanto (não aparece em lançamentos, metas nem totais).
   const HG_KEYS = ['fat', 'cli', 'serv', 'prod', 'planos', 'ticket', 'ocup', 'fid'];
   const HG_LABEL = { fat: 'Faturamento total', agend: 'Agendamentos', cli: 'Clientes atendidos', serv: 'Serviços realizados', prod: 'Produtos vendidos', planos: 'Planos mensais', ticket: 'Ticket médio da casa', ocup: 'Ocupação média', fid: 'Fidelização da casa' };
-  const hgFmt = (k, v) => k === 'fat' || k === 'ticket' ? money0(v) : k === 'ocup' || k === 'fid' ? nf1.format(v) + '%' : nf0.format(v);
+  const hgFmt = (k, v) => k === 'fat' || k === 'ticket' || ((k === 'serv' || k === 'prod') && GB.indMode(k) === 'valor') ? money0(v) : k === 'ocup' || k === 'fid' ? nf1.format(v) + '%' : nf0.format(v);
   function houseGoalsFor(ym) {
     const m = (state.houseGoalsM || {})[ym];
     const g = m && Object.keys(m).length ? m : (state.houseGoals || {});
@@ -3234,7 +3242,7 @@
     const agend = (state.monthly || []).filter(m => m.month === ym && ids.has(m.barberId) && isNum(m.agend)).reduce((a, m) => a + Number(m.agend), 0);
     const fat = sum('fat'), cli = sum('cli');
     const ocups = rows.map(r => r.values.ocup).filter(v => v != null);
-    const vals = { fat, agend, cli, serv: sum('serv'), prod: vis('prod') ? sum('prod') : null, planos: vis('planos') ? sum('planos') : null,
+    const vals = { fat, agend, cli, serv: sum(GB.indMode('serv') === 'valor' ? 'servV' : 'serv'), prod: vis('prod') ? sum(GB.indMode('prod') === 'valor' ? 'prodV' : 'prod') : null, planos: vis('planos') ? sum('planos') : null,
       ticket: cli > 0 ? fat / cli : null, ocup: vis('ocup') && ocups.length ? ocups.reduce((a, v) => a + v, 0) / ocups.length : null };
     // Fidelização da casa: clientes que voltaram ÷ clientes atendidos, só de quem lançou a fidelização.
     const fr = all.filter(r => r.sums.n.ret), fCli = fr.reduce((a, r) => a + (r.sums.cli || 0), 0);
@@ -3418,8 +3426,9 @@
     // Sugestão: soma das metas individuais dos profissionais ativos.
     const act = state.barbers.filter(b => b.active !== false);
     const sugg = k => k === 'agend' ? null : ['ticket', 'ocup', 'fid'].includes(k) ? GB.goalFor(state, '', k) : act.reduce((a, b) => a + GB.goalFor(state, b.id, k), 0);
-    const HG_FIELDS = [['fat', 'Faturamento total (R$)', '0.01'], ['cli', 'Clientes atendidos', '1'], ['serv', 'Serviços realizados', '1'],
-      ...(vis('prod') ? [['prod', 'Produtos vendidos', '1']] : []), ...(vis('planos') ? [['planos', 'Planos mensais', '1']] : []),
+    const vS = GB.indMode('serv') === 'valor', vP = GB.indMode('prod') === 'valor';
+    const HG_FIELDS = [['fat', 'Faturamento total (R$)', '0.01'], ['cli', 'Clientes atendidos', '1'], ['serv', vS ? 'Valor em serviços (R$)' : 'Serviços realizados', vS ? '0.01' : '1'],
+      ...(vis('prod') ? [['prod', vP ? 'Valor em produtos vendidos (R$)' : 'Produtos vendidos', vP ? '0.01' : '1']] : []), ...(vis('planos') ? [['planos', 'Planos mensais', '1']] : []),
       ['ticket', 'Ticket médio da casa (R$)', '0.01'], ...(vis('ocup') ? [['ocup', 'Ocupação média (%)', '0.1']] : []), ...(vis('fid') ? [['fid', 'Fidelização da casa (%)', '0.1']] : [])];
     const goalForm = own && ui.hgEdit ? `<section class="section card">
         <h2 class="section-title">Metas mensais da empresa</h2>
@@ -3573,8 +3582,36 @@ ${rows.length ? '' : emptyBarbers()}
   // Atualiza as porcentagens na tela, sem recarregar.
   function wRefresh(f) {
     const vals = INDICATORS.map(i => ({ k: i.key, v: Math.max(0, Number(f.elements[i.key].value) || 0) })), tot = vals.reduce((a, x) => a + x.v, 0);
-    vals.forEach(x => { const row = f.querySelector(`.wp-row[data-k="${x.k}"]`); if (!row) return; const on = x.v > 0; row.classList.toggle('is-off', !on);
+    vals.forEach(x => { const row = f.querySelector(`.wp-row[data-k="${x.k}"]`); if (!row) return; const on = x.v > 0; row.classList.toggle('is-off', !on); const sw = row.querySelector('[data-change="wToggle"]'); if (sw) sw.checked = on;
       row.querySelector('[data-pct]').textContent = on && tot ? `vale ${Math.round(x.v / tot * 100)}% da nota` : 'não usado'; });
+  }
+  // Indicadores e metas › Indicadores personalizados: o dono cria indicadores próprios (ex.: Avaliações no Google).
+  function customIndCard() {
+    const list = Array.isArray(state.customInds) ? state.customInds : [];
+    return `<section class="section card ci-card">
+      <h2 class="section-title">${icon('plus')} Indicadores personalizados</h2>
+      <p class="section-note">Crie um indicador que é só da sua empresa (ex.: Avaliações no Google, Escovas vendidas, Cortes infantis). Ele entra na nota, nas metas, no ranking e em Lançamentos, onde cada profissional ou a gestão lança o total do mês. A integração também pode enviar, com o código mostrado abaixo.</p>
+      ${list.length ? `<ul class="ci-list">${list.map(c => { const off = (state.hidden || []).includes(c.key); return `<li class="ci-item ${off ? 'is-off' : ''}">
+        <div><b>${esc(c.label)}</b><small>${c.fmt === 'money' ? 'Valor em R$' : 'Quantidade'} · meta ${c.fmt === 'money' ? money0(Number(GB.goalFor(state, '', c.key)) || 0) : nf0.format(Number(GB.goalFor(state, '', c.key)) || 0)} por mês · ${off ? 'desativado' : 'ativo'} · código da API <code>${esc(c.key)}</code></small></div>
+        <button class="btn btn-sm ${ui.confirm === 'ci' + c.key ? 'btn-danger' : ''}" data-action="ciDel" data-k="${esc(c.key)}">${icon('trash')} ${ui.confirm === 'ci' + c.key ? 'Confirmar exclusão' : 'Excluir'}</button></li>`; }).join('')}</ul>` : ''}
+      ${list.length >= 12 ? '<p class="muted">Limite de 12 indicadores personalizados.</p>' : `<form class="form ci-form" data-form="customInd" novalidate>
+        <div class="grid-2">
+          <label class="field"><span>Nome do indicador *</span><input class="input" name="label" maxlength="40" placeholder="Ex.: Avaliações no Google"></label>
+          <label class="field"><span>Tipo</span><select class="input" name="fmt"><option value="int">Quantidade</option><option value="money">Valor em R$</option></select></label>
+          <label class="field"><span>Meta do mês por profissional *</span><input class="input num" name="goal" type="number" min="0.01" step="any" placeholder="Ex.: 20"></label>
+          <label class="field"><span>Prioridade na nota</span><select class="input" name="prio">${W_PRIO.filter(([v]) => v > 0).map(([v, l]) => `<option value="${v}" ${v === 2 ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        </div>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('plus')} Adicionar indicador</button></div>
+      </form>`}
+    </section>`;
+  }
+  // Prioridades atuais (para recalcular os pesos quando um indicador entra ou sai).
+  const curPrio = () => Object.fromEntries(INDICATORS.map(i => [i.key, (state.hidden || []).includes(i.key) ? 0 : wPrioOf(state.weights || {}, i)]));
+  function applyPrio(pr) {
+    const w = wFromPrio(pr), old = state.weights || {};
+    INDICATORS.forEach(i => { if (!(w[i.key] > 0)) w[i.key] = old[i.key] || i.weight; });
+    state.weights = w; state.hidden = INDICATORS.filter(i => !(pr[i.key] > 0)).map(i => i.key).concat((state.hidden || []).filter(k => !INDICATORS.some(i => i.key === k)));
   }
   function pageConfig(part) {
     const w = state.weights, rv = revealCfg(), oc = GB.ocupCfgOf(state), oh = GB.hoursPerDay(oc);
@@ -3592,12 +3629,14 @@ ${rows.length ? '' : emptyBarbers()}
     return `
       <section class="section card">
         <h2 class="section-title">Indicadores e pesos ${tip('weights')}</h2>
-        <p class="section-note">Escolha a <b>prioridade</b> de cada indicador e o sistema calcula os pesos sozinho. Como funciona: em cada indicador, quem está em 1º ganha nota 100 e o último ganha 0. A nota geral é a média dessas notas, e os indicadores <b>essenciais</b> pesam mais. A porcentagem mostra quanto cada um vale na nota geral.</p>
+        <p class="section-note"><b>Ative ou desative</b> cada indicador na chave ao lado do nome (salva na hora). Em Serviços e em Venda de produtos, escolha se conta a <b>quantidade</b> ou o <b>valor em R$</b>. Indicador desativado sai da nota, das metas e de Lançamentos; os números já lançados ficam guardados. Escolha a <b>prioridade</b> de cada indicador e o sistema calcula os pesos sozinho. Como funciona: em cada indicador, quem está em 1º ganha nota 100 e o último ganha 0. A nota geral é a média dessas notas, e os indicadores <b>essenciais</b> pesam mais. A porcentagem mostra quanto cada um vale na nota geral.</p>
         <div class="wp-presets"><span class="muted">Modelos prontos:</span>${Object.entries(W_PRESETS).map(([k, p]) => `<button type="button" class="btn btn-sm" data-action="wPreset" data-p="${k}" title="${esc(p.d)}">${icon(p.i)} ${esc(p.t)}</button>`).join('')}</div>
         <form class="form" data-form="weights" novalidate>
           <div class="wp-list">${INDICATORS.map(i => { const off = hidden.includes(i.key), pr = off ? 0 : wPrioOf(w, i), pct = off || !total ? 0 : Math.round((Number(w[i.key] ?? i.weight) / total) * 100);
             return `<div class="wp-row ${off ? 'is-off' : ''}" data-k="${i.key}">
-              <span class="wp-name">${esc(i.label)} ${tip(i.key)}</span>
+              <label class="wp-sw" title="${off ? 'Ativar' : 'Desativar'} ${esc(i.label)}"><input type="checkbox" data-change="wToggle" data-k="${i.key}" ${off ? '' : 'checked'} aria-label="${esc(i.label)} ativo"><span aria-hidden="true"></span></label>
+              <span class="wp-name">${esc(i.label)} ${i.custom ? '<span class="chip chip-soft wp-new">personalizado</span>' : tip(i.key)}</span>
+              ${i.key === 'serv' || i.key === 'prod' ? `<div class="wp-mode" role="radiogroup" aria-label="Como medir ${esc(i.label)}">${[['qtd', 'Quantidade'], ['valor', 'Valor em R$']].map(([m, l]) => `<button type="button" role="radio" aria-checked="${GB.indMode(i.key) === m}" class="${GB.indMode(i.key) === m ? 'on' : ''}" data-action="indMode" data-k="${i.key}" data-m="${m}">${l}</button>`).join('')}</div>` : ''}
               <select class="input input-sm wp-sel" name="p-${i.key}" data-change="wPrio" aria-label="Prioridade de ${esc(i.label)}">${W_PRIO.map(([v, l]) => `<option value="${v}" ${pr === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
               <span class="wp-pct num" data-pct>${off ? 'não usado' : `vale ${pct}% da nota`}</span>
             </div>`; }).join('')}</div>
@@ -3610,6 +3649,7 @@ ${rows.length ? '' : emptyBarbers()}
           <button class="btn" type="button" data-action="defaultWeights">Voltar aos pesos padrão</button></div>
         </form>
       </section>
+      ${customIndCard()}
       ${selfCard()}
       ${planCatalogCard()}
       <section class="section card">
@@ -3700,6 +3740,7 @@ Content-Type: application/json</pre>
     horas_ocupadas: ['Horas em comandas finalizadas (para a taxa de ocupação)', 6.5],
     planos_mensais: ['Planos mensais vendidos no dia', 1], clientes_retorno: ['Clientes que já tinham vindo antes', 5],
     venda_produtos: ['Quantidade de produtos vendidos', 2], maior_comanda: ['Valor da maior comanda do dia', 180],
+    valor_servicos: ['Valor em R$ dos serviços do dia (usado quando o indicador Serviços é por valor)', 350], valor_produtos: ['Valor em R$ dos produtos do salão vendidos no dia, sem consumo de bar ou geladeira', 70],
   };
   function apiUrl() { return Cloud.enabled ? Cloud.apiUrl : location.origin + '/api/v1/lancamentos'; }
   function apiGuideText() {
@@ -4733,7 +4774,7 @@ Content-Type: application/json</pre>
   const myExtras = () => { const u = currentUser(); return u && !isGestor(u) ? extrasOf(u.barberId) : { review: false, disc: false, fields: [] }; };
   // Fiscalização: dono, gestor de área ou líder com o acesso extra "Fiscalização".
   const discOk = u => !!u && (isGestor(u) || isAreaMgr(u) || (!isGestor(u) && extrasOf(u.barberId).disc));
-  const EXTRA_FIELDS = () => GB.MONTH_FIELDS.filter(f => !f.calc && !hidAll().includes(GB.FIELD_IND[f.key] || f.key));
+  const EXTRA_FIELDS = () => GB.MONTH_FIELDS.filter(f => !f.calc && !GB.fieldOff(f.key) && !hidAll().includes(GB.FIELD_IND[f.key] || f.key));
   function areaIds(u, roles) {
     const s = new Set();
     if (!u) return s;
@@ -4767,7 +4808,7 @@ Content-Type: application/json</pre>
   const canCmd = bid => canEditB(bid) || isMe(bid);
   // Registrar planos vendidos: o dono/gestão de área para quem cuidam; o profissional, os próprios (com planos cadastrados).
   const canPlan = bid => planCat().length > 0 && (canEditB(bid) || isMe(bid));
-  const fieldOk = (bid, key) => canEditB(bid) || myExtras().fields.includes(key) || (isMe(bid) && mySelf().includes(key));
+  const fieldOk = (bid, key) => { const k2 = { servV: 'serv', prodV: 'prod' }[key] || key; return canEditB(bid) || myExtras().fields.includes(key) || myExtras().fields.includes(k2) || (isMe(bid) && (mySelf().includes(key) || mySelf().includes(k2))); };
   // Ranking só com os barbeiros da área (fechamento do gestor de área).
   function scopedR(ym) {
     const u = currentUser();
@@ -6629,6 +6670,7 @@ Content-Type: application/json</pre>
 
   // ---------- render principal ----------
   function render() {
+    syncInds();
     avPrime();
     { const k = logoColorsOn() ? String(state.company.logo || (demoKit() || {}).logo || '').slice(-80) + '|' + String((state.company.logo || '').length) : ''; if (k !== kitKey) applyKitColors().catch(() => {}); }
     clearTimeout(ui.tvTimer);
@@ -7314,8 +7356,33 @@ Content-Type: application/json</pre>
     },
     defaultOcup() { state.ocupCfg = null; save(); toast('Regra de ocupação padrão restaurada.'); render(); },
     defaultGoals() { state.goals = { ...(state.goals || {}), team: { ...GB.DEFAULT_GOALS } }; save(); toast('Metas padrão restauradas.'); render(); },
+    indMode(el) {
+      const k = el.dataset.k, m = el.dataset.m === 'valor' ? 'valor' : 'qtd';
+      if (!isGestor(currentUser()) || !['serv', 'prod'].includes(k) || GB.indMode(k) === m) return;
+      state.indMode = { ...(state.indMode || {}), [k]: m };
+      syncInds();
+      // A meta muda de unidade (quantidade ↔ R$): volta para a sugestão do novo modo; metas individuais desse indicador saem.
+      const g = state.goals || (state.goals = { team: {}, byBarber: {} });
+      g.team = { ...(g.team || {}), [k]: GB.MODE_TXT[k][m][2] };
+      Object.values(g.byBarber || {}).forEach(x => { if (x) delete x[k]; });
+      const hg = x => { if (x && isNum(x[k])) delete x[k]; };
+      hg(state.houseGoals); Object.values(state.houseGoalsM || {}).forEach(hg);
+      rkCache = {}; save();
+      toast(`${GB.MODE_TXT[k][m][0]}: agora conta ${m === 'valor' ? 'o valor em R$' : 'a quantidade'}. Confira a meta do mês em Metas mensais da equipe.`, 6000);
+      render();
+    },
+    ciDel(el) {
+      const k = el.dataset.k, c = (state.customInds || []).find(x => x.key === k); if (!c || !isGestor(currentUser())) return;
+      if (ui.confirm !== 'ci' + k) { ui.confirm = 'ci' + k; render(); return; }
+      ui.confirm = null;
+      const pr = curPrio(); delete pr[k];
+      state.customInds = state.customInds.filter(x => x.key !== k); syncInds(); applyPrio(pr);
+      state.hidden = (state.hidden || []).filter(x => x !== k); if (state.weights) delete state.weights[k];
+      rkCache = {}; save(); toast(`Indicador "${c.label}" excluído. Os números já lançados ficam guardados.`); render();
+    },
     wPreset(el) {
-      const p = W_PRESETS[el.dataset.p]; if (!p) return;
+      const p0 = W_PRESETS[el.dataset.p]; if (!p0) return;
+      const p = { ...p0, p: { ...p0.p } }; INDICATORS.forEach(i => { if (i.custom && !(state.hidden || []).includes(i.key)) p.p[i.key] = 2; }); // os personalizados ativos ficam
       state.weights = wFromPrio(p.p); state.hidden = INDICATORS.filter(i => !(p.p[i.key] > 0)).map(i => i.key);
       INDICATORS.forEach(i => { if (!(state.weights[i.key] > 0)) state.weights[i.key] = i.weight; });
       rkCache = {}; save(); toast(`Modelo "${p.t}" aplicado. Ajuste algum indicador, se quiser.`); render();
@@ -7584,6 +7651,20 @@ Content-Type: application/json</pre>
       save();
       toast(`${U(name)} adicionado. Agora envie o convite.`); render();
     },
+    customInd(f) {
+      const label = val(f, 'label').replace(/\s+/g, ' ').trim(), goal = Number(String(val(f, 'goal')).replace(',', '.')), prio = Number(val(f, 'prio')) || 2;
+      const list = Array.isArray(state.customInds) ? state.customInds : [];
+      if (label.length < 2) return setMsg(f, 'Dê um nome ao indicador.');
+      if (INDICATORS.some(i => i.label.toLowerCase() === label.toLowerCase())) return setMsg(f, 'Já existe um indicador com esse nome.');
+      if (!(goal > 0)) return setMsg(f, 'Informe a meta do mês por profissional (maior que zero).');
+      if (list.length >= 12) return setMsg(f, 'Limite de 12 indicadores personalizados.');
+      const key = 'x_' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-3);
+      const pr = curPrio();
+      state.customInds = [...list, { key, label, fmt: val(f, 'fmt') === 'money' ? 'money' : 'int', goal }];
+      syncInds(); pr[key] = prio; applyPrio(pr);
+      state.goals = { byBarber: {}, ...(state.goals || {}), team: { ...((state.goals || {}).team || {}), [key]: goal } };
+      rkCache = {}; save(); toast(`Indicador "${label}" criado. Já aparece na nota, nas metas e em Lançamentos.`); render();
+    },
     weights(f) {
       const w = {};
       for (const i of INDICATORS) {
@@ -7791,6 +7872,13 @@ Content-Type: application/json</pre>
       const w = wFromPrio(pr); INDICATORS.forEach(i => { f.elements[i.key].value = w[i.key]; }); wRefresh(f);
     },
     wNum(el) { wRefresh(el.form); },
+    wToggle(el) { // liga/desliga o indicador e salva na hora
+      const f = el.form, sel = f.elements['p-' + el.dataset.k]; if (!sel) return;
+      if (el.checked) sel.value = sel.dataset.prev && sel.dataset.prev !== '0' ? sel.dataset.prev : '2'; else { sel.dataset.prev = sel.value; sel.value = '0'; }
+      CHANGES.wPrio(sel);
+      FORMS.weights(f);
+      if (!el.checked && INDICATORS.filter(i => !(state.hidden || []).includes(i.key)).length >= 2 && !(state.hidden || []).includes(el.dataset.k)) { el.checked = true; sel.value = sel.dataset.prev || '2'; CHANGES.wPrio(sel); }
+    },
     rtDay(el) { ui.rtDay = el.value && el.value <= todayIso() ? el.value : null; ui.rtData = null; ui.rtDraft = null; render(); },
     async rtPhoto(el) {
       const f = el.files && el.files[0], d = ui.rtDraft; if (!f || !d) return;

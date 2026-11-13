@@ -234,8 +234,9 @@
   Cloud.rotateKey = async () => { const { data, error } = await c.rpc('rotate_api_key'); if (error) throw error; return data; };
 
   // ---------- conversão entre o app e as tabelas ----------
-  const ENTRY_KEYS = GB.FIELDS.map(f => f.key);
-  const MONTH_KEYS = GB.MONTH_FIELDS.filter(f => !f.calc).map(f => f.key);
+  // Listas lidas na hora (incluem os indicadores personalizados do dono).
+  const ENTRY_KEYS = { [Symbol.iterator]: function* () { for (const f of GB.FIELDS) yield f.key; } };
+  const MONTH_KEYS = { [Symbol.iterator]: function* () { for (const f of GB.MONTH_FIELDS) if (!f.calc) yield f.key; } };
   const pick = (o, keys) => { const r = {}; for (const k of keys) if (o[k] !== null && o[k] !== undefined && o[k] !== '') r[k] = Number(o[k]); return r; };
 
   const TABLES = {
@@ -260,7 +261,7 @@
       out.tables[t] = map;
     }
     const co = s.company;
-    out.company = JSON.stringify({ name: co.name, cnpj: co.cnpj || '', phone: co.phone || '', email: co.email || '', logo: co.logo || null, settings: { weights: s.weights, goals: s.goals, hidden: s.hidden, org: s.org || null, pop: s.popCfg || null, reveal: s.reveal || null, ocup: s.ocupCfg || null, pops: s.pops || null, brand: s.brand || null, theme: s.theme || null, houseGoals: s.houseGoals || null, houseGoalsM: s.houseGoalsM || null, music: s.podiumMusic || null, births: s.births || null, demoKit: s.demoKit || null, com: s.comCfg || null, dreams: s.dreams || null, units: s.units || null, prize: s.prize || null, planos: s.planCatalog || null, notices: s.notices || null, logoColors: s.logoColors === false ? false : null } });
+    out.company = JSON.stringify({ name: co.name, cnpj: co.cnpj || '', phone: co.phone || '', email: co.email || '', logo: co.logo || null, settings: { weights: s.weights, goals: s.goals, hidden: s.hidden, org: s.org || null, pop: s.popCfg || null, reveal: s.reveal || null, ocup: s.ocupCfg || null, pops: s.pops || null, brand: s.brand || null, theme: s.theme || null, houseGoals: s.houseGoals || null, houseGoalsM: s.houseGoalsM || null, music: s.podiumMusic || null, births: s.births || null, demoKit: s.demoKit || null, com: s.comCfg || null, dreams: s.dreams || null, units: s.units || null, prize: s.prize || null, planos: s.planCatalog || null, customInds: Array.isArray(s.customInds) && s.customInds.length ? s.customInds : null, indMode: s.indMode && (s.indMode.serv === 'valor' || s.indMode.prod === 'valor') ? s.indMode : null, notices: s.notices || null, logoColors: s.logoColors === false ? false : null } });
     for (const u of s.users) out.users[u.id] = JSON.stringify({ name: u.name, phone: u.phone || '', status: u.status });
     return out;
   }
@@ -352,6 +353,8 @@
       pop: pop.map(r => ({ barberId: r.barber_id, day: r.day, ...(r.data || {}) })),
       planSales: sales.map(r => ({ id: r.id, barberId: r.barber_id, date: r.date, ...(r.data || {}) })),
       planCatalog: Array.isArray(st.planos) ? st.planos : [],
+      customInds: Array.isArray(st.customInds) ? st.customInds : [],
+      indMode: st.indMode || null,
       comandaRecs: cmds.map(r => ({ id: r.id, barberId: r.barber_id, date: r.date, ...(r.data || {}) })),
       apiKey: key ? key.key : '',
       billing, plans,
