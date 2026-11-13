@@ -8,6 +8,7 @@ const FIELDS: Record<string, string> = {
   faturamento: "fat", servicos: "serv", clientes: "cli", checklist_pop: "check",
   horas_disponiveis: "hDisp", horas_ocupadas: "hOcup", planos_mensais: "planos",
   clientes_retorno: "ret", venda_produtos: "prod", maior_comanda: "comanda",
+  valor_servicos: "servV", valor_produtos: "prodV",
 };
 
 const cors = {

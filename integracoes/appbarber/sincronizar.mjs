@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSAO = "2.0";
+const VERSAO = "2.1";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const TESTE = process.argv.includes("--teste");
 const CARGA = process.argv.includes("--carga"); // carga inicial: lê todas as comandas no ritmo máximo permitido
@@ -196,7 +196,7 @@ async function main() {
   function calc() {
     // Soma por profissional e dia. Comanda já lida: itens da comanda. Ainda não lida: valor do agendamento (provisório).
     const acc = new Map();
-    const add = (nome, d) => { const k = nome + "|" + d; if (!acc.has(k)) acc.set(k, { nome, d, fat: 0, serv: 0, prod: 0, cli: new Set(), com: new Map(), int: [] }); return acc.get(k); };
+    const add = (nome, d) => { const k = nome + "|" + d; if (!acc.has(k)) acc.set(k, { nome, d, fat: 0, serv: 0, prod: 0, sv: 0, pv: 0, cli: new Set(), com: new Map(), int: [] }); return acc.get(k); };
     const usadas = new Set();
     // A AppBarber pode escrever o nome do profissional diferente na agenda e na comanda
     // (ex.: "Izaque Macedo" x "Izaquias Macedo"). Liga os dois pelo agendamento da comanda e usa o nome da agenda.
@@ -221,7 +221,7 @@ async function main() {
         if (!it.p) continue;
         if (it.prod && consumo(it)) continue; // geladeira/bar: não é faturamento do profissional
         const x = add(nomeDe(it.p), d);
-        x.fat += it.v; if (it.prod) x.prod += it.q; else x.serv += it.q;
+        x.fat += it.v; if (it.prod) { x.prod += it.q; x.pv += it.v; } else { x.serv += it.q; x.sv += it.v; }
         if (!it.prod && it.ini != null && it.fim > it.ini && it.fim - it.ini <= 600) x.int.push([it.ini, it.fim]);
         x.cli.add(inv.cli); x.com.set(c, (x.com.get(c) || 0) + it.v);
       }
@@ -231,13 +231,14 @@ async function main() {
       const d = dia(a.scheduling_start); const nome = String(a.employee_name || "").trim();
       if (!d || !nome) continue;
       const x = add(nome, d), v = num(a.service_value);
-      x.fat += v; x.serv += 1;
+      x.fat += v; x.serv += 1; x.sv += v;
       x.cli.add(String(a.client_phone || a.client_name || a.appointment_code).replace(/\D/g, "") || String(a.client_name));
       const c = a.invoice_code || a.appointment_code; x.com.set(c, (x.com.get(c) || 0) + v);
     }
     return [...acc.values()].map((x) => ({
       data: x.d, barbeiro: NOMES[x.nome] || x.nome,
       faturamento: Math.round(x.fat * 100) / 100, servicos: x.serv, clientes: x.cli.size, venda_produtos: x.prod,
+      valor_servicos: Math.round(x.sv * 100) / 100, valor_produtos: Math.round(x.pv * 100) / 100,
       maior_comanda: Math.round(Math.max(0, ...x.com.values()) * 100) / 100,
       ...(x.int.length ? { horas_ocupadas: horasJuntas(x.int) } : {}),
     }));

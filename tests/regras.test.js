@@ -156,3 +156,15 @@ test('indicador personalizado entra na nota e some ao ser desativado', () => {
   GB.computeRanking(team([['a', { fat: 1 }], ['b', { fat: 2 }]]), R);
   assert.ok(!GB.INDICATORS.some(i => i.custom) && !GB.FIELDS.some(f => f.custom) && !GB.SUM_KEYS.includes('x_google1'));
 });
+
+test('serviços e produtos: por valor em R$ quando o dono escolhe', () => {
+  const st = team([['a', { serv: 10, servV: 300, prod: 5, prodV: 50 }], ['b', { serv: 20, servV: 200, prod: 1, prodV: 90 }]], { indMode: { serv: 'valor', prod: 'valor' } });
+  let res = GB.computeRanking(st, R);
+  assert.equal(byId(res, 'a').values.serv, 300);
+  assert.equal(byId(res, 'b').values.prod, 90);
+  assert.equal(GB.INDICATORS.find(i => i.key === 'serv').fmt, 'money');
+  st.indMode = {};
+  res = GB.computeRanking(st, R);
+  assert.equal(byId(res, 'a').values.serv, 10);
+  assert.equal(GB.INDICATORS.find(i => i.key === 'serv').label, 'Serviços realizados');
+});

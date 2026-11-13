@@ -9,6 +9,8 @@
     window.GB.applyCustom(state);
     const now = window.GB.INDICATORS.filter(i => !window.GB.RETIRED.includes(i.key));
     if (now.length !== INDICATORS.length || now.some((x, i) => x !== INDICATORS[i])) { INDICATORS.length = 0; INDICATORS.push(...now); }
+    HG_LABEL.serv = GB.indMode('serv') === 'valor' ? 'Valor em serviços' : 'Serviços realizados';
+    HG_LABEL.prod = GB.indMode('prod') === 'valor' ? 'Valor em produtos vendidos' : 'Produtos vendidos';
   }
   const hidAll = () => [...(state.hidden || []), ...window.GB.RETIRED];
 
@@ -2513,7 +2515,7 @@
     const R = monthR(ym);
     const row = R.rows.find(r => r.barber.id === b.id);
     const hidden = hidAll();
-    return GB.MONTH_FIELDS.filter(f => f.key !== 'agend' && !hidden.includes(GB.FIELD_IND[f.key] || f.key)).map(f => {
+    return GB.MONTH_FIELDS.filter(f => f.key !== 'agend' && !GB.fieldOff(f.key) && !hidden.includes(GB.FIELD_IND[f.key] || f.key)).map(f => {
       if (f.calc) {
         const t = row && row.sums.cli > 0 ? row.sums.fat / row.sums.cli : null;
         return `<div class="field"><span class="tm-flabel"><span class="tm-ft">${esc(f.label)}${tip(FIELD_TIP[f.key])}</span><span class="lock">${icon('chart')} Calculado</span></span>
@@ -2585,7 +2587,7 @@
   }
   // Histórico do mês: o que entrou à mão em cada dia.
   function lanHistory(b, ym) {
-    const L = { fat: v => money0(v), cli: v => nf0.format(v) + ' clientes', serv: v => nf0.format(v) + ' serviços', prod: v => nf0.format(v) + ' produtos', check: v => nf1.format(v) + ' pts checklist', planos: v => nf0.format(v) + ' planos' };
+    const L = { servV: v => money0(v) + ' em serviços', prodV: v => money0(v) + ' em produtos', fat: v => money0(v), cli: v => nf0.format(v) + ' clientes', serv: v => nf0.format(v) + ' serviços', prod: v => nf0.format(v) + ' produtos', check: v => nf1.format(v) + ' pts checklist', planos: v => nf0.format(v) + ' planos' };
     const days = GB.manualEntries(state, b.id, ym).filter(e => GB.SUM_KEYS.some(k => isNum(e[k]) && Number(e[k]) !== 0)).sort((a, c) => c.date.localeCompare(a.date));
     if (!days.length) return '';
     return `<details class="lan-hist" ${ui.lanHistOpen ? 'open' : ''}><summary>Lançamentos por dia em ${esc(ymLabel(ym).replace(' de ', '/'))} (${days.length})</summary>
@@ -3219,7 +3221,7 @@
   // Agendamentos: indicador retirado por enquanto (não aparece em lançamentos, metas nem totais).
   const HG_KEYS = ['fat', 'cli', 'serv', 'prod', 'planos', 'ticket', 'ocup', 'fid'];
   const HG_LABEL = { fat: 'Faturamento total', agend: 'Agendamentos', cli: 'Clientes atendidos', serv: 'Serviços realizados', prod: 'Produtos vendidos', planos: 'Planos mensais', ticket: 'Ticket médio da casa', ocup: 'Ocupação média', fid: 'Fidelização da casa' };
-  const hgFmt = (k, v) => k === 'fat' || k === 'ticket' ? money0(v) : k === 'ocup' || k === 'fid' ? nf1.format(v) + '%' : nf0.format(v);
+  const hgFmt = (k, v) => k === 'fat' || k === 'ticket' || ((k === 'serv' || k === 'prod') && GB.indMode(k) === 'valor') ? money0(v) : k === 'ocup' || k === 'fid' ? nf1.format(v) + '%' : nf0.format(v);
   function houseGoalsFor(ym) {
     const m = (state.houseGoalsM || {})[ym];
     const g = m && Object.keys(m).length ? m : (state.houseGoals || {});
@@ -3240,7 +3242,7 @@
     const agend = (state.monthly || []).filter(m => m.month === ym && ids.has(m.barberId) && isNum(m.agend)).reduce((a, m) => a + Number(m.agend), 0);
     const fat = sum('fat'), cli = sum('cli');
     const ocups = rows.map(r => r.values.ocup).filter(v => v != null);
-    const vals = { fat, agend, cli, serv: sum('serv'), prod: vis('prod') ? sum('prod') : null, planos: vis('planos') ? sum('planos') : null,
+    const vals = { fat, agend, cli, serv: sum(GB.indMode('serv') === 'valor' ? 'servV' : 'serv'), prod: vis('prod') ? sum(GB.indMode('prod') === 'valor' ? 'prodV' : 'prod') : null, planos: vis('planos') ? sum('planos') : null,
       ticket: cli > 0 ? fat / cli : null, ocup: vis('ocup') && ocups.length ? ocups.reduce((a, v) => a + v, 0) / ocups.length : null };
     // Fidelização da casa: clientes que voltaram ÷ clientes atendidos, só de quem lançou a fidelização.
     const fr = all.filter(r => r.sums.n.ret), fCli = fr.reduce((a, r) => a + (r.sums.cli || 0), 0);
@@ -3424,8 +3426,9 @@
     // Sugestão: soma das metas individuais dos profissionais ativos.
     const act = state.barbers.filter(b => b.active !== false);
     const sugg = k => k === 'agend' ? null : ['ticket', 'ocup', 'fid'].includes(k) ? GB.goalFor(state, '', k) : act.reduce((a, b) => a + GB.goalFor(state, b.id, k), 0);
-    const HG_FIELDS = [['fat', 'Faturamento total (R$)', '0.01'], ['cli', 'Clientes atendidos', '1'], ['serv', 'Serviços realizados', '1'],
-      ...(vis('prod') ? [['prod', 'Produtos vendidos', '1']] : []), ...(vis('planos') ? [['planos', 'Planos mensais', '1']] : []),
+    const vS = GB.indMode('serv') === 'valor', vP = GB.indMode('prod') === 'valor';
+    const HG_FIELDS = [['fat', 'Faturamento total (R$)', '0.01'], ['cli', 'Clientes atendidos', '1'], ['serv', vS ? 'Valor em serviços (R$)' : 'Serviços realizados', vS ? '0.01' : '1'],
+      ...(vis('prod') ? [['prod', vP ? 'Valor em produtos vendidos (R$)' : 'Produtos vendidos', vP ? '0.01' : '1']] : []), ...(vis('planos') ? [['planos', 'Planos mensais', '1']] : []),
       ['ticket', 'Ticket médio da casa (R$)', '0.01'], ...(vis('ocup') ? [['ocup', 'Ocupação média (%)', '0.1']] : []), ...(vis('fid') ? [['fid', 'Fidelização da casa (%)', '0.1']] : [])];
     const goalForm = own && ui.hgEdit ? `<section class="section card">
         <h2 class="section-title">Metas mensais da empresa</h2>
@@ -3626,13 +3629,14 @@ ${rows.length ? '' : emptyBarbers()}
     return `
       <section class="section card">
         <h2 class="section-title">Indicadores e pesos ${tip('weights')}</h2>
-        <p class="section-note"><b>Ative ou desative</b> cada indicador na chave ao lado do nome (salva na hora). Indicador desativado sai da nota, das metas e de Lançamentos; os números já lançados ficam guardados. Escolha a <b>prioridade</b> de cada indicador e o sistema calcula os pesos sozinho. Como funciona: em cada indicador, quem está em 1º ganha nota 100 e o último ganha 0. A nota geral é a média dessas notas, e os indicadores <b>essenciais</b> pesam mais. A porcentagem mostra quanto cada um vale na nota geral.</p>
+        <p class="section-note"><b>Ative ou desative</b> cada indicador na chave ao lado do nome (salva na hora). Em Serviços e em Venda de produtos, escolha se conta a <b>quantidade</b> ou o <b>valor em R$</b>. Indicador desativado sai da nota, das metas e de Lançamentos; os números já lançados ficam guardados. Escolha a <b>prioridade</b> de cada indicador e o sistema calcula os pesos sozinho. Como funciona: em cada indicador, quem está em 1º ganha nota 100 e o último ganha 0. A nota geral é a média dessas notas, e os indicadores <b>essenciais</b> pesam mais. A porcentagem mostra quanto cada um vale na nota geral.</p>
         <div class="wp-presets"><span class="muted">Modelos prontos:</span>${Object.entries(W_PRESETS).map(([k, p]) => `<button type="button" class="btn btn-sm" data-action="wPreset" data-p="${k}" title="${esc(p.d)}">${icon(p.i)} ${esc(p.t)}</button>`).join('')}</div>
         <form class="form" data-form="weights" novalidate>
           <div class="wp-list">${INDICATORS.map(i => { const off = hidden.includes(i.key), pr = off ? 0 : wPrioOf(w, i), pct = off || !total ? 0 : Math.round((Number(w[i.key] ?? i.weight) / total) * 100);
             return `<div class="wp-row ${off ? 'is-off' : ''}" data-k="${i.key}">
               <label class="wp-sw" title="${off ? 'Ativar' : 'Desativar'} ${esc(i.label)}"><input type="checkbox" data-change="wToggle" data-k="${i.key}" ${off ? '' : 'checked'} aria-label="${esc(i.label)} ativo"><span aria-hidden="true"></span></label>
               <span class="wp-name">${esc(i.label)} ${i.custom ? '<span class="chip chip-soft wp-new">personalizado</span>' : tip(i.key)}</span>
+              ${i.key === 'serv' || i.key === 'prod' ? `<div class="wp-mode" role="radiogroup" aria-label="Como medir ${esc(i.label)}">${[['qtd', 'Quantidade'], ['valor', 'Valor em R$']].map(([m, l]) => `<button type="button" role="radio" aria-checked="${GB.indMode(i.key) === m}" class="${GB.indMode(i.key) === m ? 'on' : ''}" data-action="indMode" data-k="${i.key}" data-m="${m}">${l}</button>`).join('')}</div>` : ''}
               <select class="input input-sm wp-sel" name="p-${i.key}" data-change="wPrio" aria-label="Prioridade de ${esc(i.label)}">${W_PRIO.map(([v, l]) => `<option value="${v}" ${pr === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
               <span class="wp-pct num" data-pct>${off ? 'não usado' : `vale ${pct}% da nota`}</span>
             </div>`; }).join('')}</div>
@@ -3736,6 +3740,7 @@ Content-Type: application/json</pre>
     horas_ocupadas: ['Horas em comandas finalizadas (para a taxa de ocupação)', 6.5],
     planos_mensais: ['Planos mensais vendidos no dia', 1], clientes_retorno: ['Clientes que já tinham vindo antes', 5],
     venda_produtos: ['Quantidade de produtos vendidos', 2], maior_comanda: ['Valor da maior comanda do dia', 180],
+    valor_servicos: ['Valor em R$ dos serviços do dia (usado quando o indicador Serviços é por valor)', 350], valor_produtos: ['Valor em R$ dos produtos do salão vendidos no dia, sem consumo de bar ou geladeira', 70],
   };
   function apiUrl() { return Cloud.enabled ? Cloud.apiUrl : location.origin + '/api/v1/lancamentos'; }
   function apiGuideText() {
@@ -4769,7 +4774,7 @@ Content-Type: application/json</pre>
   const myExtras = () => { const u = currentUser(); return u && !isGestor(u) ? extrasOf(u.barberId) : { review: false, disc: false, fields: [] }; };
   // Fiscalização: dono, gestor de área ou líder com o acesso extra "Fiscalização".
   const discOk = u => !!u && (isGestor(u) || isAreaMgr(u) || (!isGestor(u) && extrasOf(u.barberId).disc));
-  const EXTRA_FIELDS = () => GB.MONTH_FIELDS.filter(f => !f.calc && !hidAll().includes(GB.FIELD_IND[f.key] || f.key));
+  const EXTRA_FIELDS = () => GB.MONTH_FIELDS.filter(f => !f.calc && !GB.fieldOff(f.key) && !hidAll().includes(GB.FIELD_IND[f.key] || f.key));
   function areaIds(u, roles) {
     const s = new Set();
     if (!u) return s;
@@ -4803,7 +4808,7 @@ Content-Type: application/json</pre>
   const canCmd = bid => canEditB(bid) || isMe(bid);
   // Registrar planos vendidos: o dono/gestão de área para quem cuidam; o profissional, os próprios (com planos cadastrados).
   const canPlan = bid => planCat().length > 0 && (canEditB(bid) || isMe(bid));
-  const fieldOk = (bid, key) => canEditB(bid) || myExtras().fields.includes(key) || (isMe(bid) && mySelf().includes(key));
+  const fieldOk = (bid, key) => { const k2 = { servV: 'serv', prodV: 'prod' }[key] || key; return canEditB(bid) || myExtras().fields.includes(key) || myExtras().fields.includes(k2) || (isMe(bid) && (mySelf().includes(key) || mySelf().includes(k2))); };
   // Ranking só com os barbeiros da área (fechamento do gestor de área).
   function scopedR(ym) {
     const u = currentUser();
@@ -7351,6 +7356,21 @@ Content-Type: application/json</pre>
     },
     defaultOcup() { state.ocupCfg = null; save(); toast('Regra de ocupação padrão restaurada.'); render(); },
     defaultGoals() { state.goals = { ...(state.goals || {}), team: { ...GB.DEFAULT_GOALS } }; save(); toast('Metas padrão restauradas.'); render(); },
+    indMode(el) {
+      const k = el.dataset.k, m = el.dataset.m === 'valor' ? 'valor' : 'qtd';
+      if (!isGestor(currentUser()) || !['serv', 'prod'].includes(k) || GB.indMode(k) === m) return;
+      state.indMode = { ...(state.indMode || {}), [k]: m };
+      syncInds();
+      // A meta muda de unidade (quantidade ↔ R$): volta para a sugestão do novo modo; metas individuais desse indicador saem.
+      const g = state.goals || (state.goals = { team: {}, byBarber: {} });
+      g.team = { ...(g.team || {}), [k]: GB.MODE_TXT[k][m][2] };
+      Object.values(g.byBarber || {}).forEach(x => { if (x) delete x[k]; });
+      const hg = x => { if (x && isNum(x[k])) delete x[k]; };
+      hg(state.houseGoals); Object.values(state.houseGoalsM || {}).forEach(hg);
+      rkCache = {}; save();
+      toast(`${GB.MODE_TXT[k][m][0]}: agora conta ${m === 'valor' ? 'o valor em R$' : 'a quantidade'}. Confira a meta do mês em Metas mensais da equipe.`, 6000);
+      render();
+    },
     ciDel(el) {
       const k = el.dataset.k, c = (state.customInds || []).find(x => x.key === k); if (!c || !isGestor(currentUser())) return;
       if (ui.confirm !== 'ci' + k) { ui.confirm = 'ci' + k; render(); return; }

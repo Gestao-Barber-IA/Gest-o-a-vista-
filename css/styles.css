@@ -2834,3 +2834,9 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
   .wp-row .wp-name { grid-column: 2 / -1; }
   .wp-row .wp-sel { grid-column: 1 / 3; }
 }
+/* Serviços / Venda de produtos: quantidade ou valor */
+.wp-mode { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; gap: 2px; justify-self: start; }
+.wp-mode button { border: 0; background: transparent; color: var(--fg-soft, inherit); font: inherit; font-size: .82rem; font-weight: 600; padding: 5px 12px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
+.wp-mode button.on { background: var(--accent, #d4b26a); color: #111; }
+.wp-row .wp-mode { grid-column: 2 / -1; }
+@media (max-width: 560px) { .wp-row .wp-mode { grid-column: 1 / -1; } }
