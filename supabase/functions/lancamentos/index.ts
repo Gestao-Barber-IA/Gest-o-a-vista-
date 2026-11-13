@@ -77,6 +77,13 @@ Deno.serve(async (req) => {
       if (Number.isNaN(num) || num < 0) { erros.push(`Item ${n}: "${api}" precisa ser um número positivo.`); return; }
       data[key] = num;
     }
+    // Indicadores personalizados do dono (código x_… mostrado em Indicadores e metas).
+    for (const [api, v] of Object.entries(item)) {
+      if (!/^x_[a-z0-9]{3,24}$/.test(api) || v === undefined || v === null || v === "") continue;
+      const num = Number(v);
+      if (Number.isNaN(num) || num < 0) { erros.push(`Item ${n}: "${api}" precisa ser um número positivo.`); return; }
+      data[api] = num;
+    }
     rows.push({ id: `api_${b.id}_${date}`, company_id: k.company_id, barber_id: b.id, date, data, source: "api", updated_at: new Date().toISOString() });
   });
 

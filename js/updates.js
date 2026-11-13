@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-13-indicadores', date: '2026-11-13', title: 'Ligar, desligar e criar indicadores', items: [
+    ['novo', 'Em Configurações › Indicadores e metas, cada indicador tem uma chave para ativar ou desativar. Salva na hora: o indicador desativado sai da nota, das metas e de Lançamentos, e os números já lançados ficam guardados.'],
+    ['novo', 'Indicadores personalizados: crie indicadores só da sua empresa (ex.: Avaliações no Google), com tipo (quantidade ou R$), meta do mês e prioridade. Eles entram na nota, no ranking, nas metas e em Lançamentos.'],
+  ] },
   { id: '2026-11-13-chegada-3', date: '2026-11-13', title: 'Horário de chegada com 3 botões e penalidade automática', items: [
     ['novo', 'O Horário de chegada fica no topo do Checklist Agenda Cheia, sem prova, com 3 botões: Chegou no horário combinado (verde, ganha os pontos), Chegou após o horário combinado (amarelo, sem bônus) e Chegou atrasado (vermelho, sem bônus).'],
     ['novo', 'O vermelho gera sozinho um registro na Fiscalização (tipo falta): no mês, a 1ª vez é ocorrência, a 2ª reincidência e da 3ª em diante penalidade.'],

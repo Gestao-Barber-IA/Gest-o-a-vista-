@@ -4,6 +4,12 @@
   const { DB, FIELDS, PERIOD_NAMES, periodRange, computeRanking, importEntries, upsertEntry, gapTo, emptyState, monthRange, addMonths, monthFromIntegration, levelOf, isNum, passHash, uid, iso, fromIso, hash, icon, logo } = window.GB;
   // Indicadores em uso no sistema (os retirados por enquanto ficam de fora em todas as telas).
   const INDICATORS = window.GB.INDICATORS.filter(i => !window.GB.RETIRED.includes(i.key));
+  // Indicadores personalizados do dono: atualiza as listas (mesmos arrays usados em todas as telas).
+  function syncInds() {
+    window.GB.applyCustom(state);
+    const now = window.GB.INDICATORS.filter(i => !window.GB.RETIRED.includes(i.key));
+    if (now.length !== INDICATORS.length || now.some((x, i) => x !== INDICATORS[i])) { INDICATORS.length = 0; INDICATORS.push(...now); }
+  }
   const hidAll = () => [...(state.hidden || []), ...window.GB.RETIRED];
 
   const Cloud = window.GB.Cloud || { enabled: false };
@@ -2583,7 +2589,7 @@
     const days = GB.manualEntries(state, b.id, ym).filter(e => GB.SUM_KEYS.some(k => isNum(e[k]) && Number(e[k]) !== 0)).sort((a, c) => c.date.localeCompare(a.date));
     if (!days.length) return '';
     return `<details class="lan-hist" ${ui.lanHistOpen ? 'open' : ''}><summary>Lançamentos por dia em ${esc(ymLabel(ym).replace(' de ', '/'))} (${days.length})</summary>
-      <ul>${days.map(e => `<li><b class="num">${dateBR(e.date).slice(0, 5)}</b><span>${GB.SUM_KEYS.filter(k => isNum(e[k]) && Number(e[k]) !== 0).map(k => L[k](Number(e[k]))).join(' · ')}</span></li>`).join('')}</ul></details>`;
+      <ul>${days.map(e => `<li><b class="num">${dateBR(e.date).slice(0, 5)}</b><span>${GB.SUM_KEYS.filter(k => isNum(e[k]) && Number(e[k]) !== 0).map(k => L[k] ? L[k](Number(e[k])) : (INDICATORS.find(i => i.key === k) || {}).fmt === 'money' ? money0(Number(e[k])) + ' ' + esc((INDICATORS.find(i => i.key === k) || { label: '' }).label.toLowerCase()) : nf1.format(Number(e[k])) + ' ' + esc((INDICATORS.find(i => i.key === k) || { label: '' }).label.toLowerCase())).join(' · ')}</span></li>`).join('')}</ul></details>`;
   }
 
   function teamEditor(ym) {
@@ -3573,8 +3579,36 @@ ${rows.length ? '' : emptyBarbers()}
   // Atualiza as porcentagens na tela, sem recarregar.
   function wRefresh(f) {
     const vals = INDICATORS.map(i => ({ k: i.key, v: Math.max(0, Number(f.elements[i.key].value) || 0) })), tot = vals.reduce((a, x) => a + x.v, 0);
-    vals.forEach(x => { const row = f.querySelector(`.wp-row[data-k="${x.k}"]`); if (!row) return; const on = x.v > 0; row.classList.toggle('is-off', !on);
+    vals.forEach(x => { const row = f.querySelector(`.wp-row[data-k="${x.k}"]`); if (!row) return; const on = x.v > 0; row.classList.toggle('is-off', !on); const sw = row.querySelector('[data-change="wToggle"]'); if (sw) sw.checked = on;
       row.querySelector('[data-pct]').textContent = on && tot ? `vale ${Math.round(x.v / tot * 100)}% da nota` : 'não usado'; });
+  }
+  // Indicadores e metas › Indicadores personalizados: o dono cria indicadores próprios (ex.: Avaliações no Google).
+  function customIndCard() {
+    const list = Array.isArray(state.customInds) ? state.customInds : [];
+    return `<section class="section card ci-card">
+      <h2 class="section-title">${icon('plus')} Indicadores personalizados</h2>
+      <p class="section-note">Crie um indicador que é só da sua empresa (ex.: Avaliações no Google, Escovas vendidas, Cortes infantis). Ele entra na nota, nas metas, no ranking e em Lançamentos, onde cada profissional ou a gestão lança o total do mês. A integração também pode enviar, com o código mostrado abaixo.</p>
+      ${list.length ? `<ul class="ci-list">${list.map(c => { const off = (state.hidden || []).includes(c.key); return `<li class="ci-item ${off ? 'is-off' : ''}">
+        <div><b>${esc(c.label)}</b><small>${c.fmt === 'money' ? 'Valor em R$' : 'Quantidade'} · meta ${c.fmt === 'money' ? money0(Number(GB.goalFor(state, '', c.key)) || 0) : nf0.format(Number(GB.goalFor(state, '', c.key)) || 0)} por mês · ${off ? 'desativado' : 'ativo'} · código da API <code>${esc(c.key)}</code></small></div>
+        <button class="btn btn-sm ${ui.confirm === 'ci' + c.key ? 'btn-danger' : ''}" data-action="ciDel" data-k="${esc(c.key)}">${icon('trash')} ${ui.confirm === 'ci' + c.key ? 'Confirmar exclusão' : 'Excluir'}</button></li>`; }).join('')}</ul>` : ''}
+      ${list.length >= 12 ? '<p class="muted">Limite de 12 indicadores personalizados.</p>' : `<form class="form ci-form" data-form="customInd" novalidate>
+        <div class="grid-2">
+          <label class="field"><span>Nome do indicador *</span><input class="input" name="label" maxlength="40" placeholder="Ex.: Avaliações no Google"></label>
+          <label class="field"><span>Tipo</span><select class="input" name="fmt"><option value="int">Quantidade</option><option value="money">Valor em R$</option></select></label>
+          <label class="field"><span>Meta do mês por profissional *</span><input class="input num" name="goal" type="number" min="0.01" step="any" placeholder="Ex.: 20"></label>
+          <label class="field"><span>Prioridade na nota</span><select class="input" name="prio">${W_PRIO.filter(([v]) => v > 0).map(([v, l]) => `<option value="${v}" ${v === 2 ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        </div>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('plus')} Adicionar indicador</button></div>
+      </form>`}
+    </section>`;
+  }
+  // Prioridades atuais (para recalcular os pesos quando um indicador entra ou sai).
+  const curPrio = () => Object.fromEntries(INDICATORS.map(i => [i.key, (state.hidden || []).includes(i.key) ? 0 : wPrioOf(state.weights || {}, i)]));
+  function applyPrio(pr) {
+    const w = wFromPrio(pr), old = state.weights || {};
+    INDICATORS.forEach(i => { if (!(w[i.key] > 0)) w[i.key] = old[i.key] || i.weight; });
+    state.weights = w; state.hidden = INDICATORS.filter(i => !(pr[i.key] > 0)).map(i => i.key).concat((state.hidden || []).filter(k => !INDICATORS.some(i => i.key === k)));
   }
   function pageConfig(part) {
     const w = state.weights, rv = revealCfg(), oc = GB.ocupCfgOf(state), oh = GB.hoursPerDay(oc);
@@ -3592,12 +3626,13 @@ ${rows.length ? '' : emptyBarbers()}
     return `
       <section class="section card">
         <h2 class="section-title">Indicadores e pesos ${tip('weights')}</h2>
-        <p class="section-note">Escolha a <b>prioridade</b> de cada indicador e o sistema calcula os pesos sozinho. Como funciona: em cada indicador, quem está em 1º ganha nota 100 e o último ganha 0. A nota geral é a média dessas notas, e os indicadores <b>essenciais</b> pesam mais. A porcentagem mostra quanto cada um vale na nota geral.</p>
+        <p class="section-note"><b>Ative ou desative</b> cada indicador na chave ao lado do nome (salva na hora). Indicador desativado sai da nota, das metas e de Lançamentos; os números já lançados ficam guardados. Escolha a <b>prioridade</b> de cada indicador e o sistema calcula os pesos sozinho. Como funciona: em cada indicador, quem está em 1º ganha nota 100 e o último ganha 0. A nota geral é a média dessas notas, e os indicadores <b>essenciais</b> pesam mais. A porcentagem mostra quanto cada um vale na nota geral.</p>
         <div class="wp-presets"><span class="muted">Modelos prontos:</span>${Object.entries(W_PRESETS).map(([k, p]) => `<button type="button" class="btn btn-sm" data-action="wPreset" data-p="${k}" title="${esc(p.d)}">${icon(p.i)} ${esc(p.t)}</button>`).join('')}</div>
         <form class="form" data-form="weights" novalidate>
           <div class="wp-list">${INDICATORS.map(i => { const off = hidden.includes(i.key), pr = off ? 0 : wPrioOf(w, i), pct = off || !total ? 0 : Math.round((Number(w[i.key] ?? i.weight) / total) * 100);
             return `<div class="wp-row ${off ? 'is-off' : ''}" data-k="${i.key}">
-              <span class="wp-name">${esc(i.label)} ${tip(i.key)}</span>
+              <label class="wp-sw" title="${off ? 'Ativar' : 'Desativar'} ${esc(i.label)}"><input type="checkbox" data-change="wToggle" data-k="${i.key}" ${off ? '' : 'checked'} aria-label="${esc(i.label)} ativo"><span aria-hidden="true"></span></label>
+              <span class="wp-name">${esc(i.label)} ${i.custom ? '<span class="chip chip-soft wp-new">personalizado</span>' : tip(i.key)}</span>
               <select class="input input-sm wp-sel" name="p-${i.key}" data-change="wPrio" aria-label="Prioridade de ${esc(i.label)}">${W_PRIO.map(([v, l]) => `<option value="${v}" ${pr === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
               <span class="wp-pct num" data-pct>${off ? 'não usado' : `vale ${pct}% da nota`}</span>
             </div>`; }).join('')}</div>
@@ -3610,6 +3645,7 @@ ${rows.length ? '' : emptyBarbers()}
           <button class="btn" type="button" data-action="defaultWeights">Voltar aos pesos padrão</button></div>
         </form>
       </section>
+      ${customIndCard()}
       ${selfCard()}
       ${planCatalogCard()}
       <section class="section card">
@@ -6629,6 +6665,7 @@ Content-Type: application/json</pre>
 
   // ---------- render principal ----------
   function render() {
+    syncInds();
     avPrime();
     { const k = logoColorsOn() ? String(state.company.logo || (demoKit() || {}).logo || '').slice(-80) + '|' + String((state.company.logo || '').length) : ''; if (k !== kitKey) applyKitColors().catch(() => {}); }
     clearTimeout(ui.tvTimer);
@@ -7314,8 +7351,18 @@ Content-Type: application/json</pre>
     },
     defaultOcup() { state.ocupCfg = null; save(); toast('Regra de ocupação padrão restaurada.'); render(); },
     defaultGoals() { state.goals = { ...(state.goals || {}), team: { ...GB.DEFAULT_GOALS } }; save(); toast('Metas padrão restauradas.'); render(); },
+    ciDel(el) {
+      const k = el.dataset.k, c = (state.customInds || []).find(x => x.key === k); if (!c || !isGestor(currentUser())) return;
+      if (ui.confirm !== 'ci' + k) { ui.confirm = 'ci' + k; render(); return; }
+      ui.confirm = null;
+      const pr = curPrio(); delete pr[k];
+      state.customInds = state.customInds.filter(x => x.key !== k); syncInds(); applyPrio(pr);
+      state.hidden = (state.hidden || []).filter(x => x !== k); if (state.weights) delete state.weights[k];
+      rkCache = {}; save(); toast(`Indicador "${c.label}" excluído. Os números já lançados ficam guardados.`); render();
+    },
     wPreset(el) {
-      const p = W_PRESETS[el.dataset.p]; if (!p) return;
+      const p0 = W_PRESETS[el.dataset.p]; if (!p0) return;
+      const p = { ...p0, p: { ...p0.p } }; INDICATORS.forEach(i => { if (i.custom && !(state.hidden || []).includes(i.key)) p.p[i.key] = 2; }); // os personalizados ativos ficam
       state.weights = wFromPrio(p.p); state.hidden = INDICATORS.filter(i => !(p.p[i.key] > 0)).map(i => i.key);
       INDICATORS.forEach(i => { if (!(state.weights[i.key] > 0)) state.weights[i.key] = i.weight; });
       rkCache = {}; save(); toast(`Modelo "${p.t}" aplicado. Ajuste algum indicador, se quiser.`); render();
@@ -7584,6 +7631,20 @@ Content-Type: application/json</pre>
       save();
       toast(`${U(name)} adicionado. Agora envie o convite.`); render();
     },
+    customInd(f) {
+      const label = val(f, 'label').replace(/\s+/g, ' ').trim(), goal = Number(String(val(f, 'goal')).replace(',', '.')), prio = Number(val(f, 'prio')) || 2;
+      const list = Array.isArray(state.customInds) ? state.customInds : [];
+      if (label.length < 2) return setMsg(f, 'Dê um nome ao indicador.');
+      if (INDICATORS.some(i => i.label.toLowerCase() === label.toLowerCase())) return setMsg(f, 'Já existe um indicador com esse nome.');
+      if (!(goal > 0)) return setMsg(f, 'Informe a meta do mês por profissional (maior que zero).');
+      if (list.length >= 12) return setMsg(f, 'Limite de 12 indicadores personalizados.');
+      const key = 'x_' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-3);
+      const pr = curPrio();
+      state.customInds = [...list, { key, label, fmt: val(f, 'fmt') === 'money' ? 'money' : 'int', goal }];
+      syncInds(); pr[key] = prio; applyPrio(pr);
+      state.goals = { byBarber: {}, ...(state.goals || {}), team: { ...((state.goals || {}).team || {}), [key]: goal } };
+      rkCache = {}; save(); toast(`Indicador "${label}" criado. Já aparece na nota, nas metas e em Lançamentos.`); render();
+    },
     weights(f) {
       const w = {};
       for (const i of INDICATORS) {
@@ -7791,6 +7852,13 @@ Content-Type: application/json</pre>
       const w = wFromPrio(pr); INDICATORS.forEach(i => { f.elements[i.key].value = w[i.key]; }); wRefresh(f);
     },
     wNum(el) { wRefresh(el.form); },
+    wToggle(el) { // liga/desliga o indicador e salva na hora
+      const f = el.form, sel = f.elements['p-' + el.dataset.k]; if (!sel) return;
+      if (el.checked) sel.value = sel.dataset.prev && sel.dataset.prev !== '0' ? sel.dataset.prev : '2'; else { sel.dataset.prev = sel.value; sel.value = '0'; }
+      CHANGES.wPrio(sel);
+      FORMS.weights(f);
+      if (!el.checked && INDICATORS.filter(i => !(state.hidden || []).includes(i.key)).length >= 2 && !(state.hidden || []).includes(el.dataset.k)) { el.checked = true; sel.value = sel.dataset.prev || '2'; CHANGES.wPrio(sel); }
+    },
     rtDay(el) { ui.rtDay = el.value && el.value <= todayIso() ? el.value : null; ui.rtData = null; ui.rtDraft = null; render(); },
     async rtPhoto(el) {
       const f = el.files && el.files[0], d = ui.rtDraft; if (!f || !d) return;

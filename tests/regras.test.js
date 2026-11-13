@@ -140,3 +140,19 @@ test('horário de chegada: só "no horário combinado" vale pontos', () => {
   assert.equal(GB.popItemPts(it, [{ ...ok, arr: 'apos' }]), 0);
   assert.equal(GB.popItemPts(it, [{ ...ok, arr: 'atraso' }]), 0);
 });
+
+test('indicador personalizado entra na nota e some ao ser desativado', () => {
+  const custom = [{ key: 'x_google1', label: 'Avaliações no Google', fmt: 'int', goal: 20 }];
+  const st = team([['a', { fat: 100 }], ['b', { fat: 100 }]], { customInds: custom });
+  st.entries = [{ id: 'm1', barberId: 'a', date: '2026-10-05', source: 'manual', x_google1: 12 }, { id: 'm2', barberId: 'b', date: '2026-10-06', source: 'manual', x_google1: 3 }];
+  st.weights = { fat: 50, x_google1: 50 }; st.hidden = GB.INDICATORS.filter(i => !['fat', 'x_google1'].includes(i.key)).map(i => i.key);
+  let res = GB.computeRanking(st, R);
+  assert.equal(byId(res, 'a').values.x_google1, 12);
+  assert.ok(byId(res, 'a').overall > byId(res, 'b').overall);
+  st.hidden.push('x_google1');
+  res = GB.computeRanking(st, R);
+  assert.equal(byId(res, 'a').overall, byId(res, 'b').overall);
+  // Sem personalizados, as listas voltam ao padrão.
+  GB.computeRanking(team([['a', { fat: 1 }], ['b', { fat: 2 }]]), R);
+  assert.ok(!GB.INDICATORS.some(i => i.custom) && !GB.FIELDS.some(f => f.custom) && !GB.SUM_KEYS.includes('x_google1'));
+});

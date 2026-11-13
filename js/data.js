@@ -203,10 +203,11 @@
   const isNum = v => v !== null && v !== undefined && v !== '' && !Number.isNaN(Number(v));
 
   function aggregate(state, barberId, range) {
+    applyCustom(state);
     const s = { fat: 0, serv: 0, cli: 0, check: 0, hDisp: 0, hOcup: 0, planos: 0, ret: 0, prod: 0, comanda: 0, n: {} };
     const add = (k, v) => {
       if (k === 'comanda') { s.comanda = Math.max(s.comanda, Number(v)); s.n.comanda = (s.n.comanda || 0) + 1; return; } // maior valor, não soma
-      s[k] += Number(v); s.n[k] = (s.n[k] || 0) + 1;
+      s[k] = (s[k] || 0) + Number(v); s.n[k] = (s.n[k] || 0) + 1;
     };
     const months = fullMonths(range);
     const recs = Object.fromEntries((state.monthly || []).filter(m => m.barberId === barberId && months.includes(m.month)).map(m => [m.month, m]));
@@ -238,7 +239,7 @@
     for (const ym of months) {
       const rec = recs[ym];
       if (!rec) continue;
-      for (const k of ['fat', 'cli', 'serv', 'prod', 'check', 'planos', 'comanda']) if (isNum(rec[k]) && !(k === 'check' && popMonths.has(ym))) add(k, rec[k]);
+      for (const k of ['fat', 'cli', 'serv', 'prod', 'check', 'planos', 'comanda', ...customKeys()]) if (isNum(rec[k]) && !(k === 'check' && popMonths.has(ym))) add(k, rec[k]);
       if (isNum(rec.fidPct)) {
         const cli = isNum(rec.cli) ? Number(rec.cli) : (dailyCli[ym] || 0);
         if (cli > 0) add('ret', (Number(rec.fidPct) / 100) * cli);
@@ -266,11 +267,12 @@
 
   // O que a integração já trouxe para o barbeiro no mês (campos travados no formulário).
   function monthFromIntegration(state, barberId, ym) {
+    applyCustom(state);
     const r = monthRange(ym);
     const out = {}; let hO = 0, hasO = false, cli = 0, ret = 0;
     for (const e of state.entries) {
       if (e.source === 'manual' || e.barberId !== barberId || e.date < r.start || e.date > r.end) continue;
-      for (const k of ['fat', 'cli', 'serv', 'prod', 'check', 'planos']) if (isNum(e[k])) out[k] = (out[k] || 0) + Number(e[k]);
+      for (const k of ['fat', 'cli', 'serv', 'prod', 'check', 'planos', ...customKeys()]) if (isNum(e[k])) out[k] = (out[k] || 0) + Number(e[k]);
       if (isNum(e.comanda)) out.comanda = Math.max(out.comanda || 0, Number(e.comanda));
       if (isNum(e.hOcup)) { hO += Number(e.hOcup); hasO = true; }
       if (isNum(e.cli)) cli += Number(e.cli);
@@ -409,6 +411,7 @@
    * - Ranking: quem tem o título fica em 1º; os demais seguem pela pontuação.
    */
   function computeRanking(state, range) {
+    applyCustom(state);
     const barbers = state.barbers.filter(b => b.active !== false);
     const weights = state.weights || {};
     const rows = barbers.map(b => ({ barber: b, sums: aggregate(state, b.id, range), values: {}, ranks: {}, scores: {}, leads: [], overall: 0 }));
@@ -768,5 +771,30 @@
   const visibleInds = state => INDICATORS.filter(i => !RETIRED.includes(i.key) && !(state.hidden || []).includes(i.key));
   const FIELD_IND = { fidPct: 'fid', ocupPct: 'ocup', aus: 'ocup' };
 
-  window.GB = Object.assign(window.GB || {}, { RETIRED, BONUS_INDS, OCUP_DEFAULT, ocupCfgOf, ocupCfgFor, hoursPerDay, ocupCapacity, SUM_KEYS, manualEntries, manualTotal, applyManualTotal, evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
+  // ---------- Indicadores personalizados (criados pelo dono em Indicadores e metas) ----------
+  // state.customInds = [{ key: 'x_…', label, fmt: 'int' | 'money', goal }]. Somam no mês como Serviços ou Faturamento,
+  // entram na nota, nas metas, em Lançamentos e na API (campo com o mesmo código). Ligar/desligar: state.hidden.
+  let CUSTOM = [];
+  const customKeys = () => CUSTOM.map(c => c.key);
+  const validCustom = c => c && /^x_[a-z0-9]{3,24}$/.test(c.key) && String(c.label || '').trim();
+  let customSig = '';
+  function applyCustom(state) {
+    const list = (Array.isArray(state && state.customInds) ? state.customInds : []).filter(validCustom).slice(0, 12);
+    const sig = JSON.stringify(list);
+    if (sig === customSig) return;
+    customSig = sig; CUSTOM = list.map(c => ({ ...c, label: String(c.label).trim().slice(0, 40), fmt: c.fmt === 'money' ? 'money' : 'int' }));
+    const drop = arr => { for (let i = arr.length - 1; i >= 0; i--) if (arr[i] && (arr[i].custom || (typeof arr[i] === 'string' && arr[i].startsWith('x_')))) arr.splice(i, 1); };
+    drop(INDICATORS); drop(FIELDS); drop(MONTH_FIELDS); drop(SUM_KEYS);
+    for (const k of Object.keys(DEFAULT_GOALS)) if (k.startsWith('x_')) delete DEFAULT_GOALS[k];
+    for (const c of CUSTOM) {
+      const money = c.fmt === 'money', k = c.key;
+      INDICATORS.push({ key: k, label: c.label, weight: 10, fmt: money ? 'money' : 'int', custom: true, calc: s => s.n[k] ? s[k] : null });
+      FIELDS.push({ key: k, label: c.label + (money ? ' (R$)' : ''), api: k, step: money ? '0.01' : '1', custom: true });
+      MONTH_FIELDS.push({ key: k, label: c.label + (money ? ' (R$)' : ''), step: money ? '0.01' : '1', daily: k, custom: true });
+      SUM_KEYS.push(k);
+      DEFAULT_GOALS[k] = Number(c.goal) > 0 ? Number(c.goal) : 10;
+    }
+  }
+
+  window.GB = Object.assign(window.GB || {}, { applyCustom, customKeys, RETIRED, BONUS_INDS, OCUP_DEFAULT, ocupCfgOf, ocupCfgFor, hoursPerDay, ocupCapacity, SUM_KEYS, manualEntries, manualTotal, applyManualTotal, evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
 })();

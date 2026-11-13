@@ -2811,3 +2811,26 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .notif-penbtn > span { display: flex; flex-direction: column; }
 .pop-arr.arr-st-apos { border-color: color-mix(in srgb, #f2c230 55%, transparent); }
 .pop-arr.arr-st-atraso { border-color: color-mix(in srgb, #d64545 60%, transparent); }
+
+/* Indicadores e metas › ligar/desligar e personalizados */
+.wp-sw { position: relative; display: inline-flex; flex: 0 0 auto; width: 44px; height: 26px; cursor: pointer; }
+.wp-sw input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.wp-sw span { position: absolute; inset: 0; border-radius: 999px; background: var(--surface-3, rgba(255,255,255,.18)); transition: background .2s; }
+.wp-sw span::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+.wp-sw input:checked + span { background: #1f9d55; }
+.wp-sw input:checked + span::after { transform: translateX(18px); }
+.wp-sw input:focus-visible + span { outline: 2px solid var(--accent, #d4b26a); outline-offset: 2px; }
+.wp-new { font-size: .7rem; padding: 1px 8px; margin-left: 4px; vertical-align: middle; }
+.ci-list { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 10px; }
+.ci-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-radius: 14px; background: var(--surface-2); }
+.ci-item > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ci-item small { color: var(--muted); overflow-wrap: anywhere; }
+.ci-item.is-off b { opacity: .6; }
+.wp-row { grid-template-columns: auto minmax(0, 1.4fr) minmax(130px, 1fr) minmax(0, 1fr); }
+.wp-row.is-off { opacity: 1; }
+.wp-row.is-off > :not(.wp-sw) { opacity: .5; }
+@media (max-width: 560px) {
+  .wp-row { grid-template-columns: auto 1fr 1fr; }
+  .wp-row .wp-name { grid-column: 2 / -1; }
+  .wp-row .wp-sel { grid-column: 1 / 3; }
+}
