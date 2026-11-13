@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-13-tutorial-api', date: '2026-11-13', title: 'Passo a passo da integração', items: [
+    ['novo', 'Em Configurações › Integração & API, um passo a passo para cada caso: quem usa a AppBarber, quem usa outro sistema e quem não tem integração.'],
+    ['novo', 'Guia técnico pronto para mandar ao suporte do seu sistema, com a sua chave, o endereço, os campos e os códigos dos profissionais. Dá para copiar ou enviar por WhatsApp.'],
+  ] },
   { id: '2026-11-13-sync-nuvem', date: '2026-11-13', title: 'Sincronização AppBarber pela nuvem, 24 horas', items: [
     ['novo', 'Em Integração & API, o dono coloca o código do estabelecimento e a chave da API da AppBarber. O servidor do sistema busca os atendimentos e as comandas a cada 10 minutos, 24 horas por dia.'],
     ['melhoria', 'Não precisa mais deixar computador ligado na barbearia. O cartão mostra se está funcionando e a hora da última sincronização.'],

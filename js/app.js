@@ -341,8 +341,8 @@
     });
   }
 
-  async function copyText(text, fallbackEl) {
-    try { await navigator.clipboard.writeText(text); toast('Link copiado.'); }
+  async function copyText(text, fallbackEl, msg) {
+    try { await navigator.clipboard.writeText(text); toast(msg || 'Link copiado.'); }
     catch (e) {
       if (fallbackEl) {
         const r = document.createRange(); r.selectNodeContents(fallbackEl);
@@ -3623,8 +3623,8 @@ ${rows.length ? '' : emptyBarbers()}
     const ex = JSON.stringify([
       { data: iso(new Date()), barbeiro: state.barbers[0]?.name || 'Nome do barbeiro', faturamento: 420.5, servicos: 9, clientes: 8, checklist_pop: 1, horas_disponiveis: 8, horas_ocupadas: 6.5, planos_mensais: 1, clientes_retorno: 5, venda_produtos: 2 },
     ], null, 2);
-    return `${autoSyncCard()}
-      <section class="section card">
+    return `${apiTutorial()}${autoSyncCard()}
+      <section class="section card" id="api-ref">
         <h2 class="section-title">Como funciona ${tip('api')}</h2>
         <p class="section-note">Outro sistema (agenda, caixa, ERP) envia os resultados de cada barbeiro por dia. Os números entram no ranking na hora, junto com os lançados à mão.</p>
         <div class="field"><span>Chave da API</span><div class="invite-link" id="api-key">${esc(state.apiKey)}</div></div>
@@ -3633,7 +3633,7 @@ ${rows.length ? '' : emptyBarbers()}
         <pre class="code">POST ${esc(Cloud.enabled ? Cloud.apiUrl : '/api/v1/lancamentos')}
 Authorization: Bearer ${esc(state.apiKey)}
 Content-Type: application/json</pre>
-        <p class="section-note">Campos aceitos: <code>data</code> (AAAA-MM-DD), <code>barbeiro</code> (nome) ou <code>barbeiro_id</code>, ${FIELDS.filter(f => !f.legacy).map(f => `<code>${f.api}</code>`).join(', ')}. Campos ausentes ficam em branco. Enviar a mesma data e barbeiro de novo substitui os números.</p>
+        <p class="section-note">Campos aceitos: <code>data</code> (AAAA-MM-DD), <code>${U('barbeiro')}</code> (nome) ou <code>${U('barbeiro_id')}</code>, ${FIELDS.filter(f => !f.legacy).map(f => `<code>${f.api}</code>`).join(', ')}. Campos ausentes ficam em branco. Enviar a mesma data e barbeiro de novo substitui os números.</p>
         <p class="section-note"><code>horas_ocupadas</code>: soma das horas das comandas finalizadas do barbeiro no dia, inclusive fora do horário da agenda. A taxa de ocupação é calculada pela regra em Configurações → Indicadores e metas.</p>
         <p class="section-note">${Cloud.enabled ? 'O endereço acima funciona depois que a função <code>lancamentos</code> for publicada no Supabase (veja o guia em <code>supabase/LEIAME.md</code>). Abaixo dá para importar os dados colando o JSON.' : '<b>Atenção:</b> o endereço acima passa a receber dados quando o app for publicado com servidor. Até lá, teste o formato colando os dados abaixo.'}</p>
       </section>
@@ -3647,6 +3647,91 @@ Content-Type: application/json</pre>
       </section>${csvImportCard()}`;
   }
 
+  // Integração & API › Passo a passo: o que o dono faz (AppBarber, outro sistema ou sem integração)
+  // e um guia técnico pronto para mandar ao suporte do sistema que ele usa.
+  const API_DESC = {
+    faturamento: ['Total vendido pelo profissional no dia (serviços e produtos do salão, sem consumo de bar ou geladeira)', 420.5],
+    servicos: ['Quantidade de serviços realizados', 9], clientes: ['Clientes diferentes atendidos', 8],
+    checklist_pop: ['Pontos do Checklist Agenda Cheia (se o seu sistema controlar)', 1],
+    horas_ocupadas: ['Horas em comandas finalizadas (para a taxa de ocupação)', 6.5],
+    planos_mensais: ['Planos mensais vendidos no dia', 1], clientes_retorno: ['Clientes que já tinham vindo antes', 5],
+    venda_produtos: ['Quantidade de produtos vendidos', 2], maior_comanda: ['Valor da maior comanda do dia', 180],
+  };
+  function apiUrl() { return Cloud.enabled ? Cloud.apiUrl : location.origin + '/api/v1/lancamentos'; }
+  function apiGuideText() {
+    const pro = state.barbers.filter(b => b.active !== false);
+    const ex = [{ data: iso(new Date()), barbeiro: pro[0]?.name || 'Nome do profissional', faturamento: 420.5, servicos: 9, clientes: 8, horas_ocupadas: 6.5 }];
+    return [
+      `INTEGRAÇÃO COM O ${B().name.toUpperCase()} (${state.company.name || ''})`,
+      '',
+      'Objetivo: enviar, para cada profissional e cada dia, os totais do dia (faturamento, serviços, clientes etc.).',
+      'Envie ao longo do dia (ex.: a cada 10 a 30 minutos) ou pelo menos uma vez por dia, depois do fechamento.',
+      'Reenviar o mesmo dia e o mesmo profissional SUBSTITUI os números (não soma). Pode reenviar os últimos dias sem medo.',
+      '',
+      `Endereço:  POST ${apiUrl()}`,
+      `Cabeçalho: Authorization: Bearer ${state.apiKey}`,
+      'Cabeçalho: Content-Type: application/json',
+      '',
+      'Corpo: um objeto ou uma lista (até 1000 itens por envio). Exemplo:',
+      JSON.stringify(ex, null, 2),
+      '',
+      'Campos:',
+      '- data (obrigatório): dia no formato AAAA-MM-DD',
+      '- barbeiro (obrigatório): nome do profissional exatamente como cadastrado (ou barbeiro_id com o código abaixo)',
+      ...FIELDS.filter(f => !f.legacy && API_DESC[f.api]).map(f => `- ${f.api}: ${API_DESC[f.api][0]} (número)`),
+      'Campos que o seu sistema não tiver podem ser omitidos.',
+      '',
+      'Profissionais cadastrados (nome → barbeiro_id):',
+      ...pro.map(b => `- ${b.name} → ${b.id}`),
+      '',
+      'Respostas: 200 {"recebidos": n, "problemas": [...]} · 400 formato inválido · 401 chave inválida · 402 plano sem integração.',
+      'Teste com curl:',
+      `curl -X POST "${apiUrl()}" -H "Authorization: Bearer ${state.apiKey}" -H "Content-Type: application/json" -d '${JSON.stringify(ex[0])}'`,
+    ].join('\n');
+  }
+  function apiTutorial() {
+    const pro = state.barbers.filter(b => b.active !== false);
+    const wa = 'https://wa.me/?text=' + encodeURIComponent(`Olá! Quero integrar meu sistema com o ${B().name}. Segue o guia técnico:\n\n` + apiGuideText());
+    return `<section class="section card tut-card">
+      <h2 class="section-title">${icon('book')} Passo a passo da integração</h2>
+      <p class="section-note">Com a integração, os números de cada profissional entram sozinhos no ranking, sem ninguém digitar. Escolha o seu caso:</p>
+      <details class="tut" open><summary><b>Uso a AppBarber</b><small>O jeito mais fácil: tudo pela nuvem, sem computador ligado.</small></summary>
+        <ol class="tut-steps">
+          <li><b>Peça à AppBarber</b> (suporte ou gerente de conta) a <b>chave da API</b> do seu estabelecimento e a liberação do IP que aparece no cartão <i>Sincronização automática</i> logo abaixo.</li>
+          <li><b>Confira os nomes.</b> Cada profissional precisa estar com o mesmo nome aqui e na AppBarber (ex.: "Carlos Silva" nos dois).</li>
+          <li><b>Preencha o cartão abaixo</b> com o código do estabelecimento e a chave, e toque em Salvar.</li>
+          <li><b>Pronto.</b> Em até 10 minutos o cartão mostra <i>Funcionando</i> e os números aparecem no ranking e em Lançamentos. Depois disso, tudo se atualiza sozinho a cada 10 minutos, no horário de funcionamento.</li>
+        </ol></details>
+      <details class="tut"><summary><b>Uso outro sistema de agenda ou caixa</b><small>O seu sistema envia os números para cá pela API.</small></summary>
+        <ol class="tut-steps">
+          <li><b>Pergunte ao suporte do seu sistema</b> se ele consegue enviar dados para outro sistema por API (também chamado de integração ou webhook).</li>
+          <li><b>Mande o guia técnico</b> para o suporte ou para quem cuida do sistema. Ele já vai com a sua chave, o endereço, o formato e a lista dos seus profissionais:
+            <div class="btn-row tut-btns"><button class="btn btn-sm btn-primary" type="button" data-action="copyGuide">${icon('copy')} Copiar guia técnico</button>
+            <a class="btn btn-sm" href="${esc(wa)}" target="_blank" rel="noopener">${icon('share')} Enviar por WhatsApp</a></div></li>
+          <li><b>Eles fazem o envio</b> dos totais de cada profissional por dia, ao longo do dia ou uma vez por dia depois do fechamento.</li>
+          <li><b>Confira.</b> Quando chegar o primeiro envio, os números aparecem em Lançamentos marcados como <i>API</i>. Se faltar algum profissional, confira se o nome é igual nos dois sistemas.</li>
+        </ol>
+        <p class="tut-warn">${icon('lock')} A chave da API funciona como uma senha da sua empresa: envie só para quem vai fazer a integração. Se ela vazar, gere uma nova em <a href="#api-ref">Chave da API</a> (a antiga para de funcionar).</p></details>
+      <details class="tut"><summary><b>Meu sistema não tem integração</b><small>Dá para usar do mesmo jeito.</small></summary>
+        <ul class="tut-steps">
+          <li><b>Importe uma planilha</b>: exporte o relatório do seu sistema em CSV e use <i>Importar planilha</i> no fim desta página.</li>
+          <li><b>Ou lance à mão</b> em <a href="#lancamentos">Lançamentos</a>, uma vez por dia.</li>
+        </ul></details>
+      <details class="tut"><summary><b>Guia técnico (para o desenvolvedor)</b><small>Endereço, formato, campos e códigos dos profissionais.</small></summary>
+        <pre class="code">POST ${esc(apiUrl())}
+Authorization: Bearer ${esc(state.apiKey)}
+Content-Type: application/json</pre>
+        <div class="tut-table"><table class="table"><thead><tr><th>Campo</th><th>O que é</th></tr></thead><tbody>
+          <tr><td><code>data</code> *</td><td>Dia, no formato AAAA-MM-DD (ex.: ${iso(new Date())})</td></tr>
+          <tr><td><code>${U('barbeiro')}</code> *</td><td>Nome do profissional como está cadastrado (ou <code>${U('barbeiro_id')}</code>)</td></tr>
+          ${FIELDS.filter(f => !f.legacy && API_DESC[f.api]).map(f => `<tr><td><code>${f.api}</code></td><td>${esc(API_DESC[f.api][0])}</td></tr>`).join('')}
+        </tbody></table></div>
+        <p class="section-note">Reenviar o mesmo dia e profissional substitui os números (não soma). Até 1000 itens por envio. Respostas: <code>200</code> recebidos · <code>400</code> formato · <code>401</code> chave inválida · <code>402</code> plano sem integração.</p>
+        ${pro.length ? `<div class="tut-table"><table class="table"><thead><tr><th>Profissional</th><th><code>${U('barbeiro_id')}</code></th></tr></thead><tbody>${pro.map(b => `<tr><td>${esc(b.name)}</td><td><code>${esc(b.id)}</code></td></tr>`).join('')}</tbody></table></div>` : ''}
+        <div class="btn-row tut-btns"><button class="btn btn-sm" type="button" data-action="copyGuide">${icon('copy')} Copiar guia técnico completo</button></div>
+      </details>
+    </section>`;
+  }
   // Integração & API › Sincronização automática: o servidor do Gestão (IP fixo) busca na AppBarber
   // a cada 10 minutos, 24 horas por dia, sem computador ligado na barbearia.
   function autoSyncCard() {
@@ -7141,6 +7226,7 @@ Content-Type: application/json</pre>
       ui.confirm = null; save(); toast('Equipe e lançamentos apagados.'); render();
     },
     copyKey() { copyText(state.apiKey, $('#api-key')); },
+    copyGuide() { copyText(apiGuideText(), null, 'Guia técnico copiado. Cole no WhatsApp ou no e-mail do suporte.'); },
     copyIp() { copyText((window.GB_CONFIG || {}).syncIp || '', $('#as-ip')); },
     newKey() {
       if (ui.confirm !== 'key') { ui.confirm = 'key'; render(); return; }
