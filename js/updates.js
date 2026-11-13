@@ -2,6 +2,11 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-13-chegada-3', date: '2026-11-13', title: 'Horário de chegada com 3 botões e penalidade automática', items: [
+    ['novo', 'O Horário de chegada fica no topo do Checklist Agenda Cheia, sem prova, com 3 botões: Chegou no horário combinado (verde, ganha os pontos), Chegou após o horário combinado (amarelo, sem bônus) e Chegou atrasado (vermelho, sem bônus).'],
+    ['novo', 'O vermelho gera sozinho um registro na Fiscalização (tipo falta): no mês, a 1ª vez é ocorrência, a 2ª reincidência e da 3ª em diante penalidade.'],
+    ['novo', 'Nova aba Penalidades na Fiscalização, com os profissionais que levaram penalidade. O dono, o gestor e os líderes com acesso à Fiscalização recebem o aviso no sino.'],
+  ] },
   { id: '2026-11-13-tutorial-api', date: '2026-11-13', title: 'Passo a passo da integração', items: [
     ['novo', 'Em Configurações › Integração & API, um passo a passo para cada caso: quem usa a AppBarber, quem usa outro sistema e quem não tem integração.'],
     ['novo', 'Guia técnico pronto para mandar ao suporte do seu sistema, com a sua chave, o endereço, os campos e os códigos dos profissionais. Dá para copiar ou enviar por WhatsApp.'],
