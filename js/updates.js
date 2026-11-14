@@ -2,6 +2,11 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-14-comanda-plano', date: '2026-11-14', title: 'Maior comanda sem planos mensais', items: [
+    ['melhoria', 'Comandas de plano mensal (venda do plano ou atendimento pago pelo plano) não contam mais como maior comanda do mês. A sincronização AppBarber reconhece pelo nome (plano, assinatura, clube, mensalidade) e pelos dados de pagamento.'],
+    ['melhoria', 'A maior comanda só conta depois que o pagamento da comanda for finalizado na AppBarber.'],
+    ['melhoria', 'A venda de planos mensais não conta mais como produto vendido (nem em quantidade, nem em valor). Continua no faturamento.'],
+  ] },
   { id: '2026-11-13-so-finalizadas', date: '2026-11-13', title: 'AppBarber: só comandas finalizadas', items: [
     ['melhoria', 'A sincronização com a AppBarber passa a contar só as comandas finalizadas, com o valor real cobrado, igual ao Dashboard Profissional da AppBarber. Sem valor provisório do agendamento.'],
     ['melhoria', 'Atendimento com comanda ainda aberta entra no ranking assim que a comanda for paga (a sincronização confere as comandas abertas a cada 20 minutos).'],

@@ -20,7 +20,14 @@ Cada comanda é lida **uma única vez** (1 chamada) e guardada em `comandas.json
 (nos 3 primeiros dias do mês, também as do mês anterior, para o fechamento). **Só contam comandas finalizadas**
 (pagas, ou de um dia que já passou), como no Dashboard da AppBarber: não há valor provisório do agendamento. Comanda aberta
 ou ainda não lida entra quando for finalizada e lida. Comanda ainda não paga é relida a cada 20 minutos. Os meses anteriores
-não são reenviados. No fim da instalação, a **carga inicial** lê de uma vez as
+não são reenviados.
+
+**Maior comanda:** só conta comanda com o pagamento finalizado (comanda sem pagamento é conferida de novo a cada 6 horas).
+
+**Planos mensais:** comandas de plano mensal (venda do plano ou atendimento pago pelo plano) não contam como maior comanda, e o item do plano não conta como produto vendido (continua no faturamento). A sincronização
+reconhece pelo nome dos itens (plano, assinatura, clube, mensalidade) e pelos dados de pagamento. Se algum plano tiver
+outro nome, informe os códigos no `config.json`: `"planos_codigos": ["123", "456"]`. O `testar.bat` mostra as comandas
+reconhecidas como plano no mês. No fim da instalação, a **carga inicial** lê de uma vez as
 comandas do mês atual (do dia 1º até hoje), no ritmo máximo da AppBarber (1.000 chamadas por
 hora: cerca de 35 minutos para 550 comandas). Os números vão sendo atualizados no app
 durante a carga. Para rodar de novo: `node sincronizar.mjs --carga` na pasta.
