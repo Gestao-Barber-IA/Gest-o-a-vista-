@@ -660,6 +660,9 @@
       demo: true,
       demoV: 10,
       comCfg: { pct: 40, pctBy: {}, plano: 10, prod: 5, pos: { 1: 200, 2: 100, 3: 50 }, mvp: 150, dest: 80, meta: 100 },
+      // Bônus de exemplo do mês (roleta de produtos e presentes).
+      bonusRecs: [[0, 'dinheiro', 30, 'Roleta – venda de 3 produtos', 2], [1, 'dinheiro', 50, 'Roleta – venda de 3 produtos', 4], [2, 'presente', 80, '2 ingressos VIP no cinema', 5], [0, 'dinheiro', 20, 'Roleta – venda de 3 produtos', 6], [3, 'dinheiro', 10, 'Roleta – venda de 3 produtos', 7]]
+        .filter(x => barbers[x[0]] && x[4] <= today.getDate()).map(([i, tipo, valor, desc, d], k) => ({ id: 'bn_demo' + k, barberId: barbers[i].id, date: `${curYm}-${String(d).padStart(2, '0')}`, tipo, valor, desc, by: 'Gestão', at: `${curYm}-${String(d).padStart(2, '0')}T15:00:00Z` })),
       demoYm: curYm,
       presentation: !!DEMO,
       brand,

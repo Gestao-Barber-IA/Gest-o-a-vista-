@@ -2,6 +2,11 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-14-bonus', date: '2026-11-14', title: 'Nova aba Bônus', items: [
+    ['novo', 'Aba Bônus no menu principal: o dono, a gestão e o líder autorizado registram bônus em dinheiro (com atalho da roleta de R$ 10 a R$ 50 ao vender 3 produtos) ou presentes (ex.: 2 ingressos VIP no cinema).'],
+    ['novo', 'Cada profissional vê só os próprios bônus, com o total do mês e do ano. A liderança vê os de toda a equipe.'],
+    ['melhoria', 'Novo acesso extra do líder em Adicionar profissional: Bônus.'],
+  ] },
   { id: '2026-11-14-check-adj', date: '2026-11-14', title: 'Pontos do checklist trazidos do sistema anterior', items: [
     ['melhoria', 'Os pontos do Checklist Agenda Cheia que vieram do sistema anterior foram somados aos pontos de novembro de cada profissional. No checklist, aparecem no dia 1º como "trazidos do sistema anterior".'],
   ] },

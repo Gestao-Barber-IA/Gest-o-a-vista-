@@ -246,12 +246,13 @@
     pop: { key: r => r.barberId + '|' + r.day, row: (r, cid) => ({ id: r.barberId + '|' + r.day, company_id: cid, barber_id: r.barberId, day: r.day, data: { ev: r.ev || {}, notes: r.notes || {}, msg: r.msg || {}, res: r.res || null, by: r.by || null, at: r.at || null, ...(Number(r.adj) > 0 ? { adj: Number(r.adj), adjNote: r.adjNote || '' } : {}) } }), list: s => s.pop || [], pk: r => ({ id: r.id }) },
     monthly: { key: m => m.barberId + '|' + m.month, row: (m, cid) => ({ company_id: cid, barber_id: m.barberId, month: m.month, data: { ...pick(m, MONTH_KEYS), ...(m._adj && Object.keys(m._adj).length ? { _adj: m._adj } : {}) } }), list: s => s.monthly || [], pk: r => ({ barber_id: r.barber_id, month: r.month }) },
     planSales: { key: v => v.id, row: (v, cid) => ({ id: v.id, company_id: cid, barber_id: v.barberId, date: v.date, data: { nome: v.nome, fone: v.fone, plano: v.plano, by: v.by || null } }), list: s => s.planSales || [], pk: r => ({ id: r.id }) },
+    bonusRecs: { key: v => v.id, row: (v, cid) => ({ id: v.id, company_id: cid, barber_id: v.barberId, date: v.date, data: { tipo: v.tipo, valor: v.valor ?? null, desc: v.desc || '', by: v.by || null, byUser: v.byUser || null } }), list: s => s.bonusRecs || [], pk: r => ({ id: r.id }) },
     comandaRecs: { key: v => v.id, row: (v, cid) => ({ id: v.id, company_id: cid, barber_id: v.barberId, date: v.date, data: { valor: v.valor, foto: v.foto, by: v.by || null } }), list: s => s.comandaRecs || [], pk: r => ({ id: r.id }) },
   };
-  const TNAME = { pop: 'pop_records', planSales: 'plan_sales', comandaRecs: 'comanda_records' };
+  const TNAME = { pop: 'pop_records', planSales: 'plan_sales', comandaRecs: 'comanda_records', bonusRecs: 'bonus_records' };
   const tbl = t => TNAME[t] || t;
-  const ORDER_UP = ['barbers', 'invites', 'entries', 'monthly', 'pop', 'planSales', 'comandaRecs'];
-  const ORDER_DEL = ['comandaRecs', 'planSales', 'pop', 'monthly', 'entries', 'invites', 'barbers'];
+  const ORDER_UP = ['barbers', 'invites', 'entries', 'monthly', 'pop', 'planSales', 'comandaRecs', 'bonusRecs'];
+  const ORDER_DEL = ['bonusRecs', 'comandaRecs', 'planSales', 'pop', 'monthly', 'entries', 'invites', 'barbers'];
 
   function snapshot(s, cid) {
     const out = { tables: {}, company: '', users: {} };
@@ -308,7 +309,7 @@
       if (billing.approved === false) return { status: 'aprovacao', company: co, role: prof.role }; // cadastro aguardando o dono do SaaS
       return { status: 'bloqueado', billing, plans, company: co, role: prof.role };
     }
-    const [co, profs, barbers, entries, monthly, invites, key, pop, sales, cmds] = await Promise.all([
+    const [co, profs, barbers, entries, monthly, invites, key, pop, sales, cmds, bonus] = await Promise.all([
       q(c.from('companies').select('*').eq('id', cid).single()),
       q(c.from('profiles').select('*').eq('company_id', cid)),
       q(c.from('barbers').select('*').eq('company_id', cid).order('created_at')),
@@ -319,6 +320,7 @@
       fetchAll('pop_records', cid).catch(() => []),
       fetchAll('plan_sales', cid).catch(() => []),
       fetchAll('comanda_records', cid).catch(() => []),
+      fetchAll('bonus_records', cid).catch(() => []),
     ]);
     const st = co.settings || {};
     const state = {
@@ -356,6 +358,7 @@
       customInds: Array.isArray(st.customInds) ? st.customInds : [],
       indMode: st.indMode || null,
       comandaRecs: cmds.map(r => ({ id: r.id, barberId: r.barber_id, date: r.date, ...(r.data || {}) })),
+      bonusRecs: bonus.map(r => ({ id: r.id, barberId: r.barber_id, date: r.date, ...(r.data || {}) })),
       apiKey: key ? key.key : '',
       billing, plans,
     };
@@ -431,7 +434,7 @@
     Cloud.unsubscribe();
     const cid = Cloud.companyId;
     channel = c.channel('company-' + cid);
-    for (const t of ['entries', 'monthly', 'barbers', 'profiles', 'pop_records', 'plan_sales', 'comanda_records']) channel.on('postgres_changes', { event: '*', schema: 'public', table: t, filter: 'company_id=eq.' + cid }, remote);
+    for (const t of ['entries', 'monthly', 'barbers', 'profiles', 'pop_records', 'plan_sales', 'comanda_records', 'bonus_records']) channel.on('postgres_changes', { event: '*', schema: 'public', table: t, filter: 'company_id=eq.' + cid }, remote);
     channel.on('postgres_changes', { event: '*', schema: 'public', table: 'companies', filter: 'id=eq.' + cid }, remote);
     // Revelação do pódio ao vivo: o gestor avisa cada passo e os celulares da equipe acompanham.
     channel.on('broadcast', { event: 'reveal' }, ({ payload }) => { if (Cloud.onReveal) Cloud.onReveal(payload); });
