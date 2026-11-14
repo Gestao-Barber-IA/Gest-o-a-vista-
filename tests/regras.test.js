@@ -168,3 +168,16 @@ test('serviços e produtos: por valor em R$ quando o dono escolhe', () => {
   assert.equal(byId(res, 'a').values.serv, 10);
   assert.equal(GB.INDICATORS.find(i => i.key === 'serv').label, 'Serviços realizados');
 });
+
+test('checklist: pontos acrescentados (adj) somam aos do dia, sem apagar os atuais', () => {
+  const st = team([['a', {}], ['b', {}]]);
+  st.pop = [
+    { barberId: 'a', day: '2026-10-01', ev: {}, adj: 35 },
+    { barberId: 'a', day: '2026-10-13', ev: { stories: [{ status: 'aprovado' }] } },
+    { barberId: 'b', day: '2026-10-01', ev: {}, adj: 8 },
+  ];
+  const sA = GB.aggregate(st, 'a', R), sB = GB.aggregate(st, 'b', R);
+  const one = GB.popItemPts(GB.popCfgOf(st).items.find(i => i.id === 'stories'), [{ status: 'aprovado' }]);
+  assert.equal(Math.round(sA.check * 10) / 10, Math.round((35 + one) * 10) / 10);
+  assert.equal(sB.check, 8);
+});

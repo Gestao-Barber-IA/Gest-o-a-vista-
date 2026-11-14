@@ -2840,3 +2840,5 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .wp-mode button.on { background: var(--accent, #d4b26a); color: #111; }
 .wp-row .wp-mode { grid-column: 2 / -1; }
 @media (max-width: 560px) { .wp-row .wp-mode { grid-column: 1 / -1; } }
+.pop-adj { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; font-size: .9rem; color: var(--money, #52d37e); }
+.pop-adj svg { width: 16px; height: 16px; }

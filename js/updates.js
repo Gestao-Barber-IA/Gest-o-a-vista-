@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-14-check-adj', date: '2026-11-14', title: 'Pontos do checklist trazidos do sistema anterior', items: [
+    ['melhoria', 'Os pontos do Checklist Agenda Cheia que vieram do sistema anterior foram somados aos pontos de novembro de cada profissional. No checklist, aparecem no dia 1º como "trazidos do sistema anterior".'],
+  ] },
   { id: '2026-11-14-comanda-plano', date: '2026-11-14', title: 'Maior comanda sem planos mensais', items: [
     ['melhoria', 'Comandas de plano mensal (venda do plano ou atendimento pago pelo plano) não contam mais como maior comanda do mês. A sincronização AppBarber reconhece pelo nome (plano, assinatura, clube, mensalidade) e pelos dados de pagamento.'],
     ['melhoria', 'A maior comanda só conta depois que o pagamento da comanda for finalizado na AppBarber.'],
