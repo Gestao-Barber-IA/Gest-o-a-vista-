@@ -2842,3 +2842,33 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 @media (max-width: 560px) { .wp-row .wp-mode { grid-column: 1 / -1; } }
 .pop-adj { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; font-size: .9rem; color: var(--money, #52d37e); }
 .pop-adj svg { width: 16px; height: 16px; }
+
+/* Bônus */
+.bn-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.bn-top .section-title { margin: 0; }
+.bn-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.bn-stats > div { background: var(--surface-2); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+.bn-stats small, .bn-stats span { color: var(--muted); font-size: .82rem; }
+.bn-stats b { font-size: 1.5rem; color: var(--money, #52d37e); }
+.bn-sum { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+.bn-sumc { display: flex; align-items: center; gap: 10px; padding: 10px 12px; min-width: 150px; border: 1px solid var(--line); cursor: pointer; text-align: left; color: inherit; font: inherit; }
+.bn-sumc > span { display: flex; flex-direction: column; }
+.bn-sumc small { color: var(--money, #52d37e); font-weight: 700; }
+.bn-sumc.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.bn-total { margin: 8px 0 0; }
+.bn-roleta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
+.bn-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.bn-item { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+.bn-ic { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--money, #52d37e) 18%, transparent); color: var(--money, #52d37e); flex: 0 0 auto; }
+.bn-item.is-gift .bn-ic { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); }
+.bn-ic svg { width: 20px; height: 20px; }
+.bn-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.bn-body small { color: var(--muted); overflow-wrap: anywhere; }
+.bn-ref { font-size: .9rem; overflow-wrap: anywhere; }
+
+/* Serviços extras: marcar os tradicionais */
+.xs-count { margin: 0 0 10px; }
+.xs-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.xs-item { margin: 0; }
+.xs-item small { color: var(--muted); }
+.xs-item input:checked ~ span small { color: var(--accent); }

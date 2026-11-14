@@ -181,3 +181,20 @@ test('checklist: pontos acrescentados (adj) somam aos do dia, sem apagar os atua
   assert.equal(Math.round(sA.check * 10) / 10, Math.round((35 + one) * 10) / 10);
   assert.equal(sB.check, 8);
 });
+
+test('serviços extras: conta só o que não foi marcado como tradicional', () => {
+  const st = team([['a', {}], ['b', {}]], { extraInit: true, extraTrad: ['Corte Tradicional', 'barba'] });
+  st.hidden = [];
+  st.entries = [
+    { id: 'a1', barberId: 'a', date: '2026-10-05', source: 'api', svc: { 'Corte Tradicional': [3, 150], 'Barba': [2, 70], 'Sobrancelha (No Combo)': [2, 30], 'Pigmentação na Barba': [1, 60] } },
+    { id: 'b1', barberId: 'b', date: '2026-10-05', source: 'api', svc: { 'Corte Tradicional': [5, 250] } },
+  ];
+  const a = GB.aggregate(st, 'a', R), b = GB.aggregate(st, 'b', R);
+  assert.equal(a.extra, 3); assert.equal(a.extraV, 90);
+  assert.equal(b.extra, 0);
+  st.indMode = { extra: 'valor' };
+  assert.equal(byId(GB.computeRanking(st, R), 'a').values.extra, 90);
+  // Empresa que ainda não viu o indicador: começa desligado.
+  const novo = team([['a', {}], ['b', {}]]); GB.computeRanking(novo, R);
+  assert.ok(novo.hidden.includes('extra') && novo.extraInit);
+});

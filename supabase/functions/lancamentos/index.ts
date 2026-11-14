@@ -78,6 +78,17 @@ Deno.serve(async (req) => {
       if (Number.isNaN(num) || num < 0) { erros.push(`Item ${n}: "${api}" precisa ser um número positivo.`); return; }
       data[key] = num;
     }
+    // Serviços por nome: { "Corte Tradicional": [quantidade, valor], ... } (indicador Serviços extras).
+    const det = item.servicos_detalhe;
+    if (det && typeof det === "object" && !Array.isArray(det)) {
+      const svc: Record<string, [number, number]> = {};
+      for (const [nome, v] of Object.entries(det).slice(0, 80)) {
+        const n = String(nome).trim().slice(0, 80), q = Number(Array.isArray(v) ? v[0] : v), val = Number(Array.isArray(v) ? v[1] : 0);
+        if (!n || !Number.isFinite(q) || q < 0 || !Number.isFinite(val) || val < 0) continue;
+        svc[n] = [q, Math.round(val * 100) / 100];
+      }
+      (data as any).svc = svc;
+    }
     // Indicadores personalizados do dono (código x_… mostrado em Indicadores e metas).
     for (const [api, v] of Object.entries(item)) {
       if (!/^x_[a-z0-9]{3,24}$/.test(api) || v === undefined || v === null || v === "") continue;

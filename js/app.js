@@ -267,11 +267,12 @@
     </section>`;
   }
   function leaderExtrasBox(b) {
-    const x = extrasOf(b.id), n = (x.review ? 1 : 0) + (x.disc ? 1 : 0) + x.fields.length;
+    const x = extrasOf(b.id), n = (x.review ? 1 : 0) + (x.disc ? 1 : 0) + (x.bonus ? 1 : 0) + x.fields.length;
     return `<details class="lx" ${ui.lxOpen === b.id ? 'open' : ''} data-id="${esc(b.id)}">
       <summary>${icon('plus')} Acessos extras do líder ${n ? `<span class="chip chip-ok">${n} liberado${n > 1 ? 's' : ''}</span>` : '<span class="chip chip-soft">nenhum</span>'}${tip('extras')}</summary>
       <label class="check"><input type="checkbox" data-change="leaderExtra" data-id="${esc(b.id)}" data-k="review" ${x.review ? 'checked' : ''}><span><b>Conferir e aprovar o checklist de toda a equipe</b><small>Aprova ou recusa as provas dos colegas (nunca as próprias).</small></span></label>
       <label class="check"><input type="checkbox" data-change="leaderExtra" data-id="${esc(b.id)}" data-k="disc" ${x.disc ? 'checked' : ''}><span><b>Fiscalização (controle disciplinar)</b><small>Vê a página Fiscalização e registra atrasos, faltas e ocorrências da equipe (nunca as próprias). Apagar continua só com o dono.</small></span></label>
+      <label class="check"><input type="checkbox" data-change="leaderExtra" data-id="${esc(b.id)}" data-k="bonus" ${x.bonus ? 'checked' : ''}><span><b>Bônus</b><small>Vê os bônus de toda a equipe e lança bônus em dinheiro ou presentes para os colegas (nunca para si mesmo).</small></span></label>
       <p class="lx-sub">Lançar à mão os números de toda a equipe, só nestes indicadores:</p>
       <div class="lx-grid">${EXTRA_FIELDS().map(f => `<label class="check"><input type="checkbox" data-change="leaderExtra" data-id="${esc(b.id)}" data-k="f:${f.key}" ${x.fields.includes(f.key) ? 'checked' : ''}><span>${esc(f.label)}</span></label>`).join('')}</div>
     </details>`;
@@ -755,6 +756,7 @@
       { r: 'performance', t: 'Minha performance', i: 'chart' },
       { r: 'lancamentos', t: 'Lançamentos', i: 'wallet', g: 1, a: 1 },
       { r: 'avisos', t: 'Avisos e alterações', i: 'bell' },
+      { r: 'bonus', t: 'Bônus', i: 'diamond' },
     ] },
     { group: 'Apresentações', items: [
       { r: 'apresentacao', t: 'Tela da loja', i: 'monitor', g: 1 },
@@ -803,7 +805,7 @@
       const am = isAreaMgr(user), hg = hasGrants(user);
       const lf = lanAny();
       const items = gr.items.filter(it => (!it.g || g || (it.a && am) || (it.r === 'lancamentos' && lf) || (it.r === 'fiscalizacao' && discOk(user))) && (!it.rt || rtAuds(user).length) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
-        <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && (g || hg) ? (g || accessOf(user.barberId) !== 'profissional' ? 'Performance da empresa' : 'Performance da área') : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}${it.r === 'avisos' && avUnseen() ? `<span class="nav-new" aria-label="${avUnseen()} avisos novos">${avUnseen()}</span>` : ''}${it.r === 'atualizacoes' && updUnseen() ? `<span class="nav-new" aria-label="${updUnseen()} novidades">${updUnseen()}</span>` : ''}</a>`).join('');
+        <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && (g || hg) ? (g || accessOf(user.barberId) !== 'profissional' ? 'Performance da empresa' : 'Performance da área') : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}${it.r === 'avisos' && avUnseen() ? `<span class="nav-new" aria-label="${avUnseen()} avisos novos">${avUnseen()}</span>` : ''}${it.r === 'bonus' && bonusUnseen() ? `<span class="nav-new" aria-label="${bonusUnseen()} bônus novos">${bonusUnseen()}</span>` : ''}${it.r === 'atualizacoes' && updUnseen() ? `<span class="nav-new" aria-label="${updUnseen()} novidades">${updUnseen()}</span>` : ''}</a>`).join('');
       if (!gr.group || !items.trim()) return gr.group ? '' : items;
       // Conjunto que pode ser minimizado (fica lembrado neste aparelho); o conjunto da tela aberta aparece sempre.
       const shut = navShut().includes(gr.group) && !gr.items.some(it => it.r === route);
@@ -1822,6 +1824,72 @@
       ${ui.csvMsg ? `<div class="pm-note">${icon('help')}<span>${esc(ui.csvMsg)}</span></div>` : ''}
     </section>`;
 
+  // ---------- Bônus (dinheiro ou presente dado ao profissional) ----------
+  const bonusDraftOf = f => f ? { b: f.elements.b.value, date: f.elements.date.value, tipo: f.elements.tipo.value, valor: f.elements.valor ? f.elements.valor.value : '', item: f.elements.qual ? f.elements.qual.value : '', motivo: f.elements.motivo.value } : {};
+  // Tipo: 'dinheiro' (financeiro) ou 'outro' (presente, ingresso, folga…). Registros antigos 'presente' contam como outro.
+  const bnOutro = v => v.tipo !== 'dinheiro';
+  const bnItem = v => v.item || (bnOutro(v) ? v.desc : '') || 'Bônus';
+  const bnMotivo = v => v.motivo || (bnOutro(v) ? '' : v.desc) || '';
+  // Lança: o dono, a gestão (de área ou nível Gestor) e o líder com o acesso extra "Bônus" (nunca para si).
+  // Vê: o profissional, só os dele; quem lança, os de todos que pode lançar.
+  const BONUS_ROLETA = [10, 20, 30, 40, 50];
+  const bonusAll = () => Array.isArray(state.bonusRecs) ? state.bonusRecs : [];
+  const bonusAdmin = u => !!u && (isGestor(u) || isAreaMgr(u) || extrasOf(u.barberId).bonus);
+  const bonusCanFor = (u, bid) => !!u && (isGestor(u) || (bid !== u.barberId && (extrasOf(u.barberId).bonus || canEditB(bid))));
+  const bonusPeople = u => state.barbers.filter(b => b.active !== false && bonusCanFor(u, b.id));
+  const bonusVisible = u => bonusAll().filter(v => isGestor(u) || v.barberId === u.barberId || bonusCanFor(u, v.barberId));
+  const bonusSeenKey = () => 'bonusSeen.' + ((currentUser() || {}).id || '');
+  const bonusUnseen = () => { const u = currentUser(); if (!u || isGestor(u) || !u.barberId) return 0; const seen = DB.pref.get(bonusSeenKey(), ''); return bonusAll().filter(v => v.barberId === u.barberId && String(v.at || v.date) > seen).length; };
+  function pageBonus(user) {
+    const admin = bonusAdmin(user), ym = ui.bonusYm || curYm(), all = bonusVisible(user);
+    if (!admin && user.barberId) { const mine = all.filter(v => v.barberId === user.barberId); if (mine.length) setTimeout(() => DB.pref.set(bonusSeenKey(), mine.map(v => String(v.at || v.date)).sort().pop()), 1200); }
+    const months = [...new Set([curYm(), ...all.map(v => v.date.slice(0, 7))])].sort().reverse();
+    const list = all.filter(v => v.date.slice(0, 7) === ym && (!ui.bonusB || v.barberId === ui.bonusB)).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : String(b.at || '').localeCompare(String(a.at || ''))));
+    const name = id => (barberById(id) || { name: 'Profissional removido' }).name;
+    const sumM = l => l.filter(v => !bnOutro(v)).reduce((a, v) => a + (Number(v.valor) || 0), 0);
+    const monthAll = all.filter(v => v.date.slice(0, 7) === ym);
+    const yearMine = user.barberId ? all.filter(v => v.barberId === user.barberId && v.date.slice(0, 4) === ym.slice(0, 4)) : [];
+    const people = bonusPeople(user), d = ui.bonusDraft || {};
+    const head = `<section class="section card bn-hero">
+      <div class="bn-top"><h2 class="section-title">${icon('diamond')} Bônus</h2>
+        <select class="input input-sm" data-change="bonusYm" aria-label="Mês">${months.map(m => `<option value="${m}" ${m === ym ? 'selected' : ''}>${esc(ymLabel(m))}</option>`).join('')}</select></div>
+      <p class="section-note">${admin ? 'Registre os bônus da equipe: financeiro (ex.: roleta ao vender 3 produtos) ou outro tipo (presente, ingresso, folga…), sempre com a referência de por que ganhou. Cada profissional vê só os dele.' : 'Os bônus que você ganhou e por quê. Continue assim!'}</p>
+      ${admin ? '' : `<div class="bn-stats"><div><small>Em ${esc(ymLabel(ym))}</small><b class="num">${money2(sumM(monthAll))}</b><span>${monthAll.filter(bnOutro).length} outro(s) bônus</span></div>
+        <div><small>No ano</small><b class="num">${money2(sumM(yearMine))}</b><span>${yearMine.length} bônus</span></div></div>`}
+    </section>`;
+    const sum = admin ? (() => {
+      const by = {}; monthAll.forEach(v => { const o = by[v.barberId] || (by[v.barberId] = { r: 0, p: 0, n: 0 }); o.n++; if (bnOutro(v)) o.p++; else o.r += Number(v.valor) || 0; });
+      const rows = Object.entries(by).sort((a, b) => b[1].r - a[1].r);
+      return rows.length ? `<section class="section"><div class="bn-sum">${rows.map(([id, o]) => `<button class="card bn-sumc ${ui.bonusB === id ? 'on' : ''}" data-action="bonusPick" data-b="${esc(id)}">${avatar(barberById(id) || { name: name(id) }, 36)}<span><b>${esc(name(id).split(' ')[0])}</b><small class="num">${money2(o.r)}${o.p ? ` · ${o.p} outro(s)` : ''}</small></span></button>`).join('')}</div>
+        <p class="muted bn-total">Total da equipe no mês: <b class="num">${money2(sumM(monthAll))}</b>${monthAll.some(bnOutro) ? ` e ${monthAll.filter(bnOutro).length} outro(s) bônus` : ''}.${ui.bonusB ? ' <button class="link-btn" data-action="bonusPick" data-b="">Ver todos</button>' : ''}</p></section>` : '';
+    })() : '';
+    const form = admin && people.length ? `<section class="section card">
+      <h2 class="section-title">${icon('plus')} Registrar bônus</h2>
+      <form class="form" data-form="bonus" novalidate>
+        <div class="grid-2">
+          <label class="field"><span>Profissional *</span><select class="input" name="b"><option value="">Escolha</option>${people.map(b => `<option value="${esc(b.id)}" ${d.b === b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>
+          <label class="field"><span>Data</span><input class="input" type="date" name="date" value="${esc(d.date || todayIso())}" max="${todayIso()}"></label>
+        </div>
+        <label class="field"><span>Tipo de bônus *</span><select class="input" name="tipo" data-change="bonusTipoSel">
+          <option value="dinheiro" ${(d.tipo || 'dinheiro') === 'dinheiro' ? 'selected' : ''}>Bônus financeiro (R$)</option>
+          <option value="outro" ${(d.tipo || 'dinheiro') !== 'dinheiro' ? 'selected' : ''}>Outro tipo de bônus</option></select></label>
+        ${(d.tipo || 'dinheiro') === 'dinheiro'
+          ? `<label class="field"><span>Valor (R$) *</span><input class="input num" name="valor" type="number" inputmode="decimal" min="0" step="0.01" value="${esc(d.valor ?? '')}" placeholder="Ex.: 30"></label>
+             <div class="bn-roleta"><span class="muted">Atalho da roleta (venda de 3 produtos):</span>${BONUS_ROLETA.map(v => `<button type="button" class="btn btn-sm ${Number(d.valor) === v && d.roleta ? 'btn-primary' : ''}" data-action="bonusRoleta" data-v="${v}">R$ ${v}</button>`).join('')}</div>`
+          : `<label class="field"><span>Qual é o bônus *</span><input class="input" name="qual" maxlength="120" value="${esc(d.item || '')}" placeholder="Ex.: 2 ingressos VIP no cinema"></label>`}
+        <label class="field"><span>Referência: por que ganhou *</span><input class="input" name="motivo" maxlength="160" value="${esc(d.motivo || '')}" placeholder="Ex.: Roleta – venda de 3 produtos"></label>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('check')} Registrar bônus</button></div>
+      </form></section>` : '';
+    const rows = list.length ? `<ul class="bn-list">${list.map(v => { const del = bonusCanFor(user, v.barberId) && (isGestor(user) || v.byUser === user.id); return `<li class="card bn-item ${bnOutro(v) ? 'is-gift' : ''}">
+        <span class="bn-ic">${icon(bnOutro(v) ? 'gift' : 'wallet')}</span>
+        <div class="bn-body"><b>${bnOutro(v) ? esc(bnItem(v)) : money2(Number(v.valor) || 0)}</b>
+          ${bnMotivo(v) ? `<span class="bn-ref">${esc(bnMotivo(v))}</span>` : ''}
+          <small>${admin ? esc(name(v.barberId)) + ' · ' : ''}${esc(dateBR(v.date))}${admin && v.by ? ' · lançado por ' + esc(v.by) : ''}</small></div>
+        ${del ? `<button class="btn btn-sm ${ui.confirm === 'bn' + v.id ? 'btn-danger' : ''}" data-action="bonusDel" data-id="${esc(v.id)}" aria-label="Apagar bônus">${icon('trash')}${ui.confirm === 'bn' + v.id ? ' Confirmar' : ''}</button>` : ''}
+      </li>`; }).join('')}</ul>` : `<div class="card muted">${admin ? 'Nenhum bônus registrado neste mês.' : 'Nenhum bônus neste mês ainda.'}</div>`;
+    return head + sum + form + `<section class="section"><h2 class="section-title">${admin ? 'Bônus do mês' : 'Seus bônus'}</h2>${rows}</section>`;
+  }
   // ---------- Fiscalização (controle disciplinar) ----------
   const DISC_SEV = { ocorrencia: ['Ocorrência', 'sev-oc'], advertencia: ['Advertência', 'sev-adv'], reincidencia: ['Reincidência', 'sev-rei'], penalidade: ['Penalidade', 'sev-sus'] };
   const DISC_KIND = { atraso: ['Atraso', 'k-atraso'], falta: ['Falta', 'k-falta'], atendimento: ['Atendimento', 'k-atend'], higiene: ['Higiene', 'k-hig'], uniforme: ['Uniforme', 'k-unif'], organizacao: ['Organização', 'k-org'], comportamento: ['Comportamento', 'k-comp'], outro: ['Outro', 'k-outro'] };
@@ -2141,7 +2209,7 @@
     pop: () => ['Checklist Agenda Cheia', 'Itens e pontos do checklist: ' + listTxt((GB.popCfgOf(state).items || []).map(x => `${x.title} (${x.pts} pt${x.pts == 1 ? '' : 's'})`)) + '.'],
     pops: () => ['POPs · Guia do Sucesso', 'Os POPs foram atualizados. Confira em POPs · Guia do Sucesso: ' + popsList().map(x => x.title || x.t).filter(Boolean).slice(0, 8).join(', ') + '.'],
     access: id => { const a = ACCESS.find(x => x[0] === accessOf(id)); return ['Seu nível de acesso', `Agora você tem acesso de ${a[1]}: ${a[2]}`]; },
-    extras: id => { const x = extrasOf(id); const t = [x.review && 'conferir e aprovar o checklist da equipe', x.disc && 'registrar ocorrências na Fiscalização', x.fields.length && 'lançar os números da equipe em ' + x.fields.map(lbl).join(', ')].filter(Boolean); return ['Seus acessos extras', t.length ? 'Agora você pode: ' + t.join('; ') + '.' : 'Seus acessos extras de líder foram retirados.']; },
+    extras: id => { const x = extrasOf(id); const t = [x.review && 'conferir e aprovar o checklist da equipe', x.disc && 'registrar ocorrências na Fiscalização', x.bonus && 'lançar e ver os bônus da equipe', x.fields.length && 'lançar os números da equipe em ' + x.fields.map(lbl).join(', ')].filter(Boolean); return ['Seus acessos extras', t.length ? 'Agora você pode: ' + t.join('; ') + '.' : 'Seus acessos extras de líder foram retirados.']; },
     goals: id => { const g = (state.goals?.byBarber || {})[id] || {}, ks = GB.visibleInds(state).filter(i => isNum(g[i.key])); return ['Suas metas individuais', ks.length ? 'Suas metas do mês: ' + listTxt(GB.visibleInds(state).map(i => `${i.label} ${fmtGoal(i, GB.goalFor(state, id, i.key))}`)) + '.' : 'Suas metas voltaram a ser as metas da equipe.']; },
     comp: id => { const v = comCfg().pctBy[id] || 0; return ['Sua comissão', v > 0 ? `Sua comissão agora é de ${nf1.format(v)}% do faturamento.` : 'Sua comissão volta a seguir a regra geral da equipe.']; },
   };
@@ -2587,7 +2655,7 @@
   }
   // Histórico do mês: o que entrou à mão em cada dia.
   function lanHistory(b, ym) {
-    const L = { servV: v => money0(v) + ' em serviços', prodV: v => money0(v) + ' em produtos', fat: v => money0(v), cli: v => nf0.format(v) + ' clientes', serv: v => nf0.format(v) + ' serviços', prod: v => nf0.format(v) + ' produtos', check: v => nf1.format(v) + ' pts checklist', planos: v => nf0.format(v) + ' planos' };
+    const L = { extra: v => nf0.format(v) + ' serviços extras', extraV: v => money0(v) + ' em serviços extras', servV: v => money0(v) + ' em serviços', prodV: v => money0(v) + ' em produtos', fat: v => money0(v), cli: v => nf0.format(v) + ' clientes', serv: v => nf0.format(v) + ' serviços', prod: v => nf0.format(v) + ' produtos', check: v => nf1.format(v) + ' pts checklist', planos: v => nf0.format(v) + ' planos' };
     const days = GB.manualEntries(state, b.id, ym).filter(e => GB.SUM_KEYS.some(k => isNum(e[k]) && Number(e[k]) !== 0)).sort((a, c) => c.date.localeCompare(a.date));
     if (!days.length) return '';
     return `<details class="lan-hist" ${ui.lanHistOpen ? 'open' : ''}><summary>Lançamentos por dia em ${esc(ymLabel(ym).replace(' de ', '/'))} (${days.length})</summary>
@@ -3585,6 +3653,22 @@ ${rows.length ? '' : emptyBarbers()}
     vals.forEach(x => { const row = f.querySelector(`.wp-row[data-k="${x.k}"]`); if (!row) return; const on = x.v > 0; row.classList.toggle('is-off', !on); const sw = row.querySelector('[data-change="wToggle"]'); if (sw) sw.checked = on;
       row.querySelector('[data-pct]').textContent = on && tot ? `vale ${Math.round(x.v / tot * 100)}% da nota` : 'não usado'; });
   }
+  // Indicadores e metas › Serviços extras: o dono marca quais serviços são tradicionais; o resto conta como extra.
+  function extraCard() {
+    const trad = new Set((state.extraTrad || []).map(GB.normSvc)), lim = iso(new Date(Date.now() - 120 * 864e5));
+    const names = new Map();
+    for (const e of state.entries || []) if (e.svc && e.date >= lim) for (const n of Object.keys(e.svc)) { const k = GB.normSvc(n); if (k && !names.has(k)) names.set(k, n); }
+    for (const n of state.extraTrad || []) { const k = GB.normSvc(n); if (k && !names.has(k)) names.set(k, n); }
+    const list = [...names.values()].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    const off = (state.hidden || []).includes('extra'), nT = list.filter(n => trad.has(GB.normSvc(n))).length;
+    return `<section class="section card xs-card">
+      <h2 class="section-title">${icon('sparkle')} Serviços extras</h2>
+      <p class="section-note">Conta os serviços além dos tradicionais (ex.: sobrancelha, pigmentação, hidratação). Marque abaixo os serviços <b>tradicionais</b>: tudo o que não estiver marcado conta como extra. ${off ? '<b>O indicador está desligado:</b> ligue na chave de "Serviços extras" acima para entrar na nota.' : ''}</p>
+      ${list.length ? `<p class="muted xs-count">${nT} de ${list.length} serviços marcados como tradicionais. Os outros ${list.length - nT} contam como extra.</p>
+        <div class="xs-list">${list.map(n => `<label class="check xs-item"><input type="checkbox" data-change="extraTrad" data-n="${esc(n)}" ${trad.has(GB.normSvc(n)) ? 'checked' : ''}><span><b>${esc(n)}</b><small>${trad.has(GB.normSvc(n)) ? 'Tradicional' : 'Extra'}</small></span></label>`).join('')}</div>`
+        : `<div class="pm-note">${icon('help')}<span>A lista de serviços aparece aqui sozinha quando a sincronização com a AppBarber enviar os serviços de cada comanda. Sem integração, lance o total de serviços extras do mês em Lançamentos.</span></div>`}
+    </section>`;
+  }
   // Indicadores e metas › Indicadores personalizados: o dono cria indicadores próprios (ex.: Avaliações no Google).
   function customIndCard() {
     const list = Array.isArray(state.customInds) ? state.customInds : [];
@@ -3636,7 +3720,7 @@ ${rows.length ? '' : emptyBarbers()}
             return `<div class="wp-row ${off ? 'is-off' : ''}" data-k="${i.key}">
               <label class="wp-sw" title="${off ? 'Ativar' : 'Desativar'} ${esc(i.label)}"><input type="checkbox" data-change="wToggle" data-k="${i.key}" ${off ? '' : 'checked'} aria-label="${esc(i.label)} ativo"><span aria-hidden="true"></span></label>
               <span class="wp-name">${esc(i.label)} ${i.custom ? '<span class="chip chip-soft wp-new">personalizado</span>' : tip(i.key)}</span>
-              ${i.key === 'serv' || i.key === 'prod' ? `<div class="wp-mode" role="radiogroup" aria-label="Como medir ${esc(i.label)}">${[['qtd', 'Quantidade'], ['valor', 'Valor em R$']].map(([m, l]) => `<button type="button" role="radio" aria-checked="${GB.indMode(i.key) === m}" class="${GB.indMode(i.key) === m ? 'on' : ''}" data-action="indMode" data-k="${i.key}" data-m="${m}">${l}</button>`).join('')}</div>` : ''}
+              ${i.key === 'serv' || i.key === 'prod' || i.key === 'extra' ? `<div class="wp-mode" role="radiogroup" aria-label="Como medir ${esc(i.label)}">${[['qtd', 'Quantidade'], ['valor', 'Valor em R$']].map(([m, l]) => `<button type="button" role="radio" aria-checked="${GB.indMode(i.key) === m}" class="${GB.indMode(i.key) === m ? 'on' : ''}" data-action="indMode" data-k="${i.key}" data-m="${m}">${l}</button>`).join('')}</div>` : ''}
               <select class="input input-sm wp-sel" name="p-${i.key}" data-change="wPrio" aria-label="Prioridade de ${esc(i.label)}">${W_PRIO.map(([v, l]) => `<option value="${v}" ${pr === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
               <span class="wp-pct num" data-pct>${off ? 'não usado' : `vale ${pct}% da nota`}</span>
             </div>`; }).join('')}</div>
@@ -3649,6 +3733,7 @@ ${rows.length ? '' : emptyBarbers()}
           <button class="btn" type="button" data-action="defaultWeights">Voltar aos pesos padrão</button></div>
         </form>
       </section>
+      ${extraCard()}
       ${customIndCard()}
       ${selfCard()}
       ${planCatalogCard()}
@@ -3740,7 +3825,8 @@ Content-Type: application/json</pre>
     horas_ocupadas: ['Horas em comandas finalizadas (para a taxa de ocupação)', 6.5],
     planos_mensais: ['Planos mensais vendidos no dia', 1], clientes_retorno: ['Clientes que já tinham vindo antes', 5],
     venda_produtos: ['Quantidade de produtos vendidos', 2], maior_comanda: ['Valor da maior comanda do dia', 180],
-    valor_servicos: ['Valor em R$ dos serviços do dia (usado quando o indicador Serviços é por valor)', 350], valor_produtos: ['Valor em R$ dos produtos do salão vendidos no dia, sem consumo de bar ou geladeira', 70],
+    valor_servicos: ['Valor em R$ dos serviços do dia (usado quando o indicador Serviços é por valor)', 350],
+    servicos_extras: ['Quantidade de serviços extras do dia (além dos tradicionais)', 3], valor_servicos_extras: ['Valor em R$ dos serviços extras do dia', 90], valor_produtos: ['Valor em R$ dos produtos do salão vendidos no dia, sem consumo de bar ou geladeira', 70],
   };
   function apiUrl() { return Cloud.enabled ? Cloud.apiUrl : location.origin + '/api/v1/lancamentos'; }
   function apiGuideText() {
@@ -4767,11 +4853,11 @@ Content-Type: application/json</pre>
   const accessOf = bid => (bid && (org().access || {})[bid]) || 'profissional';
   // Acessos extras que o dono pode dar a cada líder: conferir o checklist e lançar métricas específicas.
   function extrasOf(bid) {
-    if (accessOf(bid) !== 'lider') return { review: false, disc: false, fields: [] };
+    if (accessOf(bid) !== 'lider') return { review: false, disc: false, bonus: false, fields: [] };
     const e = (org().extras || {})[bid] || {};
-    return { review: !!e.review, disc: !!e.disc, fields: Array.isArray(e.fields) ? e.fields : [] };
+    return { review: !!e.review, disc: !!e.disc, bonus: !!e.bonus, fields: Array.isArray(e.fields) ? e.fields : [] };
   }
-  const myExtras = () => { const u = currentUser(); return u && !isGestor(u) ? extrasOf(u.barberId) : { review: false, disc: false, fields: [] }; };
+  const myExtras = () => { const u = currentUser(); return u && !isGestor(u) ? extrasOf(u.barberId) : { review: false, disc: false, bonus: false, fields: [] }; };
   // Fiscalização: dono, gestor de área ou líder com o acesso extra "Fiscalização".
   const discOk = u => !!u && (isGestor(u) || isAreaMgr(u) || (!isGestor(u) && extrasOf(u.barberId).disc));
   const EXTRA_FIELDS = () => GB.MONTH_FIELDS.filter(f => !f.calc && !GB.fieldOff(f.key) && !hidAll().includes(GB.FIELD_IND[f.key] || f.key));
@@ -5847,6 +5933,7 @@ Content-Type: application/json</pre>
     atualizacoes: { t: 'Atualizações', r: pageAtualizacoes, g: 1 },
     avisos: { t: 'Avisos e alterações', r: pageAvisos },
     fiscalizacao: { t: 'Fiscalização', r: pageFiscalizacao, g: 1, a: 1 },
+    bonus: { t: 'Bônus', r: pageBonus },
     comissoes: { t: 'Comissões e prêmios', r: pageComissoes, g: 1 },
     sonhos: { t: 'Sonhos', r: pageSonhos },
     sugestoes: { t: 'Sugestões de melhorias', r: pageSugestoes, g: 1 },
@@ -7356,9 +7443,17 @@ Content-Type: application/json</pre>
     },
     defaultOcup() { state.ocupCfg = null; save(); toast('Regra de ocupação padrão restaurada.'); render(); },
     defaultGoals() { state.goals = { ...(state.goals || {}), team: { ...GB.DEFAULT_GOALS } }; save(); toast('Metas padrão restauradas.'); render(); },
+
+    bonusRoleta(el) { const f = el.form; ui.bonusDraft = { ...(ui.bonusDraft || {}), ...bonusDraftOf(f), tipo: 'dinheiro', valor: Number(el.dataset.v), motivo: 'Roleta – venda de 3 produtos', roleta: true }; render(); },
+    bonusPick(el) { ui.bonusB = el.dataset.b && ui.bonusB !== el.dataset.b ? el.dataset.b : null; render(); },
+    bonusDel(el) {
+      const u = currentUser(), v = bonusAll().find(x => x.id === el.dataset.id); if (!v || !bonusCanFor(u, v.barberId) || !(isGestor(u) || v.byUser === u.id)) return;
+      if (ui.confirm !== 'bn' + v.id) { ui.confirm = 'bn' + v.id; render(); return; }
+      ui.confirm = null; state.bonusRecs = bonusAll().filter(x => x.id !== v.id); save(); toast('Bônus apagado.'); render();
+    },
     indMode(el) {
       const k = el.dataset.k, m = el.dataset.m === 'valor' ? 'valor' : 'qtd';
-      if (!isGestor(currentUser()) || !['serv', 'prod'].includes(k) || GB.indMode(k) === m) return;
+      if (!isGestor(currentUser()) || !['serv', 'prod', 'extra'].includes(k) || GB.indMode(k) === m) return;
       state.indMode = { ...(state.indMode || {}), [k]: m };
       syncInds();
       // A meta muda de unidade (quantidade ↔ R$): volta para a sugestão do novo modo; metas individuais desse indicador saem.
@@ -7651,6 +7746,19 @@ Content-Type: application/json</pre>
       save();
       toast(`${U(name)} adicionado. Agora envie o convite.`); render();
     },
+    bonus(f) {
+      const u = currentUser(), bid = val(f, 'b'), tipo = val(f, 'tipo') === 'outro' ? 'outro' : 'dinheiro';
+      const valor = tipo === 'dinheiro' ? Number(String(val(f, 'valor')).replace(',', '.')) : null, item = tipo === 'outro' ? val(f, 'qual').trim() : '', motivo = val(f, 'motivo').trim(), date = val(f, 'date') || todayIso();
+      if (!bid) return setMsg(f, 'Escolha o profissional.');
+      if (!bonusCanFor(u, bid)) return setMsg(f, 'Você não pode lançar bônus para este profissional.');
+      if (tipo === 'dinheiro' && !(valor > 0)) return setMsg(f, 'Informe o valor do bônus em R$.');
+      if (tipo === 'outro' && item.length < 2) return setMsg(f, 'Escreva qual é o bônus (ex.: 2 ingressos VIP no cinema).');
+      if (motivo.length < 2) return setMsg(f, 'Escreva a referência: por que ele ganhou o bônus.');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > todayIso()) return setMsg(f, 'Data inválida.');
+      state.bonusRecs = [...bonusAll(), { id: uid('bn_'), barberId: bid, date, tipo, valor: valor > 0 ? Math.round(valor * 100) / 100 : null, item, motivo, by: u.name || 'Gestão', byUser: u.id, at: new Date().toISOString() }];
+      ui.bonusDraft = { tipo }; ui.bonusYm = date.slice(0, 7); save();
+      toast(`Bônus registrado para ${((barberById(bid) || {}).name || '').split(' ')[0]}.`); render();
+    },
     customInd(f) {
       const label = val(f, 'label').replace(/\s+/g, ' ').trim(), goal = Number(String(val(f, 'goal')).replace(',', '.')), prio = Number(val(f, 'prio')) || 2;
       const list = Array.isArray(state.customInds) ? state.customInds : [];
@@ -7872,6 +7980,14 @@ Content-Type: application/json</pre>
       const w = wFromPrio(pr); INDICATORS.forEach(i => { f.elements[i.key].value = w[i.key]; }); wRefresh(f);
     },
     wNum(el) { wRefresh(el.form); },
+    bonusYm(el) { ui.bonusYm = el.value; render(); },
+    extraTrad(el) {
+      if (!isGestor(currentUser())) return;
+      const n = el.dataset.n, k = GB.normSvc(n), cur = (state.extraTrad || []).filter(x => GB.normSvc(x) !== k);
+      state.extraTrad = el.checked ? [...cur, n] : cur;
+      rkCache = {}; save(); toast(el.checked ? `"${n}" agora é tradicional (não conta como extra).` : `"${n}" agora conta como serviço extra.`); render();
+    },
+    bonusTipoSel(el) { ui.bonusDraft = { ...(ui.bonusDraft || {}), ...bonusDraftOf(el.form), tipo: el.value === 'outro' ? 'outro' : 'dinheiro', roleta: false }; render(); },
     wToggle(el) { // liga/desliga o indicador e salva na hora
       const f = el.form, sel = f.elements['p-' + el.dataset.k]; if (!sel) return;
       if (el.checked) sel.value = sel.dataset.prev && sel.dataset.prev !== '0' ? sel.dataset.prev : '2'; else { sel.dataset.prev = sel.value; sel.value = '0'; }
@@ -7961,6 +8077,7 @@ Content-Type: application/json</pre>
       const x = o.extras[id] = { review: false, fields: [], ...(o.extras[id] || {}) };
       if (k === 'review') x.review = el.checked;
       else if (k === 'disc') x.disc = el.checked;
+      else if (k === 'bonus') x.bonus = el.checked;
       else { const f = k.slice(2); x.fields = el.checked ? [...new Set([...x.fields, f])] : x.fields.filter(v => v !== f); }
       ui.lxOpen = id; save(); toast('Acesso do líder atualizado.'); render();
     },
