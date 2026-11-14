@@ -225,7 +225,7 @@
     return `<section class="pl-box cm-box">
       <div class="pl-head"><h3>${icon('wallet')} Maior comanda do mês</h3>
         ${open ? '' : `<button type="button" class="btn btn-sm btn-primary" data-action="cmdForm" data-id="${esc(b.id)}">${icon('camera')} Registrar comanda</button>`}</div>
-      <p class="section-note">A sua maior até agora: <b>${now ? money2(now) : '—'}</b>${leader && top.max ? ` · maior da equipe: <b>${money2(top.max)}</b>${leader.id === b.id ? ' (é sua!)' : ` (${esc(first(leader.name))})`}` : ''}. Para valer, registre o valor com a <b>foto da comanda</b>. Se alguém fizer uma maior, passa a ser o destaque.</p>
+      <p class="section-note">A sua maior até agora: <b>${now ? money2(now) : '—'}</b>${leader && top.max ? ` · maior da equipe: <b>${money2(top.max)}</b>${leader.id === b.id ? ' (é sua!)' : ` (${esc(first(leader.name))})`}` : ''}. Para valer, registre o valor com a <b>foto da comanda</b>. Se alguém fizer uma maior, passa a ser o destaque. <b>Comanda de plano mensal não vale.</b></p>
       ${open ? `<form class="form pl-form" data-form="cmdRec" data-id="${esc(b.id)}" novalidate>
         <label class="field"><span>Valor da comanda (R$) *</span><input class="input num" name="valor" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Maior que ${now ? money2(now) : 'R$ 0,00'}"></label>
         <label class="field"><span>Foto da comanda *</span><input class="input" name="foto" type="file" accept="image/*" capture="environment"></label>
