@@ -4,6 +4,7 @@
 window.GB_UPDATES = [
   { id: '2026-11-14-comanda-plano', date: '2026-11-14', title: 'Maior comanda sem planos mensais', items: [
     ['melhoria', 'Comandas de plano mensal (venda do plano ou atendimento pago pelo plano) não contam mais como maior comanda do mês. A sincronização AppBarber reconhece pelo nome (plano, assinatura, clube, mensalidade) e pelos dados de pagamento.'],
+    ['melhoria', 'A venda de planos mensais não conta mais como produto vendido (nem em quantidade, nem em valor). Continua no faturamento.'],
   ] },
   { id: '2026-11-13-so-finalizadas', date: '2026-11-13', title: 'AppBarber: só comandas finalizadas', items: [
     ['melhoria', 'A sincronização com a AppBarber passa a contar só as comandas finalizadas, com o valor real cobrado, igual ao Dashboard Profissional da AppBarber. Sem valor provisório do agendamento.'],

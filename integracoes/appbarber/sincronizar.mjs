@@ -222,7 +222,7 @@ async function main() {
         if (!it.p) continue;
         if (it.prod && consumo(it)) continue; // geladeira/bar: não é faturamento do profissional
         const x = add(nomeDe(it.p), d);
-        x.fat += it.v; if (it.prod) { x.prod += it.q; x.pv += it.v; } else { x.serv += it.q; x.sv += it.v; }
+        x.fat += it.v; if (it.pl) { /* plano mensal: entra no faturamento, mas não como produto nem serviço */ } else if (it.prod) { x.prod += it.q; x.pv += it.v; } else { x.serv += it.q; x.sv += it.v; }
         if (!it.prod && it.ini != null && it.fim > it.ini && it.fim - it.ini <= 600) x.int.push([it.ini, it.fim]);
         x.cli.add(inv.cli); if (!inv.pl) x.com.set(c, (x.com.get(c) || 0) + it.v);
       }
@@ -291,13 +291,16 @@ async function main() {
   const PLANO = /\b(planos?|assinatura|assinante|clube|mensalidade|recorr[eê]ncia)\b/i;
   const codPlano = new Set((cfg.planos_codigos || []).map(String));
   const vivo = (v) => v !== null && v !== undefined && v !== "" && v !== 0 && v !== "0" && v !== false;
+  // Item que é a venda do plano (ou pago pelo plano): não conta como produto vendido.
+  function itemPlano(it) {
+    if (codPlano.has(String(it.product_code ?? "")) || codPlano.has(String(it.service_code ?? ""))) return true;
+    const nome = [it.product_description, it.service_description, it.item_description, it.description, it.service_name, it.product_name, it.product_code && cat.p && cat.p[String(it.product_code)] && cat.p[String(it.product_code)].n].filter(Boolean).join(" ");
+    if (PLANO.test(nome)) return true;
+    for (const [k, v] of Object.entries(it)) if (/plan|signature|subscri|assinat/i.test(k) && vivo(v)) return true;
+    return false;
+  }
   function ehPlano(inv) {
-    for (const it of inv.items || []) {
-      if (codPlano.has(String(it.product_code ?? "")) || codPlano.has(String(it.service_code ?? ""))) return true;
-      const nome = [it.product_description, it.service_description, it.item_description, it.description, it.service_name, it.product_name, it.product_code && cat.p && cat.p[String(it.product_code)] && cat.p[String(it.product_code)].n].filter(Boolean).join(" ");
-      if (PLANO.test(nome)) return true;
-      for (const [k, v] of Object.entries(it)) if (/plan|signature|subscri|assinat/i.test(k) && vivo(v)) return true;
-    }
+    if ((inv.items || []).some(itemPlano)) return true;
     for (const [k, v] of Object.entries(inv)) {
       if (k === "items") continue;
       if (/plan|signature|subscri|assinat/i.test(k) && vivo(v)) return true;
@@ -336,7 +339,7 @@ async function main() {
     const itensV = (inv.items || []).filter((it) => Number(it.product_is_tip) !== 1 && Number(it.product_is_cashback) !== 1);
     cache[c] = {
       d, cli: String(inv.person_code || inv.person_name || c), final: pago || !!antiga, lida: Date.now(), h: 3, pl: ehPlano(inv) || undefined,
-      itens: itensV.map((it) => ({
+      itens: itensV.map((it) => ({ pl: itemPlano(it) || undefined,
         p: String(it.employee_name || "").trim(), ag: it.scheduling_code ? String(it.scheduling_code) : undefined, ini: minutos(it.scheduling_start) ?? undefined, fim: minutos(it.scheduling_end) ?? undefined, v: num(it.item_value), q: Number(it.item_quantity) || 1, prod: !!it.product_code && !it.service_code, pc: it.product_code ? String(it.product_code) : undefined, nm: it.product_description ? String(it.product_description).slice(0, 60) : undefined,
       })),
     };
@@ -372,8 +375,8 @@ async function main() {
         const inv = cache[c]; if (!inv || !inv.itens || !inv.final || !inv.d || inv.d < mes) continue; lidasMes++;
         for (const it of inv.itens) {
           if (!it.p) continue;
-          const nome = NOMES[it.p] || it.p, t = soma.get(nome) || { serv: 0, prod: 0, cons: 0 };
-          if (!it.prod) t.serv += it.v; else if (consumo(it)) t.cons += it.v; else t.prod += it.v;
+          const nome = NOMES[it.p] || it.p, t = soma.get(nome) || { serv: 0, prod: 0, cons: 0, pl: 0 };
+          if (it.pl) t.pl += it.v; else if (!it.prod) t.serv += it.v; else if (consumo(it)) t.cons += it.v; else t.prod += it.v;
           soma.set(nome, t);
         }
       }
@@ -381,7 +384,7 @@ async function main() {
         const R$ = (v) => "R$ " + v.toFixed(2).replace(".", ",");
         console.log(`\n  Conferência do mês (${lidasMes} comandas lidas; compare com o Dashboard Profissional da AppBarber):`);
         for (const [n, t] of [...soma].sort((a, b) => b[1].serv + b[1].prod - (a[1].serv + a[1].prod))) {
-          console.log(`   - ${n}: serviços ${R$(t.serv)} + produtos ${R$(t.prod)} = ${R$(t.serv + t.prod)} | consumo geladeira ${R$(t.cons)} | com consumo ${R$(t.serv + t.prod + t.cons)}`);
+          console.log(`   - ${n}: serviços ${R$(t.serv)} + produtos ${R$(t.prod)}${t.pl ? ` + planos ${R$(t.pl)}` : ""} = ${R$(t.serv + t.prod + t.pl)} | consumo geladeira ${R$(t.cons)} | com consumo ${R$(t.serv + t.prod + t.pl + t.cons)}`);
         }
       }
     }
