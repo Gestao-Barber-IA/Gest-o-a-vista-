@@ -313,7 +313,7 @@
         { id: 'public', title: '3 Publicações com o cliente', desc: 'Self ou espelho junto com cliente e marcando @', type: 'count', target: 3, pts: 3 },
         { id: 'google', title: '4 Avaliações no Google', desc: 'Peça e conquiste 4 avaliações de clientes no Google', type: 'count', target: 4, pts: 3 },
         { id: 'estrat', title: 'Stories Estratégico', desc: 'postar às 8h30, 12h, 17h30', type: 'count', target: 3, pts: 2 },
-        { id: 'extra', title: 'EXTRA', desc: 'Pró atividade', type: 'count', target: 5, pts: 3 },
+        { id: 'extra', title: 'Pró Atividade', desc: 'Extra', type: 'count', target: 5, pts: 3 },
         { id: 'chegada', title: 'Horário de chegada', desc: 'Pontualidade', type: 'check', target: 1, pts: 3 },
       ],
       levels: [
