@@ -1825,7 +1825,11 @@
     </section>`;
 
   // ---------- Bônus (dinheiro ou presente dado ao profissional) ----------
-  const bonusDraftOf = f => f ? { b: f.elements.b.value, date: f.elements.date.value, valor: f.elements.valor.value, desc: f.elements.desc.value } : {};
+  const bonusDraftOf = f => f ? { b: f.elements.b.value, date: f.elements.date.value, tipo: f.elements.tipo.value, valor: f.elements.valor ? f.elements.valor.value : '', item: f.elements.qual ? f.elements.qual.value : '', motivo: f.elements.motivo.value } : {};
+  // Tipo: 'dinheiro' (financeiro) ou 'outro' (presente, ingresso, folga…). Registros antigos 'presente' contam como outro.
+  const bnOutro = v => v.tipo !== 'dinheiro';
+  const bnItem = v => v.item || (bnOutro(v) ? v.desc : '') || 'Bônus';
+  const bnMotivo = v => v.motivo || (bnOutro(v) ? '' : v.desc) || '';
   // Lança: o dono, a gestão (de área ou nível Gestor) e o líder com o acesso extra "Bônus" (nunca para si).
   // Vê: o profissional, só os dele; quem lança, os de todos que pode lançar.
   const BONUS_ROLETA = [10, 20, 30, 40, 50];
@@ -1842,22 +1846,22 @@
     const months = [...new Set([curYm(), ...all.map(v => v.date.slice(0, 7))])].sort().reverse();
     const list = all.filter(v => v.date.slice(0, 7) === ym && (!ui.bonusB || v.barberId === ui.bonusB)).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : String(b.at || '').localeCompare(String(a.at || ''))));
     const name = id => (barberById(id) || { name: 'Profissional removido' }).name;
-    const sumM = l => l.filter(v => v.tipo !== 'presente').reduce((a, v) => a + (Number(v.valor) || 0), 0);
+    const sumM = l => l.filter(v => !bnOutro(v)).reduce((a, v) => a + (Number(v.valor) || 0), 0);
     const monthAll = all.filter(v => v.date.slice(0, 7) === ym);
     const yearMine = user.barberId ? all.filter(v => v.barberId === user.barberId && v.date.slice(0, 4) === ym.slice(0, 4)) : [];
     const people = bonusPeople(user), d = ui.bonusDraft || {};
     const head = `<section class="section card bn-hero">
       <div class="bn-top"><h2 class="section-title">${icon('diamond')} Bônus</h2>
         <select class="input input-sm" data-change="bonusYm" aria-label="Mês">${months.map(m => `<option value="${m}" ${m === ym ? 'selected' : ''}>${esc(ymLabel(m))}</option>`).join('')}</select></div>
-      <p class="section-note">${admin ? 'Registre os bônus em dinheiro (ex.: roleta ao vender 3 produtos) e os presentes dados à equipe. Cada profissional vê só os dele.' : 'Os bônus e presentes que você ganhou. Continue assim!'}</p>
-      ${admin ? '' : `<div class="bn-stats"><div><small>Em ${esc(ymLabel(ym))}</small><b class="num">${money2(sumM(monthAll))}</b><span>${monthAll.filter(v => v.tipo === 'presente').length} presente(s)</span></div>
+      <p class="section-note">${admin ? 'Registre os bônus da equipe: financeiro (ex.: roleta ao vender 3 produtos) ou outro tipo (presente, ingresso, folga…), sempre com a referência de por que ganhou. Cada profissional vê só os dele.' : 'Os bônus que você ganhou e por quê. Continue assim!'}</p>
+      ${admin ? '' : `<div class="bn-stats"><div><small>Em ${esc(ymLabel(ym))}</small><b class="num">${money2(sumM(monthAll))}</b><span>${monthAll.filter(bnOutro).length} outro(s) bônus</span></div>
         <div><small>No ano</small><b class="num">${money2(sumM(yearMine))}</b><span>${yearMine.length} bônus</span></div></div>`}
     </section>`;
     const sum = admin ? (() => {
-      const by = {}; monthAll.forEach(v => { const o = by[v.barberId] || (by[v.barberId] = { r: 0, p: 0, n: 0 }); o.n++; if (v.tipo === 'presente') o.p++; else o.r += Number(v.valor) || 0; });
+      const by = {}; monthAll.forEach(v => { const o = by[v.barberId] || (by[v.barberId] = { r: 0, p: 0, n: 0 }); o.n++; if (bnOutro(v)) o.p++; else o.r += Number(v.valor) || 0; });
       const rows = Object.entries(by).sort((a, b) => b[1].r - a[1].r);
-      return rows.length ? `<section class="section"><div class="bn-sum">${rows.map(([id, o]) => `<button class="card bn-sumc ${ui.bonusB === id ? 'on' : ''}" data-action="bonusPick" data-b="${esc(id)}">${avatar(barberById(id) || { name: name(id) }, 36)}<span><b>${esc(name(id).split(' ')[0])}</b><small class="num">${money2(o.r)}${o.p ? ` · ${o.p} presente(s)` : ''}</small></span></button>`).join('')}</div>
-        <p class="muted bn-total">Total da equipe no mês: <b class="num">${money2(sumM(monthAll))}</b>${monthAll.some(v => v.tipo === 'presente') ? ` e ${monthAll.filter(v => v.tipo === 'presente').length} presente(s)` : ''}.${ui.bonusB ? ' <button class="link-btn" data-action="bonusPick" data-b="">Ver todos</button>' : ''}</p></section>` : '';
+      return rows.length ? `<section class="section"><div class="bn-sum">${rows.map(([id, o]) => `<button class="card bn-sumc ${ui.bonusB === id ? 'on' : ''}" data-action="bonusPick" data-b="${esc(id)}">${avatar(barberById(id) || { name: name(id) }, 36)}<span><b>${esc(name(id).split(' ')[0])}</b><small class="num">${money2(o.r)}${o.p ? ` · ${o.p} outro(s)` : ''}</small></span></button>`).join('')}</div>
+        <p class="muted bn-total">Total da equipe no mês: <b class="num">${money2(sumM(monthAll))}</b>${monthAll.some(bnOutro) ? ` e ${monthAll.filter(bnOutro).length} outro(s) bônus` : ''}.${ui.bonusB ? ' <button class="link-btn" data-action="bonusPick" data-b="">Ver todos</button>' : ''}</p></section>` : '';
     })() : '';
     const form = admin && people.length ? `<section class="section card">
       <h2 class="section-title">${icon('plus')} Registrar bônus</h2>
@@ -1866,19 +1870,22 @@
           <label class="field"><span>Profissional *</span><select class="input" name="b"><option value="">Escolha</option>${people.map(b => `<option value="${esc(b.id)}" ${d.b === b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>
           <label class="field"><span>Data</span><input class="input" type="date" name="date" value="${esc(d.date || todayIso())}" max="${todayIso()}"></label>
         </div>
-        <div class="bn-tipo" role="radiogroup" aria-label="Tipo de bônus">${[['dinheiro', 'Dinheiro (R$)', 'wallet'], ['presente', 'Presente', 'gift']].map(([k, l, i]) => `<button type="button" role="radio" aria-checked="${(d.tipo || 'dinheiro') === k}" class="${(d.tipo || 'dinheiro') === k ? 'on' : ''}" data-action="bonusTipo" data-t="${k}">${icon(i)} ${l}</button>`).join('')}</div>
-        ${(d.tipo || 'dinheiro') === 'dinheiro' ? `<div class="bn-roleta"><span class="muted">Roleta (venda de 3 produtos):</span>${BONUS_ROLETA.map(v => `<button type="button" class="btn btn-sm ${Number(d.valor) === v && d.roleta ? 'btn-primary' : ''}" data-action="bonusRoleta" data-v="${v}">R$ ${v}</button>`).join('')}</div>` : ''}
-        <div class="grid-2">
-          <label class="field"><span>${(d.tipo || 'dinheiro') === 'presente' ? 'Valor estimado (opcional)' : 'Valor (R$) *'}</span><input class="input num" name="valor" type="number" inputmode="decimal" min="0" step="0.01" value="${esc(d.valor ?? '')}" placeholder="Ex.: 30"></label>
-          <label class="field"><span>${(d.tipo || 'dinheiro') === 'presente' ? 'Qual presente *' : 'Motivo'}</span><input class="input" name="desc" maxlength="120" value="${esc(d.desc || '')}" placeholder="${(d.tipo || 'dinheiro') === 'presente' ? 'Ex.: 2 ingressos VIP no cinema' : 'Ex.: Roleta – venda de 3 produtos'}"></label>
-        </div>
+        <label class="field"><span>Tipo de bônus *</span><select class="input" name="tipo" data-change="bonusTipoSel">
+          <option value="dinheiro" ${(d.tipo || 'dinheiro') === 'dinheiro' ? 'selected' : ''}>Bônus financeiro (R$)</option>
+          <option value="outro" ${(d.tipo || 'dinheiro') !== 'dinheiro' ? 'selected' : ''}>Outro tipo de bônus</option></select></label>
+        ${(d.tipo || 'dinheiro') === 'dinheiro'
+          ? `<label class="field"><span>Valor (R$) *</span><input class="input num" name="valor" type="number" inputmode="decimal" min="0" step="0.01" value="${esc(d.valor ?? '')}" placeholder="Ex.: 30"></label>
+             <div class="bn-roleta"><span class="muted">Atalho da roleta (venda de 3 produtos):</span>${BONUS_ROLETA.map(v => `<button type="button" class="btn btn-sm ${Number(d.valor) === v && d.roleta ? 'btn-primary' : ''}" data-action="bonusRoleta" data-v="${v}">R$ ${v}</button>`).join('')}</div>`
+          : `<label class="field"><span>Qual é o bônus *</span><input class="input" name="qual" maxlength="120" value="${esc(d.item || '')}" placeholder="Ex.: 2 ingressos VIP no cinema"></label>`}
+        <label class="field"><span>Referência: por que ganhou *</span><input class="input" name="motivo" maxlength="160" value="${esc(d.motivo || '')}" placeholder="Ex.: Roleta – venda de 3 produtos"></label>
         <p class="form-msg" data-msg></p>
         <div><button class="btn btn-primary" type="submit">${icon('check')} Registrar bônus</button></div>
       </form></section>` : '';
-    const rows = list.length ? `<ul class="bn-list">${list.map(v => { const del = bonusCanFor(user, v.barberId) && (isGestor(user) || v.byUser === user.id); return `<li class="card bn-item ${v.tipo === 'presente' ? 'is-gift' : ''}">
-        <span class="bn-ic">${icon(v.tipo === 'presente' ? 'gift' : 'wallet')}</span>
-        <div class="bn-body"><b>${v.tipo === 'presente' ? esc(v.desc || 'Presente') : money2(Number(v.valor) || 0)}</b>
-          <small>${admin ? esc(name(v.barberId)) + ' · ' : ''}${esc(dateBR(v.date))}${v.tipo === 'presente' ? (Number(v.valor) > 0 ? ' · valor estimado ' + money2(Number(v.valor)) : '') : (v.desc ? ' · ' + esc(v.desc) : '')}${admin && v.by ? ' · lançado por ' + esc(v.by) : ''}</small></div>
+    const rows = list.length ? `<ul class="bn-list">${list.map(v => { const del = bonusCanFor(user, v.barberId) && (isGestor(user) || v.byUser === user.id); return `<li class="card bn-item ${bnOutro(v) ? 'is-gift' : ''}">
+        <span class="bn-ic">${icon(bnOutro(v) ? 'gift' : 'wallet')}</span>
+        <div class="bn-body"><b>${bnOutro(v) ? esc(bnItem(v)) : money2(Number(v.valor) || 0)}</b>
+          ${bnMotivo(v) ? `<span class="bn-ref">${esc(bnMotivo(v))}</span>` : ''}
+          <small>${admin ? esc(name(v.barberId)) + ' · ' : ''}${esc(dateBR(v.date))}${admin && v.by ? ' · lançado por ' + esc(v.by) : ''}</small></div>
         ${del ? `<button class="btn btn-sm ${ui.confirm === 'bn' + v.id ? 'btn-danger' : ''}" data-action="bonusDel" data-id="${esc(v.id)}" aria-label="Apagar bônus">${icon('trash')}${ui.confirm === 'bn' + v.id ? ' Confirmar' : ''}</button>` : ''}
       </li>`; }).join('')}</ul>` : `<div class="card muted">${admin ? 'Nenhum bônus registrado neste mês.' : 'Nenhum bônus neste mês ainda.'}</div>`;
     return head + sum + form + `<section class="section"><h2 class="section-title">${admin ? 'Bônus do mês' : 'Seus bônus'}</h2>${rows}</section>`;
@@ -7418,8 +7425,8 @@ Content-Type: application/json</pre>
     },
     defaultOcup() { state.ocupCfg = null; save(); toast('Regra de ocupação padrão restaurada.'); render(); },
     defaultGoals() { state.goals = { ...(state.goals || {}), team: { ...GB.DEFAULT_GOALS } }; save(); toast('Metas padrão restauradas.'); render(); },
-    bonusTipo(el) { const f = el.form; ui.bonusDraft = { ...(ui.bonusDraft || {}), ...bonusDraftOf(f), tipo: el.dataset.t, roleta: false }; render(); },
-    bonusRoleta(el) { const f = el.form; ui.bonusDraft = { ...(ui.bonusDraft || {}), ...bonusDraftOf(f), tipo: 'dinheiro', valor: Number(el.dataset.v), desc: 'Roleta – venda de 3 produtos', roleta: true }; render(); },
+
+    bonusRoleta(el) { const f = el.form; ui.bonusDraft = { ...(ui.bonusDraft || {}), ...bonusDraftOf(f), tipo: 'dinheiro', valor: Number(el.dataset.v), motivo: 'Roleta – venda de 3 produtos', roleta: true }; render(); },
     bonusPick(el) { ui.bonusB = el.dataset.b && ui.bonusB !== el.dataset.b ? el.dataset.b : null; render(); },
     bonusDel(el) {
       const u = currentUser(), v = bonusAll().find(x => x.id === el.dataset.id); if (!v || !bonusCanFor(u, v.barberId) || !(isGestor(u) || v.byUser === u.id)) return;
@@ -7722,14 +7729,15 @@ Content-Type: application/json</pre>
       toast(`${U(name)} adicionado. Agora envie o convite.`); render();
     },
     bonus(f) {
-      const u = currentUser(), bid = val(f, 'b'), d = ui.bonusDraft || {}, tipo = d.tipo === 'presente' ? 'presente' : 'dinheiro';
-      const valor = Number(String(val(f, 'valor')).replace(',', '.')), desc = val(f, 'desc').trim(), date = val(f, 'date') || todayIso();
+      const u = currentUser(), bid = val(f, 'b'), tipo = val(f, 'tipo') === 'outro' ? 'outro' : 'dinheiro';
+      const valor = tipo === 'dinheiro' ? Number(String(val(f, 'valor')).replace(',', '.')) : null, item = tipo === 'outro' ? val(f, 'qual').trim() : '', motivo = val(f, 'motivo').trim(), date = val(f, 'date') || todayIso();
       if (!bid) return setMsg(f, 'Escolha o profissional.');
       if (!bonusCanFor(u, bid)) return setMsg(f, 'Você não pode lançar bônus para este profissional.');
       if (tipo === 'dinheiro' && !(valor > 0)) return setMsg(f, 'Informe o valor do bônus em R$.');
-      if (tipo === 'presente' && desc.length < 2) return setMsg(f, 'Escreva qual foi o presente (ex.: 2 ingressos VIP no cinema).');
+      if (tipo === 'outro' && item.length < 2) return setMsg(f, 'Escreva qual é o bônus (ex.: 2 ingressos VIP no cinema).');
+      if (motivo.length < 2) return setMsg(f, 'Escreva a referência: por que ele ganhou o bônus.');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > todayIso()) return setMsg(f, 'Data inválida.');
-      state.bonusRecs = [...bonusAll(), { id: uid('bn_'), barberId: bid, date, tipo, valor: valor > 0 ? Math.round(valor * 100) / 100 : null, desc: desc || (d.roleta ? 'Roleta – venda de 3 produtos' : ''), by: u.name || 'Gestão', byUser: u.id, at: new Date().toISOString() }];
+      state.bonusRecs = [...bonusAll(), { id: uid('bn_'), barberId: bid, date, tipo, valor: valor > 0 ? Math.round(valor * 100) / 100 : null, item, motivo, by: u.name || 'Gestão', byUser: u.id, at: new Date().toISOString() }];
       ui.bonusDraft = { tipo }; ui.bonusYm = date.slice(0, 7); save();
       toast(`Bônus registrado para ${((barberById(bid) || {}).name || '').split(' ')[0]}.`); render();
     },
@@ -7955,6 +7963,7 @@ Content-Type: application/json</pre>
     },
     wNum(el) { wRefresh(el.form); },
     bonusYm(el) { ui.bonusYm = el.value; render(); },
+    bonusTipoSel(el) { ui.bonusDraft = { ...(ui.bonusDraft || {}), ...bonusDraftOf(el.form), tipo: el.value === 'outro' ? 'outro' : 'dinheiro', roleta: false }; render(); },
     wToggle(el) { // liga/desliga o indicador e salva na hora
       const f = el.form, sel = f.elements['p-' + el.dataset.k]; if (!sel) return;
       if (el.checked) sel.value = sel.dataset.prev && sel.dataset.prev !== '0' ? sel.dataset.prev : '2'; else { sel.dataset.prev = sel.value; sel.value = '0'; }

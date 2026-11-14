@@ -3,7 +3,7 @@
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
   { id: '2026-11-14-bonus', date: '2026-11-14', title: 'Nova aba Bônus', items: [
-    ['novo', 'Aba Bônus no menu principal: o dono, a gestão e o líder autorizado registram bônus em dinheiro (com atalho da roleta de R$ 10 a R$ 50 ao vender 3 produtos) ou presentes (ex.: 2 ingressos VIP no cinema).'],
+    ['novo', 'Aba Bônus no menu principal: o dono, a gestão e o líder autorizado registram bônus financeiro (com atalho da roleta de R$ 10 a R$ 50 ao vender 3 produtos) ou outro tipo de bônus (ex.: 2 ingressos VIP no cinema), sempre com a referência de por que o profissional ganhou.'],
     ['novo', 'Cada profissional vê só os próprios bônus, com o total do mês e do ano. A liderança vê os de toda a equipe.'],
     ['melhoria', 'Novo acesso extra do líder em Adicionar profissional: Bônus.'],
   ] },
