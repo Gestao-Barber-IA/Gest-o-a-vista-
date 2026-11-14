@@ -2,6 +2,11 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-14-extras', date: '2026-11-14', title: 'Novo indicador: Serviços extras', items: [
+    ['novo', 'Serviços extras conta os serviços além dos tradicionais (ex.: sobrancelha, pigmentação). Em Indicadores e metas › Serviços extras, o dono marca quais serviços são tradicionais: o resto conta como extra.'],
+    ['novo', 'Dá para escolher se conta a quantidade ou o valor em R$. O indicador chega desligado: ligue na chave quando quiser usar.'],
+    ['melhoria', 'A sincronização AppBarber passa a enviar os serviços de cada comanda pelo nome. Sem integração, o total do mês é lançado em Lançamentos.'],
+  ] },
   { id: '2026-11-14-bonus', date: '2026-11-14', title: 'Nova aba Bônus', items: [
     ['novo', 'Aba Bônus no menu principal: o dono, a gestão e o líder autorizado registram bônus financeiro (com atalho da roleta de R$ 10 a R$ 50 ao vender 3 produtos) ou outro tipo de bônus (ex.: 2 ingressos VIP no cinema), sempre com a referência de por que o profissional ganhou.'],
     ['novo', 'Cada profissional vê só os próprios bônus, com o total do mês e do ano. A liderança vê os de toda a equipe.'],

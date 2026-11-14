@@ -80,6 +80,9 @@
       calc: s => s.n.ret && s.cli > 0 ? (s.ret / s.cli) * 100 : null },
     { key: 'prod', label: 'Venda de produtos', weight: 8, fmt: 'int',
       calc: s => MODES.prod === 'valor' ? (s.n.prodV ? s.prodV : null) : (s.n.prod ? s.prod : null) },
+    // Serviços extras: tudo o que não é serviço tradicional (o dono marca os tradicionais). Começa desligado.
+    { key: 'extra', label: 'Serviços extras', weight: 8, fmt: 'int',
+      calc: s => MODES.extra === 'valor' ? (s.n.extraV ? s.extraV : null) : (s.n.extra ? s.extra : null) },
   ];
 
   // Indicadores de destaque que NÃO entram na pontuação, no MVP nem no Destaque.
@@ -104,6 +107,8 @@
     // Usados quando o dono escolhe "valor em R$" em Serviços ou em Venda de produtos (Indicadores e metas).
     { key: 'servV', label: 'Valor em serviços (R$)', api: 'valor_servicos', step: '0.01' },
     { key: 'prodV', label: 'Valor em produtos vendidos (R$)', api: 'valor_produtos', step: '0.01' },
+    { key: 'extra', label: 'Serviços extras (quantidade)', api: 'servicos_extras', step: '1' },
+    { key: 'extraV', label: 'Valor em serviços extras (R$)', api: 'valor_servicos_extras', step: '0.01' },
   ];
 
   // ---------- períodos ----------
@@ -145,6 +150,8 @@
     { key: 'fidPct', label: 'Taxa de fidelização (%)', step: '0.1', daily: 'ret', max: 100 },
     { key: 'prod', label: 'Produtos vendidos (quantidade)', step: '1', daily: 'prod' },
     { key: 'prodV', label: 'Valor em produtos vendidos (R$)', step: '0.01', daily: 'prodV' },
+    { key: 'extra', label: 'Serviços extras (quantidade)', step: '1', daily: 'extra' },
+    { key: 'extraV', label: 'Valor em serviços extras (R$)', step: '0.01', daily: 'extraV' },
     { key: 'check', label: 'Pontos Checklist Agenda Cheia', step: '1', daily: 'check' },
     { key: 'planos', label: 'Planos mensais vendidos', step: '1', daily: 'planos' },
     { key: 'comanda', label: 'Maior comanda do mês (R$)', step: '0.01', daily: 'comanda' },
@@ -232,6 +239,8 @@
         if (f.key === 'hDisp') continue; // a capacidade vem da regra de ocupação
         add(f.key, e[f.key]);
       }
+      // Serviços por nome (integração): os não tradicionais viram Serviços extras (quantidade e valor).
+      if (e.svc && !(rec && (isNum(rec.extra) || isNum(rec.extraV)))) { const x = extrasOf(state, e.svc); add('extra', x.q); add('extraV', x.v); }
     }
     // Checklist Agenda Cheia: os pontos diários entram no indicador e substituem o total manual do mês.
     const cfg = popCfgOf(state);
@@ -244,7 +253,7 @@
     for (const ym of months) {
       const rec = recs[ym];
       if (!rec) continue;
-      for (const k of ['fat', 'cli', 'serv', 'prod', 'check', 'planos', 'comanda', 'servV', 'prodV', ...customKeys()]) if (isNum(rec[k]) && !(k === 'check' && popMonths.has(ym))) add(k, rec[k]);
+      for (const k of ['fat', 'cli', 'serv', 'prod', 'check', 'planos', 'comanda', 'servV', 'prodV', 'extra', 'extraV', ...customKeys()]) if (isNum(rec[k]) && !(k === 'check' && popMonths.has(ym))) add(k, rec[k]);
       if (isNum(rec.fidPct)) {
         const cli = isNum(rec.cli) ? Number(rec.cli) : (dailyCli[ym] || 0);
         if (cli > 0) add('ret', (Number(rec.fidPct) / 100) * cli);
@@ -277,7 +286,8 @@
     const out = {}; let hO = 0, hasO = false, cli = 0, ret = 0;
     for (const e of state.entries) {
       if (e.source === 'manual' || e.barberId !== barberId || e.date < r.start || e.date > r.end) continue;
-      for (const k of ['fat', 'cli', 'serv', 'prod', 'check', 'planos', 'servV', 'prodV', ...customKeys()]) if (isNum(e[k])) out[k] = (out[k] || 0) + Number(e[k]);
+      for (const k of ['fat', 'cli', 'serv', 'prod', 'check', 'planos', 'servV', 'prodV', 'extra', 'extraV', ...customKeys()]) if (isNum(e[k])) out[k] = (out[k] || 0) + Number(e[k]);
+      if (e.svc) { const x = extrasOf(state, e.svc); out.extra = (out.extra || 0) + x.q; out.extraV = (out.extraV || 0) + x.v; }
       if (isNum(e.comanda)) out.comanda = Math.max(out.comanda || 0, Number(e.comanda));
       if (isNum(e.hOcup)) { hO += Number(e.hOcup); hasO = true; }
       if (isNum(e.cli)) cli += Number(e.cli);
@@ -360,7 +370,7 @@
   // ---------- Lançamento manual por dia ----------
   // Os campos somáveis do Lançamentos mostram o total do mês; ao mudar o total,
   // a diferença entra no dia escolhido (entrada "manual"), para aparecer na Semana.
-  const SUM_KEYS = ['fat', 'cli', 'serv', 'prod', 'check', 'planos', 'servV', 'prodV'];
+  const SUM_KEYS = ['fat', 'cli', 'serv', 'prod', 'check', 'planos', 'servV', 'prodV', 'extra', 'extraV'];
   const r2 = v => Math.round(v * 100) / 100;
   const manualEntries = (state, bid, ym) => state.entries.filter(e => e.source === 'manual' && e.barberId === bid && e.date.slice(0, 7) === ym);
   function manualTotal(state, bid, ym, key) {
@@ -392,7 +402,7 @@
     }
   }
 
-  const DEFAULT_GOALS = { fat: 6000, check: 390, ocup: 75, ticket: 60, serv: 130, cli: 110, planos: 4, fid: 50, prod: 20 };
+  const DEFAULT_GOALS = { fat: 6000, check: 390, ocup: 75, ticket: 60, serv: 130, cli: 110, planos: 4, fid: 50, prod: 20, extra: 40 };
   const goalFor = (state, barberId, key) => {
     const ind = state.goals?.byBarber?.[barberId]?.[key];
     return isNum(ind) ? Number(ind) : Number(state.goals?.team?.[key] ?? DEFAULT_GOALS[key]);
@@ -604,7 +614,10 @@
           const fat = Math.round(cli * tk * (0.92 + r() * 0.16) * 100) / 100;
           const hOcup = Math.round(serv * (HPS[0] + r() * (HPS[1] - HPS[0])) * 2) / 2;
           const comanda = Math.round(tk * (1.4 + r() * (r() < 0.08 ? 2.6 : 1.1)) * 100) / 100; // maior comanda do dia
-          entries.push({ id: uid('e_'), barberId: barbers[i].id, date: iso(day), fat, serv, cli, hDisp: 8, hOcup, comanda, servV: Math.round(fat * 0.88 * 100) / 100, prodV: Math.round(fat * 0.12 * 100) / 100 });
+          const sv = Math.round(fat * 0.88 * 100) / 100, nEx = Math.floor(serv * (0.12 + 0.05 * (i % 3))), nB = Math.floor((serv - nEx) / 3), nC = serv - nEx - nB;
+          const svc = { 'Corte Tradicional': [nC, Math.round(sv * 0.62)], 'Barba': [nB, Math.round(sv * 0.2)] };
+          if (nEx) { const s1 = Math.ceil(nEx / 2); svc['Sobrancelha (No Combo)'] = [s1, Math.round(sv * 0.07)]; if (nEx - s1) svc['Pigmentação na Barba'] = [nEx - s1, Math.round(sv * 0.11)]; }
+          entries.push({ id: uid('e_'), barberId: barbers[i].id, date: iso(day), fat, serv, cli, hDisp: 8, hOcup, comanda, servV: sv, prodV: Math.round(fat * 0.12 * 100) / 100, svc });
         });
       });
     }
@@ -660,6 +673,7 @@
       demo: true,
       demoV: 10,
       comCfg: { pct: 40, pctBy: {}, plano: 10, prod: 5, pos: { 1: 200, 2: 100, 3: 50 }, mvp: 150, dest: 80, meta: 100 },
+      extraTrad: ['Corte Tradicional', 'Barba'],
       // Bônus de exemplo do mês (roleta de produtos e presentes).
       bonusRecs: [[0, 'dinheiro', 30, '', 'Roleta – venda de 3 produtos', 2], [1, 'dinheiro', 50, '', 'Roleta – venda de 3 produtos', 4], [2, 'outro', null, '2 ingressos VIP no cinema', 'Bateu a meta de faturamento da semana', 5], [0, 'dinheiro', 20, '', 'Roleta – venda de 3 produtos', 6], [3, 'dinheiro', 10, '', 'Roleta – venda de 3 produtos', 7]]
         .filter(x => barbers[x[0]] && x[5] <= today.getDate()).map(([i, tipo, valor, item, motivo, d], k) => ({ id: 'bn_demo' + k, barberId: barbers[i].id, date: `${curYm}-${String(d).padStart(2, '0')}`, tipo, valor, item, motivo, by: 'Gestão', at: `${curYm}-${String(d).padStart(2, '0')}T15:00:00Z` })),
@@ -782,31 +796,42 @@
   // Indicadores retirados por enquanto: não aparecem e não pontuam em nenhuma empresa (voltam tirando daqui).
   const RETIRED = ['fid'];
   const visibleInds = state => INDICATORS.filter(i => !RETIRED.includes(i.key) && !(state.hidden || []).includes(i.key));
-  const FIELD_IND = { fidPct: 'fid', ocupPct: 'ocup', aus: 'ocup', servV: 'serv', prodV: 'prod' };
+  const FIELD_IND = { fidPct: 'fid', ocupPct: 'ocup', aus: 'ocup', servV: 'serv', prodV: 'prod', extraV: 'extra' };
 
   // ---------- Indicadores personalizados (criados pelo dono em Indicadores e metas) ----------
   // state.customInds = [{ key: 'x_…', label, fmt: 'int' | 'money', goal }]. Somam no mês como Serviços ou Faturamento,
   // entram na nota, nas metas, em Lançamentos e na API (campo com o mesmo código). Ligar/desligar: state.hidden.
   // Serviços e Venda de produtos: por quantidade (padrão) ou por valor em R$ (state.indMode = { serv: 'valor', prod: 'valor' }).
-  const MODES = { serv: 'qtd', prod: 'qtd' };
+  const MODES = { serv: 'qtd', prod: 'qtd', extra: 'qtd' };
   const MODE_TXT = {
     serv: { qtd: ['Serviços realizados', 'int', 130], valor: ['Valor em serviços', 'money', 5000] },
     prod: { qtd: ['Venda de produtos', 'int', 20], valor: ['Valor em produtos vendidos', 'money', 800] },
+    extra: { qtd: ['Serviços extras', 'int', 40], valor: ['Valor em serviços extras', 'money', 1500] },
   };
+  // Serviços por nome vindos da integração (entries[].svc = { "Nome do serviço": [quantidade, valor] }).
+  // Extra = todo serviço que o dono NÃO marcou como tradicional (state.extraTrad).
+  const normSvc = n => String(n || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  function extrasOf(state, svc) {
+    const trad = new Set(((state && state.extraTrad) || []).map(normSvc)); let q = 0, v = 0;
+    for (const [n, a] of Object.entries(svc || {})) { if (trad.has(normSvc(n)) || !Array.isArray(a)) continue; q += Number(a[0]) || 0; v += Number(a[1]) || 0; }
+    return { q, v: Math.round(v * 100) / 100 };
+  }
   const indMode = k => MODES[k] || 'qtd';
   // Campo de lançamento que não está em uso pelo modo escolhido (ex.: quantidade de serviços quando o indicador é por valor).
-  const fieldOff = k => (k === 'serv' && MODES.serv === 'valor') || (k === 'servV' && MODES.serv !== 'valor') || (k === 'prod' && MODES.prod === 'valor') || (k === 'prodV' && MODES.prod !== 'valor');
+  const fieldOff = k => (k === 'serv' && MODES.serv === 'valor') || (k === 'servV' && MODES.serv !== 'valor') || (k === 'prod' && MODES.prod === 'valor') || (k === 'prodV' && MODES.prod !== 'valor') || (k === 'extra' && MODES.extra === 'valor') || (k === 'extraV' && MODES.extra !== 'valor');
   let CUSTOM = [];
   const customKeys = () => CUSTOM.map(c => c.key);
   const validCustom = c => c && /^x_[a-z0-9]{3,24}$/.test(c.key) && String(c.label || '').trim();
   let customSig = '';
   function applyCustom(state) {
     const list = (Array.isArray(state && state.customInds) ? state.customInds : []).filter(validCustom).slice(0, 12);
+    // Serviços extras chega desligado (uma vez por empresa); o dono liga em Indicadores e metas.
+    if (state && !state.extraInit && Array.isArray(state.hidden)) { state.extraInit = true; if (!state.hidden.includes('extra')) state.hidden = [...state.hidden, 'extra']; }
     const m = (state && state.indMode) || {};
-    const sig = JSON.stringify([list, m.serv, m.prod]);
+    const sig = JSON.stringify([list, m.serv, m.prod, m.extra]);
     if (sig === customSig) return;
     customSig = sig;
-    for (const k of ['serv', 'prod']) {
+    for (const k of ['serv', 'prod', 'extra']) {
       MODES[k] = m[k] === 'valor' ? 'valor' : 'qtd';
       const [label, fmt, goal] = MODE_TXT[k][MODES[k]], ind = INDICATORS.find(i => i.key === k);
       if (ind) { ind.label = label; ind.fmt = fmt; }
@@ -825,5 +850,5 @@
     }
   }
 
-  window.GB = Object.assign(window.GB || {}, { applyCustom, customKeys, indMode, fieldOff, MODE_TXT, RETIRED, BONUS_INDS, OCUP_DEFAULT, ocupCfgOf, ocupCfgFor, hoursPerDay, ocupCapacity, SUM_KEYS, manualEntries, manualTotal, applyManualTotal, evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
+  window.GB = Object.assign(window.GB || {}, { applyCustom, customKeys, indMode, fieldOff, MODE_TXT, extrasOf, normSvc, RETIRED, BONUS_INDS, OCUP_DEFAULT, ocupCfgOf, ocupCfgFor, hoursPerDay, ocupCapacity, SUM_KEYS, manualEntries, manualTotal, applyManualTotal, evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
 })();

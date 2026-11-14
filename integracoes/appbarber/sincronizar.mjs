@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSAO = "2.3";
+const VERSAO = "2.4";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const TESTE = process.argv.includes("--teste");
 const CARGA = process.argv.includes("--carga"); // carga inicial: lê todas as comandas no ritmo máximo permitido
@@ -193,11 +193,19 @@ async function main() {
     for (const [s1, e1] of a.slice(1)) { if (s1 <= e0) e0 = Math.max(e0, e1); else { tot += e0 - s0; s0 = s1; e0 = e1; } }
     return Math.round((tot + e0 - s0) / 60 * 100) / 100;
   }
+  // Nome do serviço (para o indicador Serviços extras): da comanda ou, se não vier, do agendamento.
+  function nomeDeServico(o) {
+    if (!o) return "";
+    for (const k of ["service_description", "service_name", "service", "item_description", "description", "name"]) { const v = o[k]; if (typeof v === "string" && v.trim()) return v.trim().slice(0, 80); }
+    for (const [k, v] of Object.entries(o)) if (/serv/i.test(k) && /(desc|name|nome)/i.test(k) && typeof v === "string" && v.trim()) return v.trim().slice(0, 80);
+    return "";
+  }
   function calc() {
     // Soma por profissional e dia SÓ com comandas finalizadas (pagas, ou de um dia que já passou), como na AppBarber.
     // Sem valor provisório: atendimento com comanda aberta ou ainda não lida entra quando a comanda for finalizada e lida.
     const acc = new Map();
-    const add = (nome, d) => { const k = nome + "|" + d; if (!acc.has(k)) acc.set(k, { nome, d, fat: 0, serv: 0, prod: 0, sv: 0, pv: 0, cli: new Set(), com: new Map(), int: [] }); return acc.get(k); };
+    const agNome = new Map(lista.map((a) => [String(a.appointment_code || a.scheduling_code), nomeDeServico(a)]));
+    const add = (nome, d) => { const k = nome + "|" + d; if (!acc.has(k)) acc.set(k, { nome, d, fat: 0, serv: 0, prod: 0, sv: 0, pv: 0, svc: {}, cli: new Set(), com: new Map(), int: [] }); return acc.get(k); };
     const usadas = new Set();
     // A AppBarber pode escrever o nome do profissional diferente na agenda e na comanda
     // (ex.: "Izaque Macedo" x "Izaquias Macedo"). Liga os dois pelo agendamento da comanda e usa o nome da agenda.
@@ -222,7 +230,7 @@ async function main() {
         if (!it.p) continue;
         if (it.prod && consumo(it)) continue; // geladeira/bar: não é faturamento do profissional
         const x = add(nomeDe(it.p), d);
-        x.fat += it.v; if (it.pl) { /* plano mensal: entra no faturamento, mas não como produto nem serviço */ } else if (it.prod) { x.prod += it.q; x.pv += it.v; } else { x.serv += it.q; x.sv += it.v; }
+        x.fat += it.v; if (it.pl) { /* plano mensal: entra no faturamento, mas não como produto nem serviço */ } else if (it.prod) { x.prod += it.q; x.pv += it.v; } else { x.serv += it.q; x.sv += it.v; const n = it.sn || agNome.get(it.ag) || (it.sc ? "Serviço " + it.sc : "Serviço sem nome"); const a = x.svc[n] || (x.svc[n] = [0, 0]); a[0] += it.q; a[1] += it.v; }
         if (!it.prod && it.ini != null && it.fim > it.ini && it.fim - it.ini <= 600) x.int.push([it.ini, it.fim]);
         x.cli.add(inv.cli); if (!inv.pl && inv.pago) x.com.set(c, (x.com.get(c) || 0) + it.v); // maior comanda: só paga e sem plano
       }
@@ -237,6 +245,7 @@ async function main() {
       data: x.d, barbeiro: NOMES[x.nome] || x.nome,
       faturamento: Math.round(x.fat * 100) / 100, servicos: x.serv, clientes: x.cli.size, venda_produtos: x.prod,
       valor_servicos: Math.round(x.sv * 100) / 100, valor_produtos: Math.round(x.pv * 100) / 100,
+      servicos_detalhe: Object.fromEntries(Object.entries(x.svc).map(([n, a]) => [n, [a[0], Math.round(a[1] * 100) / 100]])),
       maior_comanda: Math.round(Math.max(0, ...x.com.values()) * 100) / 100,
       ...(x.int.length ? { horas_ocupadas: horasJuntas(x.int) } : {}),
     }));
@@ -340,7 +349,7 @@ async function main() {
     cache[c] = {
       d, cli: String(inv.person_code || inv.person_name || c), final: pago || !!antiga, pago: pago || undefined, lida: Date.now(), h: 3, pl: ehPlano(inv) || undefined,
       itens: itensV.map((it) => ({ pl: itemPlano(it) || undefined,
-        p: String(it.employee_name || "").trim(), ag: it.scheduling_code ? String(it.scheduling_code) : undefined, ini: minutos(it.scheduling_start) ?? undefined, fim: minutos(it.scheduling_end) ?? undefined, v: num(it.item_value), q: Number(it.item_quantity) || 1, prod: !!it.product_code && !it.service_code, pc: it.product_code ? String(it.product_code) : undefined, nm: it.product_description ? String(it.product_description).slice(0, 60) : undefined,
+        p: String(it.employee_name || "").trim(), ag: it.scheduling_code ? String(it.scheduling_code) : undefined, ini: minutos(it.scheduling_start) ?? undefined, fim: minutos(it.scheduling_end) ?? undefined, v: num(it.item_value), q: Number(it.item_quantity) || 1, prod: !!it.product_code && !it.service_code, pc: it.product_code ? String(it.product_code) : undefined, nm: it.product_description ? String(it.product_description).slice(0, 60) : undefined, sc: it.service_code ? String(it.service_code) : undefined, sn: !it.product_code && it.service_code ? nomeDeServico(it) || undefined : undefined,
       })),
     };
     lidas++;
@@ -366,6 +375,8 @@ async function main() {
       if (faltam.length || ab) console.log(`  (Ainda não contam: ${faltam.length} comandas não lidas e ${ab} abertas/não pagas. Entram quando forem finalizadas e lidas.)`); }
     { const pls = codigos.filter((c) => cache[c] && cache[c].pl && cache[c].d && cache[c].d >= desde);
       console.log(pls.length ? `  Comandas de plano mensal (fora da maior comanda): ${pls.length} · ex.: ${pls.slice(0, 5).map((c) => `nº ${c} R$ ${(cache[c].itens || []).reduce((a, it) => a + it.v, 0).toFixed(2)}`).join(", ")}` : "  Nenhuma comanda de plano mensal reconhecida neste mês. Se houver, informe os códigos em \"planos_codigos\" no config.json."); }
+    { const nomes = new Map(); for (const i of itens) for (const [n, a] of Object.entries(i.servicos_detalhe || {})) nomes.set(n, (nomes.get(n) || 0) + a[0]);
+      console.log(nomes.size ? `  Serviços encontrados (marque os tradicionais no app, em Indicadores e metas › Serviços extras): ${[...nomes].sort((a, b) => b[1] - a[1]).map(([n, q]) => `${n} (${q})`).join(", ")}` : "  Nenhum serviço com nome encontrado."); }
     // Conferência com o "Total realizado/vendido" da AppBarber (só comandas já lidas, do mês atual):
     // se o total deles bater com Serviços + Produtos + Consumo, a AppBarber conta o consumo; se bater com Serviços + Produtos, ela já separa.
     {

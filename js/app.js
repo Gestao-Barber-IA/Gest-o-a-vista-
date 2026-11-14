@@ -2655,7 +2655,7 @@
   }
   // Histórico do mês: o que entrou à mão em cada dia.
   function lanHistory(b, ym) {
-    const L = { servV: v => money0(v) + ' em serviços', prodV: v => money0(v) + ' em produtos', fat: v => money0(v), cli: v => nf0.format(v) + ' clientes', serv: v => nf0.format(v) + ' serviços', prod: v => nf0.format(v) + ' produtos', check: v => nf1.format(v) + ' pts checklist', planos: v => nf0.format(v) + ' planos' };
+    const L = { extra: v => nf0.format(v) + ' serviços extras', extraV: v => money0(v) + ' em serviços extras', servV: v => money0(v) + ' em serviços', prodV: v => money0(v) + ' em produtos', fat: v => money0(v), cli: v => nf0.format(v) + ' clientes', serv: v => nf0.format(v) + ' serviços', prod: v => nf0.format(v) + ' produtos', check: v => nf1.format(v) + ' pts checklist', planos: v => nf0.format(v) + ' planos' };
     const days = GB.manualEntries(state, b.id, ym).filter(e => GB.SUM_KEYS.some(k => isNum(e[k]) && Number(e[k]) !== 0)).sort((a, c) => c.date.localeCompare(a.date));
     if (!days.length) return '';
     return `<details class="lan-hist" ${ui.lanHistOpen ? 'open' : ''}><summary>Lançamentos por dia em ${esc(ymLabel(ym).replace(' de ', '/'))} (${days.length})</summary>
@@ -3653,6 +3653,22 @@ ${rows.length ? '' : emptyBarbers()}
     vals.forEach(x => { const row = f.querySelector(`.wp-row[data-k="${x.k}"]`); if (!row) return; const on = x.v > 0; row.classList.toggle('is-off', !on); const sw = row.querySelector('[data-change="wToggle"]'); if (sw) sw.checked = on;
       row.querySelector('[data-pct]').textContent = on && tot ? `vale ${Math.round(x.v / tot * 100)}% da nota` : 'não usado'; });
   }
+  // Indicadores e metas › Serviços extras: o dono marca quais serviços são tradicionais; o resto conta como extra.
+  function extraCard() {
+    const trad = new Set((state.extraTrad || []).map(GB.normSvc)), lim = iso(new Date(Date.now() - 120 * 864e5));
+    const names = new Map();
+    for (const e of state.entries || []) if (e.svc && e.date >= lim) for (const n of Object.keys(e.svc)) { const k = GB.normSvc(n); if (k && !names.has(k)) names.set(k, n); }
+    for (const n of state.extraTrad || []) { const k = GB.normSvc(n); if (k && !names.has(k)) names.set(k, n); }
+    const list = [...names.values()].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    const off = (state.hidden || []).includes('extra'), nT = list.filter(n => trad.has(GB.normSvc(n))).length;
+    return `<section class="section card xs-card">
+      <h2 class="section-title">${icon('sparkle')} Serviços extras</h2>
+      <p class="section-note">Conta os serviços além dos tradicionais (ex.: sobrancelha, pigmentação, hidratação). Marque abaixo os serviços <b>tradicionais</b>: tudo o que não estiver marcado conta como extra. ${off ? '<b>O indicador está desligado:</b> ligue na chave de "Serviços extras" acima para entrar na nota.' : ''}</p>
+      ${list.length ? `<p class="muted xs-count">${nT} de ${list.length} serviços marcados como tradicionais. Os outros ${list.length - nT} contam como extra.</p>
+        <div class="xs-list">${list.map(n => `<label class="check xs-item"><input type="checkbox" data-change="extraTrad" data-n="${esc(n)}" ${trad.has(GB.normSvc(n)) ? 'checked' : ''}><span><b>${esc(n)}</b><small>${trad.has(GB.normSvc(n)) ? 'Tradicional' : 'Extra'}</small></span></label>`).join('')}</div>`
+        : `<div class="pm-note">${icon('help')}<span>A lista de serviços aparece aqui sozinha quando a sincronização com a AppBarber enviar os serviços de cada comanda. Sem integração, lance o total de serviços extras do mês em Lançamentos.</span></div>`}
+    </section>`;
+  }
   // Indicadores e metas › Indicadores personalizados: o dono cria indicadores próprios (ex.: Avaliações no Google).
   function customIndCard() {
     const list = Array.isArray(state.customInds) ? state.customInds : [];
@@ -3704,7 +3720,7 @@ ${rows.length ? '' : emptyBarbers()}
             return `<div class="wp-row ${off ? 'is-off' : ''}" data-k="${i.key}">
               <label class="wp-sw" title="${off ? 'Ativar' : 'Desativar'} ${esc(i.label)}"><input type="checkbox" data-change="wToggle" data-k="${i.key}" ${off ? '' : 'checked'} aria-label="${esc(i.label)} ativo"><span aria-hidden="true"></span></label>
               <span class="wp-name">${esc(i.label)} ${i.custom ? '<span class="chip chip-soft wp-new">personalizado</span>' : tip(i.key)}</span>
-              ${i.key === 'serv' || i.key === 'prod' ? `<div class="wp-mode" role="radiogroup" aria-label="Como medir ${esc(i.label)}">${[['qtd', 'Quantidade'], ['valor', 'Valor em R$']].map(([m, l]) => `<button type="button" role="radio" aria-checked="${GB.indMode(i.key) === m}" class="${GB.indMode(i.key) === m ? 'on' : ''}" data-action="indMode" data-k="${i.key}" data-m="${m}">${l}</button>`).join('')}</div>` : ''}
+              ${i.key === 'serv' || i.key === 'prod' || i.key === 'extra' ? `<div class="wp-mode" role="radiogroup" aria-label="Como medir ${esc(i.label)}">${[['qtd', 'Quantidade'], ['valor', 'Valor em R$']].map(([m, l]) => `<button type="button" role="radio" aria-checked="${GB.indMode(i.key) === m}" class="${GB.indMode(i.key) === m ? 'on' : ''}" data-action="indMode" data-k="${i.key}" data-m="${m}">${l}</button>`).join('')}</div>` : ''}
               <select class="input input-sm wp-sel" name="p-${i.key}" data-change="wPrio" aria-label="Prioridade de ${esc(i.label)}">${W_PRIO.map(([v, l]) => `<option value="${v}" ${pr === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
               <span class="wp-pct num" data-pct>${off ? 'não usado' : `vale ${pct}% da nota`}</span>
             </div>`; }).join('')}</div>
@@ -3717,6 +3733,7 @@ ${rows.length ? '' : emptyBarbers()}
           <button class="btn" type="button" data-action="defaultWeights">Voltar aos pesos padrão</button></div>
         </form>
       </section>
+      ${extraCard()}
       ${customIndCard()}
       ${selfCard()}
       ${planCatalogCard()}
@@ -3808,7 +3825,8 @@ Content-Type: application/json</pre>
     horas_ocupadas: ['Horas em comandas finalizadas (para a taxa de ocupação)', 6.5],
     planos_mensais: ['Planos mensais vendidos no dia', 1], clientes_retorno: ['Clientes que já tinham vindo antes', 5],
     venda_produtos: ['Quantidade de produtos vendidos', 2], maior_comanda: ['Valor da maior comanda do dia', 180],
-    valor_servicos: ['Valor em R$ dos serviços do dia (usado quando o indicador Serviços é por valor)', 350], valor_produtos: ['Valor em R$ dos produtos do salão vendidos no dia, sem consumo de bar ou geladeira', 70],
+    valor_servicos: ['Valor em R$ dos serviços do dia (usado quando o indicador Serviços é por valor)', 350],
+    servicos_extras: ['Quantidade de serviços extras do dia (além dos tradicionais)', 3], valor_servicos_extras: ['Valor em R$ dos serviços extras do dia', 90], valor_produtos: ['Valor em R$ dos produtos do salão vendidos no dia, sem consumo de bar ou geladeira', 70],
   };
   function apiUrl() { return Cloud.enabled ? Cloud.apiUrl : location.origin + '/api/v1/lancamentos'; }
   function apiGuideText() {
@@ -7435,7 +7453,7 @@ Content-Type: application/json</pre>
     },
     indMode(el) {
       const k = el.dataset.k, m = el.dataset.m === 'valor' ? 'valor' : 'qtd';
-      if (!isGestor(currentUser()) || !['serv', 'prod'].includes(k) || GB.indMode(k) === m) return;
+      if (!isGestor(currentUser()) || !['serv', 'prod', 'extra'].includes(k) || GB.indMode(k) === m) return;
       state.indMode = { ...(state.indMode || {}), [k]: m };
       syncInds();
       // A meta muda de unidade (quantidade ↔ R$): volta para a sugestão do novo modo; metas individuais desse indicador saem.
@@ -7963,6 +7981,12 @@ Content-Type: application/json</pre>
     },
     wNum(el) { wRefresh(el.form); },
     bonusYm(el) { ui.bonusYm = el.value; render(); },
+    extraTrad(el) {
+      if (!isGestor(currentUser())) return;
+      const n = el.dataset.n, k = GB.normSvc(n), cur = (state.extraTrad || []).filter(x => GB.normSvc(x) !== k);
+      state.extraTrad = el.checked ? [...cur, n] : cur;
+      rkCache = {}; save(); toast(el.checked ? `"${n}" agora é tradicional (não conta como extra).` : `"${n}" agora conta como serviço extra.`); render();
+    },
     bonusTipoSel(el) { ui.bonusDraft = { ...(ui.bonusDraft || {}), ...bonusDraftOf(el.form), tipo: el.value === 'outro' ? 'outro' : 'dinheiro', roleta: false }; render(); },
     wToggle(el) { // liga/desliga o indicador e salva na hora
       const f = el.form, sel = f.elements['p-' + el.dataset.k]; if (!sel) return;

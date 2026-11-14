@@ -242,7 +242,7 @@
   const TABLES = {
     barbers: { key: b => b.id, row: (b, cid) => ({ id: b.id, company_id: cid, name: b.name, photo: b.photo || null, active: b.active !== false, role: b.role || 'Barbeiro', instagram: b.instagram || '', dream: b.dream || null, unit: b.unit || null }), list: s => s.barbers, pk: r => ({ id: r.id }) },
     invites: { key: i => i.code, row: (i, cid) => ({ code: i.code, company_id: cid, barber_id: i.barberId, used: !!i.used }), list: s => s.invites, pk: r => ({ code: r.code }) },
-    entries: { key: e => e.id, row: (e, cid) => ({ id: e.id, company_id: cid, barber_id: e.barberId, date: e.date, data: pick(e, ENTRY_KEYS), source: e.source || 'api' }), list: s => s.entries, pk: r => ({ id: r.id }) },
+    entries: { key: e => e.id, row: (e, cid) => ({ id: e.id, company_id: cid, barber_id: e.barberId, date: e.date, data: { ...pick(e, ENTRY_KEYS), ...(e.svc && typeof e.svc === 'object' ? { svc: e.svc } : {}) }, source: e.source || 'api' }), list: s => s.entries, pk: r => ({ id: r.id }) },
     pop: { key: r => r.barberId + '|' + r.day, row: (r, cid) => ({ id: r.barberId + '|' + r.day, company_id: cid, barber_id: r.barberId, day: r.day, data: { ev: r.ev || {}, notes: r.notes || {}, msg: r.msg || {}, res: r.res || null, by: r.by || null, at: r.at || null, ...(Number(r.adj) > 0 ? { adj: Number(r.adj), adjNote: r.adjNote || '' } : {}) } }), list: s => s.pop || [], pk: r => ({ id: r.id }) },
     monthly: { key: m => m.barberId + '|' + m.month, row: (m, cid) => ({ company_id: cid, barber_id: m.barberId, month: m.month, data: { ...pick(m, MONTH_KEYS), ...(m._adj && Object.keys(m._adj).length ? { _adj: m._adj } : {}) } }), list: s => s.monthly || [], pk: r => ({ barber_id: r.barber_id, month: r.month }) },
     planSales: { key: v => v.id, row: (v, cid) => ({ id: v.id, company_id: cid, barber_id: v.barberId, date: v.date, data: { nome: v.nome, fone: v.fone, plano: v.plano, by: v.by || null } }), list: s => s.planSales || [], pk: r => ({ id: r.id }) },
@@ -262,7 +262,7 @@
       out.tables[t] = map;
     }
     const co = s.company;
-    out.company = JSON.stringify({ name: co.name, cnpj: co.cnpj || '', phone: co.phone || '', email: co.email || '', logo: co.logo || null, settings: { weights: s.weights, goals: s.goals, hidden: s.hidden, org: s.org || null, pop: s.popCfg || null, reveal: s.reveal || null, ocup: s.ocupCfg || null, pops: s.pops || null, brand: s.brand || null, theme: s.theme || null, houseGoals: s.houseGoals || null, houseGoalsM: s.houseGoalsM || null, music: s.podiumMusic || null, births: s.births || null, demoKit: s.demoKit || null, com: s.comCfg || null, dreams: s.dreams || null, units: s.units || null, prize: s.prize || null, planos: s.planCatalog || null, customInds: Array.isArray(s.customInds) && s.customInds.length ? s.customInds : null, indMode: s.indMode && (s.indMode.serv === 'valor' || s.indMode.prod === 'valor') ? s.indMode : null, notices: s.notices || null, logoColors: s.logoColors === false ? false : null } });
+    out.company = JSON.stringify({ name: co.name, cnpj: co.cnpj || '', phone: co.phone || '', email: co.email || '', logo: co.logo || null, settings: { weights: s.weights, goals: s.goals, hidden: s.hidden, org: s.org || null, pop: s.popCfg || null, reveal: s.reveal || null, ocup: s.ocupCfg || null, pops: s.pops || null, brand: s.brand || null, theme: s.theme || null, houseGoals: s.houseGoals || null, houseGoalsM: s.houseGoalsM || null, music: s.podiumMusic || null, births: s.births || null, demoKit: s.demoKit || null, com: s.comCfg || null, dreams: s.dreams || null, units: s.units || null, prize: s.prize || null, planos: s.planCatalog || null, customInds: Array.isArray(s.customInds) && s.customInds.length ? s.customInds : null, indMode: s.indMode && (s.indMode.serv === 'valor' || s.indMode.prod === 'valor' || s.indMode.extra === 'valor') ? s.indMode : null, extraInit: s.extraInit || null, extraTrad: Array.isArray(s.extraTrad) && s.extraTrad.length ? s.extraTrad : null, notices: s.notices || null, logoColors: s.logoColors === false ? false : null } });
     for (const u of s.users) out.users[u.id] = JSON.stringify({ name: u.name, phone: u.phone || '', status: u.status });
     return out;
   }
@@ -357,6 +357,8 @@
       planCatalog: Array.isArray(st.planos) ? st.planos : [],
       customInds: Array.isArray(st.customInds) ? st.customInds : [],
       indMode: st.indMode || null,
+      extraInit: !!st.extraInit,
+      extraTrad: Array.isArray(st.extraTrad) ? st.extraTrad : [],
       comandaRecs: cmds.map(r => ({ id: r.id, barberId: r.barber_id, date: r.date, ...(r.data || {}) })),
       bonusRecs: bonus.map(r => ({ id: r.id, barberId: r.barber_id, date: r.date, ...(r.data || {}) })),
       apiKey: key ? key.key : '',
