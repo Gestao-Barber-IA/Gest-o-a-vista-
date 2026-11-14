@@ -224,7 +224,7 @@ async function main() {
         const x = add(nomeDe(it.p), d);
         x.fat += it.v; if (it.pl) { /* plano mensal: entra no faturamento, mas não como produto nem serviço */ } else if (it.prod) { x.prod += it.q; x.pv += it.v; } else { x.serv += it.q; x.sv += it.v; }
         if (!it.prod && it.ini != null && it.fim > it.ini && it.fim - it.ini <= 600) x.int.push([it.ini, it.fim]);
-        x.cli.add(inv.cli); if (!inv.pl) x.com.set(c, (x.com.get(c) || 0) + it.v);
+        x.cli.add(inv.cli); if (!inv.pl && inv.pago) x.com.set(c, (x.com.get(c) || 0) + it.v); // maior comanda: só paga e sem plano
       }
     }
     // Profissional com atendimento no dia mas sem comanda finalizada ainda: envia zero, para não ficar um valor antigo.
@@ -310,7 +310,7 @@ async function main() {
   }
   const codigos = [...new Set(lista.map((a) => a.invoice_code).filter((c) => c && Number(c) > 0).map(String))];
   // Comanda ainda não paga é relida a cada 20 minutos (e depois que o dia vira, uma última vez).
-  let faltam = codigos.filter((c) => !cache[c] || (cache[c].itens && (cache[c].h || 0) < 3) || (!cache[c].final && (Date.now() - (cache[c].lida || 0) > 20 * 60000 || (cache[c].d && cache[c].d < iso(hoje)))));
+  let faltam = codigos.filter((c) => !cache[c] || (cache[c].itens && (cache[c].h || 0) < 3) || (cache[c].final && !cache[c].pago && Date.now() - (cache[c].lida || 0) > 6 * 3600000) || (!cache[c].final && (Date.now() - (cache[c].lida || 0) > 20 * 60000 || (cache[c].d && cache[c].d < iso(hoje)))));
   // Só lê as comandas do mês atual (o ranking é por mês). Nos 3 primeiros dias, também as do mês anterior,
   // para o fechamento sair com as comandas finais. Os meses anteriores não são reenviados.
   const diaDe = new Map(lista.map((a) => [String(a.invoice_code), dia(a.scheduling_start) || ""]));
@@ -338,7 +338,7 @@ async function main() {
     const antiga = d && d < iso(hoje);
     const itensV = (inv.items || []).filter((it) => Number(it.product_is_tip) !== 1 && Number(it.product_is_cashback) !== 1);
     cache[c] = {
-      d, cli: String(inv.person_code || inv.person_name || c), final: pago || !!antiga, lida: Date.now(), h: 3, pl: ehPlano(inv) || undefined,
+      d, cli: String(inv.person_code || inv.person_name || c), final: pago || !!antiga, pago: pago || undefined, lida: Date.now(), h: 3, pl: ehPlano(inv) || undefined,
       itens: itensV.map((it) => ({ pl: itemPlano(it) || undefined,
         p: String(it.employee_name || "").trim(), ag: it.scheduling_code ? String(it.scheduling_code) : undefined, ini: minutos(it.scheduling_start) ?? undefined, fim: minutos(it.scheduling_end) ?? undefined, v: num(it.item_value), q: Number(it.item_quantity) || 1, prod: !!it.product_code && !it.service_code, pc: it.product_code ? String(it.product_code) : undefined, nm: it.product_description ? String(it.product_description).slice(0, 60) : undefined,
       })),

@@ -22,6 +22,8 @@ Cada comanda é lida **uma única vez** (1 chamada) e guardada em `comandas.json
 ou ainda não lida entra quando for finalizada e lida. Comanda ainda não paga é relida a cada 20 minutos. Os meses anteriores
 não são reenviados.
 
+**Maior comanda:** só conta comanda com o pagamento finalizado (comanda sem pagamento é conferida de novo a cada 6 horas).
+
 **Planos mensais:** comandas de plano mensal (venda do plano ou atendimento pago pelo plano) não contam como maior comanda, e o item do plano não conta como produto vendido (continua no faturamento). A sincronização
 reconhece pelo nome dos itens (plano, assinatura, clube, mensalidade) e pelos dados de pagamento. Se algum plano tiver
 outro nome, informe os códigos no `config.json`: `"planos_codigos": ["123", "456"]`. O `testar.bat` mostra as comandas
