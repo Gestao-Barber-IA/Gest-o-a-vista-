@@ -5102,6 +5102,9 @@ Content-Type: application/json</pre>
     apos: ['Chegou após o horário combinado', 'arr-apos', 'clock'],
     atraso: ['Chegou atrasado', 'arr-atraso', 'alert'],
   };
+  // Ordem dos cartões no checklist: Horário de chegada primeiro, logo abaixo o EXTRA, depois as demais tarefas.
+  const popIsExtra = it => !popArr(it) && (it.id === 'extra' || /^extra\b/i.test(String(it.title || '').trim()));
+  const popOrder = items => [...items.filter(popArr), ...items.filter(popIsExtra), ...items.filter(it => !popArr(it) && !popIsExtra(it))];
   function arrBlock(it, list, bid) {
     const e = list.find(GB.evLive), can = popMarkOk(it, bid);
     if (e) {
@@ -5329,7 +5332,7 @@ Content-Type: application/json</pre>
         <p class="pop-sum"><b class="num" id="pop-daypts">${fmtPts(dayPts)}/${fmtPts(dayMax)} pts aprovados no dia</b>${GB.popDayPts(cfg, rec, true) ? ` · <span class="pend num">+${fmtPts(GB.popDayPts(cfg, rec, true))} pts aguardando conferência</span>` : ''}</p>${rec && Number(rec.adj) > 0 ? `<p class="pop-adj">${icon('plus')} <b class="num">+${fmtPts(Number(rec.adj))} pts</b> ${esc(rec.adjNote || 'acrescentados pela gestão')}</p>` : ''}
         <p class="section-note">Cada unidade precisa de uma prova: foto ou print. Anexe, escreva uma descrição se quiser e toque em Confirmar. As fotos são apagadas ${PROOF_DAYS} dias depois do envio (as que ainda aguardam conferência ficam até serem conferidas); a prova e os pontos continuam.</p>
         ${ro ? '<p class="section-note">Você está vendo este checklist sem poder editar.</p>' : ''}
-        <div class="pop-items">${[...cfg.items.filter(popArr), ...cfg.items.filter(it => !popArr(it))].map(it => popItemCard(it, rec, bid)).join('')}</div>
+        <div class="pop-items">${popOrder(cfg.items).map(it => popItemCard(it, rec, bid)).join('')}</div>
       </section>
       <section class="section card pop-rem">
         <div class="pop-dhead"><div><h2 class="pop-h2">${icon('bell')} Lembretes de posts</h2><p class="muted">Aviso diário para preencher o checklist enquanto a meta do dia não for batida.</p></div>
