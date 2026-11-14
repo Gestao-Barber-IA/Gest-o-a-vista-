@@ -239,7 +239,7 @@
     for (const r of popDays(state, barberId)) {
       if (r.day < range.start || r.day > range.end) continue;
       add('check', Math.round(popDayPts(cfg, r) * 10) / 10);
-      popMonths.add(r.day.slice(0, 7));
+      if (popHasEv(r)) popMonths.add(r.day.slice(0, 7)); // só o ajuste não substitui um total lançado à mão
     }
     for (const ym of months) {
       const rec = recs[ym];
@@ -345,11 +345,16 @@
     return Number(it.pts) * Math.min(n, t) / t;
   }
   const popDayMax = cfg => cfg.items.reduce((a, it) => a + Number(it.pts || 0), 0);
+  // rec.adj: pontos acrescentados à mão pela gestão (ex.: pontos trazidos do sistema anterior). Somam aos do dia.
+  const popAdj = rec => (rec && Number(rec.adj) > 0 ? Number(rec.adj) : 0);
   function popDayPts(cfg, rec, pending) {
-    if (!rec || !rec.ev) return 0;
-    return cfg.items.reduce((a, it) => a + popItemPts(it, rec.ev[it.id], pending), 0);
+    if (!rec) return 0;
+    const adj = pending ? 0 : popAdj(rec);
+    if (!rec.ev) return adj;
+    return cfg.items.reduce((a, it) => a + popItemPts(it, rec.ev[it.id], pending), 0) + adj;
   }
-  const popDays = (state, barberId) => (state.pop || []).filter(r => r.barberId === barberId && r.day.length === 10 && r.ev && Object.values(r.ev).some(l => Array.isArray(l) && l.length));
+  const popHasEv = r => !!r.ev && Object.values(r.ev).some(l => Array.isArray(l) && l.length);
+  const popDays = (state, barberId) => (state.pop || []).filter(r => r.barberId === barberId && r.day.length === 10 && (popHasEv(r) || popAdj(r) > 0));
 
 
   // ---------- Lançamento manual por dia ----------
