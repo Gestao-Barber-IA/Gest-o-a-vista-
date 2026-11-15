@@ -679,6 +679,10 @@
       demoV: 10,
       comCfg: { pct: 40, pctBy: {}, plano: 10, prod: 5, pos: { 1: 200, 2: 100, 3: 50 }, mvp: 150, dest: 80, meta: 100 },
       extraTrad: ['Corte Tradicional', 'Barba'],
+      bonusTypes: [
+        { id: 'bt_demo1', nome: 'Roleta de produtos', tipo: 'dinheiro', premio: 'de R$ 10 a R$ 50', regra: 'A cada 3 produtos vendidos no dia, o profissional gira a roleta.' },
+        { id: 'bt_demo2', nome: 'Meta de planos do mês', tipo: 'outro', premio: '2 ingressos VIP no cinema', regra: 'Quem bater a meta de planos mensais do mês.' },
+      ],
       // Bônus de exemplo do mês (roleta de produtos e presentes).
       bonusRecs: [[0, 'dinheiro', 30, '', 'Roleta – venda de 3 produtos', 2], [1, 'dinheiro', 50, '', 'Roleta – venda de 3 produtos', 4], [2, 'outro', null, '2 ingressos VIP no cinema', 'Bateu a meta de faturamento da semana', 5], [0, 'dinheiro', 20, '', 'Roleta – venda de 3 produtos', 6], [3, 'dinheiro', 10, '', 'Roleta – venda de 3 produtos', 7]]
         .filter(x => barbers[x[0]] && x[5] <= today.getDate()).map(([i, tipo, valor, item, motivo, d], k) => ({ id: 'bn_demo' + k, barberId: barbers[i].id, date: `${curYm}-${String(d).padStart(2, '0')}`, tipo, valor, item, motivo, by: 'Gestão', at: `${curYm}-${String(d).padStart(2, '0')}T15:00:00Z` })),

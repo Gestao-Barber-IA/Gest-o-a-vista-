@@ -262,7 +262,7 @@
       out.tables[t] = map;
     }
     const co = s.company;
-    out.company = JSON.stringify({ name: co.name, cnpj: co.cnpj || '', phone: co.phone || '', email: co.email || '', logo: co.logo || null, settings: { weights: s.weights, goals: s.goals, hidden: s.hidden, org: s.org || null, pop: s.popCfg || null, reveal: s.reveal || null, ocup: s.ocupCfg || null, pops: s.pops || null, precos: Array.isArray(s.precos) && s.precos.length ? s.precos : null, brand: s.brand || null, theme: s.theme || null, houseGoals: s.houseGoals || null, houseGoalsM: s.houseGoalsM || null, music: s.podiumMusic || null, births: s.births || null, demoKit: s.demoKit || null, com: s.comCfg || null, dreams: s.dreams || null, units: s.units || null, prize: s.prize || null, planos: s.planCatalog || null, customInds: Array.isArray(s.customInds) && s.customInds.length ? s.customInds : null, indMode: s.indMode && (s.indMode.serv === 'valor' || s.indMode.prod === 'valor' || s.indMode.extra === 'valor') ? s.indMode : null, extraInit: s.extraInit || null, extraTrad: Array.isArray(s.extraTrad) && s.extraTrad.length ? s.extraTrad : null, extraCombo: s.extraCombo && Object.keys(s.extraCombo).length ? s.extraCombo : null, notices: s.notices || null, logoColors: s.logoColors === false ? false : null } });
+    out.company = JSON.stringify({ name: co.name, cnpj: co.cnpj || '', phone: co.phone || '', email: co.email || '', logo: co.logo || null, settings: { weights: s.weights, goals: s.goals, hidden: s.hidden, org: s.org || null, pop: s.popCfg || null, reveal: s.reveal || null, ocup: s.ocupCfg || null, pops: s.pops || null, precos: Array.isArray(s.precos) && s.precos.length ? s.precos : null, bonusTypes: Array.isArray(s.bonusTypes) && s.bonusTypes.length ? s.bonusTypes : null, brand: s.brand || null, theme: s.theme || null, houseGoals: s.houseGoals || null, houseGoalsM: s.houseGoalsM || null, music: s.podiumMusic || null, births: s.births || null, demoKit: s.demoKit || null, com: s.comCfg || null, dreams: s.dreams || null, units: s.units || null, prize: s.prize || null, planos: s.planCatalog || null, customInds: Array.isArray(s.customInds) && s.customInds.length ? s.customInds : null, indMode: s.indMode && (s.indMode.serv === 'valor' || s.indMode.prod === 'valor' || s.indMode.extra === 'valor') ? s.indMode : null, extraInit: s.extraInit || null, extraTrad: Array.isArray(s.extraTrad) && s.extraTrad.length ? s.extraTrad : null, extraCombo: s.extraCombo && Object.keys(s.extraCombo).length ? s.extraCombo : null, notices: s.notices || null, logoColors: s.logoColors === false ? false : null } });
     for (const u of s.users) out.users[u.id] = JSON.stringify({ name: u.name, phone: u.phone || '', status: u.status });
     return out;
   }
@@ -338,6 +338,7 @@
       popCfg: st.pop || null,
       pops: Array.isArray(st.pops) ? st.pops : [],
       precos: Array.isArray(st.precos) ? st.precos : [],
+      bonusTypes: Array.isArray(st.bonusTypes) ? st.bonusTypes : [],
       brand: st.brand === 'salao' ? 'salao' : 'barber',
       reveal: st.reveal || null,
       theme: st.theme || null,

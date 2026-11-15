@@ -2901,3 +2901,13 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .ind-off { border-color: color-mix(in srgb, #d64545 55%, transparent); }
 .cmd-off { color: #ef5b5b; }
 .cmd-off-note { margin: 6px 0 0; font-size: .82rem; color: #ef8b8b; line-height: 1.4; }
+/* Bônus › Tipos de bônus da empresa */
+.bn-tabs { margin-top: 12px; }
+.bt-list { display: grid; gap: 10px; }
+.bt-card { display: flex; gap: 12px; align-items: flex-start; padding: 14px; }
+.bt-body { flex: 1; min-width: 0; }
+.bt-body h3 { margin: 0 0 4px; font-size: 1.05rem; }
+.bt-body p { margin: 0; color: var(--fg-soft, inherit); overflow-wrap: anywhere; line-height: 1.45; }
+.bt-body .bt-premio { color: var(--money, #52d37e); font-weight: 700; margin-bottom: 4px; }
+.bt-card.is-gift .bt-premio { color: var(--accent); }
+.bt-btns { display: flex; gap: 6px; }

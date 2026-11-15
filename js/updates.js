@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-15-tipos-bonus', date: '2026-11-15', title: 'Tipos de bônus da empresa', items: [
+    ['novo', 'Na aba Bônus, a nova aba Tipos de bônus da empresa: o dono cadastra os bônus que a casa oferece (nome, o que ganha e como ganhar) e toda a equipe consulta.'],
+    ['melhoria', 'Ao registrar um bônus, dá para escolher um bônus da empresa e o formulário já vem preenchido. Só o dono, o gestor e o líder autorizado registram bônus; o profissional só acompanha os dele.'],
+  ] },
   { id: '2026-11-15-comanda-disp', date: '2026-11-15', title: 'Maior comanda e Disponibilidade comercial', items: [
     ['melhoria', 'A comanda feita no dia em que o profissional teve Disponibilidade alterada ou Compromisso comercial não atendido não conta para o destaque Maior comanda (pódio, Tela da loja e fechamento).'],
     ['melhoria', 'No perfil do profissional, esse valor aparece em vermelho, com o aviso de que não conta no pódio e o valor que está valendo.'],

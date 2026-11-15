@@ -1853,7 +1853,30 @@
   const bonusVisible = u => bonusAll().filter(v => isGestor(u) || v.barberId === u.barberId || bonusCanFor(u, v.barberId));
   const bonusSeenKey = () => 'bonusSeen.' + ((currentUser() || {}).id || '');
   const bonusUnseen = () => { const u = currentUser(); if (!u || isGestor(u) || !u.barberId) return 0; const seen = DB.pref.get(bonusSeenKey(), ''); return bonusAll().filter(v => v.barberId === u.barberId && String(v.at || v.date) > seen).length; };
+  // Tipos de bônus da empresa: o que a casa oferece (o dono cadastra; toda a equipe consulta).
+  const bonusTypes = () => (Array.isArray(state.bonusTypes) ? state.bonusTypes : []);
+  const bonusTabs = t => `<div class="disc-tabs bn-tabs" role="tablist"><button role="tab" class="disc-tab ${t === 'reg' ? 'on' : ''}" aria-selected="${t === 'reg'}" data-action="bonusTab" data-t="reg">${icon('diamond')} Bônus</button><button role="tab" class="disc-tab ${t === 'tipos' ? 'on' : ''}" aria-selected="${t === 'tipos'}" data-action="bonusTab" data-t="tipos">${icon('gift')} Tipos de bônus da empresa</button></div>`;
+  function bonusTypesPage(user) {
+    const own = isGestor(user), list = bonusTypes(), e = ui.btEdit ? list.find(x => x.id === ui.btEdit) : null;
+    const form = own ? `<section class="section card"><h2 class="section-title">${icon(e ? 'edit' : 'plus')} ${e ? 'Editar tipo de bônus' : 'Novo tipo de bônus'}</h2>
+      <form class="form" data-form="bonusType" novalidate>
+        <div class="grid-2"><label class="field"><span>Nome do bônus *</span><input class="input" name="nome" maxlength="60" value="${esc(e ? e.nome : '')}" placeholder="Ex.: Roleta de produtos"></label>
+        <label class="field"><span>Tipo</span><select class="input" name="tipo"><option value="dinheiro" ${!e || e.tipo === 'dinheiro' ? 'selected' : ''}>Bônus financeiro (R$)</option><option value="outro" ${e && e.tipo === 'outro' ? 'selected' : ''}>Outro tipo de bônus</option></select></label></div>
+        <label class="field"><span>O que ganha</span><input class="input" name="premio" maxlength="80" value="${esc(e ? e.premio || '' : '')}" placeholder="Ex.: de R$ 10 a R$ 50 · 2 ingressos VIP no cinema"></label>
+        <label class="field"><span>Como ganhar (regra) *</span><textarea class="input" name="regra" rows="3" maxlength="400" placeholder="Ex.: a cada 3 produtos vendidos no dia, gira a roleta.">${esc(e ? e.regra : '')}</textarea></label>
+        <p class="form-msg" data-msg></p>
+        <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} ${e ? 'Salvar' : 'Adicionar tipo de bônus'}</button>${e ? '<button type="button" class="btn" data-action="btEdit" data-id="">Cancelar</button>' : ''}</div>
+      </form></section>` : '';
+    const cards = list.length ? `<div class="bt-list">${list.map(x => `<article class="card bt-card ${x.tipo === 'outro' ? 'is-gift' : ''}">
+        <span class="bn-ic">${icon(x.tipo === 'outro' ? 'gift' : 'wallet')}</span>
+        <div class="bt-body"><h3>${esc(x.nome)}</h3>${x.premio ? `<p class="bt-premio">${esc(x.premio)}</p>` : ''}<p>${esc(x.regra)}</p></div>
+        ${own ? `<div class="bt-btns"><button class="icon-btn" data-action="btEdit" data-id="${esc(x.id)}" aria-label="Editar">${icon('edit')}</button><button class="icon-btn ${ui.confirm === 'bt' + x.id ? 'btn-danger' : ''}" data-action="btDel" data-id="${esc(x.id)}" aria-label="${ui.confirm === 'bt' + x.id ? 'Confirmar exclusão' : 'Excluir'}">${ui.confirm === 'bt' + x.id ? icon('check') : icon('trash')}</button></div>` : ''}
+      </article>`).join('')}</div>` : `<div class="card empty">${icon('gift')}<h2>Nenhum tipo de bônus cadastrado</h2><p>${own ? 'Cadastre acima os bônus que a empresa oferece: como ganhar e o que ganha.' : 'O dono ainda não cadastrou os bônus da empresa.'}</p></div>`;
+    return `<section class="section card bn-hero"><h2 class="section-title">${icon('gift')} Tipos de bônus da empresa</h2>
+      <p class="section-note">${own ? 'Os bônus que a empresa oferece e como ganhar. Toda a equipe vê esta lista.' : 'Os bônus que a empresa oferece e como ganhar cada um.'}</p>${bonusTabs('tipos')}</section>${form}<section class="section">${cards}</section>`;
+  }
   function pageBonus(user) {
+    if (ui.bonusTab === 'tipos') return bonusTypesPage(user);
     const admin = bonusAdmin(user), ym = ui.bonusYm || curYm(), all = bonusVisible(user);
     if (!admin && user.barberId) { const mine = all.filter(v => v.barberId === user.barberId); if (mine.length) setTimeout(() => DB.pref.set(bonusSeenKey(), mine.map(v => String(v.at || v.date)).sort().pop()), 1200); }
     const months = [...new Set([curYm(), ...all.map(v => v.date.slice(0, 7))])].sort().reverse();
@@ -1869,6 +1892,7 @@
       <p class="section-note">${admin ? 'Registre os bônus da equipe: financeiro (ex.: roleta ao vender 3 produtos) ou outro tipo (presente, ingresso, folga…), sempre com a referência de por que ganhou. Cada profissional vê só os dele.' : 'Os bônus que você ganhou e por quê. Continue assim!'}</p>
       ${admin ? '' : `<div class="bn-stats"><div><small>Em ${esc(ymLabel(ym))}</small><b class="num">${money2(sumM(monthAll))}</b><span>${monthAll.filter(bnOutro).length} outro(s) bônus</span></div>
         <div><small>No ano</small><b class="num">${money2(sumM(yearMine))}</b><span>${yearMine.length} bônus</span></div></div>`}
+      ${bonusTabs('reg')}
     </section>`;
     const sum = admin ? (() => {
       const by = {}; monthAll.forEach(v => { const o = by[v.barberId] || (by[v.barberId] = { r: 0, p: 0, n: 0 }); o.n++; if (bnOutro(v)) o.p++; else o.r += Number(v.valor) || 0; });
@@ -1883,6 +1907,7 @@
           <label class="field"><span>Profissional *</span><select class="input" name="b"><option value="">Escolha</option>${people.map(b => `<option value="${esc(b.id)}" ${d.b === b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>
           <label class="field"><span>Data</span><input class="input" type="date" name="date" value="${esc(d.date || todayIso())}" max="${todayIso()}"></label>
         </div>
+        ${bonusTypes().length ? `<label class="field"><span>Bônus da empresa (opcional)</span><select class="input" data-change="bonusFromType"><option value="">Escolha para preencher</option>${bonusTypes().map(x => `<option value="${esc(x.id)}">${esc(x.nome)}</option>`).join('')}</select></label>` : ''}
         <label class="field"><span>Tipo de bônus *</span><select class="input" name="tipo" data-change="bonusTipoSel">
           <option value="dinheiro" ${(d.tipo || 'dinheiro') === 'dinheiro' ? 'selected' : ''}>Bônus financeiro (R$)</option>
           <option value="outro" ${(d.tipo || 'dinheiro') !== 'dinheiro' ? 'selected' : ''}>Outro tipo de bônus</option></select></label>
@@ -7500,6 +7525,14 @@ Content-Type: application/json</pre>
     defaultGoals() { state.goals = { ...(state.goals || {}), team: { ...GB.DEFAULT_GOALS } }; save(); toast('Metas padrão restauradas.'); render(); },
 
     bonusRoleta(el) { const f = el.form; ui.bonusDraft = { ...(ui.bonusDraft || {}), ...bonusDraftOf(f), tipo: 'dinheiro', valor: Number(el.dataset.v), motivo: 'Roleta – venda de 3 produtos', roleta: true }; render(); },
+    bonusTab(el) { ui.bonusTab = el.dataset.t === 'tipos' ? 'tipos' : 'reg'; ui.btEdit = null; ui.confirm = null; render(); },
+    btEdit(el) { if (!isGestor(currentUser())) return; ui.btEdit = el.dataset.id || null; render(); if (ui.btEdit) setTimeout(() => document.querySelector('[data-form="bonusType"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 40); },
+    btDel(el) {
+      if (!isGestor(currentUser())) return;
+      const id = el.dataset.id, x = bonusTypes().find(t => t.id === id); if (!x) return;
+      if (ui.confirm !== 'bt' + id) { ui.confirm = 'bt' + id; render(); return; }
+      ui.confirm = null; state.bonusTypes = bonusTypes().filter(t => t.id !== id); save(); toast(`"${x.nome}" excluído.`); render();
+    },
     bonusPick(el) { ui.bonusB = el.dataset.b && ui.bonusB !== el.dataset.b ? el.dataset.b : null; render(); },
     bonusDel(el) {
       const u = currentUser(), v = bonusAll().find(x => x.id === el.dataset.id); if (!v || !bonusCanFor(u, v.barberId) || !(isGestor(u) || v.byUser === u.id)) return;
@@ -7811,6 +7844,15 @@ Content-Type: application/json</pre>
       save();
       toast(`${U(name)} adicionado. Agora envie o convite.`); render();
     },
+    bonusType(f) {
+      if (!isGestor(currentUser())) return;
+      const nome = val(f, 'nome').trim(), regra = val(f, 'regra').trim(), premio = val(f, 'premio').trim(), tipo = val(f, 'tipo') === 'outro' ? 'outro' : 'dinheiro';
+      if (nome.length < 2) return setMsg(f, 'Dê um nome ao bônus.');
+      if (regra.length < 3) return setMsg(f, 'Escreva como ganhar esse bônus.');
+      const list = bonusTypes().slice(), i = ui.btEdit ? list.findIndex(x => x.id === ui.btEdit) : -1, row = { nome: nome.slice(0, 60), regra: regra.slice(0, 400), premio: premio.slice(0, 80), tipo };
+      if (i >= 0) list[i] = { ...list[i], ...row }; else list.push({ id: uid('bt_'), ...row });
+      state.bonusTypes = list; ui.btEdit = null; save(); toast(i >= 0 ? 'Tipo de bônus salvo.' : 'Tipo de bônus adicionado. A equipe já vê.'); render();
+    },
     bonus(f) {
       const u = currentUser(), bid = val(f, 'b'), tipo = val(f, 'tipo') === 'outro' ? 'outro' : 'dinheiro';
       const valor = tipo === 'dinheiro' ? Number(String(val(f, 'valor')).replace(',', '.')) : null, item = tipo === 'outro' ? val(f, 'qual').trim() : '', motivo = val(f, 'motivo').trim(), date = val(f, 'date') || todayIso();
@@ -8052,6 +8094,12 @@ Content-Type: application/json</pre>
       if (!isGestor(currentUser())) return;
       const n = el.dataset.n, c = { ...(state.extraCombo || {}) }, key = Object.keys(c).find(k => GB.normSvc(k) === GB.normSvc(n)) || n;
       c[key] = el.value; state.extraCombo = c; rkCache = {}; save(); toast('Serviço de base do combo salvo.'); render();
+    },
+    bonusFromType(el) {
+      const x = bonusTypes().find(t => t.id === el.value); if (!x) return;
+      const d = bonusDraftOf(el.form);
+      ui.bonusDraft = { ...(ui.bonusDraft || {}), ...d, tipo: x.tipo === 'outro' ? 'outro' : 'dinheiro', item: x.tipo === 'outro' ? (x.premio || x.nome) : '', motivo: x.nome, roleta: false };
+      render();
     },
     bonusTipoSel(el) { ui.bonusDraft = { ...(ui.bonusDraft || {}), ...bonusDraftOf(el.form), tipo: el.value === 'outro' ? 'outro' : 'dinheiro', roleta: false }; render(); },
     wToggle(el) { // liga/desliga o indicador e salva na hora
