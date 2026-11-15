@@ -807,7 +807,8 @@
     if (isGestor(user)) return NAV;
     const gp = NAV.find(x => x.group === 'GP · Gestão de pessoas'), ap = NAV.find(x => x.group === 'Apresentações');
     const chk = gp.items.find(it => it.r === 'checklist');
-    const top = { ...NAV[0], items: [NAV[0].items[0], chk, ...NAV[0].items.slice(1)] };
+    const rest = NAV[0].items.slice(1), av = rest.find(it => it.r === 'avisos');
+    const top = { ...NAV[0], items: [NAV[0].items[0], chk, ...rest.filter(it => it !== av), av] }; // Avisos logo abaixo da Tabela de Preços
     const mine = { ...gp, group: 'Minha Gestão', items: gp.items.filter(it => it !== chk) };
     return [top, mine, ap, ...NAV.filter(x => x !== NAV[0] && x !== gp && x !== ap)];
   }
