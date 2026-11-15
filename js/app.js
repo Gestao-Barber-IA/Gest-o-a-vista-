@@ -5131,16 +5131,16 @@ Content-Type: application/json</pre>
   // O dono pode ligar ou desligar em cada tarefa ("arr"); sem escolha, vale para tarefas da gestão com "chegada" no nome.
   const popArr = it => it.arr !== undefined ? !!it.arr : popGest(it) && it.type === 'check' && (it.id === 'chegada' || /chegad|pontualid|disponibilidade comercial/i.test(`${it.title || ''} ${it.desc || ''}`));
   const ARR = {
-    ok: ['Disponibilidade confirmada', 'arr-ok', 'check', 'Profissional disponível para os atendimentos anunciados.'],
-    apos: ['Disponibilidade alterada', 'arr-apos', 'clock', 'Alteração comunicada para reorganização da agenda e dos clientes.'],
-    atraso: ['Compromisso comercial não atendido', 'arr-atraso', 'alert', 'Incompatibilidade não comunicada que prejudicou um atendimento confirmado ou a oferta anunciada. Situação sujeita à análise individual.'],
+    ok: ['Disponibilidade confirmada', 'arr-ok', 'check', 'Profissional disponível para os atendimentos anunciados.', '(bônus ativo)'],
+    apos: ['Disponibilidade alterada', 'arr-apos', 'clock', 'Alteração comunicada para reorganização da agenda e dos clientes.', '(registrado e sem bônus)'],
+    atraso: ['Compromisso comercial não atendido', 'arr-atraso', 'alert', 'Incompatibilidade não comunicada que prejudicou um atendimento confirmado ou a oferta anunciada. Situação sujeita à análise individual.', '(registrado e sem bônus)'],
   };
   // Ordem dos cartões no checklist: Horário de chegada primeiro, logo abaixo o EXTRA, depois as demais tarefas.
   const popIsExtra = it => !popArr(it) && (it.id === 'extra' || /^extra\b/i.test(String(it.title || '').trim()));
   const popOrder = items => [...items.filter(popArr), ...items.filter(popIsExtra), ...items.filter(it => !popArr(it) && !popIsExtra(it))];
   // O que o profissional vê no Horário de chegada (os botões são só da gestão).
   const arrRules = () => `<span class="chip chip-soft arr-info">Informativo</span><ul class="arr-rules">
-      ${Object.entries(ARR).map(([k, [l, , i, d]]) => `<li class="arr-r-${k}">${icon(i)}<span><b>${l}</b>${d}</span></li>`).join('')}
+      ${Object.entries(ARR).map(([k, [l, , i, d, n]]) => `<li class="arr-r-${k}">${icon(i)}<span><b>${l}</b>${d}<em class="arr-note">${n}</em></span></li>`).join('')}
     </ul><p class="muted pop-gest">${icon('lock')} Marcado pelo dono, gestor ou líder.</p>`;
   function arrBlock(it, list, bid) {
     const e = list.find(GB.evLive), can = popMarkOk(it, bid);
@@ -5151,7 +5151,7 @@ Content-Type: application/json</pre>
         ${undo ? `<button class="link-btn arr-undo" data-action="arrUndo" data-it="${esc(it.id)}">${ui.confirm === 'arr' + it.id ? 'Confirmar: desfazer' + (e.disc ? ' e apagar a ocorrência' : '') : 'Desfazer'}</button>` : ''}`;
     }
     if (!can) return arrRules();
-    return `<div class="arr-btns">${Object.entries(ARR).map(([k, [l, c, i]]) => `<button class="btn arr-btn ${c}" data-action="arrMark" data-it="${esc(it.id)}" data-v="${k}" ${ui.arrBusy ? 'disabled' : ''}>${icon(i)} <span>${l}<small>${ARR[k][3]}</small></span></button>`).join('')}</div>`;
+    return `<div class="arr-btns">${Object.entries(ARR).map(([k, [l, c, i]]) => `<button class="btn arr-btn ${c}" data-action="arrMark" data-it="${esc(it.id)}" data-v="${k}" ${ui.arrBusy ? 'disabled' : ''}>${icon(i)} <span>${l}<small>${ARR[k][3]}</small><em class="arr-note">${ARR[k][4]}</em></span></button>`).join('')}</div>`;
   }
   function popStepper(it, list, t, bid, mayAdd) {
     if (!popMarkOk(it, bid)) return `<p class="muted pop-gest">${icon('lock')} Marcado pelo dono, gestor ou líder.</p>`;
