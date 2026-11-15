@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-16-ganho', date: '2026-11-16', title: 'Ganho do mês em Minha performance', items: [
+    ['novo', 'Em Minha performance, o profissional vê quanto ganhou no mês: comissão, planos e produtos, prêmios do ranking, bônus registrados e descontos de penalidade.'],
+    ['melhoria', 'Só o próprio profissional, o dono, o gestor e o líder com o novo acesso extra "Ver o ganho da equipe" veem esse valor. Os colegas não.'],
+  ] },
   { id: '2026-11-15-tipos-bonus', date: '2026-11-15', title: 'Tipos de bônus da empresa', items: [
     ['novo', 'Na aba Bônus, a nova aba Tipos de bônus da empresa: o dono cadastra os bônus que a casa oferece (nome, o que ganha e como ganhar) e toda a equipe consulta.'],
     ['melhoria', 'O dono muda os tipos de bônus quando quiser (por exemplo, todo mês). Cada alteração aparece para a equipe em Avisos e alterações.'],

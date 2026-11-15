@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSAO = "2.4";
+const VERSAO = "2.5";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const TESTE = process.argv.includes("--teste");
 const CARGA = process.argv.includes("--carga"); // carga inicial: lê todas as comandas no ritmo máximo permitido
@@ -250,6 +250,36 @@ async function main() {
       ...(x.int.length ? { horas_ocupadas: horasJuntas(x.int) } : {}),
     }));
   }
+  // Diagnóstico (testar.bat): mostra os campos que a AppBarber manda num produto vendido de comanda finalizada e
+  // no catálogo de produtos, para saber se ela informa a comissão de cada produto. Não mostra dados de clientes.
+  async function camposComissao() {
+    const COM = /comis|commission|percent|perc|rate|comm/i;
+    const SENS = /client|person|customer|phone|fone|cpf|email|mail|document|doc|birth|nasc|address|endere/i;
+    const mostra = (o) => Object.entries(o || {}).map(([k, v]) => {
+      const val = SENS.test(k) ? "(oculto)" : v === null || v === undefined ? "vazio" : typeof v === "object" ? "{…}" : String(v).slice(0, 40);
+      return `${COM.test(k) ? "  >>> " : "      "}${k}: ${val}`;
+    }).join("\n");
+    console.log("\n=== Diagnóstico de comissão de produtos (mande um print desta parte) ===");
+    const alvo = [...codigos].reverse().find((c) => cache[c] && cache[c].final && cache[c].pago && (cache[c].itens || []).some((it) => it.prod && !consumo(it) && !it.pl));
+    if (!alvo) console.log("  Nenhuma comanda finalizada com produto encontrada nos últimos dias.");
+    else {
+      const rr = await getExato(`${BASE}/v1/invoice/${encodeURIComponent(alvo)}?establishment_code=${encodeURIComponent(cfg.codigo_estabelecimento)}`, HDR).catch((e) => ({ ok: false, status: 0, text: e.message }));
+      if (!rr.ok) console.log(`  Não consegui ler a comanda ${alvo} (AppBarber respondeu ${rr.status}).`);
+      else {
+        const inv = (JSON.parse(rr.text).data) || {};
+        const item = (inv.items || []).find((it) => it.product_code && !it.service_code) || (inv.items || [])[0];
+        console.log(`  Comanda nº ${alvo} · campos da comanda:\n${mostra(Object.fromEntries(Object.entries(inv).filter(([k]) => k !== "items")))}`);
+        console.log(`  Campos do PRODUTO vendido nessa comanda:\n${mostra(item)}`);
+      }
+    }
+    const rp = await getExato(`${BASE}/v1/products?establishment_code=${encodeURIComponent(cfg.codigo_estabelecimento)}`, HDR).catch(() => null);
+    if (rp && rp.ok) {
+      const lst = (JSON.parse(rp.text).data) || [];
+      const p = lst.find((x) => Object.keys(x).some((k) => COM.test(k))) || lst[0];
+      console.log(p ? `  Campos de um produto do CATÁLOGO:\n${mostra(p)}` : "  Catálogo de produtos vazio.");
+    } else console.log("  Não consegui ler o catálogo de produtos.");
+    console.log('  Linhas marcadas com ">>>" parecem ser de comissão.\n');
+  }
   async function enviar(silencioso) {
     const itens = calc();
     if (!itens.length) { if (!silencioso) log("Nada para enviar."); return; }
@@ -405,6 +435,7 @@ async function main() {
       for (const [k, o] of cats) { const sim = excluir.has(k) || (!incluir.has(k) && o.bar * 2 >= o.tot); console.log(`   - categoria ${k}: ${sim ? "CONSUMO (não conta)" : "salão (conta)"} · ex.: ${o.ex.join(", ")}`); }
       console.log('  Para corrigir uma categoria, use no config.json: "categorias_salao": ["código"] ou "categorias_consumo": ["código"].');
     }
+    await camposComissao();
     log("Modo teste: nada foi enviado.");
     return;
   }

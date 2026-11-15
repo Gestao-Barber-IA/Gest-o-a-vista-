@@ -267,12 +267,13 @@
     </section>`;
   }
   function leaderExtrasBox(b) {
-    const x = extrasOf(b.id), n = (x.review ? 1 : 0) + (x.disc ? 1 : 0) + (x.bonus ? 1 : 0) + x.fields.length;
+    const x = extrasOf(b.id), n = (x.review ? 1 : 0) + (x.disc ? 1 : 0) + (x.bonus ? 1 : 0) + (x.lucro ? 1 : 0) + x.fields.length;
     return `<details class="lx" ${ui.lxOpen === b.id ? 'open' : ''} data-id="${esc(b.id)}">
       <summary>${icon('plus')} Acessos extras do líder ${n ? `<span class="chip chip-ok">${n} liberado${n > 1 ? 's' : ''}</span>` : '<span class="chip chip-soft">nenhum</span>'}${tip('extras')}</summary>
       <label class="check"><input type="checkbox" data-change="leaderExtra" data-id="${esc(b.id)}" data-k="review" ${x.review ? 'checked' : ''}><span><b>Conferir e aprovar o checklist de toda a equipe</b><small>Aprova ou recusa as provas dos colegas (nunca as próprias).</small></span></label>
       <label class="check"><input type="checkbox" data-change="leaderExtra" data-id="${esc(b.id)}" data-k="disc" ${x.disc ? 'checked' : ''}><span><b>Fiscalização (controle disciplinar)</b><small>Vê a página Fiscalização e registra atrasos, faltas e ocorrências da equipe (nunca as próprias). Apagar continua só com o dono.</small></span></label>
       <label class="check"><input type="checkbox" data-change="leaderExtra" data-id="${esc(b.id)}" data-k="bonus" ${x.bonus ? 'checked' : ''}><span><b>Bônus</b><small>Vê os bônus de toda a equipe e lança bônus em dinheiro ou presentes para os colegas (nunca para si mesmo).</small></span></label>
+      <label class="check"><input type="checkbox" data-change="leaderExtra" data-id="${esc(b.id)}" data-k="lucro" ${x.lucro ? 'checked' : ''}><span><b>Ver o ganho da equipe</b><small>Abre a performance dos colegas e vê quanto cada um ganha no mês (comissão, prêmios e bônus). Para ver também os bônus lançados, libere o acesso Bônus.</small></span></label>
       <p class="lx-sub">Lançar à mão os números de toda a equipe, só nestes indicadores:</p>
       <div class="lx-grid">${EXTRA_FIELDS().map(f => `<label class="check"><input type="checkbox" data-change="leaderExtra" data-id="${esc(b.id)}" data-k="f:${f.key}" ${x.fields.includes(f.key) ? 'checked' : ''}><span>${esc(f.label)}</span></label>`).join('')}</div>
     </details>`;
@@ -2254,7 +2255,7 @@
     precos: () => ['Tabela de Preços e Planos', 'A tabela de preços e planos foi atualizada. Confira em Tabela de Preços e Planos: ' + popsList('precos').map(x => x.name).filter(Boolean).slice(0, 8).join(', ') + '.'],
     pops: () => ['POPs · Guia do Sucesso', 'Os POPs foram atualizados. Confira em POPs · Guia do Sucesso: ' + popsList().map(x => x.title || x.t).filter(Boolean).slice(0, 8).join(', ') + '.'],
     access: id => { const a = ACCESS.find(x => x[0] === accessOf(id)); return ['Seu nível de acesso', `Agora você tem acesso de ${a[1]}: ${a[2]}`]; },
-    extras: id => { const x = extrasOf(id); const t = [x.review && 'conferir e aprovar o checklist da equipe', x.disc && 'registrar ocorrências na Fiscalização', x.bonus && 'lançar e ver os bônus da equipe', x.fields.length && 'lançar os números da equipe em ' + x.fields.map(lbl).join(', ')].filter(Boolean); return ['Seus acessos extras', t.length ? 'Agora você pode: ' + t.join('; ') + '.' : 'Seus acessos extras de líder foram retirados.']; },
+    extras: id => { const x = extrasOf(id); const t = [x.review && 'conferir e aprovar o checklist da equipe', x.disc && 'registrar ocorrências na Fiscalização', x.bonus && 'lançar e ver os bônus da equipe', x.lucro && 'ver o ganho de cada profissional', x.fields.length && 'lançar os números da equipe em ' + x.fields.map(lbl).join(', ')].filter(Boolean); return ['Seus acessos extras', t.length ? 'Agora você pode: ' + t.join('; ') + '.' : 'Seus acessos extras de líder foram retirados.']; },
     goals: id => { const g = (state.goals?.byBarber || {})[id] || {}, ks = GB.visibleInds(state).filter(i => isNum(g[i.key])); return ['Suas metas individuais', ks.length ? 'Suas metas do mês: ' + listTxt(GB.visibleInds(state).map(i => `${i.label} ${fmtGoal(i, GB.goalFor(state, id, i.key))}`)) + '.' : 'Suas metas voltaram a ser as metas da equipe.']; },
     comp: id => { const v = comCfg().pctBy[id] || 0; return ['Sua comissão', v > 0 ? `Sua comissão agora é de ${nf1.format(v)}% do faturamento.` : 'Sua comissão volta a seguir a regra geral da equipe.']; },
   };
@@ -3244,13 +3245,44 @@
     }, 450);
   }
 
+  // Ganho do profissional no mês (Minha performance): comissão + planos + produtos + prêmios do ranking
+  // + bônus financeiros registrados − descontos de penalidade. Só ele, o dono, a gestão e o líder com o acesso "Ver o ganho da equipe".
+  const earnCanSee = (u, bid) => !!u && (isGestor(u) || u.barberId === bid || isAreaMgr(u) || extrasOf(u.barberId).lucro);
+  function earnCard(bid, ym, user) {
+    if (!earnCanSee(user, bid)) return '';
+    const own = isGestor(user), me = user.barberId === bid, c = comFor(ym, bid);
+    const bonusSeen = me || bonusCanFor(user, bid) || isGestor(user);
+    const bonusL = bonusSeen ? bonusAll().filter(v => v.barberId === bid && v.date.slice(0, 7) === ym && !bnOutro(v) && Number(v.valor) > 0) : [];
+    const gifts = bonusSeen ? bonusAll().filter(v => v.barberId === bid && v.date.slice(0, 7) === ym && bnOutro(v)).length : 0;
+    const bSum = bonusL.reduce((a, v) => a + Number(v.valor), 0);
+    if (!comOn() && !bSum) return own ? `<section class="section card earn-card"><h2 class="section-title">${icon('wallet')} Ganho do mês</h2><p class="muted">Configure a comissão em <a href="#comissoes">Comissões e prêmios</a> para cada profissional ver quanto ganha no mês.</p></section>` : '';
+    const line = (l, v, cls = '') => `<li class="${cls}"><span>${l}</span><b class="num">${v < 0 ? '−' + money2(-v) : money2(v)}</b></li>`;
+    const items = [];
+    if (c) {
+      if (c.base > 0) items.push(line(`Comissão (${nf1.format(c.pct)}% de ${money0(c.fat)})`, c.base));
+      if (c.vPl > 0) items.push(line(`Planos vendidos (${nf0.format(c.planos)})`, c.vPl));
+      if (c.vPr > 0) items.push(line(`Produtos vendidos (${nf0.format(c.prod)})`, c.vPr));
+      c.bonus.forEach(([l, v]) => items.push(line(esc(l), v, v < 0 ? 'neg' : 'pos')));
+    }
+    if (bSum > 0) items.push(line(`Bônus registrados (${bonusL.length})`, bSum, 'pos'));
+    const total = Math.max(0, (c ? c.total : 0) + bSum);
+    const who = me ? 'Seu ganho' : `Ganho de ${first((barberById(bid) || { name: "" }).name)}`;
+    return `<section class="section card earn-card">
+      <div class="earn-head"><h2 class="section-title">${icon('wallet')} ${who} em ${esc(ymLabel(ym))}</h2><span class="chip chip-soft">${icon('lock')} ${me ? 'só você e a gestão veem' : 'restrito'}</span></div>
+      <div class="earn-total num">${money2(total)}</div>
+      ${items.length ? `<ul class="earn-list">${items.join('')}</ul>` : '<p class="muted">Ainda sem valores neste mês.</p>'}
+      ${gifts ? `<p class="muted earn-note">${icon('gift')} + ${gifts} bônus que não são em dinheiro (veja em <a href="#bonus">Bônus</a>).</p>` : ''}
+      ${!bonusSeen ? '<p class="muted earn-note">Os bônus registrados aparecem com o acesso Bônus.</p>' : ''}
+      <p class="muted earn-note">Valor estimado pelos números lançados no sistema; o valor final é o do fechamento do mês.</p>
+    </section>`;
+  }
   function perfFor(barberId, user) {
     if (!seeNum(barberId)) return `<div class="card empty">${icon('lock')}<h2>Números reservados</h2><p>Você vê o ranking com os números de todos, e a performance detalhada só a sua.</p><a class="btn" href="#performance">Ver minha performance</a></div>`;
     const b = barberById(barberId);
     if (!b) return `<div class="card empty">${icon('users')}<h2>Barbeiro não encontrado</h2><p>Ele pode ter sido removido da equipe.</p></div>`;
     const R = computeRanking(state, range());
     const dk = isGestor(user) ? null : darkFor(range());
-    if (dk) return `${periodNav()}${suspenseCard(dk)}${ownNumbers(R, b.id, ui.period === 'mes' ? range().start.slice(0, 7) : null)}`;
+    if (dk) return `${periodNav()}${suspenseCard(dk)}${earnCard(b.id, range().start.slice(0, 7), user)}${ownNumbers(R, b.id, ui.period === 'mes' ? range().start.slice(0, 7) : null)}`;
     // Compara com o mesmo número de dias do período anterior, para não punir o período em andamento.
     const cur = range(), prevR = range(ui.offset - 1);
     if (ui.offset === 0) {
@@ -3305,6 +3337,7 @@
           <div class="stat"><span>Faturamento</span><b class="num">${money0(row.sums.fat)}</b></div>
         </div>
       </div>
+      ${earnCard(b.id, ui.period === 'mes' ? range().start.slice(0, 7) : curYm(), user)}
       <section class="section"><h2 class="section-title">Indicadores ${tip('score')}</h2><div class="ind-grid">${cards}</div></section>
       ${fatHistory(b.id)}
       ${feedbackCard(b.id, user)}
@@ -4925,11 +4958,11 @@ Content-Type: application/json</pre>
   const accessOf = bid => (bid && (org().access || {})[bid]) || 'profissional';
   // Acessos extras que o dono pode dar a cada líder: conferir o checklist e lançar métricas específicas.
   function extrasOf(bid) {
-    if (accessOf(bid) !== 'lider') return { review: false, disc: false, bonus: false, fields: [] };
+    if (accessOf(bid) !== 'lider') return { review: false, disc: false, bonus: false, lucro: false, fields: [] };
     const e = (org().extras || {})[bid] || {};
-    return { review: !!e.review, disc: !!e.disc, bonus: !!e.bonus, fields: Array.isArray(e.fields) ? e.fields : [] };
+    return { review: !!e.review, disc: !!e.disc, bonus: !!e.bonus, lucro: !!e.lucro, fields: Array.isArray(e.fields) ? e.fields : [] };
   }
-  const myExtras = () => { const u = currentUser(); return u && !isGestor(u) ? extrasOf(u.barberId) : { review: false, disc: false, bonus: false, fields: [] }; };
+  const myExtras = () => { const u = currentUser(); return u && !isGestor(u) ? extrasOf(u.barberId) : { review: false, disc: false, bonus: false, lucro: false, fields: [] }; };
   // Fiscalização: dono, gestor de área ou líder com o acesso extra "Fiscalização".
   const discOk = u => !!u && (isGestor(u) || isAreaMgr(u) || (!isGestor(u) && extrasOf(u.barberId).disc));
   const EXTRA_FIELDS = () => GB.MONTH_FIELDS.filter(f => !f.calc && !GB.fieldOff(f.key) && !hidAll().includes(GB.FIELD_IND[f.key] || f.key));
@@ -4951,7 +4984,7 @@ Content-Type: application/json</pre>
   function seeNum(bid) {
     const u = currentUser();
     if (!u || isGestor(u) || u.barberId === bid) return true;
-    return areaIds(u, ['gestor', 'membro']).has(bid);
+    return areaIds(u, ['gestor', 'membro']).has(bid) || !!myExtras().lucro;
   }
   // Quem pode lançar os números do mês de um barbeiro.
   function canEditB(bid) { const u = currentUser(); return !!u && (isGestor(u) || areaIds(u, ['gestor']).has(bid)); }
@@ -8194,6 +8227,7 @@ Content-Type: application/json</pre>
       if (k === 'review') x.review = el.checked;
       else if (k === 'disc') x.disc = el.checked;
       else if (k === 'bonus') x.bonus = el.checked;
+      else if (k === 'lucro') x.lucro = el.checked;
       else { const f = k.slice(2); x.fields = el.checked ? [...new Set([...x.fields, f])] : x.fields.filter(v => v !== f); }
       ui.lxOpen = id; save(); toast('Acesso do líder atualizado.'); render();
     },
