@@ -2924,3 +2924,10 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .earn-list li.neg b { color: #ef5b5b; }
 .earn-note { font-size: .82rem; margin: 8px 0 0; }
 .earn-note svg { width: 14px; height: 14px; vertical-align: -2px; }
+/* Minha performance › Como sua nota é calculada */
+.how-list { list-style: none; margin: 4px 0 10px; padding: 0; display: grid; gap: 8px; }
+.how-list li { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(60px, 1fr) 4.2ch; align-items: center; gap: 10px; font-size: .92rem; }
+.how-n { min-width: 0; overflow-wrap: anywhere; }
+.how-bar { height: 8px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.how-bar i { display: block; height: 100%; border-radius: 99px; background: var(--accent); }
+.how-list b { color: var(--accent); min-width: 3ch; text-align: right; }
