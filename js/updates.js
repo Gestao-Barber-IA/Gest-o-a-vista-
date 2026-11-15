@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-15-disp-comercial', date: '2026-11-15', title: 'Disponibilidade comercial', items: [
+    ['melhoria', 'O cartão Horário de chegada passa a se chamar Disponibilidade comercial, com 3 situações: Disponibilidade confirmada, Disponibilidade alterada e Compromisso comercial não atendido. As regras de pontos e de Fiscalização continuam as mesmas.'],
+  ] },
   { id: '2026-11-15-chegada-regras', date: '2026-11-15', title: 'Horário de chegada: novas regras na Fiscalização', items: [
     ['melhoria', 'O Horário de chegada fica no topo do Registro do dia. O profissional vê as regras: no horário participa dos bônus; após o horário não participa; atrasado fica registrado na Fiscalização.'],
     ['melhoria', 'Amarelo (após o horário combinado): registra na Fiscalização (tipo Atraso), sem somar para advertência.'],

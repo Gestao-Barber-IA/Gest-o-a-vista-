@@ -314,7 +314,7 @@
         { id: 'google', title: '4 Avaliações no Google', desc: 'Peça e conquiste 4 avaliações de clientes no Google', type: 'count', target: 4, pts: 3 },
         { id: 'estrat', title: 'Stories Estratégico', desc: 'postar às 8h30, 12h, 17h30', type: 'count', target: 3, pts: 2 },
         { id: 'extra', title: 'Pró Atividade', desc: 'Extra', type: 'count', target: 5, pts: 3 },
-        { id: 'chegada', title: 'Horário de chegada', desc: 'Pontualidade', type: 'check', target: 1, pts: 3 },
+        { id: 'chegada', title: 'Disponibilidade comercial', desc: 'Organização da agenda e dos atendimentos oferecidos aos clientes.', type: 'check', target: 1, pts: 3 },
       ],
       levels: [
         { name: 'Elite', min: 390, max: 600, value: 4500, tone: 'gold' },

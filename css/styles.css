@@ -2888,3 +2888,6 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .arr-r-ok { background: color-mix(in srgb, #1f9d55 16%, transparent); } .arr-r-ok svg { color: #2fbf6c; }
 .arr-r-apos { background: color-mix(in srgb, #f2c230 16%, transparent); } .arr-r-apos svg { color: #f2c230; }
 .arr-r-atraso { background: color-mix(in srgb, #d64545 16%, transparent); } .arr-r-atraso svg { color: #ef6b6b; }
+.arr-info { display: inline-flex; width: fit-content; max-width: 100%; align-self: flex-start; justify-self: start; margin-top: 10px; font-size: .75rem; }
+.arr-rules li span { display: flex; flex-direction: column; gap: 2px; }
+.arr-btn small { white-space: normal; }

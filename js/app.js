@@ -5129,31 +5129,29 @@ Content-Type: application/json</pre>
   const popMarkOk = (it, bid) => { if (!popGest(it)) return canPopEdit(bid); const u = currentUser(); return !!u && (isGestor(u) || (u.barberId !== bid && (canEditB(bid) || accessOf(u.barberId) === 'lider'))); };
   // Horário de chegada: três botões (no horário, depois do horário, atrasado), sem prova. Fica no topo do checklist.
   // O dono pode ligar ou desligar em cada tarefa ("arr"); sem escolha, vale para tarefas da gestão com "chegada" no nome.
-  const popArr = it => it.arr !== undefined ? !!it.arr : popGest(it) && it.type === 'check' && /chegad|pontualid/i.test(`${it.title || ''} ${it.desc || ''}`);
+  const popArr = it => it.arr !== undefined ? !!it.arr : popGest(it) && it.type === 'check' && (it.id === 'chegada' || /chegad|pontualid|disponibilidade comercial/i.test(`${it.title || ''} ${it.desc || ''}`));
   const ARR = {
-    ok: ['Chegou no horário combinado', 'arr-ok', 'check'],
-    apos: ['Chegou após o horário combinado', 'arr-apos', 'clock'],
-    atraso: ['Chegou atrasado', 'arr-atraso', 'alert'],
+    ok: ['Disponibilidade confirmada', 'arr-ok', 'check', 'Profissional disponível para os atendimentos anunciados.'],
+    apos: ['Disponibilidade alterada', 'arr-apos', 'clock', 'Alteração comunicada para reorganização da agenda e dos clientes.'],
+    atraso: ['Compromisso comercial não atendido', 'arr-atraso', 'alert', 'Incompatibilidade não comunicada que prejudicou um atendimento confirmado ou a oferta anunciada. Situação sujeita à análise individual.'],
   };
   // Ordem dos cartões no checklist: Horário de chegada primeiro, logo abaixo o EXTRA, depois as demais tarefas.
   const popIsExtra = it => !popArr(it) && (it.id === 'extra' || /^extra\b/i.test(String(it.title || '').trim()));
   const popOrder = items => [...items.filter(popArr), ...items.filter(popIsExtra), ...items.filter(it => !popArr(it) && !popIsExtra(it))];
   // O que o profissional vê no Horário de chegada (os botões são só da gestão).
-  const arrRules = () => `<ul class="arr-rules">
-      <li class="arr-r-ok">${icon('check')}<span><b>Chegou no horário combinado:</b> participa dos bônus.</span></li>
-      <li class="arr-r-apos">${icon('clock')}<span><b>Chegou após o horário combinado:</b> não participa dos bônus e fica registrado na Fiscalização.</span></li>
-      <li class="arr-r-atraso">${icon('alert')}<span><b>Chegou atrasado:</b> fica registrado na Fiscalização. No mês, o 1º atraso é advertência, o 2º reincidência e o 3º penalidade.</span></li>
+  const arrRules = () => `<span class="chip chip-soft arr-info">Informativo</span><ul class="arr-rules">
+      ${Object.entries(ARR).map(([k, [l, , i, d]]) => `<li class="arr-r-${k}">${icon(i)}<span><b>${l}</b>${d}</span></li>`).join('')}
     </ul><p class="muted pop-gest">${icon('lock')} Marcado pelo dono, gestor ou líder.</p>`;
   function arrBlock(it, list, bid) {
     const e = list.find(GB.evLive), can = popMarkOk(it, bid);
     if (e) {
       const a = ARR[e.arr || 'ok'], sev = e.sev && DISC_SEV[e.sev];
       const undo = can && (isGestor(currentUser()) || e.byUser === (currentUser() || {}).id);
-      return `<div class="arr-done ${a[1]}">${icon(a[2])}<span><b>${a[0]}</b><small>${e.arr && e.arr !== 'ok' ? 'Sem bônus' : `+${fmtPts(it.pts)} pts`}${sev ? ` · Fiscalização: atraso, ${sev[0].toLowerCase()}` : ''}</small></span></div>
+      return `<div class="arr-done ${a[1]}">${icon(a[2])}<span><b>${a[0]}</b><small>${!e.arr || e.arr === 'ok' ? `+${fmtPts(it.pts)} pts` : can && sev ? `Fiscalização: ${sev[0].toLowerCase()}` : esc(a[3])}</small></span></div>
         ${undo ? `<button class="link-btn arr-undo" data-action="arrUndo" data-it="${esc(it.id)}">${ui.confirm === 'arr' + it.id ? 'Confirmar: desfazer' + (e.disc ? ' e apagar a ocorrência' : '') : 'Desfazer'}</button>` : ''}`;
     }
     if (!can) return arrRules();
-    return `<div class="arr-btns">${Object.entries(ARR).map(([k, [l, c, i]]) => `<button class="btn arr-btn ${c}" data-action="arrMark" data-it="${esc(it.id)}" data-v="${k}" ${ui.arrBusy ? 'disabled' : ''}>${icon(i)} <span>${l}${k === 'ok' ? '' : '<small>sem bônus · ' + (k === 'atraso' ? 'advertência, reincidência, penalidade' : 'registra na Fiscalização') + '</small>'}</span></button>`).join('')}</div>`;
+    return `<div class="arr-btns">${Object.entries(ARR).map(([k, [l, c, i]]) => `<button class="btn arr-btn ${c}" data-action="arrMark" data-it="${esc(it.id)}" data-v="${k}" ${ui.arrBusy ? 'disabled' : ''}>${icon(i)} <span>${l}<small>${ARR[k][3]}</small></span></button>`).join('')}</div>`;
   }
   function popStepper(it, list, t, bid, mayAdd) {
     if (!popMarkOk(it, bid)) return `<p class="muted pop-gest">${icon('lock')} Marcado pelo dono, gestor ou líder.</p>`;
@@ -5205,7 +5203,7 @@ Content-Type: application/json</pre>
     if (popArr(it)) {
       const e = list.find(GB.evLive);
       return `<article class="pop-item pop-arr ${e ? (!e.arr || e.arr === 'ok' ? 'is-done' : 'arr-st-' + e.arr) : ''}" id="pi-${esc(it.id)}">
-      <div class="pop-ihead"><div><h3>${icon('clock')} ${esc(it.title)}</h3><p>${esc(it.desc || 'Sem prova: o dono, o gestor ou o líder marca quando o profissional chega.')}</p></div><span class="pop-badge num">${fmtPts(pts)}/${fmtPts(it.pts)} pts</span></div>
+      <div class="pop-ihead"><div><h3>${icon('checksq')} ${esc(it.title)}</h3><p>${esc(it.desc || 'Sem prova: o dono, o gestor ou o líder marca quando o profissional chega.')}</p></div><span class="pop-badge num">${fmtPts(pts)}/${fmtPts(it.pts)} pts</span></div>
       ${arrBlock(it, list, bid)}
     </article>`;
     }
@@ -5284,7 +5282,7 @@ Content-Type: application/json</pre>
         <div class="grid-2">${it.type === 'check' ? '' : `<label class="field"><span class="tm-flabel">Meta (quantidade)</span><input class="input num" type="number" min="1" id="pei-m-${i}" value="${it.target}" data-popitem="target" data-i="${i}"></label>`}
         <label class="field"><span class="tm-flabel">Pontos</span><input class="input num" type="number" min="0" step="0.5" id="pei-p-${i}" value="${it.pts}" data-popitem="pts" data-i="${i}"></label></div>
         <label class="check"><input type="checkbox" data-popitem="gest" data-i="${i}" ${popGest(it) ? 'checked' : ''}><span><b>Só o dono, o gestor ou o líder marcam</b><small>O profissional vê a tarefa, mas não consegue marcar (ex.: horário de chegada).</small></span></label>
-        ${it.type === 'check' ? `<label class="check"><input type="checkbox" data-popitem="arr" data-i="${i}" ${popArr(it) ? 'checked' : ''}><span><b>É o horário de chegada (3 botões)</b><small>Fica no topo, sem prova: no horário (verde, com pontos), depois do horário (amarelo, sem bônus, registra na Fiscalização) e atrasado (vermelho, sem bônus: 1º advertência, 2º reincidência, 3º penalidade no mês).</small></span></label>` : ''}
+        ${it.type === 'check' ? `<label class="check"><input type="checkbox" data-popitem="arr" data-i="${i}" ${popArr(it) ? 'checked' : ''}><span><b>É a Disponibilidade comercial (3 botões)</b><small>Fica no topo, sem prova: disponibilidade confirmada (verde, com pontos), disponibilidade alterada (amarelo, registra na Fiscalização) e compromisso comercial não atendido (vermelho: 1º advertência, 2º reincidência, 3º penalidade no mês).</small></span></label>` : ''}
         <div class="btn-row"><button class="btn btn-sm" data-action="popItemMove" data-i="${i}" data-d="-1" ${i ? '' : 'disabled'}>${icon('up')} Subir</button>
           <button class="btn btn-sm" data-action="popItemMove" data-i="${i}" data-d="1" ${i < c.items.length - 1 ? '' : 'disabled'}>${icon('down')} Descer</button>
           <button class="btn btn-sm btn-danger" data-action="popItemDel" data-i="${i}">${ui.confirm === 'pitem' + i ? 'Confirmar exclusão' : 'Excluir'}</button></div>
@@ -7040,8 +7038,8 @@ Content-Type: application/json</pre>
       save();
       const nm = ((barberById(bid) || {}).name || 'Profissional').split(' ')[0];
       if (e.sev === 'penalidade') toast(`${nm}: PENALIDADE registrada na Fiscalização (3º atraso no mês). O dono, o gestor e os líderes com acesso foram avisados.`, 7000, 'alert');
-      else if (v === 'apos') toast(`${nm}: chegou após o horário combinado. Sem bônus; registrado na Fiscalização.`, 5000, 'clock');
-      else if (e.sev) toast(`${nm}: ${DISC_SEV[e.sev][0].toLowerCase()} por atraso registrada na Fiscalização (${e.sev === 'advertencia' ? '1º' : '2º'} atraso no mês).`, 5000, 'alert');
+      else if (v === 'apos') toast(`${nm}: disponibilidade alterada. Registrado na Fiscalização.`, 5000, 'clock');
+      else if (e.sev) toast(`${nm}: compromisso comercial não atendido. ${DISC_SEV[e.sev][0]} registrada na Fiscalização (${e.sev === 'advertencia' ? '1º' : '2º'} no mês).`, 5000, 'alert');
       else toast(`${nm}: ${ARR[v][0].toLowerCase()}.`);
       render();
     },
