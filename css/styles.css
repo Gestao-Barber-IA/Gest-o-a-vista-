@@ -2898,3 +2898,6 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .arr-rules .arr-r-atraso { background: #d64545; color: #fff; } .arr-rules .arr-r-atraso svg { color: #fff; }
 .arr-rules li b { font-size: 1rem; }
 .arr-note { font-style: normal; font-weight: 800; margin-top: 4px; font-size: .9rem; }
+.ind-off { border-color: color-mix(in srgb, #d64545 55%, transparent); }
+.cmd-off { color: #ef5b5b; }
+.cmd-off-note { margin: 6px 0 0; font-size: .82rem; color: #ef8b8b; line-height: 1.4; }

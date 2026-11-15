@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-15-comanda-disp', date: '2026-11-15', title: 'Maior comanda e Disponibilidade comercial', items: [
+    ['melhoria', 'A comanda feita no dia em que o profissional teve Disponibilidade alterada ou Compromisso comercial não atendido não conta para o destaque Maior comanda (pódio, Tela da loja e fechamento).'],
+    ['melhoria', 'No perfil do profissional, esse valor aparece em vermelho, com o aviso de que não conta no pódio e o valor que está valendo.'],
+  ] },
   { id: '2026-11-15-disp-comercial', date: '2026-11-15', title: 'Disponibilidade comercial', items: [
     ['melhoria', 'O cartão Horário de chegada passa a se chamar Disponibilidade comercial, com 3 situações: Disponibilidade confirmada, Disponibilidade alterada e Compromisso comercial não atendido. As regras de pontos e de Fiscalização continuam as mesmas.'],
   ] },

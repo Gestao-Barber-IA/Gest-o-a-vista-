@@ -1266,6 +1266,18 @@
     </section>`;
   }
   // Os próprios números do barbeiro durante o segredo (sem posição nem pontuação).
+  // Maior comanda no perfil do profissional. Comanda feita num dia com Disponibilidade alterada ou
+  // Compromisso comercial não atendido não vale para o destaque/pódio: aparece em vermelho só para ele (e a gestão).
+  function cmdOwnCard(row, R) {
+    const on = row.sums.n.comanda ? Number(row.sums.comanda) || 0 : 0, off = Number(row.sums.comandaOff) || 0;
+    if (!on && !off) return '';
+    const top = (R.bonus || []).find(i => i.key === 'comanda'), red = off > on, lead = !red && top && top.leaders.includes(row.barber.id);
+    return `<div class="card ind ${lead ? 'card-glow' : ''} ${red ? 'ind-off' : ''}">
+      <div class="ind-top"><span>Maior comanda do mês ${tip('comanda')}</span>${lead ? '<span class="chip chip-destaque">Destaque</span>' : '<span class="chip chip-soft">não pontua</span>'}</div>
+      <div class="ind-val num ${red ? 'cmd-off' : ''}">${money2(red ? off : on)}</div>
+      ${red ? `<p class="cmd-off-note">Não conta no pódio: foi feita no dia de uma disponibilidade alterada ou de um compromisso comercial não atendido.${on ? ` Valendo para o destaque: <b class="num">${money2(on)}</b>.` : ''}</p>` : ''}
+    </div>`;
+  }
   function ownNumbers(R, bid, ym) {
     const row = bid && R.rows.find(r => r.barber.id === bid);
     if (!row) return '';
@@ -1278,7 +1290,7 @@
         <div class="ind-val num">${fmt(ind, v)}${ind.key === 'check' && v != null ? ' pts' : ''}</div>
         ${pct != null ? `<div class="bar"><i style="width:${Math.max(2, Math.min(100, pct))}%"></i></div><div class="ind-foot"><span class="num">${nf0.format(pct)}% da meta</span></div>` : ''}
       </div>`;
-    }).join('');
+    }).join('') + cmdOwnCard(row, R);
     return `<section class="section"><h2 class="section-title">Seus números ${ym ? 'no mês' : 'no período'}</h2>
       <p class="section-note">Só você vê estes números agora. Ainda dá tempo de subir: cada atendimento conta.</p>
       <div class="ind-grid">${cards}</div></section>`;
@@ -3254,7 +3266,7 @@
         <div class="bar" title="Nota ${score(row.scores[ind.key])}"><i style="width:${Math.max(2, row.scores[ind.key])}%"></i></div>
         <div class="ind-foot"><span class="num">${ord(row.ranks[ind.key])} de ${R.rows.length} · nota ${score(row.scores[ind.key])}</span>${delta}</div>
       </div>`;
-    }).join('');
+    }).join('') + cmdOwnCard(row, R);
 
     return `${picker}${periodNav()}
       <div class="card">

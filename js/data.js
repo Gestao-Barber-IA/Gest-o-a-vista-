@@ -223,6 +223,10 @@
     };
     const months = fullMonths(range);
     const recs = Object.fromEntries((state.monthly || []).filter(m => m.barberId === barberId && months.includes(m.month)).map(m => [m.month, m]));
+    // Dias com Disponibilidade alterada ou Compromisso comercial não atendido: a comanda do dia não vale para o destaque
+    // (fica em s.comandaOff, para o profissional ver no perfil dele).
+    const cmdOff = new Set();
+    for (const r of state.pop || []) if (r.barberId === barberId && r.ev) for (const l of Object.values(r.ev)) if (Array.isArray(l) && l.some(e => evLive(e) && (e.arr === 'apos' || e.arr === 'atraso'))) cmdOff.add(r.day);
     // Somas diárias por mês, para combinar com o total mensal.
     const dailyCli = {};
     for (const e of state.entries) {
@@ -237,6 +241,7 @@
         }
         if (f.key === 'check' && popDays(state, barberId).some(r => r.day.slice(0, 7) === monthKey(e.date))) continue;
         if (f.key === 'hDisp') continue; // a capacidade vem da regra de ocupação
+        if (f.key === 'comanda' && cmdOff.has(e.date)) { s.comandaOff = Math.max(s.comandaOff || 0, Number(e.comanda) || 0); continue; }
         add(f.key, e[f.key]);
       }
       // Serviços por nome (integração): os não tradicionais viram Serviços extras (quantidade e valor).
