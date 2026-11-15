@@ -2891,3 +2891,9 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .arr-info { display: inline-flex; width: fit-content; max-width: 100%; align-self: flex-start; justify-self: start; margin-top: 10px; font-size: .75rem; }
 .arr-rules li span { display: flex; flex-direction: column; gap: 2px; }
 .arr-btn small { white-space: normal; }
+/* Disponibilidade comercial (visão do profissional): mesmas cores vivas dos botões */
+.arr-rules li { padding: 12px 14px; border-radius: 14px; }
+.arr-rules .arr-r-ok { background: #1f9d55; color: #fff; } .arr-rules .arr-r-ok svg { color: #fff; }
+.arr-rules .arr-r-apos { background: #f2c230; color: #1d1600; } .arr-rules .arr-r-apos svg { color: #1d1600; }
+.arr-rules .arr-r-atraso { background: #d64545; color: #fff; } .arr-rules .arr-r-atraso svg { color: #fff; }
+.arr-rules li b { font-size: 1rem; }
