@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-15-combo-extra', date: '2026-11-15', title: 'Serviços extras: opção Combo com extra', items: [
+    ['novo', 'Em Indicadores e metas › Serviços extras, cada serviço agora tem 3 opções: Tradicional, Extra ou Combo com extra.'],
+    ['novo', 'Combo com extra (ex.: Corte Tradicional & Sobrancelha): cada combo conta 1 serviço extra; no valor, conta só a diferença entre o preço do combo e o do serviço tradicional dele (o sistema sugere e o dono pode trocar).'],
+  ] },
   { id: '2026-11-15-precos', date: '2026-11-15', title: 'Nova aba Tabela de Preços e Planos', items: [
     ['novo', 'Aba Tabela de Preços e Planos no menu principal, no mesmo formato dos POPs: o dono cria tabelas (ex.: Serviços, Planos mensais) e anexa as imagens; toda a equipe consulta e amplia com um toque.'],
   ] },

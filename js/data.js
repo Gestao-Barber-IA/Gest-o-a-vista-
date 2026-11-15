@@ -811,9 +811,41 @@
   // Serviços por nome vindos da integração (entries[].svc = { "Nome do serviço": [quantidade, valor] }).
   // Extra = todo serviço que o dono NÃO marcou como tradicional (state.extraTrad).
   const normSvc = n => String(n || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  // Combo com extra (state.extraCombo = { "Nome do combo": "Serviço tradicional de base" }): cada combo conta 1 extra;
+  // no valor, conta a diferença entre o combo e o preço médio do serviço de base.
+  let priceMemo = { ref: null, len: -1, map: null };
+  function svcPrices(state) {
+    const es = (state && state.entries) || [];
+    if (priceMemo.ref === es && priceMemo.len === es.length) return priceMemo.map;
+    const t = {};
+    for (const e of es) if (e.svc) for (const [n, a] of Object.entries(e.svc)) { if (!Array.isArray(a)) continue; const k = normSvc(n), o = t[k] || (t[k] = [0, 0]); o[0] += Number(a[0]) || 0; o[1] += Number(a[1]) || 0; }
+    const map = {}; for (const [k, [q, v]] of Object.entries(t)) if (q > 0) map[k] = v / q;
+    priceMemo = { ref: es, len: es.length, map }; return map;
+  }
+  // Sugere o serviço de base do combo: o tradicional com o mesmo nome da primeira parte (antes de "&" ou " e ").
+  const svcCore = n => normSvc(n).replace(/^[\d.]+\s*/, '');
+  function comboBase(state, name) {
+    const set = ((state && state.extraCombo) || {})[name];
+    if (set) return set;
+    const head = svcCore(name).split(/\s*&\s*|\s+e\s+/)[0];
+    return ((state && state.extraTrad) || []).find(t => svcCore(t) === head) || '';
+  }
   function extrasOf(state, svc) {
-    const trad = new Set(((state && state.extraTrad) || []).map(normSvc)); let q = 0, v = 0;
-    for (const [n, a] of Object.entries(svc || {})) { if (trad.has(normSvc(n)) || !Array.isArray(a)) continue; q += Number(a[0]) || 0; v += Number(a[1]) || 0; }
+    const trad = new Set(((state && state.extraTrad) || []).map(normSvc)), combos = (state && state.extraCombo) || {};
+    const comboK = new Map(Object.keys(combos).map(n => [normSvc(n), n]));
+    let q = 0, v = 0, prices = null;
+    for (const [n, a] of Object.entries(svc || {})) {
+      if (!Array.isArray(a)) continue;
+      const k = normSvc(n), qq = Number(a[0]) || 0, vv = Number(a[1]) || 0;
+      if (comboK.has(k)) {
+        prices = prices || svcPrices(state);
+        const base = normSvc(comboBase(state, comboK.get(k))), bp = base && prices[base] ? prices[base] : null;
+        q += qq; v += bp == null ? 0 : Math.max(0, vv - qq * bp);
+        continue;
+      }
+      if (trad.has(k)) continue;
+      q += qq; v += vv;
+    }
     return { q, v: Math.round(v * 100) / 100 };
   }
   const indMode = k => MODES[k] || 'qtd';
@@ -850,5 +882,5 @@
     }
   }
 
-  window.GB = Object.assign(window.GB || {}, { applyCustom, customKeys, indMode, fieldOff, MODE_TXT, extrasOf, normSvc, RETIRED, BONUS_INDS, OCUP_DEFAULT, ocupCfgOf, ocupCfgFor, hoursPerDay, ocupCapacity, SUM_KEYS, manualEntries, manualTotal, applyManualTotal, evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
+  window.GB = Object.assign(window.GB || {}, { applyCustom, customKeys, indMode, fieldOff, MODE_TXT, extrasOf, normSvc, comboBase, svcPrices, RETIRED, BONUS_INDS, OCUP_DEFAULT, ocupCfgOf, ocupCfgFor, hoursPerDay, ocupCapacity, SUM_KEYS, manualEntries, manualTotal, applyManualTotal, evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
 })();

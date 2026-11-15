@@ -3673,17 +3673,29 @@ ${rows.length ? '' : emptyBarbers()}
   }
   // Indicadores e metas › Serviços extras: o dono marca quais serviços são tradicionais; o resto conta como extra.
   function extraCard() {
-    const trad = new Set((state.extraTrad || []).map(GB.normSvc)), lim = iso(new Date(Date.now() - 120 * 864e5));
-    const names = new Map();
+    const trad = new Set((state.extraTrad || []).map(GB.normSvc)), combo = state.extraCombo || {}, comboK = new Set(Object.keys(combo).map(GB.normSvc));
+    const lim = iso(new Date(Date.now() - 120 * 864e5)), names = new Map();
     for (const e of state.entries || []) if (e.svc && e.date >= lim) for (const n of Object.keys(e.svc)) { const k = GB.normSvc(n); if (k && !names.has(k)) names.set(k, n); }
-    for (const n of state.extraTrad || []) { const k = GB.normSvc(n); if (k && !names.has(k)) names.set(k, n); }
-    const list = [...names.values()].sort((a, b) => a.localeCompare(b, 'pt-BR'));
-    const off = (state.hidden || []).includes('extra'), nT = list.filter(n => trad.has(GB.normSvc(n))).length;
+    for (const n of [...(state.extraTrad || []), ...Object.keys(combo)]) { const k = GB.normSvc(n); if (k && !names.has(k)) names.set(k, n); }
+    const list = [...names.values()].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }));
+    const modeOf = n => comboK.has(GB.normSvc(n)) ? 'combo' : trad.has(GB.normSvc(n)) ? 'trad' : 'extra';
+    const nT = list.filter(n => modeOf(n) === 'trad').length, nC = list.filter(n => modeOf(n) === 'combo').length;
+    const off = (state.hidden || []).includes('extra'), prices = GB.svcPrices(state), tradList = list.filter(n => modeOf(n) === 'trad');
+    const M = [['trad', 'Tradicional'], ['extra', 'Extra'], ['combo', 'Combo com extra']];
+    const row = n => {
+      const m = modeOf(n), base = m === 'combo' ? GB.comboBase(state, Object.keys(combo).find(c => GB.normSvc(c) === GB.normSvc(n)) || n) : '';
+      const cp = prices[GB.normSvc(n)], bp = base ? prices[GB.normSvc(base)] : null;
+      return `<div class="xs-row is-${m}"><b class="xs-name">${esc(n)}</b>
+        <div class="xs-mode" role="radiogroup" aria-label="${esc(n)}">${M.map(([k, l]) => `<button type="button" role="radio" aria-checked="${m === k}" class="${m === k ? 'on' : ''}" data-action="extraSet" data-n="${esc(n)}" data-m="${k}">${l}</button>`).join('')}</div>
+        ${m === 'combo' ? `<label class="xs-base"><span>Serviço tradicional do combo:</span><select class="input input-sm" data-change="extraBase" data-n="${esc(n)}"><option value="">Escolha</option>${tradList.map(t => `<option value="${esc(t)}" ${GB.normSvc(t) === GB.normSvc(base) ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>
+          <small class="muted">${base && cp != null && bp != null ? `Cada combo conta 1 extra · no valor, ≈ ${money2(Math.max(0, cp - bp))} (${money2(cp)} − ${money2(bp)})` : 'Cada combo conta 1 extra · escolha o serviço de base para o valor'}</small></label>` : ''}
+      </div>`;
+    };
     return `<section class="section card xs-card">
       <h2 class="section-title">${icon('sparkle')} Serviços extras</h2>
-      <p class="section-note">Conta os serviços além dos tradicionais (ex.: sobrancelha, pigmentação, hidratação). Marque abaixo os serviços <b>tradicionais</b>: tudo o que não estiver marcado conta como extra. ${off ? '<b>O indicador está desligado:</b> ligue na chave de "Serviços extras" acima para entrar na nota.' : ''}</p>
-      ${list.length ? `<p class="muted xs-count">${nT} de ${list.length} serviços marcados como tradicionais. Os outros ${list.length - nT} contam como extra.</p>
-        <div class="xs-list">${list.map(n => `<label class="check xs-item"><input type="checkbox" data-change="extraTrad" data-n="${esc(n)}" ${trad.has(GB.normSvc(n)) ? 'checked' : ''}><span><b>${esc(n)}</b><small>${trad.has(GB.normSvc(n)) ? 'Tradicional' : 'Extra'}</small></span></label>`).join('')}</div>`
+      <p class="section-note">Conta os serviços além dos tradicionais (ex.: sobrancelha, pigmentação, hidratação). Para cada serviço, escolha: <b>Tradicional</b> (não conta), <b>Extra</b> (conta inteiro) ou <b>Combo com extra</b> (ex.: Corte & Sobrancelha: conta 1 extra e, no valor, só a diferença para o serviço tradicional). Serviço novo, que ainda não apareceu, conta como extra. ${off ? '<b>O indicador está desligado:</b> ligue na chave de "Serviços extras" acima para entrar na nota.' : ''}</p>
+      ${list.length ? `<p class="muted xs-count">${list.length} serviços: ${nT} tradicionais, ${nC} combos com extra e ${list.length - nT - nC} extras.</p>
+        <div class="xs-list">${list.map(row).join('')}</div>`
         : `<div class="pm-note">${icon('help')}<span>A lista de serviços aparece aqui sozinha quando a sincronização com a AppBarber enviar os serviços de cada comanda. Sem integração, lance o total de serviços extras do mês em Lançamentos.</span></div>`}
     </section>`;
   }
@@ -7488,6 +7500,16 @@ Content-Type: application/json</pre>
       toast(`${GB.MODE_TXT[k][m][0]}: agora conta ${m === 'valor' ? 'o valor em R$' : 'a quantidade'}. Confira a meta do mês em Metas mensais da equipe.`, 6000);
       render();
     },
+    extraSet(el) {
+      if (!isGestor(currentUser())) return;
+      const n = el.dataset.n, m = el.dataset.m, k = GB.normSvc(n);
+      const trad = (state.extraTrad || []).filter(x => GB.normSvc(x) !== k), combo = { ...(state.extraCombo || {}) };
+      Object.keys(combo).forEach(x => { if (GB.normSvc(x) === k) delete combo[x]; });
+      if (m === 'trad') trad.push(n);
+      if (m === 'combo') combo[n] = GB.comboBase({ ...state, extraCombo: {} }, n);
+      state.extraTrad = trad; state.extraCombo = combo;
+      rkCache = {}; save(); toast(m === 'trad' ? `"${n}": tradicional (não conta).` : m === 'combo' ? `"${n}": combo com extra (conta 1 extra).` : `"${n}": conta como serviço extra.`); render();
+    },
     ciDel(el) {
       const k = el.dataset.k, c = (state.customInds || []).find(x => x.key === k); if (!c || !isGestor(currentUser())) return;
       if (ui.confirm !== 'ci' + k) { ui.confirm = 'ci' + k; render(); return; }
@@ -8005,11 +8027,10 @@ Content-Type: application/json</pre>
     },
     wNum(el) { wRefresh(el.form); },
     bonusYm(el) { ui.bonusYm = el.value; render(); },
-    extraTrad(el) {
+    extraBase(el) {
       if (!isGestor(currentUser())) return;
-      const n = el.dataset.n, k = GB.normSvc(n), cur = (state.extraTrad || []).filter(x => GB.normSvc(x) !== k);
-      state.extraTrad = el.checked ? [...cur, n] : cur;
-      rkCache = {}; save(); toast(el.checked ? `"${n}" agora é tradicional (não conta como extra).` : `"${n}" agora conta como serviço extra.`); render();
+      const n = el.dataset.n, c = { ...(state.extraCombo || {}) }, key = Object.keys(c).find(k => GB.normSvc(k) === GB.normSvc(n)) || n;
+      c[key] = el.value; state.extraCombo = c; rkCache = {}; save(); toast('Serviço de base do combo salvo.'); render();
     },
     bonusTipoSel(el) { ui.bonusDraft = { ...(ui.bonusDraft || {}), ...bonusDraftOf(el.form), tipo: el.value === 'outro' ? 'outro' : 'dinheiro', roleta: false }; render(); },
     wToggle(el) { // liga/desliga o indicador e salva na hora
