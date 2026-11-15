@@ -2912,3 +2912,15 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .bt-card.is-gift .bt-premio { color: var(--accent); }
 .bt-btns { display: flex; gap: 6px; }
 .bt-at { margin: 4px 0 0; font-size: .85rem; }
+/* Minha performance › Ganho do mês */
+.earn-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.earn-head .section-title { margin: 0; }
+.earn-head .chip svg { width: 13px; height: 13px; vertical-align: -2px; }
+.earn-total { font-size: 2rem; font-weight: 800; color: var(--money, #52d37e); margin: 8px 0 10px; }
+.earn-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.earn-list li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: .92rem; }
+.earn-list li span { min-width: 0; overflow-wrap: anywhere; }
+.earn-list li.pos b { color: var(--money, #52d37e); }
+.earn-list li.neg b { color: #ef5b5b; }
+.earn-note { font-size: .82rem; margin: 8px 0 0; }
+.earn-note svg { width: 14px; height: 14px; vertical-align: -2px; }
