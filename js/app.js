@@ -1910,11 +1910,10 @@
     del: async id => { if (Cloud.enabled) return Cloud.disc.del(id); discSave(discLocal().filter(x => x.id !== id)); },
   };
   // Horário de chegada → registro automático na Fiscalização (tipo Atraso).
-  // Amarelo (após o horário): só registra. Vermelho (atrasado), no mês: 1º ocorrência, 2º advertência, 3º ocorrência,
-  // 4º advertência (a 2ª), do 5º em diante penalidade.
+  // Amarelo (após o horário): só registra. Vermelho (atrasado), no mês: 1º advertência, 2º reincidência, do 3º em diante penalidade.
   const LATE_NOTE = 'Chegou atrasado, depois do horário combinado (marcado no Checklist › Horário de chegada).';
   const APOS_NOTE = 'Chegou após o horário combinado: sem bônus (marcado no Checklist › Horário de chegada).';
-  const lateSev = (list, bid, day) => { const n = list.filter(x => x.barber_id === bid && /^Chegou atrasado/.test(x.note || '') && String(x.day).slice(0, 7) === day.slice(0, 7)).length; return n === 0 || n === 2 ? 'ocorrencia' : n === 1 || n === 3 ? 'advertencia' : 'penalidade'; };
+  const lateSev = (list, bid, day) => { const n = list.filter(x => x.barber_id === bid && /^Chegou atrasado/.test(x.note || '') && String(x.day).slice(0, 7) === day.slice(0, 7)).length; return n === 0 ? 'advertencia' : n === 1 ? 'reincidencia' : 'penalidade'; };
   async function lateRegister(bid, day, author, tipo = 'atraso') {
     const apos = tipo === 'apos', note = apos ? APOS_NOTE : LATE_NOTE;
     if (Cloud.enabled) {
@@ -1997,7 +1996,7 @@
     ${discModal(user, r.list)}`;
   }
   function discPenTab(pens, name) {
-    if (!pens.length) return `<section class="section"><div class="card muted">Nenhuma penalidade registrada. A penalidade aparece aqui sozinha quando um profissional chega atrasado depois de já ter 2 advertências por atraso no mês (Checklist › Horário de chegada › Chegou atrasado) ou quando alguém registra uma.</div></section>`;
+    if (!pens.length) return `<section class="section"><div class="card muted">Nenhuma penalidade registrada. A penalidade aparece aqui sozinha quando um profissional chega atrasado pela 3ª vez no mês (Checklist › Horário de chegada › Chegou atrasado) ou quando alguém registra uma.</div></section>`;
     const by = {};
     pens.forEach(x => (by[x.barber_id] = by[x.barber_id] || []).push(x));
     const rows = Object.entries(by).sort((a, b) => b[1].length - a[1].length);
@@ -5143,7 +5142,7 @@ Content-Type: application/json</pre>
   const arrRules = () => `<ul class="arr-rules">
       <li class="arr-r-ok">${icon('check')}<span><b>Chegou no horário combinado:</b> participa dos bônus.</span></li>
       <li class="arr-r-apos">${icon('clock')}<span><b>Chegou após o horário combinado:</b> não participa dos bônus e fica registrado na Fiscalização.</span></li>
-      <li class="arr-r-atraso">${icon('alert')}<span><b>Chegou atrasado:</b> fica um registro de atraso. A cada 2 atrasos no mês, 1 advertência; depois de 2 advertências, penalidade.</span></li>
+      <li class="arr-r-atraso">${icon('alert')}<span><b>Chegou atrasado:</b> fica registrado na Fiscalização. No mês, o 1º atraso é advertência, o 2º reincidência e o 3º penalidade.</span></li>
     </ul><p class="muted pop-gest">${icon('lock')} Marcado pelo dono, gestor ou líder.</p>`;
   function arrBlock(it, list, bid) {
     const e = list.find(GB.evLive), can = popMarkOk(it, bid);
@@ -5154,7 +5153,7 @@ Content-Type: application/json</pre>
         ${undo ? `<button class="link-btn arr-undo" data-action="arrUndo" data-it="${esc(it.id)}">${ui.confirm === 'arr' + it.id ? 'Confirmar: desfazer' + (e.disc ? ' e apagar a ocorrência' : '') : 'Desfazer'}</button>` : ''}`;
     }
     if (!can) return arrRules();
-    return `<div class="arr-btns">${Object.entries(ARR).map(([k, [l, c, i]]) => `<button class="btn arr-btn ${c}" data-action="arrMark" data-it="${esc(it.id)}" data-v="${k}" ${ui.arrBusy ? 'disabled' : ''}>${icon(i)} <span>${l}${k === 'ok' ? '' : '<small>sem bônus · ' + (k === 'atraso' ? 'conta para advertência' : 'registra na Fiscalização') + '</small>'}</span></button>`).join('')}</div>`;
+    return `<div class="arr-btns">${Object.entries(ARR).map(([k, [l, c, i]]) => `<button class="btn arr-btn ${c}" data-action="arrMark" data-it="${esc(it.id)}" data-v="${k}" ${ui.arrBusy ? 'disabled' : ''}>${icon(i)} <span>${l}${k === 'ok' ? '' : '<small>sem bônus · ' + (k === 'atraso' ? 'advertência, reincidência, penalidade' : 'registra na Fiscalização') + '</small>'}</span></button>`).join('')}</div>`;
   }
   function popStepper(it, list, t, bid, mayAdd) {
     if (!popMarkOk(it, bid)) return `<p class="muted pop-gest">${icon('lock')} Marcado pelo dono, gestor ou líder.</p>`;
@@ -5285,7 +5284,7 @@ Content-Type: application/json</pre>
         <div class="grid-2">${it.type === 'check' ? '' : `<label class="field"><span class="tm-flabel">Meta (quantidade)</span><input class="input num" type="number" min="1" id="pei-m-${i}" value="${it.target}" data-popitem="target" data-i="${i}"></label>`}
         <label class="field"><span class="tm-flabel">Pontos</span><input class="input num" type="number" min="0" step="0.5" id="pei-p-${i}" value="${it.pts}" data-popitem="pts" data-i="${i}"></label></div>
         <label class="check"><input type="checkbox" data-popitem="gest" data-i="${i}" ${popGest(it) ? 'checked' : ''}><span><b>Só o dono, o gestor ou o líder marcam</b><small>O profissional vê a tarefa, mas não consegue marcar (ex.: horário de chegada).</small></span></label>
-        ${it.type === 'check' ? `<label class="check"><input type="checkbox" data-popitem="arr" data-i="${i}" ${popArr(it) ? 'checked' : ''}><span><b>É o horário de chegada (3 botões)</b><small>Fica no topo, sem prova: no horário (verde, com pontos), depois do horário (amarelo, sem bônus, registra na Fiscalização) e atrasado (vermelho, sem bônus, conta para advertência e penalidade).</small></span></label>` : ''}
+        ${it.type === 'check' ? `<label class="check"><input type="checkbox" data-popitem="arr" data-i="${i}" ${popArr(it) ? 'checked' : ''}><span><b>É o horário de chegada (3 botões)</b><small>Fica no topo, sem prova: no horário (verde, com pontos), depois do horário (amarelo, sem bônus, registra na Fiscalização) e atrasado (vermelho, sem bônus: 1º advertência, 2º reincidência, 3º penalidade no mês).</small></span></label>` : ''}
         <div class="btn-row"><button class="btn btn-sm" data-action="popItemMove" data-i="${i}" data-d="-1" ${i ? '' : 'disabled'}>${icon('up')} Subir</button>
           <button class="btn btn-sm" data-action="popItemMove" data-i="${i}" data-d="1" ${i < c.items.length - 1 ? '' : 'disabled'}>${icon('down')} Descer</button>
           <button class="btn btn-sm btn-danger" data-action="popItemDel" data-i="${i}">${ui.confirm === 'pitem' + i ? 'Confirmar exclusão' : 'Excluir'}</button></div>
@@ -7040,9 +7039,9 @@ Content-Type: application/json</pre>
       const r = popRecW(bid, day); (r.ev[it.id] = Array.isArray(r.ev[it.id]) ? r.ev[it.id] : []).push(e);
       save();
       const nm = ((barberById(bid) || {}).name || 'Profissional').split(' ')[0];
-      if (e.sev === 'penalidade') toast(`${nm}: PENALIDADE registrada na Fiscalização (já tinha 2 advertências por atraso no mês). O dono, o gestor e os líderes com acesso foram avisados.`, 7000, 'alert');
+      if (e.sev === 'penalidade') toast(`${nm}: PENALIDADE registrada na Fiscalização (3º atraso no mês). O dono, o gestor e os líderes com acesso foram avisados.`, 7000, 'alert');
       else if (v === 'apos') toast(`${nm}: chegou após o horário combinado. Sem bônus; registrado na Fiscalização.`, 5000, 'clock');
-      else if (e.sev) toast(`${nm}: ${DISC_SEV[e.sev][0].toLowerCase()} por atraso registrada na Fiscalização.`, 5000, 'alert');
+      else if (e.sev) toast(`${nm}: ${DISC_SEV[e.sev][0].toLowerCase()} por atraso registrada na Fiscalização (${e.sev === 'advertencia' ? '1º' : '2º'} atraso no mês).`, 5000, 'alert');
       else toast(`${nm}: ${ARR[v][0].toLowerCase()}.`);
       render();
     },

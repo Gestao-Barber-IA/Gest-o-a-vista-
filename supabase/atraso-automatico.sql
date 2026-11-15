@@ -1,7 +1,6 @@
 -- Checklist › Horário de chegada → registro automático na Fiscalização (tipo Atraso).
 --  • Amarelo "Chegou após o horário combinado": registra (ocorrência), sem somar para advertência.
---  • Vermelho "Chegou atrasado", contando no mês: 1º ocorrência, 2º advertência, 3º ocorrência,
---    4º advertência (a 2ª), do 5º em diante penalidade.
+--  • Vermelho "Chegou atrasado", contando no mês: 1º advertência, 2º reincidência, do 3º em diante penalidade.
 -- Quem marca: dono, gestor (de área ou nível Gestor) ou líder; nunca o próprio profissional.
 -- Funciona mesmo para o líder sem o acesso extra "Fiscalização". Pode rodar mais de uma vez.
 drop function if exists public.registrar_atraso(text, date, text);
@@ -28,7 +27,7 @@ begin
     select count(*) into n from discipline
       where company_id = cid and barber_id = p_barber and kind in ('atraso', 'falta') and note like 'Chegou atrasado%'
         and date_trunc('month', day) = date_trunc('month', p_day);
-    sev := case when n in (0, 2) then 'ocorrencia' when n in (1, 3) then 'advertencia' else 'penalidade' end;
+    sev := case when n = 0 then 'advertencia' when n = 1 then 'reincidencia' else 'penalidade' end;
     nota := 'Chegou atrasado, depois do horário combinado (marcado no Checklist › Horário de chegada).';
   end if;
   insert into discipline (company_id, user_id, barber_id, day, severity, kind, note, author)
