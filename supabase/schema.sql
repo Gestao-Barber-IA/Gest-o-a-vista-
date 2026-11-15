@@ -1227,17 +1227,20 @@ create policy integrations_gestor on public.integrations for all
   using (company_id = my_company() and is_gestor())
   with check (company_id = my_company() and is_gestor());
 
--- Checklist › Horário de chegada: o botão vermelho "Chegou atrasado" gera sozinho um registro na Fiscalização.
--- Tipo: falta. Gravidade no mês: 1ª vez ocorrência, 2ª reincidência, 3ª em diante penalidade.
+-- Checklist › Horário de chegada → registro automático na Fiscalização (tipo Atraso).
+--  • Amarelo "Chegou após o horário combinado": registra (ocorrência), sem somar para advertência.
+--  • Vermelho "Chegou atrasado", contando no mês: 1º advertência, 2º reincidência, do 3º em diante penalidade.
 -- Quem marca: dono, gestor (de área ou nível Gestor) ou líder; nunca o próprio profissional.
--- Funciona mesmo para o líder sem o acesso extra "Fiscalização" (ele só não vê a página). Pode rodar mais de uma vez.
-create or replace function public.registrar_atraso(p_barber text, p_day date, p_author text default '')
+-- Funciona mesmo para o líder sem o acesso extra "Fiscalização". Pode rodar mais de uma vez.
+drop function if exists public.registrar_atraso(text, date, text);
+create or replace function public.registrar_atraso(p_barber text, p_day date, p_author text default '', p_tipo text default 'atraso')
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   cid uuid := my_company();
   lider boolean;
   n int;
   sev text;
+  nota text;
   rid uuid;
 begin
   if cid is null then raise exception 'Sem empresa.'; end if;
@@ -1246,68 +1249,29 @@ begin
     raise exception 'Só o dono, o gestor ou o líder marcam o horário de chegada.';
   end if;
   if not exists (select 1 from barbers where company_id = cid and id = p_barber) then raise exception 'Profissional não encontrado.'; end if;
-  select count(*) into n from discipline
-    where company_id = cid and barber_id = p_barber and kind = 'falta'
-      and date_trunc('month', day) = date_trunc('month', p_day);
-  sev := case when n = 0 then 'ocorrencia' when n = 1 then 'reincidencia' else 'penalidade' end;
+  if p_tipo = 'apos' then
+    sev := 'ocorrencia';
+    nota := 'Chegou após o horário combinado: sem bônus (marcado no Checklist › Horário de chegada).';
+  else
+    select count(*) into n from discipline
+      where company_id = cid and barber_id = p_barber and kind in ('atraso', 'falta') and note like 'Chegou atrasado%'
+        and date_trunc('month', day) = date_trunc('month', p_day);
+    sev := case when n = 0 then 'advertencia' when n = 1 then 'reincidencia' else 'penalidade' end;
+    nota := 'Chegou atrasado, depois do horário combinado (marcado no Checklist › Horário de chegada).';
+  end if;
   insert into discipline (company_id, user_id, barber_id, day, severity, kind, note, author)
-    values (cid, auth.uid(), p_barber, p_day, sev, 'falta',
-      'Chegou atrasado, depois do horário combinado (marcado no Checklist › Horário de chegada).', left(coalesce(p_author, ''), 80))
+    values (cid, auth.uid(), p_barber, p_day, sev, 'atraso', nota, left(coalesce(p_author, ''), 80))
     returning id into rid;
   return jsonb_build_object('id', rid, 'severity', sev);
 end $$;
-grant execute on function public.registrar_atraso(text, date, text) to authenticated;
+grant execute on function public.registrar_atraso(text, date, text, text) to authenticated;
 
--- Desfazer a marcação vermelha: apaga o registro gerado (só quem marcou, ou o dono).
+-- Desfazer a marcação: apaga o registro gerado (só quem marcou, ou o dono).
 create or replace function public.desfazer_atraso(p_id uuid) returns boolean
 language plpgsql security definer set search_path = public as $$
 begin
-  delete from discipline where id = p_id and company_id = my_company() and kind = 'falta'
-    and note like 'Chegou atrasado, depois do horário combinado%' and (is_gestor() or user_id = auth.uid());
+  delete from discipline where id = p_id and company_id = my_company() and kind in ('atraso', 'falta')
+    and (note like 'Chegou atrasado%' or note like 'Chegou após o horário combinado%') and (is_gestor() or user_id = auth.uid());
   return found;
 end $$;
 grant execute on function public.desfazer_atraso(uuid) to authenticated;
-
--- Bônus: registro de bônus em dinheiro (ex.: roleta de R$ 10 a R$ 50 ao vender 3 produtos) ou presentes
--- (ex.: 2 ingressos VIP de cinema) dados ao profissional.
--- Quem lança: o dono, o gestor (de área ou nível Gestor) e o líder com o acesso extra "Bônus" (nunca para si mesmo).
--- Quem vê: o profissional vê só os dele; o dono, a gestão e o líder com o acesso extra veem os de todos.
--- Pode rodar mais de uma vez.
-create table if not exists public.bonus_records (
-  id text primary key,
-  company_id uuid not null references public.companies on delete cascade,
-  barber_id text not null references public.barbers on delete cascade,
-  date date not null,
-  data jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-create index if not exists bonus_records_company_date on public.bonus_records (company_id, date);
-
-grant select, insert, update, delete on public.bonus_records to authenticated;
-grant all on public.bonus_records to service_role;
-alter table public.bonus_records enable row level security;
-
-create or replace function public.lider_bonus() returns boolean
-language sql stable security definer set search_path = public as $$
-  select coalesce((leader_extra()->>'bonus')::boolean, false)
-$$;
-grant execute on function public.lider_bonus() to authenticated;
-
-drop policy if exists bonus_read on public.bonus_records;
-drop policy if exists bonus_ins on public.bonus_records;
-drop policy if exists bonus_upd on public.bonus_records;
-drop policy if exists bonus_del on public.bonus_records;
-create policy bonus_read on public.bonus_records for select
-  using (company_id = my_company() and (is_gestor() or barber_id = my_barber() or can_edit_barber(barber_id) or lider_bonus()));
-create policy bonus_ins on public.bonus_records for insert
-  with check (company_id = my_company() and (is_gestor() or ((can_edit_barber(barber_id) or lider_bonus()) and barber_id is distinct from my_barber())));
-create policy bonus_upd on public.bonus_records for update
-  using (company_id = my_company() and (is_gestor() or ((can_edit_barber(barber_id) or lider_bonus()) and barber_id is distinct from my_barber())))
-  with check (company_id = my_company() and (is_gestor() or ((can_edit_barber(barber_id) or lider_bonus()) and barber_id is distinct from my_barber())));
-create policy bonus_del on public.bonus_records for delete
-  using (company_id = my_company() and (is_gestor() or ((can_edit_barber(barber_id) or lider_bonus()) and barber_id is distinct from my_barber())));
-
-do $$ begin
-  begin alter publication supabase_realtime add table public.bonus_records; exception when duplicate_object then null; end;
-end $$;

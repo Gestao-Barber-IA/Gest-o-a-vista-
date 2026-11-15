@@ -1909,21 +1909,24 @@
     upd: async (id, patch) => { if (Cloud.enabled) return Cloud.disc.upd(id, patch); const v = discLocal(), r = v.find(x => x.id === id); if (r) Object.assign(r, patch); discSave(v); },
     del: async id => { if (Cloud.enabled) return Cloud.disc.del(id); discSave(discLocal().filter(x => x.id !== id)); },
   };
-  // Horário de chegada › Chegou atrasado: registro automático (tipo falta). No mês: 1ª ocorrência, 2ª reincidência, 3ª em diante penalidade.
+  // Horário de chegada → registro automático na Fiscalização (tipo Atraso).
+  // Amarelo (após o horário): só registra. Vermelho (atrasado), no mês: 1º advertência, 2º reincidência, do 3º em diante penalidade.
   const LATE_NOTE = 'Chegou atrasado, depois do horário combinado (marcado no Checklist › Horário de chegada).';
-  const lateSev = (list, bid, day) => { const n = list.filter(x => x.barber_id === bid && x.kind === 'falta' && String(x.day).slice(0, 7) === day.slice(0, 7)).length; return n === 0 ? 'ocorrencia' : n === 1 ? 'reincidencia' : 'penalidade'; };
-  async function lateRegister(bid, day, author) {
+  const APOS_NOTE = 'Chegou após o horário combinado: sem bônus (marcado no Checklist › Horário de chegada).';
+  const lateSev = (list, bid, day) => { const n = list.filter(x => x.barber_id === bid && /^Chegou atrasado/.test(x.note || '') && String(x.day).slice(0, 7) === day.slice(0, 7)).length; return n === 0 ? 'advertencia' : n === 1 ? 'reincidencia' : 'penalidade'; };
+  async function lateRegister(bid, day, author, tipo = 'atraso') {
+    const apos = tipo === 'apos', note = apos ? APOS_NOTE : LATE_NOTE;
     if (Cloud.enabled) {
-      try { return await Cloud.disc.late(bid, day, author); }
+      try { return await Cloud.disc.late(bid, day, author, apos ? 'apos' : 'atraso'); }
       catch (e) {
         if (!/registrar_atraso|function|schema cache/i.test(String(e.message || e))) throw e;
-        const severity = lateSev(await Cloud.disc.list(), bid, day); // servidor ainda sem a função: grava direto
-        const row = await Cloud.disc.add({ barber_id: bid, day, severity, kind: 'falta', note: LATE_NOTE, author: String(author || '').slice(0, 80) });
+        const severity = apos ? 'ocorrencia' : lateSev(await Cloud.disc.list(), bid, day); // servidor ainda sem a função: grava direto
+        const row = await Cloud.disc.add({ barber_id: bid, day, severity, kind: 'atraso', note, author: String(author || '').slice(0, 80) });
         return { id: row.id, severity };
       }
     }
-    const v = discLocal(), severity = lateSev(v, bid, day), id = uid('dc_');
-    v.unshift({ id, barber_id: bid, day, severity, kind: 'falta', note: LATE_NOTE, author: String(author || ''), created_at: new Date().toISOString() });
+    const v = discLocal(), severity = apos ? 'ocorrencia' : lateSev(v, bid, day), id = uid('dc_');
+    v.unshift({ id, barber_id: bid, day, severity, kind: 'atraso', note, author: String(author || ''), created_at: new Date().toISOString() });
     discSave(v); return { id, severity };
   }
   async function lateUndo(id) {
@@ -1993,7 +1996,7 @@
     ${discModal(user, r.list)}`;
   }
   function discPenTab(pens, name) {
-    if (!pens.length) return `<section class="section"><div class="card muted">Nenhuma penalidade registrada. A penalidade aparece aqui sozinha quando um profissional chega à 3ª falta no mês (Checklist › Horário de chegada › Chegou atrasado) ou quando alguém registra uma.</div></section>`;
+    if (!pens.length) return `<section class="section"><div class="card muted">Nenhuma penalidade registrada. A penalidade aparece aqui sozinha quando um profissional chega atrasado pela 3ª vez no mês (Checklist › Horário de chegada › Chegou atrasado) ou quando alguém registra uma.</div></section>`;
     const by = {};
     pens.forEach(x => (by[x.barber_id] = by[x.barber_id] || []).push(x));
     const rows = Object.entries(by).sort((a, b) => b[1].length - a[1].length);
@@ -3673,17 +3676,29 @@ ${rows.length ? '' : emptyBarbers()}
   }
   // Indicadores e metas › Serviços extras: o dono marca quais serviços são tradicionais; o resto conta como extra.
   function extraCard() {
-    const trad = new Set((state.extraTrad || []).map(GB.normSvc)), lim = iso(new Date(Date.now() - 120 * 864e5));
-    const names = new Map();
+    const trad = new Set((state.extraTrad || []).map(GB.normSvc)), combo = state.extraCombo || {}, comboK = new Set(Object.keys(combo).map(GB.normSvc));
+    const lim = iso(new Date(Date.now() - 120 * 864e5)), names = new Map();
     for (const e of state.entries || []) if (e.svc && e.date >= lim) for (const n of Object.keys(e.svc)) { const k = GB.normSvc(n); if (k && !names.has(k)) names.set(k, n); }
-    for (const n of state.extraTrad || []) { const k = GB.normSvc(n); if (k && !names.has(k)) names.set(k, n); }
-    const list = [...names.values()].sort((a, b) => a.localeCompare(b, 'pt-BR'));
-    const off = (state.hidden || []).includes('extra'), nT = list.filter(n => trad.has(GB.normSvc(n))).length;
+    for (const n of [...(state.extraTrad || []), ...Object.keys(combo)]) { const k = GB.normSvc(n); if (k && !names.has(k)) names.set(k, n); }
+    const list = [...names.values()].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }));
+    const modeOf = n => comboK.has(GB.normSvc(n)) ? 'combo' : trad.has(GB.normSvc(n)) ? 'trad' : 'extra';
+    const nT = list.filter(n => modeOf(n) === 'trad').length, nC = list.filter(n => modeOf(n) === 'combo').length;
+    const off = (state.hidden || []).includes('extra'), prices = GB.svcPrices(state), tradList = list.filter(n => modeOf(n) === 'trad');
+    const M = [['trad', 'Tradicional'], ['extra', 'Extra'], ['combo', 'Combo com extra']];
+    const row = n => {
+      const m = modeOf(n), base = m === 'combo' ? GB.comboBase(state, Object.keys(combo).find(c => GB.normSvc(c) === GB.normSvc(n)) || n) : '';
+      const cp = prices[GB.normSvc(n)], bp = base ? prices[GB.normSvc(base)] : null;
+      return `<div class="xs-row is-${m}"><b class="xs-name">${esc(n)}</b>
+        <div class="xs-mode" role="radiogroup" aria-label="${esc(n)}">${M.map(([k, l]) => `<button type="button" role="radio" aria-checked="${m === k}" class="${m === k ? 'on' : ''}" data-action="extraSet" data-n="${esc(n)}" data-m="${k}">${l}</button>`).join('')}</div>
+        ${m === 'combo' ? `<label class="xs-base"><span>Serviço tradicional do combo:</span><select class="input input-sm" data-change="extraBase" data-n="${esc(n)}"><option value="">Escolha</option>${tradList.map(t => `<option value="${esc(t)}" ${GB.normSvc(t) === GB.normSvc(base) ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>
+          <small class="muted">${base && cp != null && bp != null ? `Cada combo conta 1 extra · no valor, ≈ ${money2(Math.max(0, cp - bp))} (${money2(cp)} − ${money2(bp)})` : 'Cada combo conta 1 extra · escolha o serviço de base para o valor'}</small></label>` : ''}
+      </div>`;
+    };
     return `<section class="section card xs-card">
       <h2 class="section-title">${icon('sparkle')} Serviços extras</h2>
-      <p class="section-note">Conta os serviços além dos tradicionais (ex.: sobrancelha, pigmentação, hidratação). Marque abaixo os serviços <b>tradicionais</b>: tudo o que não estiver marcado conta como extra. ${off ? '<b>O indicador está desligado:</b> ligue na chave de "Serviços extras" acima para entrar na nota.' : ''}</p>
-      ${list.length ? `<p class="muted xs-count">${nT} de ${list.length} serviços marcados como tradicionais. Os outros ${list.length - nT} contam como extra.</p>
-        <div class="xs-list">${list.map(n => `<label class="check xs-item"><input type="checkbox" data-change="extraTrad" data-n="${esc(n)}" ${trad.has(GB.normSvc(n)) ? 'checked' : ''}><span><b>${esc(n)}</b><small>${trad.has(GB.normSvc(n)) ? 'Tradicional' : 'Extra'}</small></span></label>`).join('')}</div>`
+      <p class="section-note">Conta os serviços além dos tradicionais (ex.: sobrancelha, pigmentação, hidratação). Para cada serviço, escolha: <b>Tradicional</b> (não conta), <b>Extra</b> (conta inteiro) ou <b>Combo com extra</b> (ex.: Corte & Sobrancelha: conta 1 extra e, no valor, só a diferença para o serviço tradicional). Serviço novo, que ainda não apareceu, conta como extra. ${off ? '<b>O indicador está desligado:</b> ligue na chave de "Serviços extras" acima para entrar na nota.' : ''}</p>
+      ${list.length ? `<p class="muted xs-count">${list.length} serviços: ${nT} tradicionais, ${nC} combos com extra e ${list.length - nT - nC} extras.</p>
+        <div class="xs-list">${list.map(row).join('')}</div>`
         : `<div class="pm-note">${icon('help')}<span>A lista de serviços aparece aqui sozinha quando a sincronização com a AppBarber enviar os serviços de cada comanda. Sem integração, lance o total de serviços extras do mês em Lançamentos.</span></div>`}
     </section>`;
   }
@@ -5123,16 +5138,22 @@ Content-Type: application/json</pre>
   // Ordem dos cartões no checklist: Horário de chegada primeiro, logo abaixo o EXTRA, depois as demais tarefas.
   const popIsExtra = it => !popArr(it) && (it.id === 'extra' || /^extra\b/i.test(String(it.title || '').trim()));
   const popOrder = items => [...items.filter(popArr), ...items.filter(popIsExtra), ...items.filter(it => !popArr(it) && !popIsExtra(it))];
+  // O que o profissional vê no Horário de chegada (os botões são só da gestão).
+  const arrRules = () => `<ul class="arr-rules">
+      <li class="arr-r-ok">${icon('check')}<span><b>Chegou no horário combinado:</b> participa dos bônus.</span></li>
+      <li class="arr-r-apos">${icon('clock')}<span><b>Chegou após o horário combinado:</b> não participa dos bônus e fica registrado na Fiscalização.</span></li>
+      <li class="arr-r-atraso">${icon('alert')}<span><b>Chegou atrasado:</b> fica registrado na Fiscalização. No mês, o 1º atraso é advertência, o 2º reincidência e o 3º penalidade.</span></li>
+    </ul><p class="muted pop-gest">${icon('lock')} Marcado pelo dono, gestor ou líder.</p>`;
   function arrBlock(it, list, bid) {
     const e = list.find(GB.evLive), can = popMarkOk(it, bid);
     if (e) {
       const a = ARR[e.arr || 'ok'], sev = e.sev && DISC_SEV[e.sev];
       const undo = can && (isGestor(currentUser()) || e.byUser === (currentUser() || {}).id);
-      return `<div class="arr-done ${a[1]}">${icon(a[2])}<span><b>${a[0]}</b><small>${e.arr && e.arr !== 'ok' ? 'Sem bônus' : `+${fmtPts(it.pts)} pts`}${sev ? ` · Fiscalização: falta, ${sev[0].toLowerCase()}` : ''}</small></span></div>
+      return `<div class="arr-done ${a[1]}">${icon(a[2])}<span><b>${a[0]}</b><small>${e.arr && e.arr !== 'ok' ? 'Sem bônus' : `+${fmtPts(it.pts)} pts`}${sev ? ` · Fiscalização: atraso, ${sev[0].toLowerCase()}` : ''}</small></span></div>
         ${undo ? `<button class="link-btn arr-undo" data-action="arrUndo" data-it="${esc(it.id)}">${ui.confirm === 'arr' + it.id ? 'Confirmar: desfazer' + (e.disc ? ' e apagar a ocorrência' : '') : 'Desfazer'}</button>` : ''}`;
     }
-    if (!can) return `<p class="muted pop-gest">${icon('lock')} Marcado pelo dono, gestor ou líder.</p>`;
-    return `<div class="arr-btns">${Object.entries(ARR).map(([k, [l, c, i]]) => `<button class="btn arr-btn ${c}" data-action="arrMark" data-it="${esc(it.id)}" data-v="${k}" ${ui.arrBusy ? 'disabled' : ''}>${icon(i)} <span>${l}${k === 'ok' ? '' : '<small>sem bônus' + (k === 'atraso' ? ' · gera ocorrência' : '') + '</small>'}</span></button>`).join('')}</div>`;
+    if (!can) return arrRules();
+    return `<div class="arr-btns">${Object.entries(ARR).map(([k, [l, c, i]]) => `<button class="btn arr-btn ${c}" data-action="arrMark" data-it="${esc(it.id)}" data-v="${k}" ${ui.arrBusy ? 'disabled' : ''}>${icon(i)} <span>${l}${k === 'ok' ? '' : '<small>sem bônus · ' + (k === 'atraso' ? 'advertência, reincidência, penalidade' : 'registra na Fiscalização') + '</small>'}</span></button>`).join('')}</div>`;
   }
   function popStepper(it, list, t, bid, mayAdd) {
     if (!popMarkOk(it, bid)) return `<p class="muted pop-gest">${icon('lock')} Marcado pelo dono, gestor ou líder.</p>`;
@@ -5263,7 +5284,7 @@ Content-Type: application/json</pre>
         <div class="grid-2">${it.type === 'check' ? '' : `<label class="field"><span class="tm-flabel">Meta (quantidade)</span><input class="input num" type="number" min="1" id="pei-m-${i}" value="${it.target}" data-popitem="target" data-i="${i}"></label>`}
         <label class="field"><span class="tm-flabel">Pontos</span><input class="input num" type="number" min="0" step="0.5" id="pei-p-${i}" value="${it.pts}" data-popitem="pts" data-i="${i}"></label></div>
         <label class="check"><input type="checkbox" data-popitem="gest" data-i="${i}" ${popGest(it) ? 'checked' : ''}><span><b>Só o dono, o gestor ou o líder marcam</b><small>O profissional vê a tarefa, mas não consegue marcar (ex.: horário de chegada).</small></span></label>
-        ${it.type === 'check' ? `<label class="check"><input type="checkbox" data-popitem="arr" data-i="${i}" ${popArr(it) ? 'checked' : ''}><span><b>É o horário de chegada (3 botões)</b><small>Fica no topo, sem prova: no horário (verde, com pontos), depois do horário (amarelo, sem bônus) e atrasado (vermelho, sem bônus e gera ocorrência na Fiscalização).</small></span></label>` : ''}
+        ${it.type === 'check' ? `<label class="check"><input type="checkbox" data-popitem="arr" data-i="${i}" ${popArr(it) ? 'checked' : ''}><span><b>É o horário de chegada (3 botões)</b><small>Fica no topo, sem prova: no horário (verde, com pontos), depois do horário (amarelo, sem bônus, registra na Fiscalização) e atrasado (vermelho, sem bônus: 1º advertência, 2º reincidência, 3º penalidade no mês).</small></span></label>` : ''}
         <div class="btn-row"><button class="btn btn-sm" data-action="popItemMove" data-i="${i}" data-d="-1" ${i ? '' : 'disabled'}>${icon('up')} Subir</button>
           <button class="btn btn-sm" data-action="popItemMove" data-i="${i}" data-d="1" ${i < c.items.length - 1 ? '' : 'disabled'}>${icon('down')} Descer</button>
           <button class="btn btn-sm btn-danger" data-action="popItemDel" data-i="${i}">${ui.confirm === 'pitem' + i ? 'Confirmar exclusão' : 'Excluir'}</button></div>
@@ -5348,9 +5369,10 @@ Content-Type: application/json</pre>
         <span class="tm-flabel">Dia do mês</span>
         <div class="pop-days" id="pop-days">${Array.from({ length: n }, (_, i) => { const d = `${ym}-${String(i + 1).padStart(2, '0')}`; const s2 = popStatus(bid, d); return `<button class="pop-dn ${i + 1 === ui.popDay ? 'on' : ''} st-${s2} ${d > today ? 'future' : ''}" data-action="popDay" data-d="${i + 1}" aria-label="Dia ${i + 1}">${i + 1}</button>`; }).join('')}</div>
         <p class="pop-sum"><b class="num" id="pop-daypts">${fmtPts(dayPts)}/${fmtPts(dayMax)} pts aprovados no dia</b>${GB.popDayPts(cfg, rec, true) ? ` · <span class="pend num">+${fmtPts(GB.popDayPts(cfg, rec, true))} pts aguardando conferência</span>` : ''}</p>${rec && Number(rec.adj) > 0 ? `<p class="pop-adj">${icon('plus')} <b class="num">+${fmtPts(Number(rec.adj))} pts</b> ${esc(rec.adjNote || 'acrescentados pela gestão')}</p>` : ''}
+        ${cfg.items.some(popArr) ? `<div class="pop-items pop-items-top">${cfg.items.filter(popArr).map(it => popItemCard(it, rec, bid)).join('')}</div>` : ''}
         <p class="section-note">Cada unidade precisa de uma prova: foto ou print. Anexe, escreva uma descrição se quiser e toque em Confirmar. As fotos são apagadas ${PROOF_DAYS} dias depois do envio (as que ainda aguardam conferência ficam até serem conferidas); a prova e os pontos continuam.</p>
         ${ro ? '<p class="section-note">Você está vendo este checklist sem poder editar.</p>' : ''}
-        <div class="pop-items">${popOrder(cfg.items).map(it => popItemCard(it, rec, bid)).join('')}</div>
+        <div class="pop-items">${popOrder(cfg.items).filter(it => !popArr(it)).map(it => popItemCard(it, rec, bid)).join('')}</div>
       </section>
       <section class="section card pop-rem">
         <div class="pop-dhead"><div><h2 class="pop-h2">${icon('bell')} Lembretes de posts</h2><p class="muted">Aviso diário para preencher o checklist enquanto a meta do dia não for batida.</p></div>
@@ -7008,17 +7030,18 @@ Content-Type: application/json</pre>
       const day = `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`, u = currentUser();
       if (popRec(bid, day)?.ev?.[it.id]?.some(GB.evLive)) return;
       const e = { id: uid('e_'), desc: '', at: Date.now(), by: 'gestao', byUser: u ? u.id : null, status: 'aprovado', reviewedBy: u ? u.id : null, reviewedAt: Date.now(), noPhoto: true, arr: v };
-      if (v === 'atraso') {
+      if (v === 'atraso' || v === 'apos') {
         ui.arrBusy = true; render();
-        try { const r = await lateRegister(bid, day, u ? u.name : ''); e.disc = r.id; e.sev = r.severity; }
+        try { const r = await lateRegister(bid, day, u ? u.name : '', v); e.disc = r.id; e.sev = r.severity; }
         catch (err) { ui.arrBusy = false; render(); toast('Não foi possível gerar a ocorrência: ' + (Cloud.enabled ? Cloud.message(err) : err.message)); return; }
         ui.arrBusy = false; ui.discData = null;
       }
       const r = popRecW(bid, day); (r.ev[it.id] = Array.isArray(r.ev[it.id]) ? r.ev[it.id] : []).push(e);
       save();
       const nm = ((barberById(bid) || {}).name || 'Profissional').split(' ')[0];
-      if (e.sev === 'penalidade') toast(`${nm}: PENALIDADE registrada na Fiscalização (3ª falta no mês). O dono, o gestor e os líderes com acesso foram avisados.`, 7000, 'alert');
-      else if (e.sev) toast(`${nm}: ${DISC_SEV[e.sev][0].toLowerCase()} registrada na Fiscalização (falta).`, 5000, 'alert');
+      if (e.sev === 'penalidade') toast(`${nm}: PENALIDADE registrada na Fiscalização (3º atraso no mês). O dono, o gestor e os líderes com acesso foram avisados.`, 7000, 'alert');
+      else if (v === 'apos') toast(`${nm}: chegou após o horário combinado. Sem bônus; registrado na Fiscalização.`, 5000, 'clock');
+      else if (e.sev) toast(`${nm}: ${DISC_SEV[e.sev][0].toLowerCase()} por atraso registrada na Fiscalização (${e.sev === 'advertencia' ? '1º' : '2º'} atraso no mês).`, 5000, 'alert');
       else toast(`${nm}: ${ARR[v][0].toLowerCase()}.`);
       render();
     },
@@ -7487,6 +7510,16 @@ Content-Type: application/json</pre>
       rkCache = {}; save();
       toast(`${GB.MODE_TXT[k][m][0]}: agora conta ${m === 'valor' ? 'o valor em R$' : 'a quantidade'}. Confira a meta do mês em Metas mensais da equipe.`, 6000);
       render();
+    },
+    extraSet(el) {
+      if (!isGestor(currentUser())) return;
+      const n = el.dataset.n, m = el.dataset.m, k = GB.normSvc(n);
+      const trad = (state.extraTrad || []).filter(x => GB.normSvc(x) !== k), combo = { ...(state.extraCombo || {}) };
+      Object.keys(combo).forEach(x => { if (GB.normSvc(x) === k) delete combo[x]; });
+      if (m === 'trad') trad.push(n);
+      if (m === 'combo') combo[n] = GB.comboBase({ ...state, extraCombo: {} }, n);
+      state.extraTrad = trad; state.extraCombo = combo;
+      rkCache = {}; save(); toast(m === 'trad' ? `"${n}": tradicional (não conta).` : m === 'combo' ? `"${n}": combo com extra (conta 1 extra).` : `"${n}": conta como serviço extra.`); render();
     },
     ciDel(el) {
       const k = el.dataset.k, c = (state.customInds || []).find(x => x.key === k); if (!c || !isGestor(currentUser())) return;
@@ -8005,11 +8038,10 @@ Content-Type: application/json</pre>
     },
     wNum(el) { wRefresh(el.form); },
     bonusYm(el) { ui.bonusYm = el.value; render(); },
-    extraTrad(el) {
+    extraBase(el) {
       if (!isGestor(currentUser())) return;
-      const n = el.dataset.n, k = GB.normSvc(n), cur = (state.extraTrad || []).filter(x => GB.normSvc(x) !== k);
-      state.extraTrad = el.checked ? [...cur, n] : cur;
-      rkCache = {}; save(); toast(el.checked ? `"${n}" agora é tradicional (não conta como extra).` : `"${n}" agora conta como serviço extra.`); render();
+      const n = el.dataset.n, c = { ...(state.extraCombo || {}) }, key = Object.keys(c).find(k => GB.normSvc(k) === GB.normSvc(n)) || n;
+      c[key] = el.value; state.extraCombo = c; rkCache = {}; save(); toast('Serviço de base do combo salvo.'); render();
     },
     bonusTipoSel(el) { ui.bonusDraft = { ...(ui.bonusDraft || {}), ...bonusDraftOf(el.form), tipo: el.value === 'outro' ? 'outro' : 'dinheiro', roleta: false }; render(); },
     wToggle(el) { // liga/desliga o indicador e salva na hora

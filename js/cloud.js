@@ -213,7 +213,7 @@
     upd: async (id, patch) => RES(await c.from('discipline').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)),
     del: async id => RES(await c.from('discipline').delete().eq('id', id)),
     // Horário de chegada › Chegou atrasado: o servidor calcula a gravidade do mês e grava o registro.
-    late: async (barber, day, author) => { const { data, error } = await c.rpc('registrar_atraso', { p_barber: barber, p_day: day, p_author: author || '' }); if (error) throw error; return data; },
+    late: async (barber, day, author, tipo) => { const { data, error } = await c.rpc('registrar_atraso', { p_barber: barber, p_day: day, p_author: author || '', p_tipo: tipo || 'atraso' }); if (error) throw error; return data; },
     unlate: async id => { const { data, error } = await c.rpc('desfazer_atraso', { p_id: id }); if (error) throw error; return data; },
   };
   // Checklist de rotina (Líder e Recepção): tarefas com horário e o que foi ticado em cada dia.
@@ -262,7 +262,7 @@
       out.tables[t] = map;
     }
     const co = s.company;
-    out.company = JSON.stringify({ name: co.name, cnpj: co.cnpj || '', phone: co.phone || '', email: co.email || '', logo: co.logo || null, settings: { weights: s.weights, goals: s.goals, hidden: s.hidden, org: s.org || null, pop: s.popCfg || null, reveal: s.reveal || null, ocup: s.ocupCfg || null, pops: s.pops || null, precos: Array.isArray(s.precos) && s.precos.length ? s.precos : null, brand: s.brand || null, theme: s.theme || null, houseGoals: s.houseGoals || null, houseGoalsM: s.houseGoalsM || null, music: s.podiumMusic || null, births: s.births || null, demoKit: s.demoKit || null, com: s.comCfg || null, dreams: s.dreams || null, units: s.units || null, prize: s.prize || null, planos: s.planCatalog || null, customInds: Array.isArray(s.customInds) && s.customInds.length ? s.customInds : null, indMode: s.indMode && (s.indMode.serv === 'valor' || s.indMode.prod === 'valor' || s.indMode.extra === 'valor') ? s.indMode : null, extraInit: s.extraInit || null, extraTrad: Array.isArray(s.extraTrad) && s.extraTrad.length ? s.extraTrad : null, notices: s.notices || null, logoColors: s.logoColors === false ? false : null } });
+    out.company = JSON.stringify({ name: co.name, cnpj: co.cnpj || '', phone: co.phone || '', email: co.email || '', logo: co.logo || null, settings: { weights: s.weights, goals: s.goals, hidden: s.hidden, org: s.org || null, pop: s.popCfg || null, reveal: s.reveal || null, ocup: s.ocupCfg || null, pops: s.pops || null, precos: Array.isArray(s.precos) && s.precos.length ? s.precos : null, brand: s.brand || null, theme: s.theme || null, houseGoals: s.houseGoals || null, houseGoalsM: s.houseGoalsM || null, music: s.podiumMusic || null, births: s.births || null, demoKit: s.demoKit || null, com: s.comCfg || null, dreams: s.dreams || null, units: s.units || null, prize: s.prize || null, planos: s.planCatalog || null, customInds: Array.isArray(s.customInds) && s.customInds.length ? s.customInds : null, indMode: s.indMode && (s.indMode.serv === 'valor' || s.indMode.prod === 'valor' || s.indMode.extra === 'valor') ? s.indMode : null, extraInit: s.extraInit || null, extraTrad: Array.isArray(s.extraTrad) && s.extraTrad.length ? s.extraTrad : null, extraCombo: s.extraCombo && Object.keys(s.extraCombo).length ? s.extraCombo : null, notices: s.notices || null, logoColors: s.logoColors === false ? false : null } });
     for (const u of s.users) out.users[u.id] = JSON.stringify({ name: u.name, phone: u.phone || '', status: u.status });
     return out;
   }
@@ -360,6 +360,7 @@
       indMode: st.indMode || null,
       extraInit: !!st.extraInit,
       extraTrad: Array.isArray(st.extraTrad) ? st.extraTrad : [],
+      extraCombo: st.extraCombo && typeof st.extraCombo === 'object' ? st.extraCombo : {},
       comandaRecs: cmds.map(r => ({ id: r.id, barberId: r.barber_id, date: r.date, ...(r.data || {}) })),
       bonusRecs: bonus.map(r => ({ id: r.id, barberId: r.barber_id, date: r.date, ...(r.data || {}) })),
       apiKey: key ? key.key : '',

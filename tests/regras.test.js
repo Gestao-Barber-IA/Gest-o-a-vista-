@@ -198,3 +198,16 @@ test('serviços extras: conta só o que não foi marcado como tradicional', () =
   const novo = team([['a', {}], ['b', {}]]); GB.computeRanking(novo, R);
   assert.ok(novo.hidden.includes('extra') && novo.extraInit);
 });
+
+test('serviços extras: combo com extra conta 1 e, no valor, só a diferença para o serviço de base', () => {
+  const st = team([['a', {}], ['b', {}]], { extraInit: true, extraTrad: ['1.1 Corte Tradicional'], extraCombo: { '1.2 Corte Tradicional & Sobrancelha': '' } });
+  st.hidden = [];
+  st.entries = [
+    { id: 'a1', barberId: 'a', date: '2026-10-05', source: 'api', svc: { '1.1 Corte Tradicional': [4, 200], '1.2 Corte Tradicional & Sobrancelha': [2, 130] } },
+    { id: 'b1', barberId: 'b', date: '2026-10-05', source: 'api', svc: { '1.1 Corte Tradicional': [1, 50] } },
+  ];
+  assert.equal(GB.comboBase(st, '1.2 Corte Tradicional & Sobrancelha'), '1.1 Corte Tradicional');
+  const a = GB.aggregate(st, 'a', R);
+  assert.equal(a.extra, 2);       // 2 combos = 2 extras
+  assert.equal(a.extraV, 30);     // 130 - 2 × 50 (preço médio do corte)
+});
