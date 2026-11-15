@@ -2911,3 +2911,4 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .bt-body .bt-premio { color: var(--money, #52d37e); font-weight: 700; margin-bottom: 4px; }
 .bt-card.is-gift .bt-premio { color: var(--accent); }
 .bt-btns { display: flex; gap: 6px; }
+.bt-at { margin: 4px 0 0; font-size: .85rem; }

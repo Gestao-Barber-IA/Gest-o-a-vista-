@@ -4,6 +4,7 @@
 window.GB_UPDATES = [
   { id: '2026-11-15-tipos-bonus', date: '2026-11-15', title: 'Tipos de bônus da empresa', items: [
     ['novo', 'Na aba Bônus, a nova aba Tipos de bônus da empresa: o dono cadastra os bônus que a casa oferece (nome, o que ganha e como ganhar) e toda a equipe consulta.'],
+    ['melhoria', 'O dono muda os tipos de bônus quando quiser (por exemplo, todo mês). Cada alteração aparece para a equipe em Avisos e alterações.'],
     ['melhoria', 'Ao registrar um bônus, dá para escolher um bônus da empresa e o formulário já vem preenchido. Só o dono, o gestor e o líder autorizado registram bônus; o profissional só acompanha os dele.'],
   ] },
   { id: '2026-11-15-comanda-disp', date: '2026-11-15', title: 'Maior comanda e Disponibilidade comercial', items: [

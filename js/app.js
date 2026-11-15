@@ -1873,7 +1873,7 @@
         ${own ? `<div class="bt-btns"><button class="icon-btn" data-action="btEdit" data-id="${esc(x.id)}" aria-label="Editar">${icon('edit')}</button><button class="icon-btn ${ui.confirm === 'bt' + x.id ? 'btn-danger' : ''}" data-action="btDel" data-id="${esc(x.id)}" aria-label="${ui.confirm === 'bt' + x.id ? 'Confirmar exclusão' : 'Excluir'}">${ui.confirm === 'bt' + x.id ? icon('check') : icon('trash')}</button></div>` : ''}
       </article>`).join('')}</div>` : `<div class="card empty">${icon('gift')}<h2>Nenhum tipo de bônus cadastrado</h2><p>${own ? 'Cadastre acima os bônus que a empresa oferece: como ganhar e o que ganha.' : 'O dono ainda não cadastrou os bônus da empresa.'}</p></div>`;
     return `<section class="section card bn-hero"><h2 class="section-title">${icon('gift')} Tipos de bônus da empresa</h2>
-      <p class="section-note">${own ? 'Os bônus que a empresa oferece e como ganhar. Toda a equipe vê esta lista.' : 'Os bônus que a empresa oferece e como ganhar cada um.'}</p>${bonusTabs('tipos')}</section>${form}<section class="section">${cards}</section>`;
+      <p class="section-note">${own ? 'Os bônus que a empresa oferece e como ganhar. Toda a equipe vê esta lista. Mude quando quiser (por exemplo, todo mês): adicione, edite ou exclua. Cada alteração aparece para a equipe em Avisos e alterações.' : 'Os bônus que a empresa oferece e como ganhar cada um.'}</p>${state.bonusTypesAt ? `<p class="muted bt-at">Última atualização: ${esc(new Date(state.bonusTypesAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }))}</p>` : ''}${bonusTabs('tipos')}</section>${form}<section class="section">${cards}</section>`;
   }
   function pageBonus(user) {
     if (ui.bonusTab === 'tipos') return bonusTypesPage(user);
@@ -2239,6 +2239,7 @@
       pop: JSON.stringify((pop.items || []).map(x => [x.title, x.pts, x.target])),
       pops: JSON.stringify(popsList().map(x => x.title || x.t || x.id)),
       precos: JSON.stringify(popsList('precos').map(x => [x.id, x.name, (x.steps || []).length, x.at])),
+      btipos: JSON.stringify((state.bonusTypes || []).map(x => [x.id, x.nome, x.tipo, x.premio, x.regra])),
       per };
   }
   const listTxt = a => a.filter(Boolean).join(' · ');
@@ -2249,6 +2250,7 @@
     com: () => { const c = comCfg(); return ['Comissões e prêmios', 'Regras atuais: ' + listTxt([c.pct > 0 && `comissão de ${nf1.format(c.pct)}% do faturamento`, c.plano > 0 && `${money0(c.plano)} por plano vendido`, c.prod > 0 && `${money0(c.prod)} por produto vendido`, [1, 2, 3].some(n => c.pos[n] > 0) && `pódio: ${[1, 2, 3].map(n => `${n}º ${money0(c.pos[n])}`).join(', ')}`, c.mvp > 0 && `MVP ${money0(c.mvp)}`, c.dest > 0 && `Destaque ${money0(c.dest)}`, c.meta > 0 && `bater a meta ${money0(c.meta)}`, c.pen > 0 && `penalidade de ${nf1.format(c.pen)}% por ocorrência`]) + '.']; },
     ocup: () => { const oc = GB.ocupCfgOf(state); return ['Regra da taxa de ocupação', `Agora 100% de ocupação = ${nf1.format(GB.hoursPerDay(oc))} h por dia (${oc.open} às ${oc.close}${Number(oc.lunch) ? `, ${oc.lunch} min de almoço` : ''}) × ${oc.days} dias no mês.`]; },
     pop: () => ['Checklist Agenda Cheia', 'Itens e pontos do checklist: ' + listTxt((GB.popCfgOf(state).items || []).map(x => `${x.title} (${x.pts} pt${x.pts == 1 ? '' : 's'})`)) + '.'],
+    btipos: () => { const l = Array.isArray(state.bonusTypes) ? state.bonusTypes : []; return ['Tipos de bônus da empresa', l.length ? 'Os bônus da empresa foram atualizados. Confira em Bônus › Tipos de bônus da empresa: ' + l.map(x => x.nome + (x.premio ? ` (${x.premio})` : '')).slice(0, 8).join('; ') + '.' : 'Os tipos de bônus da empresa foram retirados.']; },
     precos: () => ['Tabela de Preços e Planos', 'A tabela de preços e planos foi atualizada. Confira em Tabela de Preços e Planos: ' + popsList('precos').map(x => x.name).filter(Boolean).slice(0, 8).join(', ') + '.'],
     pops: () => ['POPs · Guia do Sucesso', 'Os POPs foram atualizados. Confira em POPs · Guia do Sucesso: ' + popsList().map(x => x.title || x.t).filter(Boolean).slice(0, 8).join(', ') + '.'],
     access: id => { const a = ACCESS.find(x => x[0] === accessOf(id)); return ['Seu nível de acesso', `Agora você tem acesso de ${a[1]}: ${a[2]}`]; },
@@ -2271,7 +2273,7 @@
     if (!u || !isGestor(u)) { avBase = null; return; }
     const now = avSnap();
     if (avState !== state || !avBase) { avBase = now; avState = state; return; }
-    for (const k of ['pesos', 'metas', 'self', 'com', 'ocup', 'pop', 'pops', 'precos']) if (now[k] !== avBase[k]) addNotice(k);
+    for (const k of ['pesos', 'metas', 'self', 'com', 'ocup', 'pop', 'pops', 'precos', 'btipos']) if (now[k] !== avBase[k]) addNotice(k);
     for (const [id, p] of Object.entries(now.per)) {
       const was = avBase.per[id]; if (!was) continue;
       if (p.access !== was.access) addNotice('access', id);
@@ -2292,7 +2294,7 @@
     const when = s => new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     return `<section class="section card">
       <h2 class="section-title">${icon('bell')} Avisos e alterações</h2>
-      <p class="muted">${own ? 'Tudo o que você muda e que importa para a equipe aparece aqui sozinho, e cada profissional vê no menu dele: pesos e pontos dos indicadores, metas, comissões, checklist, POPs e regras de acesso. Avisos marcados com um nome só aparecem para aquela pessoa.' : 'Mudanças feitas pela gestão que afetam você: pesos e pontos dos indicadores, metas, comissões, checklist, POPs e seus acessos.'}</p>
+      <p class="muted">${own ? 'Tudo o que você muda e que importa para a equipe aparece aqui sozinho, e cada profissional vê no menu dele: pesos e pontos dos indicadores, metas, comissões, checklist, POPs, tabela de preços, tipos de bônus e regras de acesso. Avisos marcados com um nome só aparecem para aquela pessoa.' : 'Mudanças feitas pela gestão que afetam você: pesos e pontos dos indicadores, metas, comissões, checklist, POPs, tabela de preços, tipos de bônus e seus acessos.'}</p>
     </section>
     ${list.length ? `<div class="up-list">${list.map(n => { const nw = !own && n.at > seen, b = n.to && barberById(n.to); return `<article class="card up-item av-item ${nw ? 'is-new' : ''}">
       <div class="up-head"><time datetime="${esc(n.at)}">${esc(when(n.at))}</time>${nw ? '<span class="chip chip-ok">Novo</span>' : ''}${n.to ? `<span class="chip chip-soft">${own ? 'Só para ' + esc(b ? first(b.name) : 'profissional') : 'Só para você'}</span>` : ''}</div>
@@ -7531,7 +7533,7 @@ Content-Type: application/json</pre>
       if (!isGestor(currentUser())) return;
       const id = el.dataset.id, x = bonusTypes().find(t => t.id === id); if (!x) return;
       if (ui.confirm !== 'bt' + id) { ui.confirm = 'bt' + id; render(); return; }
-      ui.confirm = null; state.bonusTypes = bonusTypes().filter(t => t.id !== id); save(); toast(`"${x.nome}" excluído.`); render();
+      ui.confirm = null; state.bonusTypes = bonusTypes().filter(t => t.id !== id); state.bonusTypesAt = new Date().toISOString(); save(); toast(`"${x.nome}" excluído.`); render();
     },
     bonusPick(el) { ui.bonusB = el.dataset.b && ui.bonusB !== el.dataset.b ? el.dataset.b : null; render(); },
     bonusDel(el) {
@@ -7851,7 +7853,7 @@ Content-Type: application/json</pre>
       if (regra.length < 3) return setMsg(f, 'Escreva como ganhar esse bônus.');
       const list = bonusTypes().slice(), i = ui.btEdit ? list.findIndex(x => x.id === ui.btEdit) : -1, row = { nome: nome.slice(0, 60), regra: regra.slice(0, 400), premio: premio.slice(0, 80), tipo };
       if (i >= 0) list[i] = { ...list[i], ...row }; else list.push({ id: uid('bt_'), ...row });
-      state.bonusTypes = list; ui.btEdit = null; save(); toast(i >= 0 ? 'Tipo de bônus salvo.' : 'Tipo de bônus adicionado. A equipe já vê.'); render();
+      state.bonusTypes = list; state.bonusTypesAt = new Date().toISOString(); ui.btEdit = null; save(); toast(i >= 0 ? 'Tipo de bônus salvo.' : 'Tipo de bônus adicionado. A equipe já vê.'); render();
     },
     bonus(f) {
       const u = currentUser(), bid = val(f, 'b'), tipo = val(f, 'tipo') === 'outro' ? 'outro' : 'dinheiro';
