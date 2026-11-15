@@ -2,8 +2,8 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
-  { id: '2026-11-16-nota', date: '2026-11-16', title: 'Como sua nota é calculada', items: [
-    ['novo', 'No topo de Minha performance, o profissional vê quanto cada indicador vale na nota, em porcentagem, conforme os pesos definidos pelo dono.'],
+  { id: '2026-11-16-nota', date: '2026-11-16', title: 'Como seus pontos são calculados', items: [
+    ['novo', 'No topo de Minha performance, o profissional vê até quantos pontos (de 100) vale cada indicador, conforme os pesos definidos pelo dono.'],
   ] },
   { id: '2026-11-16-ganho', date: '2026-11-16', title: 'Ganho do mês em Minha performance', items: [
     ['novo', 'Em Minha performance, o profissional vê quanto ganhou no mês: comissão, planos e produtos, prêmios do ranking, bônus registrados e descontos de penalidade.'],

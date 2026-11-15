@@ -3287,15 +3287,15 @@
       <p class="muted earn-note">Valor estimado pelos números lançados no sistema; o valor final é o do fechamento do mês.</p>
     </section>`;
   }
-  // Minha performance › "Como sua nota é calculada": quanto cada indicador vale na nota (pesos do dono, em %).
+  // Minha performance › "Como seus pontos são calculados": até quantos pontos (de 100) vale cada indicador (pesos do dono).
   function noteHowCard() {
     const list = pctOf().filter(([, p]) => p > 0).sort((a, b) => b[1] - a[1]);
     if (!list.length) return '';
     const max = Math.max(...list.map(([, p]) => p));
     return `<section class="section card how-card">
-      <h2 class="section-title">${icon('chart')} Como sua nota é calculada</h2>
-      <p class="section-note">Em cada indicador, quem está em 1º ganha nota 100 e o último ganha 0. Sua nota geral é a soma dessas notas, cada uma valendo o peso abaixo.</p>
-      <ul class="how-list">${list.map(([i, p]) => `<li><span class="how-n">${esc(i.label)}</span><span class="how-bar"><i style="width:${Math.max(4, p / max * 100)}%"></i></span><b class="num">${p}%</b></li>`).join('')}</ul>
+      <h2 class="section-title">${icon('chart')} Como seus pontos são calculados</h2>
+      <p class="section-note">Sua pontuação vai até <b>100 pontos</b>. Cada indicador vale até os pontos abaixo: quem está em 1º no indicador ganha todos, o último ganha 0 e os outros ganham proporcional ao resultado.</p>
+      <ul class="how-list">${list.map(([i, p]) => `<li><span class="how-n">${esc(i.label)}</span><span class="how-bar"><i style="width:${Math.max(4, p / max * 100)}%"></i></span><b class="num">${p} pts</b></li>`).join('')}</ul>
       <a class="how-link" href="#ajuda">${icon('help')} Entenda Destaque e MVP</a>
     </section>`;
   }
