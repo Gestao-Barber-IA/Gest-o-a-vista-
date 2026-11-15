@@ -213,7 +213,7 @@
     upd: async (id, patch) => RES(await c.from('discipline').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)),
     del: async id => RES(await c.from('discipline').delete().eq('id', id)),
     // Horário de chegada › Chegou atrasado: o servidor calcula a gravidade do mês e grava o registro.
-    late: async (barber, day, author) => { const { data, error } = await c.rpc('registrar_atraso', { p_barber: barber, p_day: day, p_author: author || '' }); if (error) throw error; return data; },
+    late: async (barber, day, author, tipo) => { const { data, error } = await c.rpc('registrar_atraso', { p_barber: barber, p_day: day, p_author: author || '', p_tipo: tipo || 'atraso' }); if (error) throw error; return data; },
     unlate: async id => { const { data, error } = await c.rpc('desfazer_atraso', { p_id: id }); if (error) throw error; return data; },
   };
   // Checklist de rotina (Líder e Recepção): tarefas com horário e o que foi ticado em cada dia.

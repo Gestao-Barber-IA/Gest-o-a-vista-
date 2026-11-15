@@ -2,6 +2,11 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-15-chegada-regras', date: '2026-11-15', title: 'Horário de chegada: novas regras na Fiscalização', items: [
+    ['melhoria', 'O Horário de chegada fica no topo do Registro do dia. O profissional vê as regras: no horário participa dos bônus; após o horário não participa; atrasado gera registro de atraso.'],
+    ['melhoria', 'Amarelo (após o horário combinado): registra na Fiscalização (tipo Atraso), sem somar para advertência.'],
+    ['melhoria', 'Vermelho (atrasado), no mês: 1º ocorrência, 2º advertência, 3º ocorrência, 4º advertência, do 5º em diante penalidade (depois de 2 advertências).'],
+  ] },
   { id: '2026-11-15-combo-extra', date: '2026-11-15', title: 'Serviços extras: opção Combo com extra', items: [
     ['novo', 'Em Indicadores e metas › Serviços extras, cada serviço agora tem 3 opções: Tradicional, Extra ou Combo com extra.'],
     ['novo', 'Combo com extra (ex.: Corte Tradicional & Sobrancelha): cada combo conta 1 serviço extra; no valor, conta só a diferença entre o preço do combo e o do serviço tradicional dele (o sistema sugere e o dono pode trocar).'],
