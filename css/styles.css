@@ -2881,3 +2881,10 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .xs-mode button.on { background: var(--accent); color: #111; }
 .xs-row.is-extra .xs-mode button.on { background: var(--money, #52d37e); }
 .xs-base { flex-basis: 100%; display: flex; flex-direction: column; gap: 4px; font-size: .85rem; }
+.pop-items-top { margin: 10px 0 14px; }
+.arr-rules { list-style: none; margin: 12px 0 6px; padding: 0; display: grid; gap: 8px; }
+.arr-rules li { display: flex; gap: 10px; align-items: flex-start; padding: 9px 12px; border-radius: 12px; font-size: .92rem; line-height: 1.4; }
+.arr-rules svg { width: 18px; height: 18px; flex: 0 0 auto; margin-top: 2px; }
+.arr-r-ok { background: color-mix(in srgb, #1f9d55 16%, transparent); } .arr-r-ok svg { color: #2fbf6c; }
+.arr-r-apos { background: color-mix(in srgb, #f2c230 16%, transparent); } .arr-r-apos svg { color: #f2c230; }
+.arr-r-atraso { background: color-mix(in srgb, #d64545 16%, transparent); } .arr-r-atraso svg { color: #ef6b6b; }

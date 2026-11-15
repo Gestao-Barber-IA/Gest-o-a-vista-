@@ -5135,6 +5135,12 @@ Content-Type: application/json</pre>
   // Ordem dos cartões no checklist: Horário de chegada primeiro, logo abaixo o EXTRA, depois as demais tarefas.
   const popIsExtra = it => !popArr(it) && (it.id === 'extra' || /^extra\b/i.test(String(it.title || '').trim()));
   const popOrder = items => [...items.filter(popArr), ...items.filter(popIsExtra), ...items.filter(it => !popArr(it) && !popIsExtra(it))];
+  // O que o profissional vê no Horário de chegada (os botões são só da gestão).
+  const arrRules = () => `<ul class="arr-rules">
+      <li class="arr-r-ok">${icon('check')}<span><b>Chegou no horário combinado:</b> participa dos bônus.</span></li>
+      <li class="arr-r-apos">${icon('clock')}<span><b>Chegou após o horário combinado:</b> não participa dos bônus.</span></li>
+      <li class="arr-r-atraso">${icon('alert')}<span><b>Chegou atrasado:</b> fica um registro de atraso. A cada 2 registros, 1 advertência; com 2 advertências, penalidade.</span></li>
+    </ul><p class="muted pop-gest">${icon('lock')} Marcado pelo dono, gestor ou líder.</p>`;
   function arrBlock(it, list, bid) {
     const e = list.find(GB.evLive), can = popMarkOk(it, bid);
     if (e) {
@@ -5143,7 +5149,7 @@ Content-Type: application/json</pre>
       return `<div class="arr-done ${a[1]}">${icon(a[2])}<span><b>${a[0]}</b><small>${e.arr && e.arr !== 'ok' ? 'Sem bônus' : `+${fmtPts(it.pts)} pts`}${sev ? ` · Fiscalização: falta, ${sev[0].toLowerCase()}` : ''}</small></span></div>
         ${undo ? `<button class="link-btn arr-undo" data-action="arrUndo" data-it="${esc(it.id)}">${ui.confirm === 'arr' + it.id ? 'Confirmar: desfazer' + (e.disc ? ' e apagar a ocorrência' : '') : 'Desfazer'}</button>` : ''}`;
     }
-    if (!can) return `<p class="muted pop-gest">${icon('lock')} Marcado pelo dono, gestor ou líder.</p>`;
+    if (!can) return arrRules();
     return `<div class="arr-btns">${Object.entries(ARR).map(([k, [l, c, i]]) => `<button class="btn arr-btn ${c}" data-action="arrMark" data-it="${esc(it.id)}" data-v="${k}" ${ui.arrBusy ? 'disabled' : ''}>${icon(i)} <span>${l}${k === 'ok' ? '' : '<small>sem bônus' + (k === 'atraso' ? ' · gera ocorrência' : '') + '</small>'}</span></button>`).join('')}</div>`;
   }
   function popStepper(it, list, t, bid, mayAdd) {
@@ -5360,9 +5366,10 @@ Content-Type: application/json</pre>
         <span class="tm-flabel">Dia do mês</span>
         <div class="pop-days" id="pop-days">${Array.from({ length: n }, (_, i) => { const d = `${ym}-${String(i + 1).padStart(2, '0')}`; const s2 = popStatus(bid, d); return `<button class="pop-dn ${i + 1 === ui.popDay ? 'on' : ''} st-${s2} ${d > today ? 'future' : ''}" data-action="popDay" data-d="${i + 1}" aria-label="Dia ${i + 1}">${i + 1}</button>`; }).join('')}</div>
         <p class="pop-sum"><b class="num" id="pop-daypts">${fmtPts(dayPts)}/${fmtPts(dayMax)} pts aprovados no dia</b>${GB.popDayPts(cfg, rec, true) ? ` · <span class="pend num">+${fmtPts(GB.popDayPts(cfg, rec, true))} pts aguardando conferência</span>` : ''}</p>${rec && Number(rec.adj) > 0 ? `<p class="pop-adj">${icon('plus')} <b class="num">+${fmtPts(Number(rec.adj))} pts</b> ${esc(rec.adjNote || 'acrescentados pela gestão')}</p>` : ''}
+        ${cfg.items.some(popArr) ? `<div class="pop-items pop-items-top">${cfg.items.filter(popArr).map(it => popItemCard(it, rec, bid)).join('')}</div>` : ''}
         <p class="section-note">Cada unidade precisa de uma prova: foto ou print. Anexe, escreva uma descrição se quiser e toque em Confirmar. As fotos são apagadas ${PROOF_DAYS} dias depois do envio (as que ainda aguardam conferência ficam até serem conferidas); a prova e os pontos continuam.</p>
         ${ro ? '<p class="section-note">Você está vendo este checklist sem poder editar.</p>' : ''}
-        <div class="pop-items">${popOrder(cfg.items).map(it => popItemCard(it, rec, bid)).join('')}</div>
+        <div class="pop-items">${popOrder(cfg.items).filter(it => !popArr(it)).map(it => popItemCard(it, rec, bid)).join('')}</div>
       </section>
       <section class="section card pop-rem">
         <div class="pop-dhead"><div><h2 class="pop-h2">${icon('bell')} Lembretes de posts</h2><p class="muted">Aviso diário para preencher o checklist enquanto a meta do dia não for batida.</p></div>
