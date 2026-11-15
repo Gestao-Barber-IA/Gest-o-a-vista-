@@ -2888,3 +2888,27 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .arr-r-ok { background: color-mix(in srgb, #1f9d55 16%, transparent); } .arr-r-ok svg { color: #2fbf6c; }
 .arr-r-apos { background: color-mix(in srgb, #f2c230 16%, transparent); } .arr-r-apos svg { color: #f2c230; }
 .arr-r-atraso { background: color-mix(in srgb, #d64545 16%, transparent); } .arr-r-atraso svg { color: #ef6b6b; }
+.arr-info { display: inline-flex; width: fit-content; max-width: 100%; align-self: flex-start; justify-self: start; margin-top: 10px; font-size: .75rem; }
+.arr-rules li span { display: flex; flex-direction: column; gap: 2px; }
+.arr-btn small { white-space: normal; }
+/* Disponibilidade comercial (visão do profissional): mesmas cores vivas dos botões */
+.arr-rules li { padding: 12px 14px; border-radius: 14px; }
+.arr-rules .arr-r-ok { background: #1f9d55; color: #fff; } .arr-rules .arr-r-ok svg { color: #fff; }
+.arr-rules .arr-r-apos { background: #f2c230; color: #1d1600; } .arr-rules .arr-r-apos svg { color: #1d1600; }
+.arr-rules .arr-r-atraso { background: #d64545; color: #fff; } .arr-rules .arr-r-atraso svg { color: #fff; }
+.arr-rules li b { font-size: 1rem; }
+.arr-note { font-style: normal; font-weight: 800; margin-top: 4px; font-size: .9rem; }
+.ind-off { border-color: color-mix(in srgb, #d64545 55%, transparent); }
+.cmd-off { color: #ef5b5b; }
+.cmd-off-note { margin: 6px 0 0; font-size: .82rem; color: #ef8b8b; line-height: 1.4; }
+/* Bônus › Tipos de bônus da empresa */
+.bn-tabs { margin-top: 12px; }
+.bt-list { display: grid; gap: 10px; }
+.bt-card { display: flex; gap: 12px; align-items: flex-start; padding: 14px; }
+.bt-body { flex: 1; min-width: 0; }
+.bt-body h3 { margin: 0 0 4px; font-size: 1.05rem; }
+.bt-body p { margin: 0; color: var(--fg-soft, inherit); overflow-wrap: anywhere; line-height: 1.45; }
+.bt-body .bt-premio { color: var(--money, #52d37e); font-weight: 700; margin-bottom: 4px; }
+.bt-card.is-gift .bt-premio { color: var(--accent); }
+.bt-btns { display: flex; gap: 6px; }
+.bt-at { margin: 4px 0 0; font-size: .85rem; }

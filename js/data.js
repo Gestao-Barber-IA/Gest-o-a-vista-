@@ -223,6 +223,10 @@
     };
     const months = fullMonths(range);
     const recs = Object.fromEntries((state.monthly || []).filter(m => m.barberId === barberId && months.includes(m.month)).map(m => [m.month, m]));
+    // Dias com Disponibilidade alterada ou Compromisso comercial não atendido: a comanda do dia não vale para o destaque
+    // (fica em s.comandaOff, para o profissional ver no perfil dele).
+    const cmdOff = new Set();
+    for (const r of state.pop || []) if (r.barberId === barberId && r.ev) for (const l of Object.values(r.ev)) if (Array.isArray(l) && l.some(e => evLive(e) && (e.arr === 'apos' || e.arr === 'atraso'))) cmdOff.add(r.day);
     // Somas diárias por mês, para combinar com o total mensal.
     const dailyCli = {};
     for (const e of state.entries) {
@@ -237,6 +241,7 @@
         }
         if (f.key === 'check' && popDays(state, barberId).some(r => r.day.slice(0, 7) === monthKey(e.date))) continue;
         if (f.key === 'hDisp') continue; // a capacidade vem da regra de ocupação
+        if (f.key === 'comanda' && cmdOff.has(e.date)) { s.comandaOff = Math.max(s.comandaOff || 0, Number(e.comanda) || 0); continue; }
         add(f.key, e[f.key]);
       }
       // Serviços por nome (integração): os não tradicionais viram Serviços extras (quantidade e valor).
@@ -314,7 +319,7 @@
         { id: 'google', title: '4 Avaliações no Google', desc: 'Peça e conquiste 4 avaliações de clientes no Google', type: 'count', target: 4, pts: 3 },
         { id: 'estrat', title: 'Stories Estratégico', desc: 'postar às 8h30, 12h, 17h30', type: 'count', target: 3, pts: 2 },
         { id: 'extra', title: 'Pró Atividade', desc: 'Extra', type: 'count', target: 5, pts: 3 },
-        { id: 'chegada', title: 'Horário de chegada', desc: 'Pontualidade', type: 'check', target: 1, pts: 3 },
+        { id: 'chegada', title: 'Disponibilidade comercial', desc: 'Organização da agenda e dos atendimentos oferecidos aos clientes.', type: 'check', target: 1, pts: 3 },
       ],
       levels: [
         { name: 'Elite', min: 390, max: 600, value: 4500, tone: 'gold' },
@@ -674,6 +679,10 @@
       demoV: 10,
       comCfg: { pct: 40, pctBy: {}, plano: 10, prod: 5, pos: { 1: 200, 2: 100, 3: 50 }, mvp: 150, dest: 80, meta: 100 },
       extraTrad: ['Corte Tradicional', 'Barba'],
+      bonusTypes: [
+        { id: 'bt_demo1', nome: 'Roleta de produtos', tipo: 'dinheiro', premio: 'de R$ 10 a R$ 50', regra: 'A cada 3 produtos vendidos no dia, o profissional gira a roleta.' },
+        { id: 'bt_demo2', nome: 'Meta de planos do mês', tipo: 'outro', premio: '2 ingressos VIP no cinema', regra: 'Quem bater a meta de planos mensais do mês.' },
+      ],
       // Bônus de exemplo do mês (roleta de produtos e presentes).
       bonusRecs: [[0, 'dinheiro', 30, '', 'Roleta – venda de 3 produtos', 2], [1, 'dinheiro', 50, '', 'Roleta – venda de 3 produtos', 4], [2, 'outro', null, '2 ingressos VIP no cinema', 'Bateu a meta de faturamento da semana', 5], [0, 'dinheiro', 20, '', 'Roleta – venda de 3 produtos', 6], [3, 'dinheiro', 10, '', 'Roleta – venda de 3 produtos', 7]]
         .filter(x => barbers[x[0]] && x[5] <= today.getDate()).map(([i, tipo, valor, item, motivo, d], k) => ({ id: 'bn_demo' + k, barberId: barbers[i].id, date: `${curYm}-${String(d).padStart(2, '0')}`, tipo, valor, item, motivo, by: 'Gestão', at: `${curYm}-${String(d).padStart(2, '0')}T15:00:00Z` })),

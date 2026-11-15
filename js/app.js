@@ -1266,6 +1266,18 @@
     </section>`;
   }
   // Os próprios números do barbeiro durante o segredo (sem posição nem pontuação).
+  // Maior comanda no perfil do profissional. Comanda feita num dia com Disponibilidade alterada ou
+  // Compromisso comercial não atendido não vale para o destaque/pódio: aparece em vermelho só para ele (e a gestão).
+  function cmdOwnCard(row, R) {
+    const on = row.sums.n.comanda ? Number(row.sums.comanda) || 0 : 0, off = Number(row.sums.comandaOff) || 0;
+    if (!on && !off) return '';
+    const top = (R.bonus || []).find(i => i.key === 'comanda'), red = off > on, lead = !red && top && top.leaders.includes(row.barber.id);
+    return `<div class="card ind ${lead ? 'card-glow' : ''} ${red ? 'ind-off' : ''}">
+      <div class="ind-top"><span>Maior comanda do mês ${tip('comanda')}</span>${lead ? '<span class="chip chip-destaque">Destaque</span>' : '<span class="chip chip-soft">não pontua</span>'}</div>
+      <div class="ind-val num ${red ? 'cmd-off' : ''}">${money2(red ? off : on)}</div>
+      ${red ? `<p class="cmd-off-note">Não conta no pódio: foi feita no dia de uma disponibilidade alterada ou de um compromisso comercial não atendido.${on ? ` Valendo para o destaque: <b class="num">${money2(on)}</b>.` : ''}</p>` : ''}
+    </div>`;
+  }
   function ownNumbers(R, bid, ym) {
     const row = bid && R.rows.find(r => r.barber.id === bid);
     if (!row) return '';
@@ -1278,7 +1290,7 @@
         <div class="ind-val num">${fmt(ind, v)}${ind.key === 'check' && v != null ? ' pts' : ''}</div>
         ${pct != null ? `<div class="bar"><i style="width:${Math.max(2, Math.min(100, pct))}%"></i></div><div class="ind-foot"><span class="num">${nf0.format(pct)}% da meta</span></div>` : ''}
       </div>`;
-    }).join('');
+    }).join('') + cmdOwnCard(row, R);
     return `<section class="section"><h2 class="section-title">Seus números ${ym ? 'no mês' : 'no período'}</h2>
       <p class="section-note">Só você vê estes números agora. Ainda dá tempo de subir: cada atendimento conta.</p>
       <div class="ind-grid">${cards}</div></section>`;
@@ -1841,7 +1853,30 @@
   const bonusVisible = u => bonusAll().filter(v => isGestor(u) || v.barberId === u.barberId || bonusCanFor(u, v.barberId));
   const bonusSeenKey = () => 'bonusSeen.' + ((currentUser() || {}).id || '');
   const bonusUnseen = () => { const u = currentUser(); if (!u || isGestor(u) || !u.barberId) return 0; const seen = DB.pref.get(bonusSeenKey(), ''); return bonusAll().filter(v => v.barberId === u.barberId && String(v.at || v.date) > seen).length; };
+  // Tipos de bônus da empresa: o que a casa oferece (o dono cadastra; toda a equipe consulta).
+  const bonusTypes = () => (Array.isArray(state.bonusTypes) ? state.bonusTypes : []);
+  const bonusTabs = t => `<div class="disc-tabs bn-tabs" role="tablist"><button role="tab" class="disc-tab ${t === 'reg' ? 'on' : ''}" aria-selected="${t === 'reg'}" data-action="bonusTab" data-t="reg">${icon('diamond')} Bônus</button><button role="tab" class="disc-tab ${t === 'tipos' ? 'on' : ''}" aria-selected="${t === 'tipos'}" data-action="bonusTab" data-t="tipos">${icon('gift')} Tipos de bônus da empresa</button></div>`;
+  function bonusTypesPage(user) {
+    const own = isGestor(user), list = bonusTypes(), e = ui.btEdit ? list.find(x => x.id === ui.btEdit) : null;
+    const form = own ? `<section class="section card"><h2 class="section-title">${icon(e ? 'edit' : 'plus')} ${e ? 'Editar tipo de bônus' : 'Novo tipo de bônus'}</h2>
+      <form class="form" data-form="bonusType" novalidate>
+        <div class="grid-2"><label class="field"><span>Nome do bônus *</span><input class="input" name="nome" maxlength="60" value="${esc(e ? e.nome : '')}" placeholder="Ex.: Roleta de produtos"></label>
+        <label class="field"><span>Tipo</span><select class="input" name="tipo"><option value="dinheiro" ${!e || e.tipo === 'dinheiro' ? 'selected' : ''}>Bônus financeiro (R$)</option><option value="outro" ${e && e.tipo === 'outro' ? 'selected' : ''}>Outro tipo de bônus</option></select></label></div>
+        <label class="field"><span>O que ganha</span><input class="input" name="premio" maxlength="80" value="${esc(e ? e.premio || '' : '')}" placeholder="Ex.: de R$ 10 a R$ 50 · 2 ingressos VIP no cinema"></label>
+        <label class="field"><span>Como ganhar (regra) *</span><textarea class="input" name="regra" rows="3" maxlength="400" placeholder="Ex.: a cada 3 produtos vendidos no dia, gira a roleta.">${esc(e ? e.regra : '')}</textarea></label>
+        <p class="form-msg" data-msg></p>
+        <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} ${e ? 'Salvar' : 'Adicionar tipo de bônus'}</button>${e ? '<button type="button" class="btn" data-action="btEdit" data-id="">Cancelar</button>' : ''}</div>
+      </form></section>` : '';
+    const cards = list.length ? `<div class="bt-list">${list.map(x => `<article class="card bt-card ${x.tipo === 'outro' ? 'is-gift' : ''}">
+        <span class="bn-ic">${icon(x.tipo === 'outro' ? 'gift' : 'wallet')}</span>
+        <div class="bt-body"><h3>${esc(x.nome)}</h3>${x.premio ? `<p class="bt-premio">${esc(x.premio)}</p>` : ''}<p>${esc(x.regra)}</p></div>
+        ${own ? `<div class="bt-btns"><button class="icon-btn" data-action="btEdit" data-id="${esc(x.id)}" aria-label="Editar">${icon('edit')}</button><button class="icon-btn ${ui.confirm === 'bt' + x.id ? 'btn-danger' : ''}" data-action="btDel" data-id="${esc(x.id)}" aria-label="${ui.confirm === 'bt' + x.id ? 'Confirmar exclusão' : 'Excluir'}">${ui.confirm === 'bt' + x.id ? icon('check') : icon('trash')}</button></div>` : ''}
+      </article>`).join('')}</div>` : `<div class="card empty">${icon('gift')}<h2>Nenhum tipo de bônus cadastrado</h2><p>${own ? 'Cadastre acima os bônus que a empresa oferece: como ganhar e o que ganha.' : 'O dono ainda não cadastrou os bônus da empresa.'}</p></div>`;
+    return `<section class="section card bn-hero"><h2 class="section-title">${icon('gift')} Tipos de bônus da empresa</h2>
+      <p class="section-note">${own ? 'Os bônus que a empresa oferece e como ganhar. Toda a equipe vê esta lista. Mude quando quiser (por exemplo, todo mês): adicione, edite ou exclua. Cada alteração aparece para a equipe em Avisos e alterações.' : 'Os bônus que a empresa oferece e como ganhar cada um.'}</p>${state.bonusTypesAt ? `<p class="muted bt-at">Última atualização: ${esc(new Date(state.bonusTypesAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }))}</p>` : ''}${bonusTabs('tipos')}</section>${form}<section class="section">${cards}</section>`;
+  }
   function pageBonus(user) {
+    if (ui.bonusTab === 'tipos') return bonusTypesPage(user);
     const admin = bonusAdmin(user), ym = ui.bonusYm || curYm(), all = bonusVisible(user);
     if (!admin && user.barberId) { const mine = all.filter(v => v.barberId === user.barberId); if (mine.length) setTimeout(() => DB.pref.set(bonusSeenKey(), mine.map(v => String(v.at || v.date)).sort().pop()), 1200); }
     const months = [...new Set([curYm(), ...all.map(v => v.date.slice(0, 7))])].sort().reverse();
@@ -1857,6 +1892,7 @@
       <p class="section-note">${admin ? 'Registre os bônus da equipe: financeiro (ex.: roleta ao vender 3 produtos) ou outro tipo (presente, ingresso, folga…), sempre com a referência de por que ganhou. Cada profissional vê só os dele.' : 'Os bônus que você ganhou e por quê. Continue assim!'}</p>
       ${admin ? '' : `<div class="bn-stats"><div><small>Em ${esc(ymLabel(ym))}</small><b class="num">${money2(sumM(monthAll))}</b><span>${monthAll.filter(bnOutro).length} outro(s) bônus</span></div>
         <div><small>No ano</small><b class="num">${money2(sumM(yearMine))}</b><span>${yearMine.length} bônus</span></div></div>`}
+      ${bonusTabs('reg')}
     </section>`;
     const sum = admin ? (() => {
       const by = {}; monthAll.forEach(v => { const o = by[v.barberId] || (by[v.barberId] = { r: 0, p: 0, n: 0 }); o.n++; if (bnOutro(v)) o.p++; else o.r += Number(v.valor) || 0; });
@@ -1871,6 +1907,7 @@
           <label class="field"><span>Profissional *</span><select class="input" name="b"><option value="">Escolha</option>${people.map(b => `<option value="${esc(b.id)}" ${d.b === b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>
           <label class="field"><span>Data</span><input class="input" type="date" name="date" value="${esc(d.date || todayIso())}" max="${todayIso()}"></label>
         </div>
+        ${bonusTypes().length ? `<label class="field"><span>Bônus da empresa (opcional)</span><select class="input" data-change="bonusFromType"><option value="">Escolha para preencher</option>${bonusTypes().map(x => `<option value="${esc(x.id)}">${esc(x.nome)}</option>`).join('')}</select></label>` : ''}
         <label class="field"><span>Tipo de bônus *</span><select class="input" name="tipo" data-change="bonusTipoSel">
           <option value="dinheiro" ${(d.tipo || 'dinheiro') === 'dinheiro' ? 'selected' : ''}>Bônus financeiro (R$)</option>
           <option value="outro" ${(d.tipo || 'dinheiro') !== 'dinheiro' ? 'selected' : ''}>Outro tipo de bônus</option></select></label>
@@ -2202,6 +2239,7 @@
       pop: JSON.stringify((pop.items || []).map(x => [x.title, x.pts, x.target])),
       pops: JSON.stringify(popsList().map(x => x.title || x.t || x.id)),
       precos: JSON.stringify(popsList('precos').map(x => [x.id, x.name, (x.steps || []).length, x.at])),
+      btipos: JSON.stringify((state.bonusTypes || []).map(x => [x.id, x.nome, x.tipo, x.premio, x.regra])),
       per };
   }
   const listTxt = a => a.filter(Boolean).join(' · ');
@@ -2212,6 +2250,7 @@
     com: () => { const c = comCfg(); return ['Comissões e prêmios', 'Regras atuais: ' + listTxt([c.pct > 0 && `comissão de ${nf1.format(c.pct)}% do faturamento`, c.plano > 0 && `${money0(c.plano)} por plano vendido`, c.prod > 0 && `${money0(c.prod)} por produto vendido`, [1, 2, 3].some(n => c.pos[n] > 0) && `pódio: ${[1, 2, 3].map(n => `${n}º ${money0(c.pos[n])}`).join(', ')}`, c.mvp > 0 && `MVP ${money0(c.mvp)}`, c.dest > 0 && `Destaque ${money0(c.dest)}`, c.meta > 0 && `bater a meta ${money0(c.meta)}`, c.pen > 0 && `penalidade de ${nf1.format(c.pen)}% por ocorrência`]) + '.']; },
     ocup: () => { const oc = GB.ocupCfgOf(state); return ['Regra da taxa de ocupação', `Agora 100% de ocupação = ${nf1.format(GB.hoursPerDay(oc))} h por dia (${oc.open} às ${oc.close}${Number(oc.lunch) ? `, ${oc.lunch} min de almoço` : ''}) × ${oc.days} dias no mês.`]; },
     pop: () => ['Checklist Agenda Cheia', 'Itens e pontos do checklist: ' + listTxt((GB.popCfgOf(state).items || []).map(x => `${x.title} (${x.pts} pt${x.pts == 1 ? '' : 's'})`)) + '.'],
+    btipos: () => { const l = Array.isArray(state.bonusTypes) ? state.bonusTypes : []; return ['Tipos de bônus da empresa', l.length ? 'Os bônus da empresa foram atualizados. Confira em Bônus › Tipos de bônus da empresa: ' + l.map(x => x.nome + (x.premio ? ` (${x.premio})` : '')).slice(0, 8).join('; ') + '.' : 'Os tipos de bônus da empresa foram retirados.']; },
     precos: () => ['Tabela de Preços e Planos', 'A tabela de preços e planos foi atualizada. Confira em Tabela de Preços e Planos: ' + popsList('precos').map(x => x.name).filter(Boolean).slice(0, 8).join(', ') + '.'],
     pops: () => ['POPs · Guia do Sucesso', 'Os POPs foram atualizados. Confira em POPs · Guia do Sucesso: ' + popsList().map(x => x.title || x.t).filter(Boolean).slice(0, 8).join(', ') + '.'],
     access: id => { const a = ACCESS.find(x => x[0] === accessOf(id)); return ['Seu nível de acesso', `Agora você tem acesso de ${a[1]}: ${a[2]}`]; },
@@ -2234,7 +2273,7 @@
     if (!u || !isGestor(u)) { avBase = null; return; }
     const now = avSnap();
     if (avState !== state || !avBase) { avBase = now; avState = state; return; }
-    for (const k of ['pesos', 'metas', 'self', 'com', 'ocup', 'pop', 'pops', 'precos']) if (now[k] !== avBase[k]) addNotice(k);
+    for (const k of ['pesos', 'metas', 'self', 'com', 'ocup', 'pop', 'pops', 'precos', 'btipos']) if (now[k] !== avBase[k]) addNotice(k);
     for (const [id, p] of Object.entries(now.per)) {
       const was = avBase.per[id]; if (!was) continue;
       if (p.access !== was.access) addNotice('access', id);
@@ -2255,7 +2294,7 @@
     const when = s => new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     return `<section class="section card">
       <h2 class="section-title">${icon('bell')} Avisos e alterações</h2>
-      <p class="muted">${own ? 'Tudo o que você muda e que importa para a equipe aparece aqui sozinho, e cada profissional vê no menu dele: pesos e pontos dos indicadores, metas, comissões, checklist, POPs e regras de acesso. Avisos marcados com um nome só aparecem para aquela pessoa.' : 'Mudanças feitas pela gestão que afetam você: pesos e pontos dos indicadores, metas, comissões, checklist, POPs e seus acessos.'}</p>
+      <p class="muted">${own ? 'Tudo o que você muda e que importa para a equipe aparece aqui sozinho, e cada profissional vê no menu dele: pesos e pontos dos indicadores, metas, comissões, checklist, POPs, tabela de preços, tipos de bônus e regras de acesso. Avisos marcados com um nome só aparecem para aquela pessoa.' : 'Mudanças feitas pela gestão que afetam você: pesos e pontos dos indicadores, metas, comissões, checklist, POPs, tabela de preços, tipos de bônus e seus acessos.'}</p>
     </section>
     ${list.length ? `<div class="up-list">${list.map(n => { const nw = !own && n.at > seen, b = n.to && barberById(n.to); return `<article class="card up-item av-item ${nw ? 'is-new' : ''}">
       <div class="up-head"><time datetime="${esc(n.at)}">${esc(when(n.at))}</time>${nw ? '<span class="chip chip-ok">Novo</span>' : ''}${n.to ? `<span class="chip chip-soft">${own ? 'Só para ' + esc(b ? first(b.name) : 'profissional') : 'Só para você'}</span>` : ''}</div>
@@ -3254,7 +3293,7 @@
         <div class="bar" title="Nota ${score(row.scores[ind.key])}"><i style="width:${Math.max(2, row.scores[ind.key])}%"></i></div>
         <div class="ind-foot"><span class="num">${ord(row.ranks[ind.key])} de ${R.rows.length} · nota ${score(row.scores[ind.key])}</span>${delta}</div>
       </div>`;
-    }).join('');
+    }).join('') + cmdOwnCard(row, R);
 
     return `${picker}${periodNav()}
       <div class="card">
@@ -5129,31 +5168,29 @@ Content-Type: application/json</pre>
   const popMarkOk = (it, bid) => { if (!popGest(it)) return canPopEdit(bid); const u = currentUser(); return !!u && (isGestor(u) || (u.barberId !== bid && (canEditB(bid) || accessOf(u.barberId) === 'lider'))); };
   // Horário de chegada: três botões (no horário, depois do horário, atrasado), sem prova. Fica no topo do checklist.
   // O dono pode ligar ou desligar em cada tarefa ("arr"); sem escolha, vale para tarefas da gestão com "chegada" no nome.
-  const popArr = it => it.arr !== undefined ? !!it.arr : popGest(it) && it.type === 'check' && /chegad|pontualid/i.test(`${it.title || ''} ${it.desc || ''}`);
+  const popArr = it => it.arr !== undefined ? !!it.arr : popGest(it) && it.type === 'check' && (it.id === 'chegada' || /chegad|pontualid|disponibilidade comercial/i.test(`${it.title || ''} ${it.desc || ''}`));
   const ARR = {
-    ok: ['Chegou no horário combinado', 'arr-ok', 'check'],
-    apos: ['Chegou após o horário combinado', 'arr-apos', 'clock'],
-    atraso: ['Chegou atrasado', 'arr-atraso', 'alert'],
+    ok: ['Disponibilidade confirmada', 'arr-ok', 'check', 'Profissional disponível para os atendimentos anunciados.', '(bônus ativo)'],
+    apos: ['Disponibilidade alterada', 'arr-apos', 'clock', 'Alteração comunicada para reorganização da agenda e dos clientes.', '(registrado e sem bônus)'],
+    atraso: ['Compromisso comercial não atendido', 'arr-atraso', 'alert', 'Incompatibilidade não comunicada que prejudicou um atendimento confirmado ou a oferta anunciada. Situação sujeita à análise individual.', '(registrado e sem bônus)'],
   };
   // Ordem dos cartões no checklist: Horário de chegada primeiro, logo abaixo o EXTRA, depois as demais tarefas.
   const popIsExtra = it => !popArr(it) && (it.id === 'extra' || /^extra\b/i.test(String(it.title || '').trim()));
   const popOrder = items => [...items.filter(popArr), ...items.filter(popIsExtra), ...items.filter(it => !popArr(it) && !popIsExtra(it))];
   // O que o profissional vê no Horário de chegada (os botões são só da gestão).
-  const arrRules = () => `<ul class="arr-rules">
-      <li class="arr-r-ok">${icon('check')}<span><b>Chegou no horário combinado:</b> participa dos bônus.</span></li>
-      <li class="arr-r-apos">${icon('clock')}<span><b>Chegou após o horário combinado:</b> não participa dos bônus e fica registrado na Fiscalização.</span></li>
-      <li class="arr-r-atraso">${icon('alert')}<span><b>Chegou atrasado:</b> fica registrado na Fiscalização. No mês, o 1º atraso é advertência, o 2º reincidência e o 3º penalidade.</span></li>
+  const arrRules = () => `<span class="chip chip-soft arr-info">Informativo</span><ul class="arr-rules">
+      ${Object.entries(ARR).map(([k, [l, , i, d, n]]) => `<li class="arr-r-${k}">${icon(i)}<span><b>${l}</b>${d}<em class="arr-note">${n}</em></span></li>`).join('')}
     </ul><p class="muted pop-gest">${icon('lock')} Marcado pelo dono, gestor ou líder.</p>`;
   function arrBlock(it, list, bid) {
     const e = list.find(GB.evLive), can = popMarkOk(it, bid);
     if (e) {
       const a = ARR[e.arr || 'ok'], sev = e.sev && DISC_SEV[e.sev];
       const undo = can && (isGestor(currentUser()) || e.byUser === (currentUser() || {}).id);
-      return `<div class="arr-done ${a[1]}">${icon(a[2])}<span><b>${a[0]}</b><small>${e.arr && e.arr !== 'ok' ? 'Sem bônus' : `+${fmtPts(it.pts)} pts`}${sev ? ` · Fiscalização: atraso, ${sev[0].toLowerCase()}` : ''}</small></span></div>
+      return `<div class="arr-done ${a[1]}">${icon(a[2])}<span><b>${a[0]}</b><small>${!e.arr || e.arr === 'ok' ? `+${fmtPts(it.pts)} pts` : can && sev ? `Fiscalização: ${sev[0].toLowerCase()}` : esc(a[3])}</small></span></div>
         ${undo ? `<button class="link-btn arr-undo" data-action="arrUndo" data-it="${esc(it.id)}">${ui.confirm === 'arr' + it.id ? 'Confirmar: desfazer' + (e.disc ? ' e apagar a ocorrência' : '') : 'Desfazer'}</button>` : ''}`;
     }
     if (!can) return arrRules();
-    return `<div class="arr-btns">${Object.entries(ARR).map(([k, [l, c, i]]) => `<button class="btn arr-btn ${c}" data-action="arrMark" data-it="${esc(it.id)}" data-v="${k}" ${ui.arrBusy ? 'disabled' : ''}>${icon(i)} <span>${l}${k === 'ok' ? '' : '<small>sem bônus · ' + (k === 'atraso' ? 'advertência, reincidência, penalidade' : 'registra na Fiscalização') + '</small>'}</span></button>`).join('')}</div>`;
+    return `<div class="arr-btns">${Object.entries(ARR).map(([k, [l, c, i]]) => `<button class="btn arr-btn ${c}" data-action="arrMark" data-it="${esc(it.id)}" data-v="${k}" ${ui.arrBusy ? 'disabled' : ''}>${icon(i)} <span>${l}<small>${ARR[k][3]}</small><em class="arr-note">${ARR[k][4]}</em></span></button>`).join('')}</div>`;
   }
   function popStepper(it, list, t, bid, mayAdd) {
     if (!popMarkOk(it, bid)) return `<p class="muted pop-gest">${icon('lock')} Marcado pelo dono, gestor ou líder.</p>`;
@@ -5205,7 +5242,7 @@ Content-Type: application/json</pre>
     if (popArr(it)) {
       const e = list.find(GB.evLive);
       return `<article class="pop-item pop-arr ${e ? (!e.arr || e.arr === 'ok' ? 'is-done' : 'arr-st-' + e.arr) : ''}" id="pi-${esc(it.id)}">
-      <div class="pop-ihead"><div><h3>${icon('clock')} ${esc(it.title)}</h3><p>${esc(it.desc || 'Sem prova: o dono, o gestor ou o líder marca quando o profissional chega.')}</p></div><span class="pop-badge num">${fmtPts(pts)}/${fmtPts(it.pts)} pts</span></div>
+      <div class="pop-ihead"><div><h3>${icon('checksq')} ${esc(it.title)}</h3><p>${esc(it.desc || 'Sem prova: o dono, o gestor ou o líder marca quando o profissional chega.')}</p></div><span class="pop-badge num">${fmtPts(pts)}/${fmtPts(it.pts)} pts</span></div>
       ${arrBlock(it, list, bid)}
     </article>`;
     }
@@ -5284,7 +5321,7 @@ Content-Type: application/json</pre>
         <div class="grid-2">${it.type === 'check' ? '' : `<label class="field"><span class="tm-flabel">Meta (quantidade)</span><input class="input num" type="number" min="1" id="pei-m-${i}" value="${it.target}" data-popitem="target" data-i="${i}"></label>`}
         <label class="field"><span class="tm-flabel">Pontos</span><input class="input num" type="number" min="0" step="0.5" id="pei-p-${i}" value="${it.pts}" data-popitem="pts" data-i="${i}"></label></div>
         <label class="check"><input type="checkbox" data-popitem="gest" data-i="${i}" ${popGest(it) ? 'checked' : ''}><span><b>Só o dono, o gestor ou o líder marcam</b><small>O profissional vê a tarefa, mas não consegue marcar (ex.: horário de chegada).</small></span></label>
-        ${it.type === 'check' ? `<label class="check"><input type="checkbox" data-popitem="arr" data-i="${i}" ${popArr(it) ? 'checked' : ''}><span><b>É o horário de chegada (3 botões)</b><small>Fica no topo, sem prova: no horário (verde, com pontos), depois do horário (amarelo, sem bônus, registra na Fiscalização) e atrasado (vermelho, sem bônus: 1º advertência, 2º reincidência, 3º penalidade no mês).</small></span></label>` : ''}
+        ${it.type === 'check' ? `<label class="check"><input type="checkbox" data-popitem="arr" data-i="${i}" ${popArr(it) ? 'checked' : ''}><span><b>É a Disponibilidade comercial (3 botões)</b><small>Fica no topo, sem prova: disponibilidade confirmada (verde, com pontos), disponibilidade alterada (amarelo, registra na Fiscalização) e compromisso comercial não atendido (vermelho: 1º advertência, 2º reincidência, 3º penalidade no mês).</small></span></label>` : ''}
         <div class="btn-row"><button class="btn btn-sm" data-action="popItemMove" data-i="${i}" data-d="-1" ${i ? '' : 'disabled'}>${icon('up')} Subir</button>
           <button class="btn btn-sm" data-action="popItemMove" data-i="${i}" data-d="1" ${i < c.items.length - 1 ? '' : 'disabled'}>${icon('down')} Descer</button>
           <button class="btn btn-sm btn-danger" data-action="popItemDel" data-i="${i}">${ui.confirm === 'pitem' + i ? 'Confirmar exclusão' : 'Excluir'}</button></div>
@@ -7040,8 +7077,8 @@ Content-Type: application/json</pre>
       save();
       const nm = ((barberById(bid) || {}).name || 'Profissional').split(' ')[0];
       if (e.sev === 'penalidade') toast(`${nm}: PENALIDADE registrada na Fiscalização (3º atraso no mês). O dono, o gestor e os líderes com acesso foram avisados.`, 7000, 'alert');
-      else if (v === 'apos') toast(`${nm}: chegou após o horário combinado. Sem bônus; registrado na Fiscalização.`, 5000, 'clock');
-      else if (e.sev) toast(`${nm}: ${DISC_SEV[e.sev][0].toLowerCase()} por atraso registrada na Fiscalização (${e.sev === 'advertencia' ? '1º' : '2º'} atraso no mês).`, 5000, 'alert');
+      else if (v === 'apos') toast(`${nm}: disponibilidade alterada. Registrado na Fiscalização.`, 5000, 'clock');
+      else if (e.sev) toast(`${nm}: compromisso comercial não atendido. ${DISC_SEV[e.sev][0]} registrada na Fiscalização (${e.sev === 'advertencia' ? '1º' : '2º'} no mês).`, 5000, 'alert');
       else toast(`${nm}: ${ARR[v][0].toLowerCase()}.`);
       render();
     },
@@ -7490,6 +7527,14 @@ Content-Type: application/json</pre>
     defaultGoals() { state.goals = { ...(state.goals || {}), team: { ...GB.DEFAULT_GOALS } }; save(); toast('Metas padrão restauradas.'); render(); },
 
     bonusRoleta(el) { const f = el.form; ui.bonusDraft = { ...(ui.bonusDraft || {}), ...bonusDraftOf(f), tipo: 'dinheiro', valor: Number(el.dataset.v), motivo: 'Roleta – venda de 3 produtos', roleta: true }; render(); },
+    bonusTab(el) { ui.bonusTab = el.dataset.t === 'tipos' ? 'tipos' : 'reg'; ui.btEdit = null; ui.confirm = null; render(); },
+    btEdit(el) { if (!isGestor(currentUser())) return; ui.btEdit = el.dataset.id || null; render(); if (ui.btEdit) setTimeout(() => document.querySelector('[data-form="bonusType"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 40); },
+    btDel(el) {
+      if (!isGestor(currentUser())) return;
+      const id = el.dataset.id, x = bonusTypes().find(t => t.id === id); if (!x) return;
+      if (ui.confirm !== 'bt' + id) { ui.confirm = 'bt' + id; render(); return; }
+      ui.confirm = null; state.bonusTypes = bonusTypes().filter(t => t.id !== id); state.bonusTypesAt = new Date().toISOString(); save(); toast(`"${x.nome}" excluído.`); render();
+    },
     bonusPick(el) { ui.bonusB = el.dataset.b && ui.bonusB !== el.dataset.b ? el.dataset.b : null; render(); },
     bonusDel(el) {
       const u = currentUser(), v = bonusAll().find(x => x.id === el.dataset.id); if (!v || !bonusCanFor(u, v.barberId) || !(isGestor(u) || v.byUser === u.id)) return;
@@ -7801,6 +7846,15 @@ Content-Type: application/json</pre>
       save();
       toast(`${U(name)} adicionado. Agora envie o convite.`); render();
     },
+    bonusType(f) {
+      if (!isGestor(currentUser())) return;
+      const nome = val(f, 'nome').trim(), regra = val(f, 'regra').trim(), premio = val(f, 'premio').trim(), tipo = val(f, 'tipo') === 'outro' ? 'outro' : 'dinheiro';
+      if (nome.length < 2) return setMsg(f, 'Dê um nome ao bônus.');
+      if (regra.length < 3) return setMsg(f, 'Escreva como ganhar esse bônus.');
+      const list = bonusTypes().slice(), i = ui.btEdit ? list.findIndex(x => x.id === ui.btEdit) : -1, row = { nome: nome.slice(0, 60), regra: regra.slice(0, 400), premio: premio.slice(0, 80), tipo };
+      if (i >= 0) list[i] = { ...list[i], ...row }; else list.push({ id: uid('bt_'), ...row });
+      state.bonusTypes = list; state.bonusTypesAt = new Date().toISOString(); ui.btEdit = null; save(); toast(i >= 0 ? 'Tipo de bônus salvo.' : 'Tipo de bônus adicionado. A equipe já vê.'); render();
+    },
     bonus(f) {
       const u = currentUser(), bid = val(f, 'b'), tipo = val(f, 'tipo') === 'outro' ? 'outro' : 'dinheiro';
       const valor = tipo === 'dinheiro' ? Number(String(val(f, 'valor')).replace(',', '.')) : null, item = tipo === 'outro' ? val(f, 'qual').trim() : '', motivo = val(f, 'motivo').trim(), date = val(f, 'date') || todayIso();
@@ -8042,6 +8096,12 @@ Content-Type: application/json</pre>
       if (!isGestor(currentUser())) return;
       const n = el.dataset.n, c = { ...(state.extraCombo || {}) }, key = Object.keys(c).find(k => GB.normSvc(k) === GB.normSvc(n)) || n;
       c[key] = el.value; state.extraCombo = c; rkCache = {}; save(); toast('Serviço de base do combo salvo.'); render();
+    },
+    bonusFromType(el) {
+      const x = bonusTypes().find(t => t.id === el.value); if (!x) return;
+      const d = bonusDraftOf(el.form);
+      ui.bonusDraft = { ...(ui.bonusDraft || {}), ...d, tipo: x.tipo === 'outro' ? 'outro' : 'dinheiro', item: x.tipo === 'outro' ? (x.premio || x.nome) : '', motivo: x.nome, roleta: false };
+      render();
     },
     bonusTipoSel(el) { ui.bonusDraft = { ...(ui.bonusDraft || {}), ...bonusDraftOf(el.form), tipo: el.value === 'outro' ? 'outro' : 'dinheiro', roleta: false }; render(); },
     wToggle(el) { // liga/desliga o indicador e salva na hora

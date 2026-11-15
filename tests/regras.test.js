@@ -211,3 +211,17 @@ test('serviços extras: combo com extra conta 1 e, no valor, só a diferença pa
   assert.equal(a.extra, 2);       // 2 combos = 2 extras
   assert.equal(a.extraV, 30);     // 130 - 2 × 50 (preço médio do corte)
 });
+
+test('maior comanda: dia com disponibilidade alterada/compromisso não atendido não vale para o destaque', () => {
+  const st = team([['a', {}], ['b', {}]]);
+  st.entries = [
+    { id: 'a1', barberId: 'a', date: '2026-10-05', source: 'api', comanda: 400 },
+    { id: 'a2', barberId: 'a', date: '2026-10-06', source: 'api', comanda: 150 },
+    { id: 'b1', barberId: 'b', date: '2026-10-05', source: 'api', comanda: 200 },
+  ];
+  st.pop = [{ barberId: 'a', day: '2026-10-05', ev: { chegada: [{ status: 'aprovado', arr: 'atraso' }] } }];
+  const a = GB.aggregate(st, 'a', R);
+  assert.equal(a.comanda, 150); assert.equal(a.comandaOff, 400);
+  const res = GB.computeRanking(st, R), top = res.bonus.find(i => i.key === 'comanda');
+  assert.equal(top.leaders.join(','), 'b');
+});
