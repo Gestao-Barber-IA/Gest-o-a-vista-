@@ -757,6 +757,7 @@
       { r: 'lancamentos', t: 'Lançamentos', i: 'wallet', g: 1, a: 1 },
       { r: 'avisos', t: 'Avisos e alterações', i: 'bell' },
       { r: 'bonus', t: 'Bônus', i: 'diamond' },
+      { r: 'precos', t: 'Tabela de Preços e Planos', i: 'card' },
     ] },
     { group: 'Apresentações', items: [
       { r: 'apresentacao', t: 'Tela da loja', i: 'monitor', g: 1 },
@@ -2197,6 +2198,7 @@
       ocup: JSON.stringify([oc.open, oc.close, oc.lunch, oc.days]),
       pop: JSON.stringify((pop.items || []).map(x => [x.title, x.pts, x.target])),
       pops: JSON.stringify(popsList().map(x => x.title || x.t || x.id)),
+      precos: JSON.stringify(popsList('precos').map(x => [x.id, x.name, (x.steps || []).length, x.at])),
       per };
   }
   const listTxt = a => a.filter(Boolean).join(' · ');
@@ -2207,6 +2209,7 @@
     com: () => { const c = comCfg(); return ['Comissões e prêmios', 'Regras atuais: ' + listTxt([c.pct > 0 && `comissão de ${nf1.format(c.pct)}% do faturamento`, c.plano > 0 && `${money0(c.plano)} por plano vendido`, c.prod > 0 && `${money0(c.prod)} por produto vendido`, [1, 2, 3].some(n => c.pos[n] > 0) && `pódio: ${[1, 2, 3].map(n => `${n}º ${money0(c.pos[n])}`).join(', ')}`, c.mvp > 0 && `MVP ${money0(c.mvp)}`, c.dest > 0 && `Destaque ${money0(c.dest)}`, c.meta > 0 && `bater a meta ${money0(c.meta)}`, c.pen > 0 && `penalidade de ${nf1.format(c.pen)}% por ocorrência`]) + '.']; },
     ocup: () => { const oc = GB.ocupCfgOf(state); return ['Regra da taxa de ocupação', `Agora 100% de ocupação = ${nf1.format(GB.hoursPerDay(oc))} h por dia (${oc.open} às ${oc.close}${Number(oc.lunch) ? `, ${oc.lunch} min de almoço` : ''}) × ${oc.days} dias no mês.`]; },
     pop: () => ['Checklist Agenda Cheia', 'Itens e pontos do checklist: ' + listTxt((GB.popCfgOf(state).items || []).map(x => `${x.title} (${x.pts} pt${x.pts == 1 ? '' : 's'})`)) + '.'],
+    precos: () => ['Tabela de Preços e Planos', 'A tabela de preços e planos foi atualizada. Confira em Tabela de Preços e Planos: ' + popsList('precos').map(x => x.name).filter(Boolean).slice(0, 8).join(', ') + '.'],
     pops: () => ['POPs · Guia do Sucesso', 'Os POPs foram atualizados. Confira em POPs · Guia do Sucesso: ' + popsList().map(x => x.title || x.t).filter(Boolean).slice(0, 8).join(', ') + '.'],
     access: id => { const a = ACCESS.find(x => x[0] === accessOf(id)); return ['Seu nível de acesso', `Agora você tem acesso de ${a[1]}: ${a[2]}`]; },
     extras: id => { const x = extrasOf(id); const t = [x.review && 'conferir e aprovar o checklist da equipe', x.disc && 'registrar ocorrências na Fiscalização', x.bonus && 'lançar e ver os bônus da equipe', x.fields.length && 'lançar os números da equipe em ' + x.fields.map(lbl).join(', ')].filter(Boolean); return ['Seus acessos extras', t.length ? 'Agora você pode: ' + t.join('; ') + '.' : 'Seus acessos extras de líder foram retirados.']; },
@@ -2228,7 +2231,7 @@
     if (!u || !isGestor(u)) { avBase = null; return; }
     const now = avSnap();
     if (avState !== state || !avBase) { avBase = now; avState = state; return; }
-    for (const k of ['pesos', 'metas', 'self', 'com', 'ocup', 'pop', 'pops']) if (now[k] !== avBase[k]) addNotice(k);
+    for (const k of ['pesos', 'metas', 'self', 'com', 'ocup', 'pop', 'pops', 'precos']) if (now[k] !== avBase[k]) addNotice(k);
     for (const [id, p] of Object.entries(now.per)) {
       const was = avBase.per[id]; if (!was) continue;
       if (p.access !== was.access) addNotice('access', id);
@@ -3022,8 +3025,23 @@
 
   // ---------- POPs · Guia do Sucesso (processos operacionais com fotos do passo a passo e vídeo) ----------
   const POPS_BUCKET = 'pops';
-  const popsList = () => (Array.isArray(state.pops) ? state.pops : (state.pops = []));
-  const popsById = id => popsList().find(x => x.id === id);
+  // Páginas de imagens no mesmo formato: POPs (passo a passo) e Tabela de Preços e Planos.
+  const DOCS = {
+    pops: { title: 'POPs · Guia do Sucesso', icon: 'book', tip: 'pops', intro: n => `Os processos operacionais da ${n}: o passo a passo em fotos e, quando houver, o vídeo explicando.`,
+      newBtn: 'Novo POP', nameLbl: 'Nome do processo *', namePh: 'Ex.: Recepção do cliente', descPh: 'Para que serve e quando usar', photosLbl: 'Fotos do passo a passo (pode escolher várias, na ordem)', morePhotos: 'Adicionar fotos do passo a passo',
+      addBtn: 'Adicionar POP', one: 'passo', many: 'passos', cap: 'Passo', video: true, open: 'Ver passo a passo', addFirst: 'Adicionar fotos', edit: 'Editar POP', del: 'Apagar POP', delOk: 'Confirmar: apagar este POP',
+      emptyT: 'Nenhum POP cadastrado', emptyOwn: 'Adicione o primeiro processo acima.', emptyTeam: 'O dono ainda não cadastrou os processos.', search: 'Buscar processo…', none: 'Nenhum processo encontrado.',
+      added: 'POP adicionado.', saved: 'POP salvo.', deleted: 'POP apagado.', needName: 'Digite o nome do processo.', noPhotos: 'Ainda não há fotos do passo a passo.', prefix: 'pop_' },
+    precos: { title: 'Tabela de Preços e Planos', icon: 'card', tip: '', intro: n => `Os preços dos serviços e os planos mensais da ${n}. Toque na imagem para ampliar. Só o dono cadastra e edita; toda a equipe consulta.`,
+      newBtn: 'Nova tabela', nameLbl: 'Nome *', namePh: 'Ex.: Tabela de serviços, Planos mensais', descPh: 'Ex.: Valores válidos a partir de dezembro', photosLbl: 'Imagens (pode escolher várias, na ordem)', morePhotos: 'Adicionar imagens',
+      addBtn: 'Adicionar tabela', one: 'imagem', many: 'imagens', cap: 'Imagem', video: false, open: 'Ver imagens', addFirst: 'Adicionar imagens', edit: 'Editar tabela', del: 'Apagar tabela', delOk: 'Confirmar: apagar esta tabela',
+      emptyT: 'Nenhuma tabela cadastrada', emptyOwn: 'Adicione a tabela de serviços ou a de planos acima.', emptyTeam: 'O dono ainda não cadastrou as tabelas.', search: 'Buscar tabela…', none: 'Nenhuma tabela encontrada.',
+      added: 'Tabela adicionada.', saved: 'Tabela salva.', deleted: 'Tabela apagada.', needName: 'Digite o nome da tabela.', noPhotos: 'Ainda não há imagens.', prefix: 'prc_' },
+  };
+  const docsK = k => (k === 'precos' ? 'precos' : 'pops');
+  const popsList = (k = 'pops') => { const key = docsK(k); return Array.isArray(state[key]) ? state[key] : (state[key] = []); };
+  const docsKindOf = id => (popsList('precos').some(x => x.id === id) ? 'precos' : 'pops');
+  const popsById = id => popsList(docsKindOf(id)).find(x => x.id === id);
   const validUrl = u => /^https?:\/\/[^\s]+\.[^\s]+$/i.test(u);
   const stepImg = (st, cls) => st.path ? `<img class="${cls || ''}" data-file="${POPS_BUCKET}|${esc(st.path)}" alt="${esc(st.cap || 'Passo do POP')}" loading="lazy">` : `<img class="${cls || ''}" src="${esc(st.src || '')}" alt="${esc(st.cap || 'Passo do POP')}" loading="lazy">`;
   async function popsPhotos(files, popId) {
@@ -3035,8 +3053,8 @@
     }
     return out;
   }
-  function pagePops(user) {
-    const own = isGestor(user), list = popsList();
+  function pagePops(user, k = 'pops') {
+    const D = DOCS[docsK(k)], own = isGestor(user), list = popsList(k), cnt = n => `${n} ${n === 1 ? D.one : D.many}`;
     const card = (p, n) => {
       const open = ui.popsOpen === p.id, steps = p.steps || [];
       const ask = ui.confirm === 'popsDel' + p.id;
@@ -3044,50 +3062,50 @@
         <div class="pops-top">
           <span class="pops-n num">${n}</span>
           <div class="pops-who"><h3>${esc(p.name)}</h3>${p.desc ? `<p>${esc(p.desc)}</p>` : ''}
-            <p class="pops-chips"><span class="chip chip-soft">${steps.length} passo${steps.length === 1 ? '' : 's'}</span>${p.video ? `<span class="chip chip-ok">${icon('play')} Vídeo</span>` : ''}</p></div>
-          ${steps[0] ? `<button class="pops-thumb" data-action="popsView" data-id="${esc(p.id)}" data-i="0" aria-label="Ver o passo 1">${stepImg(steps[0])}</button>` : ''}
+            <p class="pops-chips"><span class="chip chip-soft">${cnt(steps.length)}</span>${p.video ? `<span class="chip chip-ok">${icon('play')} Vídeo</span>` : ''}</p></div>
+          ${steps[0] ? `<button class="pops-thumb" data-action="popsView" data-id="${esc(p.id)}" data-i="0" aria-label="Ver ${D.cap.toLowerCase()} 1">${stepImg(steps[0])}</button>` : ''}
         </div>
         <div class="btn-row">
-          ${steps.length || own ? `<button class="btn btn-sm ${open ? '' : 'btn-primary'}" data-action="popsOpen" data-id="${esc(p.id)}" aria-expanded="${open}">${icon(open ? 'up' : 'down')} ${open ? 'Fechar' : steps.length ? 'Ver passo a passo' : 'Adicionar fotos'}</button>` : ''}
+          ${steps.length || own ? `<button class="btn btn-sm ${open ? '' : 'btn-primary'}" data-action="popsOpen" data-id="${esc(p.id)}" aria-expanded="${open}">${icon(open ? 'up' : 'down')} ${open ? 'Fechar' : steps.length ? D.open : D.addFirst}</button>` : ''}
           ${p.video ? `<a class="btn btn-sm" href="${esc(p.video)}" target="_blank" rel="noopener noreferrer">${icon('play')} Assistir vídeo</a>` : ''}
         </div>
         ${open ? `<div class="pops-steps">
           ${steps.length ? steps.map((st, i) => `<figure class="pops-step">
-            <button class="pops-img" data-action="popsView" data-id="${esc(p.id)}" data-i="${i}" aria-label="Ampliar o passo ${i + 1}">${stepImg(st)}</button>
-            <figcaption><b>Passo ${i + 1}</b>${own ? `<input class="input" value="${esc(st.cap || '')}" placeholder="Legenda (opcional)" maxlength="140" data-change="popsCap" data-id="${esc(p.id)}" data-i="${i}">` : st.cap ? `<span>${esc(st.cap)}</span>` : ''}</figcaption>
+            <button class="pops-img" data-action="popsView" data-id="${esc(p.id)}" data-i="${i}" aria-label="Ampliar ${D.cap.toLowerCase()} ${i + 1}">${stepImg(st)}</button>
+            <figcaption><b>${D.cap} ${i + 1}</b>${own ? `<input class="input" value="${esc(st.cap || '')}" placeholder="Legenda (opcional)" maxlength="140" data-change="popsCap" data-id="${esc(p.id)}" data-i="${i}">` : st.cap ? `<span>${esc(st.cap)}</span>` : ''}</figcaption>
             ${own ? `<div class="pops-stepbtns">
               <button class="icon-btn" data-action="popsMove" data-id="${esc(p.id)}" data-i="${i}" data-d="-1" aria-label="Subir" ${i === 0 ? 'disabled' : ''}>${icon('up')}</button>
               <button class="icon-btn" data-action="popsMove" data-id="${esc(p.id)}" data-i="${i}" data-d="1" aria-label="Descer" ${i === steps.length - 1 ? 'disabled' : ''}>${icon('down')}</button>
               <button class="icon-btn" data-action="popsDelStep" data-id="${esc(p.id)}" data-i="${i}" aria-label="Remover foto">${icon('x')}</button></div>` : ''}
-          </figure>`).join('') : '<p class="muted">Ainda não há fotos do passo a passo.</p>'}
+          </figure>`).join('') : `<p class="muted">${D.noPhotos}</p>`}
           ${own ? `<form class="form pops-edit" data-form="popsEdit" data-id="${esc(p.id)}" novalidate>
-            <h4>Editar POP</h4>
-            <div class="grid-2"><label class="field"><span>Nome do processo *</span><input class="input" name="name" value="${esc(p.name)}" maxlength="80" required></label>
-            <label class="field"><span>Link do vídeo (opcional)</span><input class="input" name="video" type="url" inputmode="url" value="${esc(p.video || '')}" placeholder="https://..."></label></div>
+            <h4>${D.edit}</h4>
+            <div class="grid-2"><label class="field"><span>${D.nameLbl}</span><input class="input" name="name" value="${esc(p.name)}" maxlength="80" required></label>
+            ${D.video ? `<label class="field"><span>Link do vídeo (opcional)</span><input class="input" name="video" type="url" inputmode="url" value="${esc(p.video || '')}" placeholder="https://..."></label>` : ''}</div>
             <label class="field"><span>Descrição (opcional)</span><textarea class="input" name="desc" rows="2" maxlength="400">${esc(p.desc || '')}</textarea></label>
-            <label class="field"><span>Adicionar fotos do passo a passo</span><input class="input" name="photos" type="file" accept="image/*" multiple></label>
+            <label class="field"><span>${D.morePhotos}</span><input class="input" name="photos" type="file" accept="image/*" multiple></label>
             <p class="form-msg" data-msg></p>
             <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button>
-            <button type="button" class="btn ${ask ? 'btn-danger' : ''}" data-action="popsDel" data-id="${esc(p.id)}">${ask ? 'Confirmar: apagar este POP' : 'Apagar POP'}</button></div>
+            <button type="button" class="btn ${ask ? 'btn-danger' : ''}" data-action="popsDel" data-id="${esc(p.id)}">${ask ? D.delOk : D.del}</button></div>
           </form>` : ''}
         </div>` : ''}
       </article>`;
     };
     return `<section class="card pops-head">
-        <div class="pops-hero">${icon('book')}<div><h2>POPs · Guia do Sucesso ${tip('pops')}</h2><p>Os processos operacionais da ${esc(state.company.name || 'barbearia')}: o passo a passo em fotos e, quando houver, o vídeo explicando.</p></div></div>
-        ${list.length > 3 ? `<input class="input" id="pops-q" type="search" placeholder="Buscar processo…" aria-label="Buscar processo">` : ''}
+        <div class="pops-hero">${icon(D.icon)}<div><h2>${D.title} ${D.tip ? tip(D.tip) : ''}</h2><p>${D.intro(esc(state.company.name || 'barbearia'))}</p></div></div>
+        ${list.length > 3 ? `<input class="input" id="pops-q" type="search" placeholder="${D.search}" aria-label="${D.search}">` : ''}
       </section>
-      ${own ? `<details class="card pops-new" ${list.length ? '' : 'open'}><summary>${icon('plus')} Novo POP</summary>
-        <form class="form" data-form="popsNew" novalidate>
-          <div class="grid-2"><label class="field"><span>Nome do processo *</span><input class="input" id="pops-name" name="name" maxlength="80" placeholder="Ex.: Recepção do cliente" required></label>
-          <label class="field"><span>Link do vídeo (opcional)</span><input class="input" name="video" type="url" inputmode="url" placeholder="https://youtube.com/..."></label></div>
-          <label class="field"><span>Descrição (opcional)</span><textarea class="input" name="desc" rows="2" maxlength="400" placeholder="Para que serve e quando usar"></textarea></label>
-          <label class="field"><span>Fotos do passo a passo (pode escolher várias, na ordem)</span><input class="input" name="photos" type="file" accept="image/*" multiple></label>
+      ${own ? `<details class="card pops-new" ${list.length ? '' : 'open'}><summary>${icon('plus')} ${D.newBtn}</summary>
+        <form class="form" data-form="popsNew" data-k="${docsK(k)}" novalidate>
+          <div class="grid-2"><label class="field"><span>${D.nameLbl}</span><input class="input" id="pops-name" name="name" maxlength="80" placeholder="${D.namePh}" required></label>
+          ${D.video ? '<label class="field"><span>Link do vídeo (opcional)</span><input class="input" name="video" type="url" inputmode="url" placeholder="https://youtube.com/..."></label>' : ''}</div>
+          <label class="field"><span>Descrição (opcional)</span><textarea class="input" name="desc" rows="2" maxlength="400" placeholder="${D.descPh}"></textarea></label>
+          <label class="field"><span>${D.photosLbl}</span><input class="input" name="photos" type="file" accept="image/*" multiple></label>
           <p class="form-msg" data-msg></p>
-          <div><button class="btn btn-primary" type="submit">${icon('plus')} Adicionar POP</button></div>
+          <div><button class="btn btn-primary" type="submit">${icon('plus')} ${D.addBtn}</button></div>
         </form></details>` : ''}
-      ${list.length ? `<div class="pops-list">${list.map((p, i) => card(p, i + 1)).join('')}</div><p class="muted pops-none" hidden>Nenhum processo encontrado.</p>`
-        : `<div class="card empty">${icon('book')}<h2>Nenhum POP cadastrado</h2><p>${own ? 'Adicione o primeiro processo acima.' : 'O dono ainda não cadastrou os processos.'}</p></div>`}
+      ${list.length ? `<div class="pops-list">${list.map((p, i) => card(p, i + 1)).join('')}</div><p class="muted pops-none" hidden>${D.none}</p>`
+        : `<div class="card empty">${icon(D.icon)}<h2>${D.emptyT}</h2><p>${own ? D.emptyOwn : D.emptyTeam}</p></div>`}
       ${popsViewer()}`;
   }
   function popsViewer() {
@@ -3095,7 +3113,7 @@
     const p = popsById(v.id), steps = (p && p.steps) || [], st = steps[v.i];
     if (!st) { ui.popsView = null; return ''; }
     return `<div class="pop-viewer" role="dialog" aria-modal="true" aria-label="Passo do POP"><div class="inst-scrim" data-action="popsViewClose"></div>
-      <figure>${stepImg(st, 'full')}<figcaption><b>${esc(p.name)} · Passo ${v.i + 1} de ${steps.length}</b>${st.cap ? `<span>${esc(st.cap)}</span>` : ''}</figcaption>
+      <figure>${stepImg(st, 'full')}<figcaption><b>${esc(p.name)} · ${DOCS[docsKindOf(v.id)].cap} ${v.i + 1} de ${steps.length}</b>${st.cap ? `<span>${esc(st.cap)}</span>` : ''}</figcaption>
       <div class="btn-row pops-vnav"><button class="btn" data-action="popsViewGo" data-d="-1" ${v.i === 0 ? 'disabled' : ''}>${icon('left')} Anterior</button>
       <button class="btn" data-action="popsViewGo" data-d="1" ${v.i === steps.length - 1 ? 'disabled' : ''}>Próximo ${icon('right')}</button>
       <button class="btn" data-action="popsViewClose">${icon('x')} Fechar</button></div></figure></div>`;
@@ -5102,6 +5120,9 @@ Content-Type: application/json</pre>
     apos: ['Chegou após o horário combinado', 'arr-apos', 'clock'],
     atraso: ['Chegou atrasado', 'arr-atraso', 'alert'],
   };
+  // Ordem dos cartões no checklist: Horário de chegada primeiro, logo abaixo o EXTRA, depois as demais tarefas.
+  const popIsExtra = it => !popArr(it) && (it.id === 'extra' || /^extra\b/i.test(String(it.title || '').trim()));
+  const popOrder = items => [...items.filter(popArr), ...items.filter(popIsExtra), ...items.filter(it => !popArr(it) && !popIsExtra(it))];
   function arrBlock(it, list, bid) {
     const e = list.find(GB.evLive), can = popMarkOk(it, bid);
     if (e) {
@@ -5329,7 +5350,7 @@ Content-Type: application/json</pre>
         <p class="pop-sum"><b class="num" id="pop-daypts">${fmtPts(dayPts)}/${fmtPts(dayMax)} pts aprovados no dia</b>${GB.popDayPts(cfg, rec, true) ? ` · <span class="pend num">+${fmtPts(GB.popDayPts(cfg, rec, true))} pts aguardando conferência</span>` : ''}</p>${rec && Number(rec.adj) > 0 ? `<p class="pop-adj">${icon('plus')} <b class="num">+${fmtPts(Number(rec.adj))} pts</b> ${esc(rec.adjNote || 'acrescentados pela gestão')}</p>` : ''}
         <p class="section-note">Cada unidade precisa de uma prova: foto ou print. Anexe, escreva uma descrição se quiser e toque em Confirmar. As fotos são apagadas ${PROOF_DAYS} dias depois do envio (as que ainda aguardam conferência ficam até serem conferidas); a prova e os pontos continuam.</p>
         ${ro ? '<p class="section-note">Você está vendo este checklist sem poder editar.</p>' : ''}
-        <div class="pop-items">${[...cfg.items.filter(popArr), ...cfg.items.filter(it => !popArr(it))].map(it => popItemCard(it, rec, bid)).join('')}</div>
+        <div class="pop-items">${popOrder(cfg.items).map(it => popItemCard(it, rec, bid)).join('')}</div>
       </section>
       <section class="section card pop-rem">
         <div class="pop-dhead"><div><h2 class="pop-h2">${icon('bell')} Lembretes de posts</h2><p class="muted">Aviso diário para preencher o checklist enquanto a meta do dia não for batida.</p></div>
@@ -5921,6 +5942,7 @@ Content-Type: application/json</pre>
     checklist: { t: 'Checklist Agenda Cheia', r: pageChecklist },
     rotina: { t: 'Checklist Líder e Recepção', r: pageRotina },
     pops: { t: 'POPs · Guia do Sucesso', r: pagePops },
+    precos: { t: 'Tabela de Preços e Planos', r: u => pagePops(u, 'precos') },
     time: { t: 'Performance da equipe', r: pageTime },
     performance: { t: 'Minha performance', r: pagePerformance },
     lancamentos: { t: 'Lançamentos', r: pageLancamentos, g: 1, a: 1 },
@@ -7396,7 +7418,7 @@ Content-Type: application/json</pre>
       if (ui.confirm !== 'popsDel' + el.dataset.id) { ui.confirm = 'popsDel' + el.dataset.id; render(); return; }
       const p = popsById(el.dataset.id); ui.confirm = null;
       if (p && Cloud.enabled) (p.steps || []).forEach(st => st.path && Cloud.removeFile(POPS_BUCKET, st.path));
-      state.pops = popsList().filter(x => x.id !== el.dataset.id); ui.popsOpen = null; save(); toast('POP apagado.'); render();
+      const kd = docsKindOf(el.dataset.id); state[kd] = popsList(kd).filter(x => x.id !== el.dataset.id); ui.popsOpen = null; save(); toast(DOCS[kd].deleted); render();
     },
     notifOpen() {
       if (!ui.notifOpen) { ui.notifSeenBefore = DB.pref.get(OVT_SEEN, ''); const f = overtakeFeed(); if (f[0]) DB.pref.set(OVT_SEEN, f[0].key); }
@@ -7845,27 +7867,29 @@ Content-Type: application/json</pre>
     },
     async popsNew(f) {
       if (!isGestor(currentUser())) return;
-      const name = val(f, 'name'), video = val(f, 'video'), desc = val(f, 'desc');
-      if (!name) return setMsg(f, 'Digite o nome do processo.');
+      const kd = docsK(f.dataset.k), D = DOCS[kd];
+      const name = val(f, 'name'), video = f.elements.video ? val(f, 'video') : '', desc = val(f, 'desc');
+      if (!name) return setMsg(f, D.needName);
       if (video && !validUrl(video)) return setMsg(f, 'O link do vídeo precisa começar com https:// (ex.: https://youtube.com/...).');
-      const id = uid('pop_');
+      const id = uid(D.prefix);
       setMsg(f, f.elements.photos.files.length ? 'Enviando as fotos…' : '', true);
       let steps;
       try { steps = await popsPhotos(f.elements.photos.files, id); } catch (e) { return setMsg(f, Cloud.enabled ? Cloud.message(e) : e.message); }
-      popsList().push({ id, name: name.slice(0, 80), desc: desc.slice(0, 400), video, steps, at: Date.now() });
-      ui.popsOpen = id; save(); toast('POP adicionado.'); render();
+      popsList(kd).push({ id, name: name.slice(0, 80), desc: desc.slice(0, 400), video, steps, at: Date.now() });
+      ui.popsOpen = id; save(); toast(D.added); render();
     },
     async popsEdit(f) {
       if (!isGestor(currentUser())) return;
       const p = popsById(f.dataset.id); if (!p) return;
-      const name = val(f, 'name'), video = val(f, 'video'), desc = val(f, 'desc');
-      if (!name) return setMsg(f, 'Digite o nome do processo.');
+      const D = DOCS[docsKindOf(p.id)];
+      const name = val(f, 'name'), video = f.elements.video ? val(f, 'video') : (p.video || ''), desc = val(f, 'desc');
+      if (!name) return setMsg(f, D.needName);
       if (video && !validUrl(video)) return setMsg(f, 'O link do vídeo precisa começar com https:// (ex.: https://youtube.com/...).');
       setMsg(f, f.elements.photos.files.length ? 'Enviando as fotos…' : '', true);
       let more;
       try { more = await popsPhotos(f.elements.photos.files, p.id); } catch (e) { return setMsg(f, Cloud.enabled ? Cloud.message(e) : e.message); }
       Object.assign(p, { name: name.slice(0, 80), desc: desc.slice(0, 400), video, steps: [...(p.steps || []), ...more], at: Date.now() });
-      save(); toast('POP salvo.'); render();
+      save(); toast(D.saved); render();
     },
     houseGoals(f) {
       const g = {};

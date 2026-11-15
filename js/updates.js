@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-15-precos', date: '2026-11-15', title: 'Nova aba Tabela de Preços e Planos', items: [
+    ['novo', 'Aba Tabela de Preços e Planos no menu principal, no mesmo formato dos POPs: o dono cria tabelas (ex.: Serviços, Planos mensais) e anexa as imagens; toda a equipe consulta e amplia com um toque.'],
+  ] },
   { id: '2026-11-14-extras', date: '2026-11-14', title: 'Novo indicador: Serviços extras', items: [
     ['novo', 'Serviços extras conta os serviços além dos tradicionais (ex.: sobrancelha, pigmentação). Em Indicadores e metas › Serviços extras, o dono marca quais serviços são tradicionais: o resto conta como extra.'],
     ['novo', 'Dá para escolher se conta a quantidade ou o valor em R$. O indicador chega desligado: ligue na chave quando quiser usar.'],
