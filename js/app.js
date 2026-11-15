@@ -801,9 +801,20 @@
   };
 
   const navShut = () => { try { const v = JSON.parse(DB.pref.get('navShut', '[]')); return Array.isArray(v) ? v : []; } catch (e) { return []; } };
+  // Menu dos profissionais (todos que não são o dono): Checklist Agenda Cheia logo abaixo do Início,
+  // "GP · Gestão de pessoas" vira "Minha Gestão" e vem antes de "Apresentações".
+  function navFor(user) {
+    if (isGestor(user)) return NAV;
+    const gp = NAV.find(x => x.group === 'GP · Gestão de pessoas'), ap = NAV.find(x => x.group === 'Apresentações');
+    const chk = gp.items.find(it => it.r === 'checklist');
+    const rest = NAV[0].items.slice(1), av = rest.find(it => it.r === 'avisos');
+    const top = { ...NAV[0], items: [NAV[0].items[0], chk, ...rest.filter(it => it !== av), av] }; // Avisos logo abaixo da Tabela de Preços
+    const mine = { ...gp, group: 'Minha Gestão', items: gp.items.filter(it => it !== chk) };
+    return [top, mine, ap, ...NAV.filter(x => x !== NAV[0] && x !== gp && x !== ap)];
+  }
   function drawer(user, route) {
     const g = isGestor(user);
-    const groups = NAV.filter(gr => !gr.g || g || isAreaMgr(user) || (gr.items.some(it => it.r === 'fiscalizacao') && discOk(user))).map(gr => {
+    const groups = navFor(user).filter(gr => !gr.g || g || isAreaMgr(user) || (gr.items.some(it => it.r === 'fiscalizacao') && discOk(user))).map(gr => {
       const am = isAreaMgr(user), hg = hasGrants(user);
       const lf = lanAny();
       const items = gr.items.filter(it => (!it.g || g || (it.a && am) || (it.r === 'lancamentos' && lf) || (it.r === 'fiscalizacao' && discOk(user))) && (!it.rt || rtAuds(user).length) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
