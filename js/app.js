@@ -6915,7 +6915,22 @@ Content-Type: application/json</pre>
   const termsAll = () => (Array.isArray(state.termAccepts) ? state.termAccepts : []);
   const termsDone = u => { const t = termsCfg(); return !t || termsAll().some(a => a.userId === u.id && a.ver === t.ver); };
   const termsNeeded = u => !!u && !isGestor(u) && !termsDone(u);
-  const termsHtml = t => esc(t).split(/\n{2,}/).map(par => `<p>${par.replace(/\n/g, '<br>')}</p>`).join('');
+  // Texto dos termos: linha em branco separa blocos; linhas com "*", "-" ou "•" viram lista; "1. TÍTULO" ou linha toda
+  // em maiúsculas vira título; linha curta sem ponto final vira subtítulo.
+  function termsHtml(t) {
+    const blocks = String(t || '').replace(/\r/g, '').split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
+    return blocks.map(b => {
+      const lines = b.split('\n').map(l => l.trim()).filter(Boolean);
+      const bullet = l => /^[*•\-–]\s+/.test(l);
+      if (lines.every(bullet)) return `<ul>${lines.map(l => { const x = l.replace(/^[*•\-–]\s+/, ''), m = x.match(/^([^:]{2,40}):\s*(.*)$/); return `<li>${m ? `<b>${esc(m[1])}:</b> ${esc(m[2])}` : esc(x)}</li>`; }).join('')}</ul>`;
+      if (lines.length === 1) {
+        const l = lines[0], letters = l.replace(/[^A-Za-zÀ-ÿ]/g, '');
+        if (/^\d+\.\s+\S/.test(l) || (letters.length >= 4 && letters === letters.toUpperCase())) return `<h3>${esc(l)}</h3>`;
+        if (l.length <= 60 && !/[.!?:;…]$/.test(l)) return `<h4>${esc(l)}</h4>`;
+      }
+      return `<p>${lines.map(esc).join('<br>')}</p>`;
+    }).join('');
+  }
   function renderTerms(user) {
     const t = termsCfg(), d = ui.termDraft || (ui.termDraft = { ok: false, name: '', drawn: false });
     root.innerHTML = `<main class="tm-wrap">

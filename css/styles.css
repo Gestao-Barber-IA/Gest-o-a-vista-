@@ -2955,3 +2955,7 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .tmc-sig { padding: 0; border: 0; background: #fff; border-radius: 8px; width: 96px; height: 32px; overflow: hidden; cursor: zoom-in; flex: 0 0 auto; }
 .tmc-sig img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .tmc-full { background: #fff; border-radius: 12px; }
+.tm-text h3 { font-size: 1rem; margin: 16px 0 8px; color: var(--accent); letter-spacing: .02em; }
+.tm-text h3:first-child { margin-top: 0; }
+.tm-text h4 { font-size: .95rem; margin: 12px 0 4px; }
+.tm-text ul { margin: 0 0 10px; padding-left: 20px; display: grid; gap: 6px; }
