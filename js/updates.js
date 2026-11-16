@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-16-retencao', date: '2026-11-16', title: 'Retenção de clientes antigos e fidelização de clientes novos', items: [
+    ['novo', 'Dois novos indicadores: Retenção de clientes antigos (dos clientes que já frequentavam a casa, quantos voltaram com o mesmo profissional em até 45 dias) e Fidelização de clientes novos (dos clientes na primeira visita, quantos voltaram com o mesmo profissional em até 45 dias).'],
+    ['melhoria', 'Os números vêm da sincronização AppBarber. Os indicadores chegam desligados: ligue em Configurações › Indicadores e metas.'],
+  ] },
   { id: '2026-11-16-contratos', date: '2026-11-16', title: 'Nova aba Contratos', items: [
     ['novo', 'Depois da assinatura dos termos e regras, o documento fica guardado na aba Contratos: o texto como estava no dia, nome completo, CNPJ, data e a assinatura. Dá para imprimir ou salvar em PDF.'],
     ['melhoria', 'O dono vê o contrato de todos; cada profissional, gestor e líder vê só o seu.'],

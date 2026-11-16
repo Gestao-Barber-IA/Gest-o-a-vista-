@@ -80,6 +80,12 @@
       calc: s => s.n.ret && s.cli > 0 ? (s.ret / s.cli) * 100 : null },
     { key: 'prod', label: 'Venda de produtos', weight: 8, fmt: 'int',
       calc: s => MODES.prod === 'valor' ? (s.n.prodV ? s.prodV : null) : (s.n.prod ? s.prod : null) },
+    // Retenção (clientes antigos) e fidelização (clientes novos): % que voltou com o mesmo profissional em até 45 dias.
+    // Vêm da sincronização (base e quantos voltaram); mínimo de clientes para não premiar amostra pequena. Começam desligados.
+    { key: 'retAnt', label: 'Retenção de clientes antigos', weight: 8, fmt: 'pct',
+      calc: s => s.raB >= 10 ? (s.raV / s.raB) * 100 : null },
+    { key: 'fidNov', label: 'Fidelização de clientes novos', weight: 8, fmt: 'pct',
+      calc: s => s.fnB >= 5 ? (s.fnV / s.fnB) * 100 : null },
     // Serviços extras: tudo o que não é serviço tradicional (o dono marca os tradicionais). Começa desligado.
     { key: 'extra', label: 'Serviços extras', weight: 8, fmt: 'int',
       calc: s => MODES.extra === 'valor' ? (s.n.extraV ? s.extraV : null) : (s.n.extra ? s.extra : null) },
@@ -109,6 +115,11 @@
     { key: 'prodV', label: 'Valor em produtos vendidos (R$)', api: 'valor_produtos', step: '0.01' },
     { key: 'extra', label: 'Serviços extras (quantidade)', api: 'servicos_extras', step: '1' },
     { key: 'extraV', label: 'Valor em serviços extras (R$)', api: 'valor_servicos_extras', step: '0.01' },
+    // Retenção/fidelização (calculados pela sincronização; não são lançados à mão).
+    { key: 'raB', label: 'Clientes antigos atendidos (base da retenção)', api: 'retorno_antigos_base', step: '1', auto: true },
+    { key: 'raV', label: 'Clientes antigos que voltaram em até 45 dias', api: 'retorno_antigos_voltaram', step: '1', auto: true },
+    { key: 'fnB', label: 'Clientes novos atendidos (base da fidelização)', api: 'retorno_novos_base', step: '1', auto: true },
+    { key: 'fnV', label: 'Clientes novos que voltaram em até 45 dias', api: 'retorno_novos_voltaram', step: '1', auto: true },
   ];
 
   // ---------- períodos ----------
@@ -407,7 +418,7 @@
     }
   }
 
-  const DEFAULT_GOALS = { fat: 6000, check: 390, ocup: 75, ticket: 60, serv: 130, cli: 110, planos: 4, fid: 50, prod: 20, extra: 40 };
+  const DEFAULT_GOALS = { fat: 6000, check: 390, ocup: 75, ticket: 60, serv: 130, cli: 110, planos: 4, fid: 50, prod: 20, extra: 40, retAnt: 60, fidNov: 35 };
   const goalFor = (state, barberId, key) => {
     const ind = state.goals?.byBarber?.[barberId]?.[key];
     return isNum(ind) ? Number(ind) : Number(state.goals?.team?.[key] ?? DEFAULT_GOALS[key]);
@@ -622,7 +633,9 @@
           const sv = Math.round(fat * 0.88 * 100) / 100, nEx = Math.floor(serv * (0.12 + 0.05 * (i % 3))), nB = Math.floor((serv - nEx) / 3), nC = serv - nEx - nB;
           const svc = { 'Corte Tradicional': [nC, Math.round(sv * 0.62)], 'Barba': [nB, Math.round(sv * 0.2)] };
           if (nEx) { const s1 = Math.ceil(nEx / 2); svc['Sobrancelha (No Combo)'] = [s1, Math.round(sv * 0.07)]; if (nEx - s1) svc['Pigmentação na Barba'] = [nEx - s1, Math.round(sv * 0.11)]; }
-          entries.push({ id: uid('e_'), barberId: barbers[i].id, date: iso(day), fat, serv, cli, hDisp: 8, hOcup, comanda, servV: sv, prodV: Math.round(fat * 0.12 * 100) / 100, svc });
+          const raB = Math.round(cli * 0.55), fnB = Math.max(0, Math.round(cli * 0.18)), q = ((i * 7 + cli + day.getDate()) % 10) / 40; // retenção/fidelização de exemplo
+          entries.push({ id: uid('e_'), barberId: barbers[i].id, date: iso(day), fat, serv, cli, hDisp: 8, hOcup, comanda, servV: sv, prodV: Math.round(fat * 0.12 * 100) / 100, svc,
+            raB, raV: Math.round(raB * (0.5 + q + i * 0.02)), fnB, fnV: Math.round(fnB * (0.25 + q + (5 - i) * 0.02)) });
         });
       });
     }
@@ -880,6 +893,7 @@
     const list = (Array.isArray(state && state.customInds) ? state.customInds : []).filter(validCustom).slice(0, 12);
     // Serviços extras chega desligado (uma vez por empresa); o dono liga em Indicadores e metas.
     if (state && !state.extraInit && Array.isArray(state.hidden)) { state.extraInit = true; if (!state.hidden.includes('extra')) state.hidden = [...state.hidden, 'extra']; }
+    if (state && !state.retInit && Array.isArray(state.hidden)) { state.retInit = true; state.hidden = [...new Set([...state.hidden, 'retAnt', 'fidNov'])]; }
     const m = (state && state.indMode) || {};
     const sig = JSON.stringify([list, m.serv, m.prod, m.extra]);
     if (sig === customSig) return;

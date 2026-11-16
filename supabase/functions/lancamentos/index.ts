@@ -9,6 +9,8 @@ const FIELDS: Record<string, string> = {
   horas_disponiveis: "hDisp", horas_ocupadas: "hOcup", planos_mensais: "planos",
   clientes_retorno: "ret", venda_produtos: "prod", maior_comanda: "comanda",
   valor_servicos: "servV", valor_produtos: "prodV",
+  servicos_extras: "extra", valor_servicos_extras: "extraV",
+  retorno_antigos_base: "raB", retorno_antigos_voltaram: "raV", retorno_novos_base: "fnB", retorno_novos_voltaram: "fnV",
 };
 
 const cors = {
