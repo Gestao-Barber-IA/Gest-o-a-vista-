@@ -31,11 +31,11 @@ function team(rows, extra = {}) {
 const byId = (res, id) => res.rows.find(r => r.barber.id === id);
 const keysOf = list => Array.from(list, i => i.key).sort(); // listas vêm de outro contexto (vm)
 
-test('nota por indicador: 1º = 100, último = 0, proporcional no meio', () => {
+test('nota por indicador: proporcional ao líder (1º = 100)', () => {
   const res = GB.computeRanking(team([['a', { fat: 10000 }], ['b', { fat: 5000 }], ['c', { fat: 7500 }]]), R);
   assert.equal(byId(res, 'a').scores.fat, 100);
-  assert.equal(byId(res, 'b').scores.fat, 0);
-  assert.equal(byId(res, 'c').scores.fat, 50);
+  assert.equal(byId(res, 'b').scores.fat, 50);
+  assert.equal(byId(res, 'c').scores.fat, 75);
 });
 
 test('só contam indicadores com dados no período', () => {
@@ -48,8 +48,8 @@ test('pontuação geral é a média ponderada pelos pesos', () => {
   const st = team([['a', { fat: 100, serv: 10 }], ['b', { fat: 50, serv: 20 }]]);
   st.weights.fat = 3; st.weights.serv = 1;
   const res = GB.computeRanking(st, R);
-  assert.equal(byId(res, 'a').overall, 75); // (3*100 + 1*0) / 4
-  assert.equal(byId(res, 'b').overall, 25);
+  assert.equal(byId(res, 'a').overall, 87.5); // (3*100 + 1*50) / 4
+  assert.equal(byId(res, 'b').overall, 62.5); // (3*50 + 1*100) / 4
 });
 
 test('indicador oculto ou com peso zero não pontua', () => {
@@ -113,7 +113,7 @@ test('profissional desligado não entra no ranking', () => {
   const st = team([['a', { fat: 100 }], ['b', { fat: 50 }]]);
   st.barbers[1].active = false;
   const res = GB.computeRanking(st, R);
-  assert.deepEqual(res.rows.map(r => r.barber.id), ['a']);
+  assert.equal(res.rows.map(r => r.barber.id).join(','), 'a');
 });
 
 test('total do mês substitui os lançamentos diários do mesmo campo', () => {
@@ -293,4 +293,28 @@ test('checklist: vermelho desconta 3 pts do dia, sem ficar negativo', () => {
   assert.equal(day({ chegada: [red], google: [ok, ok] }), 0);
   assert.equal(day({ chegada: [{ ...red, arr: 'apos' }], google: [ok, ok, ok] }), 3);
   assert.equal(day({ chegada: [{ ...red, status: 'recusado' }], google: [ok, ok, ok] }), 3);
+});
+
+test('amostra pequena: retenção/fidelização sem base fica de fora, sem nota zero', () => {
+  const st = team([['a', { fat: 100 }], ['b', { fat: 100 }]], { retInit: true });
+  st.hidden = []; st.weights = { fat: 50, fidNov: 50 };
+  st.entries = [{ id: 'e1', barberId: 'a', date: '2026-10-05', source: 'api', fnB: 6, fnV: 3 }, { id: 'e2', barberId: 'b', date: '2026-10-05', source: 'api', fnB: 2, fnV: 2 }];
+  const res = GB.computeRanking(st, R);
+  assert.equal(byId(res, 'b').scores.fidNov, null);
+  assert.equal(byId(res, 'b').overall, 100); // só o faturamento conta para b
+  assert.equal(byId(res, 'a').overall, 100);
+});
+
+test('mínimo de dias: quem trabalhou menos da metade (até 5) entra no fim, sem mexer na nota dos outros', () => {
+  const st = team([['a', {}], ['b', {}], ['c', {}]]);
+  st.weights = { fat: 100 }; st.hidden = GB.INDICATORS.filter(i => i.key !== 'fat').map(i => i.key);
+  const day = (id, d, fat) => ({ id: id + d, barberId: id, date: '2026-10-' + String(d).padStart(2, '0'), source: 'api', fat, cli: 1 });
+  st.entries = [...[1, 2, 3, 4, 5, 6].map(d => day('a', d, 100)), ...[1, 2, 3, 4, 5].map(d => day('b', d, 100)), day('c', 7, 900)];
+  const res = GB.computeRanking(st, R);
+  assert.equal(res.minDays, 3);
+  assert.equal(res.ranked, 2);
+  assert.equal(res.rows.map(r => r.barber.id).join(','), 'a,b,c');
+  assert.ok(byId(res, 'c').entering && byId(res, 'c').needDays === 2);
+  assert.equal(byId(res, 'a').scores.fat, 100); // c (900 em 1 dia) não vira o líder
+  assert.equal(Math.round(byId(res, 'b').scores.fat), 83);
 });
