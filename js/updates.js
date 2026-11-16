@@ -3,7 +3,7 @@
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
   { id: '2026-11-16-checklist-dia', date: '2026-11-16', title: 'Checklist: níveis pela média por dia trabalhado', items: [
-    ['melhoria', 'Os níveis e a garantia do Checklist Agenda Cheia agora usam a média de pontos por dia trabalhado, e não o total do mês. Quem trabalha 22 ou 28 dias concorre de igual para igual. Dia trabalhado é o dia com registro no checklist.'],
+    ['melhoria', 'Os níveis e a garantia do Checklist Agenda Cheia agora usam a média de pontos por dia trabalhado, e não o total do mês. Quem trabalha 22 ou 28 dias concorre de igual para igual. Dia trabalhado é o dia com atendimento na agenda (AppBarber) ou com registro no checklist; quem trabalhou e não fez o checklist tem o dia contado com zero.'],
     ['melhoria', 'Novas faixas (por dia, de 24 pts possíveis): Elite 20,5 · Ouro 16 · Prata 14,5 · Bronze 12,5 · Em desenvolvimento 11. As garantias continuam as mesmas.'],
     ['melhoria', 'No ranking, o indicador Checklist Agenda Cheia passa a ser a média de pontos por dia trabalhado.'],
     ['novo', 'Tarefas: 5 Stories (3 nos horários estratégicos 8h30, 12h e 17h30) vale 3 pts; 5 Abordagens vale 4 pts; Avaliações no Google passa a 3 por dia; nova tarefa 3 Retornos agendados (print da agenda com o próximo horário do cliente), 3 pts; Pró Atividade ganhou exemplos.'],

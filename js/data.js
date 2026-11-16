@@ -266,9 +266,9 @@
     for (const r of popDays(state, barberId)) {
       if (r.day < range.start || r.day > range.end) continue;
       add('check', Math.round(popDayPts(cfg, r) * 10) / 10);
-      s.checkDays = (s.checkDays || 0) + popRecDays(r);
       if (popHasEv(r)) popMonths.add(r.day.slice(0, 7)); // só o ajuste não substitui um total lançado à mão
     }
+    if (s.checkDia && s.n.check) s.checkDays = popWorkDays(state, barberId, range.start, range.end);
     for (const ym of months) {
       const rec = recs[ym];
       if (!rec) continue;
@@ -393,6 +393,21 @@
   // Dias trabalhados: cada dia com algum registro (prova ou Disponibilidade comercial marcada) conta 1.
   // Pontos trazidos de outro sistema (adj) contam os dias que cobrem (adjDays, padrão 1).
   const popRecDays = r => (popHasEv(r) ? 1 : 0) + (popAdj(r) > 0 ? Math.max(1, Number(r.adjDays) || 1) : 0);
+  // Dias trabalhados no período: dia com atendimento vindo da integração (AppBarber) OU com registro no checklist.
+  // Quem trabalhou e não fez o checklist conta o dia (média cai). Sem integração, os pontos trazidos (adj) contam adjDays.
+  function popWorkDays(state, barberId, start, end) {
+    const set = new Set(); let integ = false, extra = 0;
+    for (const e of state.entries || []) {
+      if (e.barberId !== barberId || e.source === 'manual' || e.date < start || e.date > end) continue;
+      if (Number(e.cli) > 0 || Number(e.fat) > 0) { set.add(e.date); integ = true; }
+    }
+    for (const r of state.pop || []) {
+      if (r.barberId !== barberId || r.day.length !== 10 || r.day < start || r.day > end) continue;
+      if (popHasEv(r)) set.add(r.day);
+      if (popAdj(r) > 0) extra += Math.max(1, Number(r.adjDays) || 1);
+    }
+    return set.size + (integ ? 0 : extra);
+  }
   const popDays = (state, barberId) => (state.pop || []).filter(r => r.barberId === barberId && r.day.length === 10 && (popHasEv(r) || popAdj(r) > 0));
 
 
@@ -937,5 +952,5 @@
     }
   }
 
-  window.GB = Object.assign(window.GB || {}, { applyCustom, customKeys, indMode, fieldOff, MODE_TXT, extrasOf, normSvc, comboBase, svcPrices, RETIRED, BONUS_INDS, OCUP_DEFAULT, ocupCfgOf, ocupCfgFor, hoursPerDay, ocupCapacity, SUM_KEYS, manualEntries, manualTotal, applyManualTotal, evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, popItemsFor, popPerDay, popRecDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
+  window.GB = Object.assign(window.GB || {}, { applyCustom, customKeys, indMode, fieldOff, MODE_TXT, extrasOf, normSvc, comboBase, svcPrices, RETIRED, BONUS_INDS, OCUP_DEFAULT, ocupCfgOf, ocupCfgFor, hoursPerDay, ocupCapacity, SUM_KEYS, manualEntries, manualTotal, applyManualTotal, evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, popItemsFor, popPerDay, popRecDays, popWorkDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
 })();

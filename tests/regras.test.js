@@ -269,3 +269,18 @@ test('checklist: item retirado vale só antes da data; item novo só a partir de
   const rec = { day: '2026-11-13', ev: { estrat: [{ status: 'aprovado' }, { status: 'aprovado' }, { status: 'aprovado' }] } };
   assert.equal(GB.popDayPts(cfg, rec), 2);
 });
+
+test('checklist: dia trabalhado vem da agenda (integração) mesmo sem checklist', () => {
+  const st = team([['a', {}], ['b', {}]]);
+  st.weights = { check: 100 }; st.hidden = GB.INDICATORS.filter(i => i.key !== 'check').map(i => i.key);
+  const ok = { status: 'aprovado' };
+  st.entries = ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08'].map((d, i) => ({ id: 'e' + i, barberId: 'a', date: d, source: 'api', cli: 8, fat: 400 }));
+  st.pop = [
+    { barberId: 'a', day: '2026-10-01', ev: {}, adj: 6, adjDays: 10 }, // com integração, adjDays não conta
+    { barberId: 'a', day: '2026-10-05', ev: { google: [ok, ok, ok] } },
+    { barberId: 'b', day: '2026-10-05', ev: { google: [ok, ok, ok] } },
+  ];
+  const res = GB.computeRanking(st, R);
+  assert.equal(byId(res, 'a').values.check, 9 / 4);
+  assert.equal(byId(res, 'b').values.check, 3);
+});

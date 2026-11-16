@@ -5213,12 +5213,12 @@ Content-Type: application/json</pre>
   // perDay: níveis pela média de pontos por dia trabalhado (dias com registro). score = valor usado no nível.
   function popMonth(bid, ym) {
     const cfg = popCfg(), n = daysInMonth(ym), perDay = GB.popPerDay(cfg), dayMax = GB.popDayMax(cfg);
-    let total = 0, max = 0, days = 0;
+    let total = 0, max = 0;
     for (let d = 1; d <= n; d++) {
-      const day = `${ym}-${String(d).padStart(2, '0')}`, rec = popRec(bid, day);
-      total += GB.popDayPts(cfg, rec); max += GB.popDayMax(cfg, day);
-      if (rec) days += GB.popRecDays(rec);
+      const day = `${ym}-${String(d).padStart(2, '0')}`;
+      total += GB.popDayPts(cfg, popRec(bid, day)); max += GB.popDayMax(cfg, day);
     }
+    const mr = monthRange(ym), days = GB.popWorkDays(state, bid, mr.start, mr.end);
     const avg = days ? total / days : 0;
     return { total: r1(total), max, days, avg: r1(avg), dayMax, perDay, score: perDay ? r1(avg) : r1(total), pct: perDay ? (dayMax ? avg / dayMax * 100 : 0) : (max ? total / max * 100 : 0) };
   }
@@ -5514,7 +5514,7 @@ Content-Type: application/json</pre>
           <div class="pc-stat"><span>Pontos deixados na mesa</span><b class="num">${fmtPts(Math.max(0, poss7 - won7))} pts</b></div>
           ${M.perDay ? `<div class="pc-stat"><span>Média por dia no mês (ranking)</span><b class="num">${fmtPts(M.avg)} / ${fmtPts(M.dayMax)} pts</b></div>` : `<div class="pc-stat"><span>Total no ranking (mês)</span><b class="num">${fmtPts(M.total)} / ${fmtPts(M.max)} pts</b></div>`}
         </div>
-        <p class="section-note">${M.perDay ? `Cada dia completo vale ${fmtPts(dayMax)} pts. O nível e o indicador Checklist Agenda Cheia do ranking usam a <b>média de pontos por dia trabalhado</b> (dias com registro no checklist), então quem trabalha 22 ou 28 dias no mês concorre de igual para igual.` : `Cada dia completo vale ${fmtPts(dayMax)} pts. Completar todos os dias deste mês soma ${fmtPts(M.max)} pts no indicador Checklist Agenda Cheia do ranking.`}</p>
+        <p class="section-note">${M.perDay ? `Cada dia completo vale ${fmtPts(dayMax)} pts. O nível e o indicador Checklist Agenda Cheia do ranking usam a <b>média de pontos por dia trabalhado</b> (dias com atendimento na agenda ou com registro no checklist; dia trabalhado sem checklist conta como zero), então quem trabalha 22 ou 28 dias no mês concorre de igual para igual.` : `Cada dia completo vale ${fmtPts(dayMax)} pts. Completar todos os dias deste mês soma ${fmtPts(M.max)} pts no indicador Checklist Agenda Cheia do ranking.`}</p>
       </section>
       <section class="section card">
         <h2 class="pop-h2">Níveis e garantia</h2>
