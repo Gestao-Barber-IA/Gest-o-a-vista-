@@ -6,6 +6,6 @@
 window.GB_CONFIG = {
   supabaseUrl: 'https://sekkmnkajnaqubyhpxvd.supabase.co',
   // IP fixo do servidor de sincronização (cadastrado na AppBarber). Vazio até o servidor estar no ar.
-  syncIp: '',
+  syncIp: '216.238.123.150',
   supabaseAnonKey: 'sb_publishable_H_B9KotYo03JbNmuERyf6Q_1u-RyKYB',
 };
