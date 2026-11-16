@@ -64,8 +64,9 @@
   const INDICATORS = [
     { key: 'fat', label: 'Faturamento', weight: 22, fmt: 'money',
       calc: s => s.n.fat ? s.fat : null },
+    // Com níveis por dia (padrão), o indicador é a média de pontos por dia trabalhado.
     { key: 'check', label: 'Checklist Agenda Cheia', weight: 15, fmt: 'int',
-      calc: s => s.n.check ? s.check : null },
+      calc: s => !s.n.check ? null : s.checkDia && s.checkDays > 0 ? s.check / s.checkDays : s.check },
     { key: 'ocup', label: 'Taxa de ocupação', weight: 10, fmt: 'pct',
       calc: s => s.n.hDisp && s.hDisp > 0 ? (s.hOcup / s.hDisp) * 100 : null },
     { key: 'ticket', label: 'Ticket médio', weight: 10, fmt: 'money2',
@@ -227,7 +228,7 @@
 
   function aggregate(state, barberId, range) {
     applyCustom(state);
-    const s = { fat: 0, serv: 0, cli: 0, check: 0, hDisp: 0, hOcup: 0, planos: 0, ret: 0, prod: 0, comanda: 0, n: {} };
+    const s = { fat: 0, serv: 0, cli: 0, check: 0, checkDays: 0, checkDia: false, hDisp: 0, hOcup: 0, planos: 0, ret: 0, prod: 0, comanda: 0, n: {} };
     const add = (k, v) => {
       if (k === 'comanda') { s.comanda = Math.max(s.comanda, Number(v)); s.n.comanda = (s.n.comanda || 0) + 1; return; } // maior valor, não soma
       s[k] = (s[k] || 0) + Number(v); s.n[k] = (s.n[k] || 0) + 1;
@@ -260,10 +261,12 @@
     }
     // Checklist Agenda Cheia: os pontos diários entram no indicador e substituem o total manual do mês.
     const cfg = popCfgOf(state);
+    s.checkDia = popPerDay(cfg);
     const popMonths = new Set();
     for (const r of popDays(state, barberId)) {
       if (r.day < range.start || r.day > range.end) continue;
       add('check', Math.round(popDayPts(cfg, r) * 10) / 10);
+      s.checkDays = (s.checkDays || 0) + popRecDays(r);
       if (popHasEv(r)) popMonths.add(r.day.slice(0, 7)); // só o ajuste não substitui um total lançado à mão
     }
     for (const ym of months) {
@@ -323,22 +326,26 @@
       title: 'POP — Agenda Lotada', subtitle: 'Checklist diário de performance', shop: '',
       phrase: 'A sua atitude de hoje gera o teu resultado de amanhã.', minProfit: 4500,
       items: [
-        { id: 'stories', title: '5 Stories', desc: 'Poste no mínimo 5 stories nas redes sociais', type: 'count', target: 5, pts: 2 },
-        { id: 'abord', title: '5 Abordagens', desc: 'Abordar 5 clientes em frente à barbearia e captar o telefone', type: 'phones', target: 5, pts: 3 },
+        { id: 'stories', title: '5 Stories', desc: 'Poste 5 stories nas redes sociais, sendo 3 nos horários estratégicos: 8h30, 12h e 17h30', type: 'count', target: 5, pts: 3 },
+        { id: 'abord', title: '5 Abordagens', desc: 'Abordar 5 clientes em frente à barbearia e captar o telefone', type: 'phones', target: 5, pts: 4 },
         { id: 'convites', title: '10 Convites Instagram', desc: 'Mande mensagem para 10 potenciais clientes e anexe o print', type: 'count', target: 10, pts: 2 },
         { id: 'public', title: '3 Publicações com o cliente', desc: 'Self ou espelho junto com cliente e marcando @', type: 'count', target: 3, pts: 3 },
-        { id: 'google', title: '4 Avaliações no Google', desc: 'Peça e conquiste 4 avaliações de clientes no Google', type: 'count', target: 4, pts: 3 },
-        { id: 'estrat', title: 'Stories Estratégico', desc: 'postar às 8h30, 12h, 17h30', type: 'count', target: 3, pts: 2 },
-        { id: 'extra', title: 'Pró Atividade', desc: 'Extra', type: 'count', target: 5, pts: 3 },
+        { id: 'google', title: '3 Avaliações no Google', desc: 'Peça e conquiste 3 avaliações de clientes no Google', type: 'count', target: 3, pts: 3 },
+        // Juntou com os 5 Stories em 16/11/2026: os dias anteriores continuam com os pontos que já tinham.
+        { id: 'estrat', title: 'Stories Estratégico', desc: 'postar às 8h30, 12h, 17h30', type: 'count', target: 3, pts: 2, until: '2026-11-16' },
+        { id: 'retorno', title: '3 Retornos agendados', desc: 'Cliente sai com o próximo horário marcado. Prova: print da agenda com o retorno', type: 'count', target: 3, pts: 3, from: '2026-11-16' },
+        { id: 'extra', title: 'Pró Atividade', desc: 'Atitudes além do combinado. Ex.: ajudar a recepção, organizar o estoque, repor produtos, limpar e organizar o espaço, indicar a barbearia para um novo cliente, ajudar um colega', type: 'count', target: 5, pts: 3 },
         { id: 'chegada', title: 'Disponibilidade comercial', desc: 'Organização da agenda e dos atendimentos oferecidos aos clientes.', type: 'check', target: 1, pts: 3 },
       ],
+      // Níveis pela MÉDIA de pontos por dia trabalhado (justo para quem trabalha 22 ou 28 dias no mês).
+      levelMode: 'dia',
       levels: [
-        { name: 'Elite', min: 390, max: 600, value: 4500, tone: 'gold' },
-        { name: 'Ouro', min: 300, max: 389, value: 4250, tone: 'gold' },
-        { name: 'Prata', min: 270, max: 299, value: 4000, tone: 'silver' },
-        { name: 'Bronze', min: 240, max: 269, value: 3750, tone: 'bronze' },
-        { name: 'Em desenvolvimento', min: 210, max: 239, value: 3500, tone: 'plain' },
-        { name: 'Não elegível', min: 0, max: 209, value: null, tone: 'none' },
+        { name: 'Elite', min: 20.5, max: 24, value: 4500, tone: 'gold' },
+        { name: 'Ouro', min: 16, max: 20.4, value: 4250, tone: 'gold' },
+        { name: 'Prata', min: 14.5, max: 15.9, value: 4000, tone: 'silver' },
+        { name: 'Bronze', min: 12.5, max: 14.4, value: 3750, tone: 'bronze' },
+        { name: 'Em desenvolvimento', min: 11, max: 12.4, value: 3500, tone: 'plain' },
+        { name: 'Não elegível', min: 0, max: 10.9, value: null, tone: 'none' },
       ],
       rules: 'A garantia de lucro é um benefício concedido aos novos profissionais durante os 3 primeiros meses, condicionado ao cumprimento integral do POP Agenda Lotada, ao alcance da pontuação mínima estabelecida e ao respeito às normas, cultura e padrão de atendimento da barbearia.',
       lose: ['Não cumprir jornada estabelecida', 'Atrasos sem justificativa', 'Mau atendimento ao cliente', 'Quebra das regras e padrões da empresa', 'Falta sem aviso prévio'],
@@ -370,16 +377,22 @@
     const t = it.type === 'check' ? 1 : Math.max(1, Number(it.target) || 1);
     return Number(it.pts) * Math.min(n, t) / t;
   }
-  const popDayMax = cfg => cfg.items.reduce((a, it) => a + Number(it.pts || 0), 0);
+  // Itens valendo num dia: item novo só a partir de `from`; item retirado só até a véspera de `until`.
+  const popItemsFor = (cfg, day) => { const d = day || iso(new Date()); return cfg.items.filter(it => !(it.from && d < it.from) && !(it.until && d >= it.until)); };
+  const popDayMax = (cfg, day) => popItemsFor(cfg, day).reduce((a, it) => a + Number(it.pts || 0), 0);
+  const popPerDay = cfg => !!cfg && cfg.levelMode === 'dia';
   // rec.adj: pontos acrescentados à mão pela gestão (ex.: pontos trazidos do sistema anterior). Somam aos do dia.
   const popAdj = rec => (rec && Number(rec.adj) > 0 ? Number(rec.adj) : 0);
   function popDayPts(cfg, rec, pending) {
     if (!rec) return 0;
     const adj = pending ? 0 : popAdj(rec);
     if (!rec.ev) return adj;
-    return cfg.items.reduce((a, it) => a + popItemPts(it, rec.ev[it.id], pending), 0) + adj;
+    return popItemsFor(cfg, rec.day).reduce((a, it) => a + popItemPts(it, rec.ev[it.id], pending), 0) + adj;
   }
   const popHasEv = r => !!r.ev && Object.values(r.ev).some(l => Array.isArray(l) && l.length);
+  // Dias trabalhados: cada dia com algum registro (prova ou Disponibilidade comercial marcada) conta 1.
+  // Pontos trazidos de outro sistema (adj) contam os dias que cobrem (adjDays, padrão 1).
+  const popRecDays = r => (popHasEv(r) ? 1 : 0) + (popAdj(r) > 0 ? Math.max(1, Number(r.adjDays) || 1) : 0);
   const popDays = (state, barberId) => (state.pop || []).filter(r => r.barberId === barberId && r.day.length === 10 && (popHasEv(r) || popAdj(r) > 0));
 
 
@@ -418,10 +431,13 @@
     }
   }
 
-  const DEFAULT_GOALS = { fat: 6000, check: 390, ocup: 75, ticket: 60, serv: 130, cli: 110, planos: 4, fid: 50, prod: 20, extra: 40, retAnt: 60, fidNov: 35 };
+  const DEFAULT_GOALS = { fat: 6000, check: 20.5, ocup: 75, ticket: 60, serv: 130, cli: 110, planos: 4, fid: 50, prod: 20, extra: 40, retAnt: 60, fidNov: 35 };
   const goalFor = (state, barberId, key) => {
     const ind = state.goals?.byBarber?.[barberId]?.[key];
-    return isNum(ind) ? Number(ind) : Number(state.goals?.team?.[key] ?? DEFAULT_GOALS[key]);
+    const g = isNum(ind) ? Number(ind) : Number(state.goals?.team?.[key] ?? DEFAULT_GOALS[key]);
+    // Meta antiga do checklist era o total do mês (ex.: 390); com média por dia, vira pontos por dia.
+    if (key === 'check' && popPerDay(popCfgOf(state)) && g > popDayMax(popCfgOf(state))) return Math.round(g / 19 * 2) / 2;
+    return g;
   };
 
   // Níveis de carreira pela média das pontuações mensais.
@@ -663,7 +679,7 @@
       people.forEach(([, vol, , disc], i) => {
         if (r() < 0.15) return;
         const ev = {};
-        for (const it of pcfg.items) {
+        for (const it of popItemsFor(pcfg, day)) {
           const k = 0.35 + disc * 0.55 + r() * 0.25;
           const t = it.type === 'check' ? 1 : it.target;
           const n = it.type === 'check' ? (r() < k ? 1 : 0) : Math.min(t, Math.round(t * k * (0.6 + r() * 0.6)));
@@ -895,9 +911,13 @@
     if (state && !state.extraInit && Array.isArray(state.hidden)) { state.extraInit = true; if (!state.hidden.includes('extra')) state.hidden = [...state.hidden, 'extra']; }
     if (state && !state.retInit && Array.isArray(state.hidden)) { state.retInit = true; state.hidden = [...new Set([...state.hidden, 'retAnt', 'fidNov'])]; }
     const m = (state && state.indMode) || {};
-    const sig = JSON.stringify([list, m.serv, m.prod, m.extra]);
+    const dia = popPerDay(popCfgOf(state || {}));
+    const sig = JSON.stringify([list, m.serv, m.prod, m.extra, dia]);
     if (sig === customSig) return;
     customSig = sig;
+    const ck = INDICATORS.find(i => i.key === 'check');
+    if (ck) { ck.fmt = dia ? 'dec1' : 'int'; ck.label = dia ? 'Checklist Agenda Cheia (média/dia)' : 'Checklist Agenda Cheia'; }
+    DEFAULT_GOALS.check = dia ? 20.5 : 390;
     for (const k of ['serv', 'prod', 'extra']) {
       MODES[k] = m[k] === 'valor' ? 'valor' : 'qtd';
       const [label, fmt, goal] = MODE_TXT[k][MODES[k]], ind = INDICATORS.find(i => i.key === k);
@@ -917,5 +937,5 @@
     }
   }
 
-  window.GB = Object.assign(window.GB || {}, { applyCustom, customKeys, indMode, fieldOff, MODE_TXT, extrasOf, normSvc, comboBase, svcPrices, RETIRED, BONUS_INDS, OCUP_DEFAULT, ocupCfgOf, ocupCfgFor, hoursPerDay, ocupCapacity, SUM_KEYS, manualEntries, manualTotal, applyManualTotal, evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
+  window.GB = Object.assign(window.GB || {}, { applyCustom, customKeys, indMode, fieldOff, MODE_TXT, extrasOf, normSvc, comboBase, svcPrices, RETIRED, BONUS_INDS, OCUP_DEFAULT, ocupCfgOf, ocupCfgFor, hoursPerDay, ocupCapacity, SUM_KEYS, manualEntries, manualTotal, applyManualTotal, evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, popItemsFor, popPerDay, popRecDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
 })();

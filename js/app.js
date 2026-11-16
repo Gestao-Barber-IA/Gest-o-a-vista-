@@ -133,6 +133,7 @@
       case 'money': return money0(v);
       case 'money2': return money2(v);
       case 'pct': return nf1.format(v) + '%';
+      case 'dec1': return nf1.format(v);
       default: return nf0.format(v);
     }
   }
@@ -2264,7 +2265,7 @@
     self: () => { const f = selfCfg(); return ['Lançamento dos próprios números', f.length ? 'Agora você pode lançar seus próprios números em Lançamentos: ' + f.map(lbl).join(', ') + '.' : 'O lançamento dos próprios números foi desligado. Os números passam a ser lançados pela gestão.']; },
     com: () => { const c = comCfg(); return ['Comissões e prêmios', 'Regras atuais: ' + listTxt([c.pct > 0 && `comissão de ${nf1.format(c.pct)}% do faturamento`, c.plano > 0 && `${money0(c.plano)} por plano vendido`, c.prod > 0 && `${money0(c.prod)} por produto vendido`, [1, 2, 3].some(n => c.pos[n] > 0) && `pódio: ${[1, 2, 3].map(n => `${n}º ${money0(c.pos[n])}`).join(', ')}`, c.mvp > 0 && `MVP ${money0(c.mvp)}`, c.dest > 0 && `Destaque ${money0(c.dest)}`, c.meta > 0 && `bater a meta ${money0(c.meta)}`, c.pen > 0 && `penalidade de ${nf1.format(c.pen)}% por ocorrência`]) + '.']; },
     ocup: () => { const oc = GB.ocupCfgOf(state); return ['Regra da taxa de ocupação', `Agora 100% de ocupação = ${nf1.format(GB.hoursPerDay(oc))} h por dia (${oc.open} às ${oc.close}${Number(oc.lunch) ? `, ${oc.lunch} min de almoço` : ''}) × ${oc.days} dias no mês.`]; },
-    pop: () => ['Checklist Agenda Cheia', 'Itens e pontos do checklist: ' + listTxt((GB.popCfgOf(state).items || []).map(x => `${x.title} (${x.pts} pt${x.pts == 1 ? '' : 's'})`)) + '.'],
+    pop: () => ['Checklist Agenda Cheia', 'Itens e pontos do checklist: ' + listTxt(GB.popItemsFor(GB.popCfgOf(state)).map(x => `${x.title} (${x.pts} pt${x.pts == 1 ? '' : 's'})`)) + '.'],
     btipos: () => { const l = Array.isArray(state.bonusTypes) ? state.bonusTypes : []; return ['Tipos de bônus da empresa', l.length ? 'Os bônus da empresa foram atualizados. Confira em Bônus › Tipos de bônus da empresa: ' + l.map(x => x.nome + (x.premio ? ` (${x.premio})` : '')).slice(0, 8).join('; ') + '.' : 'Os tipos de bônus da empresa foram retirados.']; },
     precos: () => ['Tabela de Preços e Planos', 'A tabela de preços e planos foi atualizada. Confira em Tabela de Preços e Planos: ' + popsList('precos').map(x => x.name).filter(Boolean).slice(0, 8).join(', ') + '.'],
     pops: () => ['POPs · Guia do Sucesso', 'Os POPs foram atualizados. Confira em POPs · Guia do Sucesso: ' + popsList().map(x => x.title || x.t).filter(Boolean).slice(0, 8).join(', ') + '.'],
@@ -3023,6 +3024,8 @@
         if (k === 'comanda') S.comanda = Math.max(S.comanda, a.comanda); else S[k] = (S[k] || 0) + (a[k] || 0);
         S.n[k] = (S.n[k] || 0) + a.n[k];
       }
+      // Checklist com média por dia: a casa soma pontos e dias trabalhados de todos.
+      S.checkDia = a.checkDia; S.checkDays = (S.checkDays || 0) + (a.checkDays || 0);
       // Agendamentos: lançados por mês, entram quando o mês inteiro está dentro do período.
       for (const m of state.monthly || []) {
         if (m.barberId !== b.id || !isNum(m.agend)) continue;
@@ -5207,12 +5210,20 @@ Content-Type: application/json</pre>
   }
   const r1 = v => Math.round(v * 10) / 10;
   const fmtPts = v => nf1.format(r1(v)).replace(/,0$/, '');
+  // perDay: níveis pela média de pontos por dia trabalhado (dias com registro). score = valor usado no nível.
   function popMonth(bid, ym) {
-    const cfg = popCfg(), n = daysInMonth(ym), max = GB.popDayMax(cfg) * n;
-    let total = 0;
-    for (let d = 1; d <= n; d++) total += GB.popDayPts(cfg, popRec(bid, `${ym}-${String(d).padStart(2, '0')}`));
-    return { total: r1(total), max, pct: max ? total / max * 100 : 0 };
+    const cfg = popCfg(), n = daysInMonth(ym), perDay = GB.popPerDay(cfg), dayMax = GB.popDayMax(cfg);
+    let total = 0, max = 0, days = 0;
+    for (let d = 1; d <= n; d++) {
+      const day = `${ym}-${String(d).padStart(2, '0')}`, rec = popRec(bid, day);
+      total += GB.popDayPts(cfg, rec); max += GB.popDayMax(cfg, day);
+      if (rec) days += GB.popRecDays(rec);
+    }
+    const avg = days ? total / days : 0;
+    return { total: r1(total), max, days, avg: r1(avg), dayMax, perDay, score: perDay ? r1(avg) : r1(total), pct: perDay ? (dayMax ? avg / dayMax * 100 : 0) : (max ? total / max * 100 : 0) };
   }
+  const popLvRange = l => `${fmtPts(Number(l.min))} a ${fmtPts(Number(l.max))} pts${GB.popPerDay(popCfg()) ? '/dia' : ''}`;
+  const popScoreTxt = M => M.perDay ? `${fmtPts(M.avg)} pts/dia` : `${fmtPts(M.total)} pts`;
   function popLevel(pts) {
     const lv = [...popCfg().levels].sort((a, b) => b.min - a.min);
     return lv.find(l => pts >= Number(l.min)) || lv[lv.length - 1];
@@ -5220,7 +5231,7 @@ Content-Type: application/json</pre>
   function popStatus(bid, day) {
     const cfg = popCfg(), rec = popRec(bid, day);
     if (!rec || !rec.ev || !Object.values(rec.ev).some(l => Array.isArray(l) && l.some(GB.evLive))) return 'none';
-    return GB.popDayPts(cfg, rec) >= GB.popDayMax(cfg) - 0.01 ? 'done' : 'part';
+    return GB.popDayPts(cfg, rec) >= GB.popDayMax(cfg, day) - 0.01 ? 'done' : 'part';
   }
   const popPendingOf = (bid, day) => { const rec = popRec(bid, day); return rec && rec.ev ? Object.values(rec.ev).reduce((a, l) => a + (Array.isArray(l) ? l.filter(e => e.status === 'pendente').length : 0), 0) : 0; };
   // Quem confere: o dono, ou o gestor de área para as pessoas dele (nunca a própria prova).
@@ -5391,7 +5402,7 @@ Content-Type: application/json</pre>
       <div class="field"><span class="tm-flabel">Dias no mês</span><b>${daysInMonth(ui.popMonth)} (calendário real, automático)</b></div>
       ${f('minProfit', 'Meta de lucro mínimo (R$)', 'number')}
       <h3 class="pop-h3">Itens do checklist</h3>
-      ${c.items.map((it, i) => `<div class="pop-eitem">
+      ${c.items.map((it, i) => it.until && it.until <= todayIso() ? '' : `<div class="pop-eitem">
         <div class="grid-2"><label class="field"><span class="tm-flabel">Nome</span><input class="input" id="pei-t-${i}" value="${esc(it.title)}" data-popitem="title" data-i="${i}"></label>
         <label class="field"><span class="tm-flabel">Tipo</span><select class="input" id="pei-y-${i}" data-popitem="type" data-i="${i}">
           ${[['count', 'Contador'], ['phones', 'Telefones'], ['check', 'Marcar como feito']].map(([k, l]) => `<option value="${k}" ${it.type === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
@@ -5405,13 +5416,13 @@ Content-Type: application/json</pre>
           <button class="btn btn-sm btn-danger" data-action="popItemDel" data-i="${i}">${ui.confirm === 'pitem' + i ? 'Confirmar exclusão' : 'Excluir'}</button></div>
       </div>`).join('')}
       <button class="btn" data-action="popItemAdd">${icon('plus')} Adicionar item</button>
-      <p class="section-note">Soma do dia: <b class="num">${fmtPts(GB.popDayMax(c))} pts</b> · mês de ${daysInMonth(ui.popMonth)} dias: <b class="num">${fmtPts(GB.popDayMax(c) * daysInMonth(ui.popMonth))} pts</b>.</p>
+      <p class="section-note">Soma do dia: <b class="num">${fmtPts(GB.popDayMax(c))} pts</b>${GB.popPerDay(c) ? ' · o nível usa a média de pontos por dia trabalhado' : ` · mês de ${daysInMonth(ui.popMonth)} dias: <b class="num">${fmtPts(GB.popDayMax(c) * daysInMonth(ui.popMonth))} pts</b>`}.</p>
       <h3 class="pop-h3">Níveis e garantia</h3>
       ${c.levels.map((l, i) => `<div class="grid-2 pop-elevel">
         <label class="field"><span class="tm-flabel">Nível</span><input class="input" id="pel-n-${i}" value="${esc(l.name)}" data-poplevel="name" data-i="${i}"></label>
         <label class="field"><span class="tm-flabel">Garantia (R$, vazio = sem)</span><input class="input num" type="number" min="0" id="pel-v-${i}" value="${l.value ?? ''}" data-poplevel="value" data-i="${i}"></label>
-        <label class="field"><span class="tm-flabel">De (pts)</span><input class="input num" type="number" min="0" id="pel-a-${i}" value="${l.min}" data-poplevel="min" data-i="${i}"></label>
-        <label class="field"><span class="tm-flabel">Até (pts)</span><input class="input num" type="number" min="0" id="pel-b-${i}" value="${l.max}" data-poplevel="max" data-i="${i}"></label>
+        <label class="field"><span class="tm-flabel">De (pts${GB.popPerDay(c) ? '/dia' : ''})</span><input class="input num" type="number" min="0" step="0.1" id="pel-a-${i}" value="${l.min}" data-poplevel="min" data-i="${i}"></label>
+        <label class="field"><span class="tm-flabel">Até (pts${GB.popPerDay(c) ? '/dia' : ''})</span><input class="input num" type="number" min="0" step="0.1" id="pel-b-${i}" value="${l.max}" data-poplevel="max" data-i="${i}"></label>
       </div>`).join('')}
       <label class="field"><span class="tm-flabel">Regras do programa</span><textarea class="input pop-ta" id="pcfg-rules" data-popcfg="rules">${esc(c.rules || '')}</textarea></label>
       <label class="field"><span class="tm-flabel">Perde a garantia quem (um por linha)</span><textarea class="input pop-ta" id="pcfg-lose" data-popcfg="lose">${esc((c.lose || []).join('\n'))}</textarea></label>
@@ -5449,8 +5460,8 @@ Content-Type: application/json</pre>
     const monthRecs = (state.pop || []).filter(r => r.barberId === bid && r.day.startsWith(ym) && r.at).sort((a, c) => c.at - a.at);
     const last = monthRecs[0];
     const editing = !!ui.popEdit && isGestor(user);
-    const dayPts = GB.popDayPts(cfg, rec), dayMax = GB.popDayMax(cfg);
-    const M = popMonth(bid, ym), lv = popLevel(M.total);
+    const dayPts = GB.popDayPts(cfg, rec), dayMax = GB.popDayMax(cfg, day), dayItems = GB.popItemsFor(cfg, day);
+    const M = popMonth(bid, ym), lv = popLevel(M.score);
     // últimos 7 dias até o dia escolhido
     const days7 = Array.from({ length: 7 }, (_, i) => { const d = fromIso(day); d.setDate(d.getDate() - 6 + i); return iso(d); }).filter(d => d.startsWith(ym) || true);
     const vals7 = days7.map(d => d > today ? null : r1(GB.popDayPts(cfg, popRec(bid, d))));
@@ -5463,7 +5474,7 @@ Content-Type: application/json</pre>
         <h2 class="pop-h2">Escolha o profissional</h2>
         <p class="pop-today">Hoje: <b class="ok">${cnt('done')} completos</b> · <b class="part">${cnt('part')} incompletos</b> · <b class="none">${cnt('none')} sem registro</b></p>
         <div class="pop-month"><select class="input" id="pop-month" data-change="popMonth">${monthOptions(ym)}</select></div>
-        <div class="pop-people">${people.map((x, i) => `<button class="pop-person ${x.id === bid ? 'on' : ''}" data-action="popPick" data-id="${esc(x.id)}"><span class="pop-av">${avatar(x, 42)}${dot(st[i])}</span><b>${esc(x.name)}</b><span class="num">${fmtPts(popMonth(x.id, ym).total)} pts</span>${canReview(x.id) && popPendingCount(x.id, ym) ? `<span class="pop-pcount" title="Provas aguardando conferência">${popPendingCount(x.id, ym)}</span>` : ''}</button>`).join('')}</div>
+        <div class="pop-people">${people.map((x, i) => `<button class="pop-person ${x.id === bid ? 'on' : ''}" data-action="popPick" data-id="${esc(x.id)}"><span class="pop-av">${avatar(x, 42)}${dot(st[i])}</span><b>${esc(x.name)}</b><span class="num">${popScoreTxt(popMonth(x.id, ym))}</span>${canReview(x.id) && popPendingCount(x.id, ym) ? `<span class="pop-pcount" title="Provas aguardando conferência">${popPendingCount(x.id, ym)}</span>` : ''}</button>`).join('')}</div>
       </section>
       ${popReviewPanel(ym)}
       <p class="pop-who">Checklist de <b>${esc(b.name)}</b>${last ? ` · último registro feito ${last.by === 'profissional' ? 'pelo profissional' : 'pela gestão'}` : ' · ainda sem registro neste mês'}</p>
@@ -5484,10 +5495,10 @@ Content-Type: application/json</pre>
         <span class="tm-flabel">Dia do mês</span>
         <div class="pop-days" id="pop-days">${Array.from({ length: n }, (_, i) => { const d = `${ym}-${String(i + 1).padStart(2, '0')}`; const s2 = popStatus(bid, d); return `<button class="pop-dn ${i + 1 === ui.popDay ? 'on' : ''} st-${s2} ${d > today ? 'future' : ''}" data-action="popDay" data-d="${i + 1}" aria-label="Dia ${i + 1}">${i + 1}</button>`; }).join('')}</div>
         <p class="pop-sum"><b class="num" id="pop-daypts">${fmtPts(dayPts)}/${fmtPts(dayMax)} pts aprovados no dia</b>${GB.popDayPts(cfg, rec, true) ? ` · <span class="pend num">+${fmtPts(GB.popDayPts(cfg, rec, true))} pts aguardando conferência</span>` : ''}</p>${rec && Number(rec.adj) > 0 ? `<p class="pop-adj">${icon('plus')} <b class="num">+${fmtPts(Number(rec.adj))} pts</b> ${esc(rec.adjNote || 'acrescentados pela gestão')}</p>` : ''}
-        ${cfg.items.some(popArr) ? `<div class="pop-items pop-items-top">${cfg.items.filter(popArr).map(it => popItemCard(it, rec, bid)).join('')}</div>` : ''}
+        ${dayItems.some(popArr) ? `<div class="pop-items pop-items-top">${dayItems.filter(popArr).map(it => popItemCard(it, rec, bid)).join('')}</div>` : ''}
         <p class="section-note">Cada unidade precisa de uma prova: foto ou print. Anexe, escreva uma descrição se quiser e toque em Confirmar. As fotos são apagadas ${PROOF_DAYS} dias depois do envio (as que ainda aguardam conferência ficam até serem conferidas); a prova e os pontos continuam.</p>
         ${ro ? '<p class="section-note">Você está vendo este checklist sem poder editar.</p>' : ''}
-        <div class="pop-items">${popOrder(cfg.items).filter(it => !popArr(it)).map(it => popItemCard(it, rec, bid)).join('')}</div>
+        <div class="pop-items">${popOrder(dayItems).filter(it => !popArr(it)).map(it => popItemCard(it, rec, bid)).join('')}</div>
       </section>
       <section class="section card pop-rem">
         <div class="pop-dhead"><div><h2 class="pop-h2">${icon('bell')} Lembretes de posts</h2><p class="muted">Aviso diário para preencher o checklist enquanto a meta do dia não for batida.</p></div>
@@ -5501,18 +5512,20 @@ Content-Type: application/json</pre>
           <div class="pc-stat"><span>Aderência da semana</span><b class="num">${poss7 ? nf0.format(won7 / poss7 * 100) : 0}%</b></div>
           <div class="pc-stat"><span>Pontos ganhos</span><b class="num">${fmtPts(won7)} pts</b></div>
           <div class="pc-stat"><span>Pontos deixados na mesa</span><b class="num">${fmtPts(Math.max(0, poss7 - won7))} pts</b></div>
-          <div class="pc-stat"><span>Total no ranking (mês)</span><b class="num">${fmtPts(M.total)} / ${fmtPts(M.max)} pts</b></div>
+          ${M.perDay ? `<div class="pc-stat"><span>Média por dia no mês (ranking)</span><b class="num">${fmtPts(M.avg)} / ${fmtPts(M.dayMax)} pts</b></div>` : `<div class="pc-stat"><span>Total no ranking (mês)</span><b class="num">${fmtPts(M.total)} / ${fmtPts(M.max)} pts</b></div>`}
         </div>
-        <p class="section-note">Cada dia completo vale ${fmtPts(dayMax)} pts. Completar todos os dias deste mês soma ${fmtPts(M.max)} pts no indicador Checklist Agenda Cheia do ranking.</p>
+        <p class="section-note">${M.perDay ? `Cada dia completo vale ${fmtPts(dayMax)} pts. O nível e o indicador Checklist Agenda Cheia do ranking usam a <b>média de pontos por dia trabalhado</b> (dias com registro no checklist), então quem trabalha 22 ou 28 dias no mês concorre de igual para igual.` : `Cada dia completo vale ${fmtPts(dayMax)} pts. Completar todos os dias deste mês soma ${fmtPts(M.max)} pts no indicador Checklist Agenda Cheia do ranking.`}</p>
       </section>
       <section class="section card">
         <h2 class="pop-h2">Níveis e garantia</h2>
-        <div class="pop-levels">${cfg.levels.map(l => `<div class="pop-lv t-${esc(l.tone || 'plain')} ${l === lv ? 'is-cur' : ''}"><div><b>${esc(l.name)}</b><span class="num">${l.min} a ${l.max} pts</span></div><strong class="num">${l.value ? money2(l.value) : 'Sem garantia'}</strong></div>`).join('')}</div>
+        <div class="pop-levels">${cfg.levels.map(l => `<div class="pop-lv t-${esc(l.tone || 'plain')} ${l === lv ? 'is-cur' : ''}"><div><b>${esc(l.name)}</b><span class="num">${popLvRange(l)}</span></div><strong class="num">${l.value ? money2(l.value) : 'Sem garantia'}</strong></div>`).join('')}</div>
       </section>
       <section class="section card">
         <h2 class="pop-h2">Resumo do mês</h2>
         <dl class="pop-res">
-          <div><dt>Pontuação total</dt><dd class="num">${fmtPts(M.total)} / ${fmtPts(M.max)}</dd></div>
+          ${M.perDay ? `<div><dt>Média por dia trabalhado</dt><dd class="num">${fmtPts(M.avg)} / ${fmtPts(M.dayMax)}</dd></div>
+          <div><dt>Dias trabalhados</dt><dd class="num">${M.days}</dd></div>
+          <div><dt>Pontos no mês</dt><dd class="num">${fmtPts(M.total)}</dd></div>` : `<div><dt>Pontuação total</dt><dd class="num">${fmtPts(M.total)} / ${fmtPts(M.max)}</dd></div>`}
           <div><dt>Percentual</dt><dd class="num">${nf0.format(M.pct)}%</dd></div>
           <div><dt>Nível alcançado</dt><dd>${esc(lv ? lv.name : '—')}</dd></div>
           <div><dt>Garantia conquistada</dt><dd>${lv && lv.value ? money2(lv.value) : 'Sem garantia'}</dd></div>
@@ -5562,8 +5575,8 @@ Content-Type: application/json</pre>
       const day = `${ym}-${String(d).padStart(2, '0')}`, rec = popRec(bid, day);
       rows.push([`${String(d).padStart(2, '0')}/${ym.slice(5)}/${ym.slice(0, 4)}`, ...cfg.items.map(it => { const l = rec && rec.ev && Array.isArray(rec.ev[it.id]) ? rec.ev[it.id] : []; const okl = l.filter(e => GB.evOk(it, e)), pl = l.filter(e => e.status === 'pendente').length; return (it.type === 'phones' ? okl.map(e => e.phone).join(' / ') : String(okl.length || '')) + (pl ? ` (+${pl} aguardando)` : ''); }), fmtPts(GB.popDayPts(cfg, rec))]);
     }
-    const M = popMonth(bid, ym), lv = popLevel(M.total);
-    rows.push([], ['Total do mês', fmtPts(M.total) + ' / ' + fmtPts(M.max)], ['Nível', lv.name], ['Garantia', lv.value ? money2(lv.value) : 'Sem garantia']);
+    const M = popMonth(bid, ym), lv = popLevel(M.score);
+    rows.push([], ['Total do mês', fmtPts(M.total) + (M.perDay ? '' : ' / ' + fmtPts(M.max))], ...(M.perDay ? [['Dias trabalhados', String(M.days)], ['Média por dia', fmtPts(M.avg) + ' / ' + fmtPts(M.dayMax)]] : []), ['Nível', lv.name], ['Garantia', lv.value ? money2(lv.value) : 'Sem garantia']);
     const csv = '﻿' + rows.map(r => r.map(q).join(';')).join('\r\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -5584,7 +5597,7 @@ Content-Type: application/json</pre>
   // ---------- Relatórios mensais: painel do mês (para ver na tela e baixar em PDF) ----------
   // Ícone de cada indicador no painel (os indicadores são os ativos da empresa, na mesma ordem do ranking).
   const RP_ICON = { fat: 'wallet', check: 'checksq', ocup: 'clock', ticket: 'card', serv: 'scissors', cli: 'users', planos: 'idcard', fid: 'undo', prod: 'gift' };
-  const rpVal = (ind, v) => v == null ? '—' : ind.fmt === 'money' ? money0(v) : ind.fmt === 'money2' ? money2(v) : ind.fmt === 'pct' ? nf2.format(v) + '%' : nf0.format(v) + (ind.key === 'check' ? ' pts' : '');
+  const rpVal = (ind, v) => v == null ? '—' : ind.fmt === 'money' ? money0(v) : ind.fmt === 'money2' ? money2(v) : ind.fmt === 'pct' ? nf2.format(v) + '%' : ind.fmt === 'dec1' ? nf1.format(v) + ' pts/dia' : nf0.format(v) + (ind.key === 'check' ? ' pts' : '');
   function repMonths() {
     const out = [];
     for (let k = curYm(); k >= firstYm() && out.length < 36; k = addMonths(k, -1)) out.push(k);

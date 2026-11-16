@@ -239,3 +239,33 @@ test('retenção de antigos e fidelização de novos: % que voltou, com amostra 
   const novo = team([['a', {}], ['b', {}]]); GB.computeRanking(novo, R);
   assert.ok(novo.hidden.includes('retAnt') && novo.hidden.includes('fidNov'));
 });
+
+test('checklist: nível e ranking pela média de pontos por dia trabalhado', () => {
+  const st = team([['a', {}], ['b', {}]]);
+  st.weights = { check: 100 }; st.hidden = GB.INDICATORS.filter(i => i.key !== 'check').map(i => i.key);
+  const full = { status: 'aprovado' };
+  // a: 2 dias com 3 pts cada; b: 1 dia com 3 pts + 10 pts trazidos cobrindo 4 dias.
+  st.pop = [
+    { barberId: 'a', day: '2026-10-05', ev: { google: [full, full, full] } },
+    { barberId: 'a', day: '2026-10-06', ev: { google: [full, full, full] } },
+    { barberId: 'b', day: '2026-10-01', ev: {}, adj: 10, adjDays: 4 },
+    { barberId: 'b', day: '2026-10-07', ev: { google: [full, full, full] } },
+  ];
+  const res = GB.computeRanking(st, R);
+  assert.equal(byId(res, 'a').values.check, 3);
+  assert.equal(byId(res, 'b').values.check, 13 / 5);
+  assert.equal(GB.INDICATORS.find(i => i.key === 'check').fmt, 'dec1');
+  // Meta antiga em total do mês vira pontos por dia.
+  st.goals = { team: { check: 390 } };
+  assert.equal(GB.goalFor(st, 'a', 'check'), 20.5);
+});
+
+test('checklist: item retirado vale só antes da data; item novo só a partir dela', () => {
+  const cfg = GB.popCfgOf({});
+  const ids = d => Array.from(GB.popItemsFor(cfg, d), i => i.id).join(',');
+  assert.ok(ids('2026-11-15').includes('estrat') && !ids('2026-11-15').includes('retorno'));
+  assert.ok(!ids('2026-11-16').includes('estrat') && ids('2026-11-16').includes('retorno'));
+  assert.equal(GB.popDayMax(cfg, '2026-11-16'), 24);
+  const rec = { day: '2026-11-13', ev: { estrat: [{ status: 'aprovado' }, { status: 'aprovado' }, { status: 'aprovado' }] } };
+  assert.equal(GB.popDayPts(cfg, rec), 2);
+});
