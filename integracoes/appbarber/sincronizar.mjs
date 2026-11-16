@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSAO = "2.6";
+const VERSAO = "2.7";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const TESTE = process.argv.includes("--teste");
 const CARGA = process.argv.includes("--carga"); // carga inicial: lê todas as comandas no ritmo máximo permitido
@@ -201,7 +201,7 @@ async function main() {
   const idCli = (a) => { const k = String(a.client_phone || "").replace(/\D/g, "") || String(a.person_code || a.client_code || a.client_id || "") || String(a.client_name || "").trim().toLowerCase(); return k ? createHash("sha1").update(k).digest("hex").slice(0, 12) : ""; };
   function guardaVisitas(lst, de, ate) {
     const porDia = {};
-    for (const a of lst) { const d = dia(a.scheduling_start), p = String(a.employee_name || "").trim(), c = idCli(a); if (d && p && c && d >= de && d <= ate) (porDia[d] = porDia[d] || []).push([p, c]); }
+    for (const a of lst) { const d = dia(a.scheduling_start), p = String(a.employee_name || "").trim(), c = idCli(a), inv = Number(a.invoice_code) > 0 ? String(a.invoice_code) : ""; if (d && p && c && d >= de && d <= ate) (porDia[d] = porDia[d] || []).push(inv ? [p, c, inv] : [p, c]); }
     for (let d = de; d <= ate; d = somaDias(d, 1)) vis.v[d] = porDia[d] || [];
   }
   guardaVisitas(lista, iso(ini), iso(hoje));
@@ -220,19 +220,24 @@ async function main() {
   for (const d of Object.keys(vis.v)) if (d < somaDias(alvoHist, -10)) delete vis.v[d];
   try { writeFileSync(VIS, JSON.stringify(vis)); } catch { /* opcional */ }
   // Por profissional e dia de fechamento: base e quantos voltaram (antigos e novos).
+  // Planos mensais: visita cuja comanda é de plano fica marcada (4º campo = 1). Cliente NOVO que fecha plano conta como
+  // fidelizado; ASSINANTE que volta todo mês fica fora das duas taxas.
   function retencao(desdeData) {
-    const porCli = new Map();
-    for (const [d, l] of Object.entries(vis.v)) for (const [p, c] of l) { if (!porCli.has(c)) porCli.set(c, []); porCli.get(c).push([d, p]); }
+    for (const l of Object.values(vis.v)) for (const e of l) if (e[2] && !e[3] && cache[e[2]] && cache[e[2]].pl) e[3] = 1;
+    try { writeFileSync(VIS, JSON.stringify(vis)); } catch { /* opcional */ }
+    const porCli = new Map(), plano = new Map(); // cliente → datas com comanda de plano
+    for (const [d, l] of Object.entries(vis.v)) for (const [p, c, , pl] of l) { if (!porCli.has(c)) porCli.set(c, []); porCli.get(c).push([d, p]); if (pl) { if (!plano.has(c)) plano.set(c, []); plano.get(c).push(d); } }
     const out = new Map();
     for (let fecha = desdeData; fecha <= iso(hoje); fecha = somaDias(fecha, 1)) {
       const d0 = somaDias(fecha, -RET_N);
       if (!vis.since || vis.since > somaDias(d0, -RET_LB) || !vis.v[d0]) continue; // sem histórico suficiente
       const vistos = new Set();
-      for (const [p, c] of vis.v[d0]) {
+      for (const [p, c, , pl] of vis.v[d0]) {
         if (vistos.has(p + "|" + c)) continue; vistos.add(p + "|" + c);
-        const hist = porCli.get(c) || [];
+        const hist = porCli.get(c) || [], dPl = plano.get(c) || [];
         const antigo = hist.some(([d]) => d < d0 && d >= somaDias(d0, -RET_LB));
-        const voltou = hist.some(([d, q]) => q === p && d > d0 && d <= fecha);
+        if (antigo && dPl.some((d) => d >= somaDias(d0, -RET_LB) && d <= fecha)) continue; // assinante: volta por contrato, fica fora
+        const voltou = !!pl || hist.some(([d, q]) => q === p && d > d0 && d <= fecha); // novo que fechou plano = fidelizado
         const k = (NOMES[p] || p) + "|" + fecha, o = out.get(k) || { aB: 0, aV: 0, nB: 0, nV: 0 };
         if (antigo) { o.aB++; if (voltou) o.aV++; } else { o.nB++; if (voltou) o.nV++; }
         out.set(k, o);
