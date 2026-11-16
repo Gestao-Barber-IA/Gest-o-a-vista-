@@ -2931,3 +2931,6 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .how-bar { height: 8px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
 .how-bar i { display: block; height: 100%; border-radius: 99px; background: var(--accent); }
 .how-list b { color: var(--accent); min-width: 3ch; text-align: right; }
+/* Menu aberto: o arraste fica só no menu (não passa para a página de trás) */
+.drawer { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+.scrim { touch-action: none; overscroll-behavior: contain; }
