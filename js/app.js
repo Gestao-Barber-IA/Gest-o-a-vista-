@@ -4109,7 +4109,8 @@ Content-Type: application/json</pre>
         <button class="btn btn-sm" data-action="exportJson">${icon('download')} Cópia completa (JSON)</button>
         <button class="btn btn-sm" data-action="exportCsv">${icon('download')} Lançamentos em planilha (CSV)</button>
       </div></section>
-    ${unitsCard()}`;
+    ${unitsCard()}
+    ${termsCard()}`;
   }
 
   // Cópia dos dados da empresa (portabilidade, LGPD). Sem senhas, chave da API nem convites.
@@ -6907,6 +6908,83 @@ Content-Type: application/json</pre>
       window.scrollTo(0, y);
     }
   }
+  // ---------- Termos e regras da barbearia (aceite com nome completo e assinatura) ----------
+  // O dono escreve as regras (Configurações › Empresa). Cada profissional, ao entrar, lê, marca o aceite,
+  // escreve o nome completo e assina com o dedo. Publicar uma nova versão pede o aceite de novo.
+  const termsCfg = () => (state.terms && String(state.terms.text || '').trim() ? state.terms : null);
+  const termsAll = () => (Array.isArray(state.termAccepts) ? state.termAccepts : []);
+  const termsDone = u => { const t = termsCfg(); return !t || termsAll().some(a => a.userId === u.id && a.ver === t.ver); };
+  const termsNeeded = u => !!u && !isGestor(u) && !termsDone(u);
+  const termsHtml = t => esc(t).split(/\n{2,}/).map(par => `<p>${par.replace(/\n/g, '<br>')}</p>`).join('');
+  function renderTerms(user) {
+    const t = termsCfg(), d = ui.termDraft || (ui.termDraft = { ok: false, name: '', drawn: false });
+    root.innerHTML = `<main class="tm-wrap">
+      <section class="card tm-card">
+        <div class="tm-head">${companyAvatar(52)}<div><h1>${esc(t.title || 'Termos e regras da ' + (state.company.name || 'barbearia'))}</h1><p class="muted">Leia com atenção. Para continuar usando o sistema, aceite, escreva seu nome completo e assine.</p></div></div>
+        <div class="tm-text" id="tm-text" tabindex="0">${termsHtml(t.text)}</div>
+        <label class="check tm-ok"><input type="checkbox" id="tm-ok" ${d.ok ? 'checked' : ''}><span><b>Li e aceito os termos e as regras acima.</b></span></label>
+        <label class="field"><span>Nome completo *</span><input class="input" id="tm-name" autocomplete="name" maxlength="80" value="${esc(d.name)}" placeholder="Seu nome e sobrenome"></label>
+        <div class="field"><span class="tm-flabel">Assinatura * <small class="muted">(use o dedo ou o mouse)</small></span>
+          <canvas id="tm-sig" class="tm-sig" width="900" height="300" aria-label="Espaço para assinar"></canvas>
+          <button type="button" class="link-btn" data-action="termClear">${icon('undo')} Limpar assinatura</button></div>
+        <p class="form-msg" id="tm-msg"></p>
+        <div class="btn-row"><button class="btn btn-primary" data-action="termAccept">${icon('check')} Aceitar e entrar</button>
+          <button class="btn" data-action="logout">${icon('logout')} Sair</button></div>
+      </section></main>`;
+    const cv = $('#tm-sig'), cx = cv.getContext('2d');
+    cx.lineWidth = 5; cx.lineCap = 'round'; cx.lineJoin = 'round'; cx.strokeStyle = '#111';
+    cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height);
+    let down = false, last = null;
+    const pt = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * cv.width / r.width, (e.clientY - r.top) * cv.height / r.height]; };
+    cv.addEventListener('pointerdown', e => { down = true; last = pt(e); cv.setPointerCapture(e.pointerId); e.preventDefault(); });
+    cv.addEventListener('pointermove', e => { if (!down) return; const p2 = pt(e); cx.beginPath(); cx.moveTo(...last); cx.lineTo(...p2); cx.stroke(); last = p2; d.drawn = true; e.preventDefault(); });
+    const up = () => { down = false; };
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+    $('#tm-ok').addEventListener('change', e => { d.ok = e.target.checked; });
+    $('#tm-name').addEventListener('input', e => { d.name = e.target.value; });
+  }
+  async function termAccept() {
+    const user = currentUser(), t = termsCfg(), d = ui.termDraft || {}, msg = $('#tm-msg');
+    const name = String(d.name || '').replace(/\s+/g, ' ').trim();
+    const say = m => { if (msg) msg.textContent = m; };
+    if (!user || !t) return;
+    if (!d.ok) return say('Marque que leu e aceita os termos.');
+    if (name.split(' ').filter(w => w.length > 1).length < 2) return say('Escreva seu nome completo (nome e sobrenome).');
+    if (!d.drawn) return say('Assine no espaço indicado.');
+    const cv = $('#tm-sig'), small = document.createElement('canvas'); small.width = 450; small.height = 150;
+    small.getContext('2d').drawImage(cv, 0, 0, 450, 150);
+    const sig = small.toDataURL('image/jpeg', 0.7);
+    state.termAccepts = [...termsAll().filter(a => !(a.userId === user.id && a.ver === t.ver)), { id: uid('ta_'), userId: user.id, ver: t.ver, name: name.slice(0, 80), sig, at: new Date().toISOString() }];
+    ui.termDraft = null; save(); toast('Termos aceitos. Bem-vindo(a)!'); render();
+  }
+  // Configurações › Empresa: o dono escreve os termos, publica e acompanha quem assinou.
+  function termsCard() {
+    const t = state.terms || {}, cur = termsCfg(), team = state.users.filter(u => u.role !== 'gestor' && u.status !== 'pendente');
+    const acc = cur ? termsAll().filter(a => a.ver === cur.ver) : [];
+    const done = team.filter(u => acc.some(a => a.userId === u.id)), miss = team.filter(u => !acc.some(a => a.userId === u.id));
+    const when = s2 => new Date(s2).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return `<section class="section card tmc-card" id="termos">
+      <h2 class="section-title">${icon('file')} Termos e regras da barbearia</h2>
+      <p class="section-note">Cada profissional, ao entrar no sistema, lê estas regras, marca o aceite, escreve o nome completo e assina. Só depois o sistema libera. Ao <b>publicar uma nova versão</b>, todos precisam aceitar de novo.</p>
+      <form class="form" data-form="terms" novalidate>
+        <label class="field"><span>Título</span><input class="input" name="title" maxlength="80" value="${esc(t.title || '')}" placeholder="Termos e regras da ${esc(state.company.name || 'barbearia')}"></label>
+        <label class="field"><span>Texto dos termos e regras *</span><textarea class="input tmc-ta" name="text" rows="12" maxlength="20000" placeholder="Cole aqui as regras da barbearia. Deixe uma linha em branco entre os parágrafos.">${esc(t.text || '')}</textarea></label>
+        <p class="form-msg" data-msg></p>
+        <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} ${cur ? 'Publicar nova versão' : 'Publicar termos'}</button>
+        ${cur ? `<button type="button" class="btn ${ui.confirm === 'termsOff' ? 'btn-danger' : ''}" data-action="termsOff">${ui.confirm === 'termsOff' ? 'Confirmar: desligar os termos' : 'Desligar termos'}</button>` : ''}</div>
+      </form>
+      ${cur ? `<div class="tmc-status"><p><b>Versão publicada em ${esc(when(cur.ver))}</b> · ${done.length} de ${team.length} assinaram.</p>
+        ${done.length ? `<ul class="tmc-list">${done.map(u => { const a = acc.find(x => x.userId === u.id); return `<li><button type="button" class="tmc-sig" data-action="termView" data-id="${esc(a.id)}" aria-label="Ver assinatura de ${esc(u.name)}"><img src="${esc(a.sig)}" alt=""></button><span><b>${esc(a.name)}</b><small>${esc(u.name)} · ${esc(when(a.at))}</small></span><span class="chip chip-ok">Assinado</span></li>`; }).join('')}</ul>` : ''}
+        ${miss.length ? `<p class="muted">Ainda não assinaram: ${miss.map(u => esc(u.name)).join(', ')}.</p>` : ''}</div>` : ''}
+      ${termViewer()}
+    </section>`;
+  }
+  function termViewer() {
+    const a = ui.termView && termsAll().find(x => x.id === ui.termView); if (!a) return '';
+    return `<div class="pop-viewer" role="dialog" aria-modal="true" aria-label="Assinatura"><div class="inst-scrim" data-action="termView" data-id=""></div>
+      <figure><img class="full tmc-full" src="${esc(a.sig)}" alt="Assinatura de ${esc(a.name)}"><figcaption><b>${esc(a.name)}</b><span>Aceitou em ${esc(new Date(a.at).toLocaleString('pt-BR'))}</span></figcaption>
+      <div class="btn-row pops-vnav"><button class="btn" data-action="termView" data-id="">${icon('x')} Fechar</button></div></figure></div>`;
+  }
   function render() {
     if (lockY !== null) pageLock(false); // a tela foi redesenhada: o menu volta fechado
     syncInds();
@@ -6918,6 +6996,7 @@ Content-Type: application/json</pre>
     if (h.startsWith('convite-')) { renderAuth('convite', h.slice(8)); return; }
     const user = currentUser();
     if (!user) { renderAuth(ui.authMode); return; }
+    if (termsNeeded(user)) { applyBrand(DB.demo || state.brand || 'barber'); renderTerms(user); return; }
     // Logado: vale a marca da empresa (e fica lembrada para a tela de login).
     applyBrand(DB.demo || state.brand || 'barber');
     if (DB.pref.get('brand', '') !== MARCA) DB.pref.set('brand', MARCA);
@@ -7598,6 +7677,14 @@ Content-Type: application/json</pre>
     defaultGoals() { state.goals = { ...(state.goals || {}), team: { ...GB.DEFAULT_GOALS } }; save(); toast('Metas padrão restauradas.'); render(); },
 
     bonusRoleta(el) { const f = el.form; ui.bonusDraft = { ...(ui.bonusDraft || {}), ...bonusDraftOf(f), tipo: 'dinheiro', valor: Number(el.dataset.v), motivo: 'Roleta – venda de 3 produtos', roleta: true }; render(); },
+    termClear() { const cv = $('#tm-sig'); if (!cv) return; const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); if (ui.termDraft) ui.termDraft.drawn = false; },
+    termAccept() { termAccept(); },
+    termView(el) { ui.termView = el.dataset.id || null; render(); },
+    termsOff() {
+      if (!isGestor(currentUser())) return;
+      if (ui.confirm !== 'termsOff') { ui.confirm = 'termsOff'; render(); return; }
+      ui.confirm = null; state.terms = { ...(state.terms || {}), text: '', ver: '' }; save(); toast('Termos desligados. Ninguém precisa aceitar.'); render();
+    },
     bonusTab(el) { ui.bonusTab = el.dataset.t === 'tipos' ? 'tipos' : 'reg'; ui.btEdit = null; ui.confirm = null; render(); },
     btEdit(el) { if (!isGestor(currentUser())) return; ui.btEdit = el.dataset.id || null; render(); if (ui.btEdit) setTimeout(() => document.querySelector('[data-form="bonusType"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 40); },
     btDel(el) {
@@ -7916,6 +8003,13 @@ Content-Type: application/json</pre>
       if (access === 'lider' || access === 'gestor') { const o = org(); o.access[id] = access; }
       save();
       toast(`${U(name)} adicionado. Agora envie o convite.`); render();
+    },
+    terms(f) {
+      if (!isGestor(currentUser())) return;
+      const text = val(f, 'text').trim(), title = val(f, 'title').trim();
+      if (text.length < 20) return setMsg(f, 'Cole o texto dos termos e regras.');
+      state.terms = { title: title.slice(0, 80), text: text.slice(0, 20000), ver: new Date().toISOString() };
+      save(); toast('Termos publicados. Cada profissional vai aceitar e assinar ao entrar.'); render();
     },
     bonusType(f) {
       if (!isGestor(currentUser())) return;
