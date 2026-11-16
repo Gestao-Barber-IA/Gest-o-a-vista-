@@ -3291,6 +3291,20 @@
     </section>`;
   }
   // Minha performance › "Como seus pontos são calculados": até quantos pontos (de 100) vale cada indicador (pesos do dono).
+  // Grupos do cartão "Como seus pontos são calculados".
+  const HOW_GROUPS = [
+    ['fin', 'Resultado financeiro', 'wallet', 'O quanto você fatura e o valor de cada atendimento.'],
+    ['cli', 'Cliente que fica', 'users', 'Planos e clientes que voltam: o que sustenta a agenda.'],
+    ['prod', 'Produtividade e disciplina', 'checksq', 'Agenda cheia e o dia a dia bem feito.'],
+    ['out', 'Outros', 'sparkle', 'Indicadores próprios da empresa.'],
+  ];
+  function howGroup(i) {
+    if (i.custom) return 'out';
+    if (['fat', 'ticket', 'extra', 'prod'].includes(i.key)) return 'fin';
+    if (i.key === 'serv') return GB.indMode('serv') === 'valor' ? 'fin' : 'prod';
+    if (['planos', 'retAnt', 'fidNov', 'fid'].includes(i.key)) return 'cli';
+    return 'prod';
+  }
   function noteHowCard() {
     const list = pctOf().filter(([, p]) => p > 0).sort((a, b) => b[1] - a[1]);
     if (!list.length) return '';
@@ -3298,7 +3312,10 @@
     return `<section class="section card how-card">
       <h2 class="section-title">${icon('chart')} Como seus pontos são calculados</h2>
       <p class="section-note">Sua pontuação vai até <b>100 pontos</b>. Cada indicador vale até os pontos abaixo: quem está em 1º no indicador ganha todos, o último ganha 0 e os outros ganham proporcional ao resultado.</p>
-      <ul class="how-list">${list.map(([i, p]) => `<li><span class="how-n">${esc(i.label)}</span><span class="how-bar"><i style="width:${Math.max(4, p / max * 100)}%"></i></span><b class="num">${p} pts</b></li>`).join('')}</ul>
+      ${HOW_GROUPS.map(([gk, gl, gi, gd]) => { const its = list.filter(([i]) => howGroup(i) === gk); if (!its.length) return '';
+        const tot = its.reduce((x, [, p]) => x + p, 0);
+        return `<div class="how-grp"><div class="how-gh">${icon(gi)}<span><b>${gl}</b><small>${gd}</small></span><b class="num how-gt">${tot} pts</b></div>
+          <ul class="how-list">${its.map(([i, p]) => `<li><span class="how-n">${esc(i.label)}</span><span class="how-bar"><i style="width:${Math.max(4, p / max * 100)}%"></i></span><b class="num">${p} pts</b></li>`).join('')}</ul></div>`; }).join('')}
       <a class="how-link" href="#ajuda">${icon('help')} Entenda Destaque e MVP</a>
     </section>`;
   }

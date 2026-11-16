@@ -2989,3 +2989,10 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
   body.printing-ct .main { padding: 0; max-width: none; }
 }
 .tm-prev { margin: 0; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--accent) 16%, transparent); font-size: .9rem; display: flex; gap: 8px; align-items: center; } .tm-prev svg { width: 16px; height: 16px; flex: 0 0 auto; }
+.how-grp { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin: 10px 0; }
+.how-gh { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.how-gh > svg { width: 20px; height: 20px; color: var(--accent); flex: 0 0 auto; }
+.how-gh > span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.how-gh small { color: var(--muted); font-size: .8rem; }
+.how-gt { font-size: 1.1rem; color: var(--accent); white-space: nowrap; }
+.how-grp .how-list { margin: 4px 0 0; }
