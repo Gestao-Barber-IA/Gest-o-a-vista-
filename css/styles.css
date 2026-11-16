@@ -2959,3 +2959,32 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .tm-text h3:first-child { margin-top: 0; }
 .tm-text h4 { font-size: .95rem; margin: 12px 0 4px; }
 .tm-text ul { margin: 0 0 10px; padding-left: 20px; display: grid; gap: 6px; }
+/* Contratos */
+.ct-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.ct-item { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 14px; text-align: left; color: inherit; font: inherit; cursor: pointer; border: 1px solid var(--line); }
+.ct-ic { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); flex: 0 0 auto; }
+.ct-ic svg { width: 20px; height: 20px; }
+.ct-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ct-body small { color: var(--muted); overflow-wrap: anywhere; }
+.ct-tools { margin-bottom: 12px; }
+.ct-doc { display: grid; gap: 16px; }
+.ct-dhead h2 { margin: 0 0 4px; font-size: 1.2rem; }
+.ct-dhead p { margin: 0; color: var(--muted); }
+.ct-text { max-height: none; }
+.ct-sign { display: grid; gap: 12px; border-top: 1px solid var(--line); padding-top: 14px; }
+.ct-decl { margin: 0; font-weight: 700; }
+.ct-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.ct-grid div { display: flex; flex-direction: column; gap: 2px; }
+.ct-grid small { color: var(--muted); }
+.ct-sigbox { display: grid; justify-items: start; gap: 4px; }
+.ct-sigbox img { width: min(360px, 100%); background: #fff; border-radius: 10px; border: 1px solid var(--line); }
+.ct-sigbox span { font-size: .85rem; color: var(--muted); border-top: 1px solid var(--muted); padding-top: 2px; width: min(360px, 100%); text-align: center; }
+.ct-id { margin: 0; font-size: .75rem; color: var(--muted); }
+@media print {
+  body.printing-ct { background: #fff !important; }
+  body.printing-ct .topbar, body.printing-ct .drawer, body.printing-ct .scrim, body.printing-ct .fab, body.printing-ct .popover, body.printing-ct .toast, body.printing-ct .ct-tools, body.printing-ct .demo-bar, body.printing-ct .sub-banner, body.printing-ct .trial-banner, body.printing-ct .gc-ov { display: none !important; }
+  body.printing-ct .ct-doc, body.printing-ct .ct-doc * { background: #fff !important; color: #111 !important; box-shadow: none !important; }
+  body.printing-ct .ct-doc { border: 0 !important; padding: 0 !important; }
+  body.printing-ct .tm-text { border: 0 !important; padding: 0 !important; overflow: visible !important; max-height: none !important; }
+  body.printing-ct .main { padding: 0; max-width: none; }
+}

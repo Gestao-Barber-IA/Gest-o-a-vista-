@@ -759,6 +759,7 @@
       { r: 'avisos', t: 'Avisos e alterações', i: 'bell' },
       { r: 'bonus', t: 'Bônus', i: 'diamond' },
       { r: 'precos', t: 'Tabela de Preços e Planos', i: 'card' },
+      { r: 'contratos', t: 'Contratos', i: 'file' },
     ] },
     { group: 'Apresentações', items: [
       { r: 'apresentacao', t: 'Tela da loja', i: 'monitor', g: 1 },
@@ -6073,6 +6074,7 @@ Content-Type: application/json</pre>
     avisos: { t: 'Avisos e alterações', r: pageAvisos },
     fiscalizacao: { t: 'Fiscalização', r: pageFiscalizacao, g: 1, a: 1 },
     bonus: { t: 'Bônus', r: pageBonus },
+    contratos: { t: 'Contratos', r: pageContratos },
     comissoes: { t: 'Comissões e prêmios', r: pageComissoes, g: 1 },
     sonhos: { t: 'Sonhos', r: pageSonhos },
     sugestoes: { t: 'Sugestões de melhorias', r: pageSugestoes, g: 1 },
@@ -6981,8 +6983,51 @@ Content-Type: application/json</pre>
     const cv = $('#tm-sig'), small = document.createElement('canvas'); small.width = 450; small.height = 150;
     small.getContext('2d').drawImage(cv, 0, 0, 450, 150);
     const sig = small.toDataURL('image/jpeg', 0.7);
-    state.termAccepts = [...termsAll().filter(a => !(a.userId === user.id && a.ver === t.ver)), { id: uid('ta_'), userId: user.id, ver: t.ver, name: name.slice(0, 80), cnpj: cnpjFmt(d.cnpj), sig, at: new Date().toISOString() }];
+    state.termAccepts = [...termsAll().filter(a => !(a.userId === user.id && a.ver === t.ver)), { id: uid('ta_'), userId: user.id, ver: t.ver, name: name.slice(0, 80), cnpj: cnpjFmt(d.cnpj), sig, at: new Date().toISOString(), title: t.title || '', text: t.text, company: state.company.name || '', companyCnpj: state.company.cnpj || '' }];
     ui.termDraft = null; save(); toast('Termos aceitos. Bem-vindo(a)!'); render();
+  }
+  // ---------- Contratos: o documento assinado de cada profissional ----------
+  // O dono vê todos; cada um vê só o seu. O documento guarda o texto exatamente como estava no dia da assinatura.
+  function pageContratos(user) {
+    const own = isGestor(user), list = termsAll().filter(a => own || a.userId === user.id).sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    const userName = id => (state.users.find(u => u.id === id) || {}).name || '';
+    const when = s2 => new Date(s2).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const cur = termsCfg(), v = ui.ctView && list.find(a => a.id === ui.ctView);
+    if (v) return contractDoc(v, own);
+    const q = normH(ui.ctQ || ''), shown = list.filter(a => !q || normH(`${a.name} ${a.cnpj || ''} ${userName(a.userId)}`).includes(q));
+    return `<section class="section card"><h2 class="section-title">${icon('file')} Contratos</h2>
+        <p class="section-note">${own ? 'Os termos e regras assinados por cada profissional, gestor e líder, com nome completo, CNPJ, data e assinatura. Toque para abrir, imprimir ou salvar em PDF.' : 'Os termos e regras que você assinou. Toque para abrir, imprimir ou salvar em PDF.'}</p>
+        ${own && list.length > 4 ? `<input class="input" type="search" placeholder="Buscar por nome ou CNPJ" value="${esc(ui.ctQ || '')}" data-change="ctQ" aria-label="Buscar contrato">` : ''}
+      </section>
+      ${shown.length ? `<section class="section"><ul class="ct-list">${shown.map(a => `<li><button type="button" class="card ct-item" data-action="ctOpen" data-id="${esc(a.id)}">
+          <span class="ct-ic">${icon('file')}</span>
+          <span class="ct-body"><b>${esc(a.name)}</b><small>${a.cnpj ? 'CNPJ ' + esc(a.cnpj) + ' · ' : ''}assinado em ${esc(when(a.at))}${own && userName(a.userId) && userName(a.userId) !== a.name ? ' · ' + esc(userName(a.userId)) : ''}</small>
+            <small>${esc(a.title || 'Termos e regras')}</small></span>
+          ${cur && a.ver === cur.ver ? '<span class="chip chip-ok">Versão atual</span>' : '<span class="chip chip-soft">Versão anterior</span>'}
+        </button></li>`).join('')}</ul></section>`
+        : `<div class="card empty">${icon('file')}<h2>Nenhum contrato assinado</h2><p>${own ? 'Os contratos aparecem aqui quando cada pessoa aceitar e assinar os termos e regras (Configurações › Empresa › Termos e regras da barbearia).' : 'Seus contratos assinados aparecem aqui.'}</p></div>`}`;
+  }
+  function contractDoc(a, own) {
+    const text = a.text || (termsCfg() && termsCfg().ver === a.ver ? termsCfg().text : '');
+    const when = new Date(a.at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const u = state.users.find(x => x.id === a.userId) || {};
+    return `<div class="btn-row ct-tools"><button class="btn" data-action="ctOpen" data-id="">${icon('left')} Voltar</button><button class="btn btn-primary" data-action="ctPrint">${icon('download')} Imprimir / salvar PDF</button></div>
+      <article class="card ct-doc">
+        <header class="ct-dhead"><h2>${esc(a.title || 'Termos e regras da ' + (a.company || state.company.name || 'barbearia'))}</h2>
+          <p>${esc(a.company || state.company.name || '')}${(a.companyCnpj || state.company.cnpj) ? ' · CNPJ ' + esc(a.companyCnpj || state.company.cnpj) : ''}</p></header>
+        <div class="tm-text ct-text">${text ? termsHtml(text) : '<p class="muted">Texto desta versão não disponível.</p>'}</div>
+        <section class="ct-sign">
+          <p class="ct-decl">Declaro que li e aceito os termos e as regras acima.</p>
+          <div class="ct-grid">
+            <div><small>Nome completo</small><b>${esc(a.name)}</b></div>
+            <div><small>CNPJ</small><b>${esc(a.cnpj || '—')}</b></div>
+            <div><small>Data e hora do aceite</small><b>${esc(when)}</b></div>
+            ${own && u.email ? `<div><small>Usuário</small><b>${esc(u.email)}</b></div>` : ''}
+          </div>
+          <div class="ct-sigbox"><img src="${esc(a.sig)}" alt="Assinatura de ${esc(a.name)}"><span>Assinatura</span></div>
+          <p class="ct-id">Documento ${esc(a.id)} · versão ${esc(new Date(a.ver).toLocaleString('pt-BR'))}</p>
+        </section>
+      </article>`;
   }
   // Configurações › Empresa: o dono escreve os termos, publica e acompanha quem assinou.
   function termsCard() {
@@ -7002,7 +7047,8 @@ Content-Type: application/json</pre>
       </form>
       ${cur ? `<div class="tmc-status"><p><b>Versão publicada em ${esc(when(cur.ver))}</b> · ${done.length} de ${team.length} assinaram.</p>
         ${done.length ? `<ul class="tmc-list">${done.map(u => { const a = acc.find(x => x.userId === u.id); return `<li><button type="button" class="tmc-sig" data-action="termView" data-id="${esc(a.id)}" aria-label="Ver assinatura de ${esc(u.name)}"><img src="${esc(a.sig)}" alt=""></button><span><b>${esc(a.name)}</b><small>${a.cnpj ? 'CNPJ ' + esc(a.cnpj) + ' · ' : ''}${esc(u.name)} · ${esc(when(a.at))}</small></span><span class="chip chip-ok">Assinado</span></li>`; }).join('')}</ul>` : ''}
-        ${miss.length ? `<p class="muted">Ainda não assinaram: ${miss.map(u => esc(u.name)).join(', ')}.</p>` : ''}</div>` : ''}
+        ${miss.length ? `<p class="muted">Ainda não assinaram: ${miss.map(u => esc(u.name)).join(', ')}.</p>` : ''}
+        <a class="btn btn-sm" href="#contratos">${icon('file')} Ver os contratos assinados</a></div>` : ''}
       ${termViewer()}
     </section>`;
   }
@@ -7704,6 +7750,8 @@ Content-Type: application/json</pre>
     defaultGoals() { state.goals = { ...(state.goals || {}), team: { ...GB.DEFAULT_GOALS } }; save(); toast('Metas padrão restauradas.'); render(); },
 
     bonusRoleta(el) { const f = el.form; ui.bonusDraft = { ...(ui.bonusDraft || {}), ...bonusDraftOf(f), tipo: 'dinheiro', valor: Number(el.dataset.v), motivo: 'Roleta – venda de 3 produtos', roleta: true }; render(); },
+    ctOpen(el) { ui.ctView = el.dataset.id || null; render(); window.scrollTo(0, 0); },
+    ctPrint() { document.body.classList.add('printing-ct'); setTimeout(() => { window.print(); document.body.classList.remove('printing-ct'); }, 60); },
     termClear() { const cv = $('#tm-sig'); if (!cv) return; const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); if (ui.termDraft) ui.termDraft.drawn = false; },
     termAccept() { termAccept(); },
     termView(el) { ui.termView = el.dataset.id || null; render(); },
@@ -8284,6 +8332,7 @@ Content-Type: application/json</pre>
     },
     wNum(el) { wRefresh(el.form); },
     bonusYm(el) { ui.bonusYm = el.value; render(); },
+    ctQ(el) { ui.ctQ = el.value; render(); },
     extraBase(el) {
       if (!isGestor(currentUser())) return;
       const n = el.dataset.n, c = { ...(state.extraCombo || {}) }, key = Object.keys(c).find(k => GB.normSvc(k) === GB.normSvc(n)) || n;
