@@ -2934,3 +2934,57 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 /* Menu aberto: o arraste fica só no menu (não passa para a página de trás) */
 .drawer { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
 .scrim { touch-action: none; overscroll-behavior: contain; }
+/* Termos e regras: tela de aceite */
+.tm-wrap { min-height: 100dvh; display: grid; place-items: start center; padding: calc(16px + env(safe-area-inset-top, 0px)) 16px 32px; }
+.tm-card { width: min(720px, 100%); display: grid; gap: 14px; }
+.tm-head { display: flex; gap: 12px; align-items: center; }
+.tm-head h1 { font-size: 1.25rem; margin: 0 0 4px; }
+.tm-head p { margin: 0; }
+.tm-text { max-height: 46vh; overflow-y: auto; overscroll-behavior: contain; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2); line-height: 1.55; font-size: .95rem; }
+.tm-text p { margin: 0 0 10px; }
+.tm-ok { margin: 0; }
+.tm-sig { width: 100%; height: auto; aspect-ratio: 3 / 1; background: #fff; border-radius: 12px; border: 2px dashed var(--line-accent, var(--accent)); touch-action: none; display: block; cursor: crosshair; }
+/* Configurações › Termos */
+.tmc-ta { min-height: 220px; font-size: .92rem; line-height: 1.5; }
+.tmc-status { margin-top: 14px; display: grid; gap: 8px; }
+.tmc-status p { margin: 0; }
+.tmc-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.tmc-list li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; }
+.tmc-list li > span:not(.chip) { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tmc-list small { color: var(--muted); }
+.tmc-sig { padding: 0; border: 0; background: #fff; border-radius: 8px; width: 96px; height: 32px; overflow: hidden; cursor: zoom-in; flex: 0 0 auto; }
+.tmc-sig img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.tmc-full { background: #fff; border-radius: 12px; }
+.tm-text h3 { font-size: 1rem; margin: 16px 0 8px; color: var(--accent); letter-spacing: .02em; }
+.tm-text h3:first-child { margin-top: 0; }
+.tm-text h4 { font-size: .95rem; margin: 12px 0 4px; }
+.tm-text ul { margin: 0 0 10px; padding-left: 20px; display: grid; gap: 6px; }
+/* Contratos */
+.ct-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.ct-item { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 14px; text-align: left; color: inherit; font: inherit; cursor: pointer; border: 1px solid var(--line); }
+.ct-ic { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); flex: 0 0 auto; }
+.ct-ic svg { width: 20px; height: 20px; }
+.ct-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ct-body small { color: var(--muted); overflow-wrap: anywhere; }
+.ct-tools { margin-bottom: 12px; }
+.ct-doc { display: grid; gap: 16px; }
+.ct-dhead h2 { margin: 0 0 4px; font-size: 1.2rem; }
+.ct-dhead p { margin: 0; color: var(--muted); }
+.ct-text { max-height: none; }
+.ct-sign { display: grid; gap: 12px; border-top: 1px solid var(--line); padding-top: 14px; }
+.ct-decl { margin: 0; font-weight: 700; }
+.ct-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.ct-grid div { display: flex; flex-direction: column; gap: 2px; }
+.ct-grid small { color: var(--muted); }
+.ct-sigbox { display: grid; justify-items: start; gap: 4px; }
+.ct-sigbox img { width: min(360px, 100%); background: #fff; border-radius: 10px; border: 1px solid var(--line); }
+.ct-sigbox span { font-size: .85rem; color: var(--muted); border-top: 1px solid var(--muted); padding-top: 2px; width: min(360px, 100%); text-align: center; }
+.ct-id { margin: 0; font-size: .75rem; color: var(--muted); }
+@media print {
+  body.printing-ct { background: #fff !important; }
+  body.printing-ct .topbar, body.printing-ct .drawer, body.printing-ct .scrim, body.printing-ct .fab, body.printing-ct .popover, body.printing-ct .toast, body.printing-ct .ct-tools, body.printing-ct .demo-bar, body.printing-ct .sub-banner, body.printing-ct .trial-banner, body.printing-ct .gc-ov { display: none !important; }
+  body.printing-ct .ct-doc, body.printing-ct .ct-doc * { background: #fff !important; color: #111 !important; box-shadow: none !important; }
+  body.printing-ct .ct-doc { border: 0 !important; padding: 0 !important; }
+  body.printing-ct .tm-text { border: 0 !important; padding: 0 !important; overflow: visible !important; max-height: none !important; }
+  body.printing-ct .main { padding: 0; max-width: none; }
+}

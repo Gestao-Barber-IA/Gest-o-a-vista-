@@ -2,6 +2,14 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-16-contratos', date: '2026-11-16', title: 'Nova aba Contratos', items: [
+    ['novo', 'Depois da assinatura dos termos e regras, o documento fica guardado na aba Contratos: o texto como estava no dia, nome completo, CNPJ, data e a assinatura. Dá para imprimir ou salvar em PDF.'],
+    ['melhoria', 'O dono vê o contrato de todos; cada profissional, gestor e líder vê só o seu.'],
+  ] },
+  { id: '2026-11-16-termos', date: '2026-11-16', title: 'Termos e regras com assinatura', items: [
+    ['novo', 'Em Configurações › Empresa › Termos e regras da barbearia, o dono publica as regras. Ao entrar, cada profissional, gestor e líder lê, marca o aceite, escreve o nome completo e o CNPJ e assina com o dedo; só então o sistema libera.'],
+    ['novo', 'O dono vê quem já assinou (com nome, data e a assinatura) e quem falta. Publicar uma nova versão pede o aceite de todos de novo.'],
+  ] },
   { id: '2026-11-16-nota', date: '2026-11-16', title: 'Como seus pontos são calculados', items: [
     ['novo', 'No topo de Minha performance, o profissional vê até quantos pontos (de 100) vale cada indicador, conforme os pesos definidos pelo dono.'],
   ] },

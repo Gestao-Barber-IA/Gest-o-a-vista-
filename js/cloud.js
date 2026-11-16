@@ -246,13 +246,14 @@
     pop: { key: r => r.barberId + '|' + r.day, row: (r, cid) => ({ id: r.barberId + '|' + r.day, company_id: cid, barber_id: r.barberId, day: r.day, data: { ev: r.ev || {}, notes: r.notes || {}, msg: r.msg || {}, res: r.res || null, by: r.by || null, at: r.at || null, ...(Number(r.adj) > 0 ? { adj: Number(r.adj), adjNote: r.adjNote || '' } : {}) } }), list: s => s.pop || [], pk: r => ({ id: r.id }) },
     monthly: { key: m => m.barberId + '|' + m.month, row: (m, cid) => ({ company_id: cid, barber_id: m.barberId, month: m.month, data: { ...pick(m, MONTH_KEYS), ...(m._adj && Object.keys(m._adj).length ? { _adj: m._adj } : {}) } }), list: s => s.monthly || [], pk: r => ({ barber_id: r.barber_id, month: r.month }) },
     planSales: { key: v => v.id, row: (v, cid) => ({ id: v.id, company_id: cid, barber_id: v.barberId, date: v.date, data: { nome: v.nome, fone: v.fone, plano: v.plano, by: v.by || null } }), list: s => s.planSales || [], pk: r => ({ id: r.id }) },
+    termAccepts: { key: v => v.id, row: (v, cid) => ({ id: v.id, company_id: cid, user_id: v.userId, ver: v.ver, data: { name: v.name, cnpj: v.cnpj || '', sig: v.sig, at: v.at, title: v.title || '', text: v.text || '', company: v.company || '', companyCnpj: v.companyCnpj || '' } }), list: s => s.termAccepts || [], pk: r => ({ id: r.id }) },
     bonusRecs: { key: v => v.id, row: (v, cid) => ({ id: v.id, company_id: cid, barber_id: v.barberId, date: v.date, data: { tipo: v.tipo, valor: v.valor ?? null, item: v.item || '', motivo: v.motivo || '', desc: v.desc || '', by: v.by || null, byUser: v.byUser || null } }), list: s => s.bonusRecs || [], pk: r => ({ id: r.id }) },
     comandaRecs: { key: v => v.id, row: (v, cid) => ({ id: v.id, company_id: cid, barber_id: v.barberId, date: v.date, data: { valor: v.valor, foto: v.foto, by: v.by || null } }), list: s => s.comandaRecs || [], pk: r => ({ id: r.id }) },
   };
-  const TNAME = { pop: 'pop_records', planSales: 'plan_sales', comandaRecs: 'comanda_records', bonusRecs: 'bonus_records' };
+  const TNAME = { pop: 'pop_records', planSales: 'plan_sales', comandaRecs: 'comanda_records', bonusRecs: 'bonus_records', termAccepts: 'term_accepts' };
   const tbl = t => TNAME[t] || t;
-  const ORDER_UP = ['barbers', 'invites', 'entries', 'monthly', 'pop', 'planSales', 'comandaRecs', 'bonusRecs'];
-  const ORDER_DEL = ['bonusRecs', 'comandaRecs', 'planSales', 'pop', 'monthly', 'entries', 'invites', 'barbers'];
+  const ORDER_UP = ['barbers', 'invites', 'entries', 'monthly', 'pop', 'planSales', 'comandaRecs', 'bonusRecs', 'termAccepts'];
+  const ORDER_DEL = ['termAccepts', 'bonusRecs', 'comandaRecs', 'planSales', 'pop', 'monthly', 'entries', 'invites', 'barbers'];
 
   function snapshot(s, cid) {
     const out = { tables: {}, company: '', users: {} };
@@ -262,7 +263,7 @@
       out.tables[t] = map;
     }
     const co = s.company;
-    out.company = JSON.stringify({ name: co.name, cnpj: co.cnpj || '', phone: co.phone || '', email: co.email || '', logo: co.logo || null, settings: { weights: s.weights, goals: s.goals, hidden: s.hidden, org: s.org || null, pop: s.popCfg || null, reveal: s.reveal || null, ocup: s.ocupCfg || null, pops: s.pops || null, precos: Array.isArray(s.precos) && s.precos.length ? s.precos : null, bonusTypes: Array.isArray(s.bonusTypes) && s.bonusTypes.length ? s.bonusTypes : null, bonusTypesAt: s.bonusTypesAt || null, brand: s.brand || null, theme: s.theme || null, houseGoals: s.houseGoals || null, houseGoalsM: s.houseGoalsM || null, music: s.podiumMusic || null, births: s.births || null, demoKit: s.demoKit || null, com: s.comCfg || null, dreams: s.dreams || null, units: s.units || null, prize: s.prize || null, planos: s.planCatalog || null, customInds: Array.isArray(s.customInds) && s.customInds.length ? s.customInds : null, indMode: s.indMode && (s.indMode.serv === 'valor' || s.indMode.prod === 'valor' || s.indMode.extra === 'valor') ? s.indMode : null, extraInit: s.extraInit || null, extraTrad: Array.isArray(s.extraTrad) && s.extraTrad.length ? s.extraTrad : null, extraCombo: s.extraCombo && Object.keys(s.extraCombo).length ? s.extraCombo : null, notices: s.notices || null, logoColors: s.logoColors === false ? false : null } });
+    out.company = JSON.stringify({ name: co.name, cnpj: co.cnpj || '', phone: co.phone || '', email: co.email || '', logo: co.logo || null, settings: { weights: s.weights, goals: s.goals, hidden: s.hidden, org: s.org || null, pop: s.popCfg || null, reveal: s.reveal || null, ocup: s.ocupCfg || null, pops: s.pops || null, precos: Array.isArray(s.precos) && s.precos.length ? s.precos : null, bonusTypes: Array.isArray(s.bonusTypes) && s.bonusTypes.length ? s.bonusTypes : null, bonusTypesAt: s.bonusTypesAt || null, terms: s.terms && s.terms.text ? s.terms : null, brand: s.brand || null, theme: s.theme || null, houseGoals: s.houseGoals || null, houseGoalsM: s.houseGoalsM || null, music: s.podiumMusic || null, births: s.births || null, demoKit: s.demoKit || null, com: s.comCfg || null, dreams: s.dreams || null, units: s.units || null, prize: s.prize || null, planos: s.planCatalog || null, customInds: Array.isArray(s.customInds) && s.customInds.length ? s.customInds : null, indMode: s.indMode && (s.indMode.serv === 'valor' || s.indMode.prod === 'valor' || s.indMode.extra === 'valor') ? s.indMode : null, extraInit: s.extraInit || null, extraTrad: Array.isArray(s.extraTrad) && s.extraTrad.length ? s.extraTrad : null, extraCombo: s.extraCombo && Object.keys(s.extraCombo).length ? s.extraCombo : null, notices: s.notices || null, logoColors: s.logoColors === false ? false : null } });
     for (const u of s.users) out.users[u.id] = JSON.stringify({ name: u.name, phone: u.phone || '', status: u.status });
     return out;
   }
@@ -309,7 +310,7 @@
       if (billing.approved === false) return { status: 'aprovacao', company: co, role: prof.role }; // cadastro aguardando o dono do SaaS
       return { status: 'bloqueado', billing, plans, company: co, role: prof.role };
     }
-    const [co, profs, barbers, entries, monthly, invites, key, pop, sales, cmds, bonus] = await Promise.all([
+    const [co, profs, barbers, entries, monthly, invites, key, pop, sales, cmds, bonus, terms] = await Promise.all([
       q(c.from('companies').select('*').eq('id', cid).single()),
       q(c.from('profiles').select('*').eq('company_id', cid)),
       q(c.from('barbers').select('*').eq('company_id', cid).order('created_at')),
@@ -321,6 +322,7 @@
       fetchAll('plan_sales', cid).catch(() => []),
       fetchAll('comanda_records', cid).catch(() => []),
       fetchAll('bonus_records', cid).catch(() => []),
+      fetchAll('term_accepts', cid).catch(() => []),
     ]);
     const st = co.settings || {};
     const state = {
@@ -340,6 +342,7 @@
       precos: Array.isArray(st.precos) ? st.precos : [],
       bonusTypes: Array.isArray(st.bonusTypes) ? st.bonusTypes : [],
       bonusTypesAt: st.bonusTypesAt || null,
+      terms: st.terms || null,
       brand: st.brand === 'salao' ? 'salao' : 'barber',
       reveal: st.reveal || null,
       theme: st.theme || null,
@@ -364,6 +367,7 @@
       extraTrad: Array.isArray(st.extraTrad) ? st.extraTrad : [],
       extraCombo: st.extraCombo && typeof st.extraCombo === 'object' ? st.extraCombo : {},
       comandaRecs: cmds.map(r => ({ id: r.id, barberId: r.barber_id, date: r.date, ...(r.data || {}) })),
+      termAccepts: terms.map(r => ({ id: r.id, userId: r.user_id, ver: r.ver, ...(r.data || {}) })),
       bonusRecs: bonus.map(r => ({ id: r.id, barberId: r.barber_id, date: r.date, ...(r.data || {}) })),
       apiKey: key ? key.key : '',
       billing, plans,
