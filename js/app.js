@@ -6941,9 +6941,9 @@ Content-Type: application/json</pre>
     return calc(12) === Number(d[12]) && calc(13) === Number(d[13]);
   }
   const cnpjFmt = v => { const d = cnpjDigits(v).slice(0, 14); return d.replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2'); };
-  function renderTerms(user) {
+  function renderTerms(user, preview) {
     const t = termsCfg(), d = ui.termDraft || (ui.termDraft = { ok: false, name: '', cnpj: '', drawn: false });
-    root.innerHTML = `<main class="tm-wrap">
+    root.innerHTML = `${DEMO_ON ? demoBar(user) : ''}<main class="tm-wrap">
       <section class="card tm-card">
         <div class="tm-head">${companyAvatar(52)}<div><h1>${esc(t.title || 'Termos e regras da ' + (state.company.name || 'barbearia'))}</h1><p class="muted">Leia com atenção. Para continuar usando o sistema, aceite, escreva seu nome completo e o CNPJ e assine.</p></div></div>
         <div class="tm-text" id="tm-text" tabindex="0">${termsHtml(t.text)}</div>
@@ -6954,8 +6954,9 @@ Content-Type: application/json</pre>
           <canvas id="tm-sig" class="tm-sig" width="900" height="300" aria-label="Espaço para assinar"></canvas>
           <button type="button" class="link-btn" data-action="termClear">${icon('undo')} Limpar assinatura</button></div>
         <p class="form-msg" id="tm-msg"></p>
+        ${preview ? `<p class="tm-prev">${icon('eye')} Prévia: é assim que o profissional vê. Nada é salvo.</p>` : ''}
         <div class="btn-row"><button class="btn btn-primary" data-action="termAccept">${icon('check')} Aceitar e entrar</button>
-          <button class="btn" data-action="logout">${icon('logout')} Sair</button></div>
+          ${preview ? `<button class="btn" data-action="termPreview" data-v="0">${icon('x')} Fechar prévia</button>` : `<button class="btn" data-action="logout">${icon('logout')} Sair</button>`}</div>
       </section></main>`;
     const cv = $('#tm-sig'), cx = cv.getContext('2d');
     cx.lineWidth = 5; cx.lineCap = 'round'; cx.lineJoin = 'round'; cx.strokeStyle = '#111';
@@ -6980,6 +6981,7 @@ Content-Type: application/json</pre>
     if (!cnpjDigits(d.cnpj)) return say('Informe o seu CNPJ.');
     if (!cnpjOk(d.cnpj)) return say('Esse CNPJ não é válido. Confira os números.');
     if (!d.drawn) return say('Assine no espaço indicado.');
+    if (ui.termPreview) { ui.termPreview = false; ui.termDraft = null; toast('Prévia: tudo certo. Na conta do profissional, o sistema seria liberado agora.', 5000); render(); return; }
     const cv = $('#tm-sig'), small = document.createElement('canvas'); small.width = 450; small.height = 150;
     small.getContext('2d').drawImage(cv, 0, 0, 450, 150);
     const sig = small.toDataURL('image/jpeg', 0.7);
@@ -7043,6 +7045,7 @@ Content-Type: application/json</pre>
         <label class="field"><span>Texto dos termos e regras *</span><textarea class="input tmc-ta" name="text" rows="12" maxlength="20000" placeholder="Cole aqui as regras da barbearia. Deixe uma linha em branco entre os parágrafos.">${esc(t.text || '')}</textarea></label>
         <p class="form-msg" data-msg></p>
         <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} ${cur ? 'Publicar nova versão' : 'Publicar termos'}</button>
+        ${cur ? `<button type="button" class="btn" data-action="termPreview" data-v="1">${icon('eye')} Ver como o profissional vê</button>` : ''}
         ${cur ? `<button type="button" class="btn ${ui.confirm === 'termsOff' ? 'btn-danger' : ''}" data-action="termsOff">${ui.confirm === 'termsOff' ? 'Confirmar: desligar os termos' : 'Desligar termos'}</button>` : ''}</div>
       </form>
       ${cur ? `<div class="tmc-status"><p><b>Versão publicada em ${esc(when(cur.ver))}</b> · ${done.length} de ${team.length} assinaram.</p>
@@ -7070,6 +7073,7 @@ Content-Type: application/json</pre>
     const user = currentUser();
     if (!user) { renderAuth(ui.authMode); return; }
     if (termsNeeded(user)) { applyBrand(DB.demo || state.brand || 'barber'); renderTerms(user); return; }
+    if (ui.termPreview && termsCfg()) { applyBrand(DB.demo || state.brand || 'barber'); renderTerms(user, true); return; }
     // Logado: vale a marca da empresa (e fica lembrada para a tela de login).
     applyBrand(DB.demo || state.brand || 'barber');
     if (DB.pref.get('brand', '') !== MARCA) DB.pref.set('brand', MARCA);
@@ -7752,6 +7756,7 @@ Content-Type: application/json</pre>
     bonusRoleta(el) { const f = el.form; ui.bonusDraft = { ...(ui.bonusDraft || {}), ...bonusDraftOf(f), tipo: 'dinheiro', valor: Number(el.dataset.v), motivo: 'Roleta – venda de 3 produtos', roleta: true }; render(); },
     ctOpen(el) { ui.ctView = el.dataset.id || null; render(); window.scrollTo(0, 0); },
     ctPrint() { document.body.classList.add('printing-ct'); setTimeout(() => { window.print(); document.body.classList.remove('printing-ct'); }, 60); },
+    termPreview(el) { ui.termPreview = el.dataset.v === '1'; ui.termDraft = null; render(); window.scrollTo(0, 0); },
     termClear() { const cv = $('#tm-sig'); if (!cv) return; const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); if (ui.termDraft) ui.termDraft.drawn = false; },
     termAccept() { termAccept(); },
     termView(el) { ui.termView = el.dataset.id || null; render(); },

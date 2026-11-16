@@ -2988,3 +2988,4 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
   body.printing-ct .tm-text { border: 0 !important; padding: 0 !important; overflow: visible !important; max-height: none !important; }
   body.printing-ct .main { padding: 0; max-width: none; }
 }
+.tm-prev { margin: 0; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--accent) 16%, transparent); font-size: .9rem; display: flex; gap: 8px; align-items: center; } .tm-prev svg { width: 16px; height: 16px; flex: 0 0 auto; }

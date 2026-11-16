@@ -679,6 +679,18 @@
       demoV: 10,
       comCfg: { pct: 40, pctBy: {}, plano: 10, prod: 5, pos: { 1: 200, 2: 100, 3: 50 }, mvp: 150, dest: 80, meta: 100 },
       extraTrad: ['Corte Tradicional', 'Barba'],
+      // Termos e regras de exemplo: "Ver como profissional" abre a tela de aceite com assinatura.
+      terms: { ver: '2026-01-01T12:00:00.000Z', title: 'Padrões de organização, apresentação e conduta profissional', text: [
+        sal ? 'STUDIO BELLA' : 'BARBEARIA DEMONSTRAÇÃO', 'Excelência, respeito e responsabilidade em cada atendimento.',
+        '1. ORGANIZAÇÃO E HIGIENE', 'Cada profissional-parceiro é responsável pela limpeza, higienização e organização de sua estação de atendimento.',
+        ['* Limpeza imediata: sempre que utilizar ou sujar algum espaço ou equipamento, realize a limpeza necessária.', '* Bancada organizada: mantenha os equipamentos e materiais de trabalho organizados.', '* Higienização dos instrumentos: siga os procedimentos de biossegurança.', '* Entre atendimentos: deixe a estação pronta para o próximo cliente.'].join('\n'),
+        '2. APRESENTAÇÃO E POSTURA PROFISSIONAL', 'A apresentação pessoal faz parte da experiência que oferecemos aos clientes.',
+        ['* Uniforme da casa limpo e conservado.', '* Calçado fechado e adequado.'].join('\n'),
+        '3. COMPORTAMENTO E COMUNICAÇÃO', 'Uso do celular', 'Durante os serviços, evite o uso pessoal do celular, exceto em urgências.',
+        'Linguagem profissional', 'Comunicação educada, clara e respeitosa. Sempre que possível, trate o cliente pelo nome.',
+        '4. DISPONIBILIDADE COMERCIAL', 'Caso precise se ausentar durante um período de disponibilidade anunciado, comunique a recepção com antecedência, informando uma previsão de retorno.',
+        '5. COMPROMISSO COM NOSSA CULTURA', 'Organização, higiene, apresentação, cordialidade e respeito constroem a experiência que oferecemos.',
+      ].join('\n\n') },
       bonusTypes: [
         { id: 'bt_demo1', nome: 'Roleta de produtos', tipo: 'dinheiro', premio: 'de R$ 10 a R$ 50', regra: 'A cada 3 produtos vendidos no dia, o profissional gira a roleta.' },
         { id: 'bt_demo2', nome: 'Meta de planos do mês', tipo: 'outro', premio: '2 ingressos VIP no cinema', regra: 'Quem bater a meta de planos mensais do mês.' },
