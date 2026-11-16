@@ -8,6 +8,7 @@ window.GB_UPDATES = [
     ['melhoria', 'No ranking, o indicador Checklist Agenda Cheia passa a ser a média de pontos por dia trabalhado.'],
     ['novo', 'Tarefas: 5 Stories (3 nos horários estratégicos 8h30, 12h e 17h30) vale 3 pts; 5 Abordagens vale 4 pts; Avaliações no Google passa a 3 por dia; nova tarefa 3 Retornos agendados (print da agenda com o próximo horário do cliente), 3 pts; Pró Atividade ganhou exemplos.'],
     ['novo', 'Compromisso comercial não atendido (vermelho) agora desconta 3 pts do dia, além de ficar sem o bônus. O dia nunca fica negativo. O dono muda o valor em Editar estrutura do checklist.'],
+    ['melhoria', 'Regras do programa: a garantia é apurada por mês fechado (do dia 1º ao último dia), pela comissão dos atendimentos do período, e não pela data de pagamento.'],
     ['melhoria', 'Stories Estratégico entrou dentro dos 5 Stories. Os dias anteriores continuam com os pontos que já tinham.'],
   ] },
   { id: '2026-11-16-retencao', date: '2026-11-16', title: 'Retenção de clientes antigos e fidelização de clientes novos', items: [
