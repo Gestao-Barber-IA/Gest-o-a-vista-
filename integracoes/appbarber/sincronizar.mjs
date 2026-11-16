@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSAO = "2.5";
+const VERSAO = "2.7";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const TESTE = process.argv.includes("--teste");
 const CARGA = process.argv.includes("--carga"); // carga inicial: lê todas as comandas no ritmo máximo permitido
@@ -187,6 +187,74 @@ async function main() {
   }
   const lista = ((JSON.parse(txt).data) || []).filter((a) => !a.scheduling_status || /realizad/i.test(a.scheduling_status));
 
+  // ---------- Retenção de clientes antigos e fidelização de clientes novos ----------
+  // Histórico de visitas (profissional + código do cliente, sem nome nem telefone) guardado em visitas.json.
+  // Cliente antigo: foi à barbearia nos 180 dias antes da visita. Novo: não foi. "Voltou": novo atendimento com o
+  // MESMO profissional em até 45 dias. A conta entra no dia em que o prazo fecha (visita + 45 dias).
+  const RET_N = Math.min(120, Math.max(15, Number(cfg.retorno_dias) || 45)), RET_LB = 180;
+  const somaDias = (d, n) => { const x = new Date(d + "T12:00:00"); x.setDate(x.getDate() + n); return iso(x); };
+  const alvoHist = somaDias(iso(hoje), -(RET_LB + RET_N + 35));
+  const VIS = join(DIR, "visitas.json");
+  let vis = {}; try { vis = JSON.parse(readFileSync(VIS, "utf8")); } catch { /* primeira vez */ }
+  vis.v = vis.v || {};
+  const { createHash } = await import("node:crypto");
+  const idCli = (a) => { const k = String(a.client_phone || "").replace(/\D/g, "") || String(a.person_code || a.client_code || a.client_id || "") || String(a.client_name || "").trim().toLowerCase(); return k ? createHash("sha1").update(k).digest("hex").slice(0, 12) : ""; };
+  function guardaVisitas(lst, de, ate) {
+    const porDia = {};
+    for (const a of lst) { const d = dia(a.scheduling_start), p = String(a.employee_name || "").trim(), c = idCli(a), inv = Number(a.invoice_code) > 0 ? String(a.invoice_code) : ""; if (d && p && c && d >= de && d <= ate) (porDia[d] = porDia[d] || []).push(inv ? [p, c, inv] : [p, c]); }
+    for (let d = de; d <= ate; d = somaDias(d, 1)) vis.v[d] = porDia[d] || [];
+  }
+  guardaVisitas(lista, iso(ini), iso(hoje));
+  vis.since = !vis.since || vis.since > iso(ini) ? iso(ini) : vis.since;
+  // Carga do histórico antigo: 1 consulta (31 dias) por sincronização, até cobrir ~260 dias. Na --carga, tudo de uma vez.
+  for (let volta = 0; !TESTE && vis.since > alvoHist && volta < (CARGA ? 12 : 1); volta++) {
+    const ate = somaDias(vis.since, -1), de = somaDias(ate, -30) < alvoHist ? alvoHist : somaDias(ate, -30);
+    const qh = new URLSearchParams({ establishment_code: String(cfg.codigo_estabelecimento), start_date: de, end_date: ate, status_type: "2" });
+    if (cfg.codigo_filial) qh.set("branch_code", String(cfg.codigo_filial));
+    const rh = await getExato(BASE + "/v1/appointments/history?" + qh, HDR).catch(() => null);
+    if (!rh || !rh.ok) break;
+    let lh = []; try { lh = ((JSON.parse(rh.text).data) || []).filter((a) => !a.scheduling_status || /realizad/i.test(a.scheduling_status)); } catch { break; }
+    guardaVisitas(lh, de, ate); vis.since = de;
+    if (CARGA) await new Promise((ok) => setTimeout(ok, 2500));
+  }
+  for (const d of Object.keys(vis.v)) if (d < somaDias(alvoHist, -10)) delete vis.v[d];
+  try { writeFileSync(VIS, JSON.stringify(vis)); } catch { /* opcional */ }
+  // Por profissional e dia de fechamento: base e quantos voltaram (antigos e novos).
+  // Planos mensais: visita cuja comanda é de plano fica marcada (4º campo = 1). Cliente NOVO que fecha plano conta como
+  // fidelizado; ASSINANTE que volta todo mês fica fora das duas taxas.
+  function retencao(desdeData) {
+    for (const l of Object.values(vis.v)) for (const e of l) if (e[2] && !e[3] && cache[e[2]] && cache[e[2]].pl) e[3] = 1;
+    try { writeFileSync(VIS, JSON.stringify(vis)); } catch { /* opcional */ }
+    const porCli = new Map(), plano = new Map(); // cliente → datas com comanda de plano
+    for (const [d, l] of Object.entries(vis.v)) for (const [p, c, , pl] of l) { if (!porCli.has(c)) porCli.set(c, []); porCli.get(c).push([d, p]); if (pl) { if (!plano.has(c)) plano.set(c, []); plano.get(c).push(d); } }
+    const out = new Map();
+    for (let fecha = desdeData; fecha <= iso(hoje); fecha = somaDias(fecha, 1)) {
+      const d0 = somaDias(fecha, -RET_N);
+      if (!vis.since || vis.since > somaDias(d0, -RET_LB) || !vis.v[d0]) continue; // sem histórico suficiente
+      const vistos = new Set();
+      for (const [p, c, , pl] of vis.v[d0]) {
+        if (vistos.has(p + "|" + c)) continue; vistos.add(p + "|" + c);
+        const hist = porCli.get(c) || [], dPl = plano.get(c) || [];
+        const antigo = hist.some(([d]) => d < d0 && d >= somaDias(d0, -RET_LB));
+        if (antigo && dPl.some((d) => d >= somaDias(d0, -RET_LB) && d <= fecha)) continue; // assinante: volta por contrato, fica fora
+        const voltou = !!pl || hist.some(([d, q]) => q === p && d > d0 && d <= fecha); // novo que fechou plano = fidelizado
+        const k = (NOMES[p] || p) + "|" + fecha, o = out.get(k) || { aB: 0, aV: 0, nB: 0, nV: 0 };
+        if (antigo) { o.aB++; if (voltou) o.aV++; } else { o.nB++; if (voltou) o.nV++; }
+        out.set(k, o);
+      }
+    }
+    return out;
+  }
+  function comRetencao(itens) {
+    const ret = retencao(desde), porChave = new Map(itens.map((i) => [i.barbeiro + "|" + i.data, i]));
+    for (const [k, o] of ret) {
+      const [b, d] = k.split("|"); let i = porChave.get(k);
+      if (!i) { i = { data: d, barbeiro: b }; itens.push(i); porChave.set(k, i); }
+      Object.assign(i, { retorno_antigos_base: o.aB, retorno_antigos_voltaram: o.aV, retorno_novos_base: o.nB, retorno_novos_voltaram: o.nV });
+    }
+    return itens;
+  }
+
   // Horas atendidas no dia: junta os horários que se sobrepõem (não conta duas vezes o mesmo tempo).
   function horasJuntas(lst) {
     const a = lst.slice().sort((p, q) => p[0] - q[0]); let tot = 0, [s0, e0] = a[0];
@@ -281,7 +349,7 @@ async function main() {
     console.log('  Linhas marcadas com ">>>" parecem ser de comissão.\n');
   }
   async function enviar(silencioso) {
-    const itens = calc();
+    const itens = comRetencao(calc());
     if (!itens.length) { if (!silencioso) log("Nada para enviar."); return; }
     const g = await fetch(GESTAO_URL, { method: "POST", headers: { Authorization: "Bearer " + cfg.gestao_api_key, "Content-Type": "application/json" }, body: JSON.stringify(itens) });
     const res = await g.json().catch(() => ({}));
@@ -395,12 +463,17 @@ async function main() {
   const pend = faltam.length - lidas;
   if (lidas || pend) log(`Comandas: ${lidas} lidas agora${pend > 0 ? `, ${pend} ficam para as próximas sincronizações` : ""}${parou ? ` (parou: ${parou})` : ""}.`);
 
-  const itens = calc();
+  const itens = comRetencao(calc());
   log(`AppBarber: ${lista.length} atendimentos realizados de ${iso(ini)} a ${iso(hoje)} → ${itens.length} dias de profissionais.`);
   if (TESTE) {
     const tot = new Map();
     for (const i of itens) { const t = tot.get(i.barbeiro) || { fat: 0, serv: 0, prod: 0, h: 0, dias: 0 }; t.fat += i.faturamento; t.serv += i.servicos; t.prod += i.venda_produtos; t.h += i.horas_ocupadas || 0; t.dias++; tot.set(i.barbeiro, t); }
     for (const [n, t] of tot) console.log(`  ${n}: R$ ${t.fat.toFixed(2)} · ${t.serv} serviços · ${t.prod} produtos · ${t.h.toFixed(1)} h atendidas · ${t.dias} dias`);
+    { const rt = new Map(); for (const i of itens) if (i.retorno_antigos_base != null) { const t = rt.get(i.barbeiro) || [0, 0, 0, 0]; t[0] += i.retorno_antigos_base; t[1] += i.retorno_antigos_voltaram; t[2] += i.retorno_novos_base; t[3] += i.retorno_novos_voltaram; rt.set(i.barbeiro, t); }
+      const pc = (v, b) => (b ? Math.round(v / b * 100) + "%" : "—");
+      console.log(`  Histórico de visitas desde ${vis.since || "—"} (precisa ir até ${alvoHist}; completa sozinho, 1 consulta por sincronização).`);
+      if (rt.size) for (const [n, t] of rt) console.log(`   - ${n}: retenção de antigos ${pc(t[1], t[0])} (${t[1]}/${t[0]}) · fidelização de novos ${pc(t[3], t[2])} (${t[3]}/${t[2]})`);
+      else console.log("   Retenção/fidelização: ainda sem histórico suficiente (precisa de ~8 meses de visitas)."); }
     { const ab = codigos.filter((c) => cache[c] && cache[c].itens && !cache[c].final).length;
       if (faltam.length || ab) console.log(`  (Ainda não contam: ${faltam.length} comandas não lidas e ${ab} abertas/não pagas. Entram quando forem finalizadas e lidas.)`); }
     { const pls = codigos.filter((c) => cache[c] && cache[c].pl && cache[c].d && cache[c].d >= desde);

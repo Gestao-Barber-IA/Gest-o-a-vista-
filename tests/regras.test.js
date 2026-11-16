@@ -225,3 +225,17 @@ test('maior comanda: dia com disponibilidade alterada/compromisso não atendido 
   const res = GB.computeRanking(st, R), top = res.bonus.find(i => i.key === 'comanda');
   assert.equal(top.leaders.join(','), 'b');
 });
+
+test('retenção de antigos e fidelização de novos: % que voltou, com amostra mínima', () => {
+  const st = team([['a', {}], ['b', {}]], { retInit: true });
+  st.hidden = [];
+  st.entries = [
+    { id: 'a1', barberId: 'a', date: '2026-10-10', source: 'api', raB: 12, raV: 9, fnB: 6, fnV: 3 },
+    { id: 'b1', barberId: 'b', date: '2026-10-10', source: 'api', raB: 8, raV: 8, fnB: 2, fnV: 2 },
+  ];
+  const res = GB.computeRanking(st, R), a = byId(res, 'a'), b = byId(res, 'b');
+  assert.equal(a.values.retAnt, 75); assert.equal(a.values.fidNov, 50);
+  assert.equal(b.values.retAnt ?? null, null); // menos de 10 antigos: sem dados
+  const novo = team([['a', {}], ['b', {}]]); GB.computeRanking(novo, R);
+  assert.ok(novo.hidden.includes('retAnt') && novo.hidden.includes('fidNov'));
+});

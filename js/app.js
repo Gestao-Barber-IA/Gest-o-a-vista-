@@ -149,6 +149,8 @@
     cli: ['Clientes atendidos', 'Quantidade de clientes atendidos pelo barbeiro no período.'],
     planos: ['Planos mensais', 'Quantidade de planos mensais (assinaturas) vendidos pelo barbeiro no período.'],
     fid: ['Taxa de fidelização', 'Clientes que voltaram ÷ clientes atendidos no período.'],
+    retAnt: ['Retenção de clientes antigos', 'Dos clientes que já frequentavam a barbearia (vieram nos 180 dias anteriores), quantos % voltaram com o mesmo profissional em até 45 dias. Assinantes de plano ficam fora (voltam por contrato). Entra no mês em que o prazo de 45 dias fecha. Precisa de pelo menos 10 clientes no período. Vem da integração.'],
+    fidNov: ['Fidelização de clientes novos', 'Dos clientes na primeira visita (não vieram nos 180 dias anteriores), quantos % voltaram com o mesmo profissional em até 45 dias ou fecharam um plano mensal. Mostra quem transforma cliente novo em cliente fixo. Precisa de pelo menos 5 clientes novos no período. Vem da integração.'],
     comanda: ['Maior comanda do mês', 'O maior valor de uma única comanda (um atendimento, com serviços e produtos) do profissional no mês. É só um destaque: não entra na pontuação, no MVP nem no Destaque.'],
     prod: ['Venda de produtos', 'Quantidade de produtos (pomadas, shampoos, óleos…) vendidos pelo barbeiro no período.'],
     agend: ['Agendamentos', 'Quantidade de agendamentos do barbeiro no mês. Aparece nos totais da Performance; não entra na pontuação.'],
@@ -3289,6 +3291,20 @@
     </section>`;
   }
   // Minha performance › "Como seus pontos são calculados": até quantos pontos (de 100) vale cada indicador (pesos do dono).
+  // Grupos do cartão "Como seus pontos são calculados".
+  const HOW_GROUPS = [
+    ['fin', 'Resultado financeiro', 'wallet', 'O quanto você fatura e o valor de cada atendimento.'],
+    ['cli', 'Cliente que fica', 'users', 'Planos e clientes que voltam: o que sustenta a agenda.'],
+    ['prod', 'Produtividade e disciplina', 'checksq', 'Agenda cheia e o dia a dia bem feito.'],
+    ['out', 'Outros', 'sparkle', 'Indicadores próprios da empresa.'],
+  ];
+  function howGroup(i) {
+    if (i.custom) return 'out';
+    if (['fat', 'ticket', 'extra', 'prod'].includes(i.key)) return 'fin';
+    if (i.key === 'serv') return GB.indMode('serv') === 'valor' ? 'fin' : 'prod';
+    if (['planos', 'retAnt', 'fidNov', 'fid'].includes(i.key)) return 'cli';
+    return 'prod';
+  }
   function noteHowCard() {
     const list = pctOf().filter(([, p]) => p > 0).sort((a, b) => b[1] - a[1]);
     if (!list.length) return '';
@@ -3296,7 +3312,10 @@
     return `<section class="section card how-card">
       <h2 class="section-title">${icon('chart')} Como seus pontos são calculados</h2>
       <p class="section-note">Sua pontuação vai até <b>100 pontos</b>. Cada indicador vale até os pontos abaixo: quem está em 1º no indicador ganha todos, o último ganha 0 e os outros ganham proporcional ao resultado.</p>
-      <ul class="how-list">${list.map(([i, p]) => `<li><span class="how-n">${esc(i.label)}</span><span class="how-bar"><i style="width:${Math.max(4, p / max * 100)}%"></i></span><b class="num">${p} pts</b></li>`).join('')}</ul>
+      ${HOW_GROUPS.map(([gk, gl, gi, gd]) => { const its = list.filter(([i]) => howGroup(i) === gk); if (!its.length) return '';
+        const tot = its.reduce((x, [, p]) => x + p, 0);
+        return `<div class="how-grp"><div class="how-gh">${icon(gi)}<span><b>${gl}</b><small>${gd}</small></span><b class="num how-gt">${tot} pts</b></div>
+          <ul class="how-list">${its.map(([i, p]) => `<li><span class="how-n">${esc(i.label)}</span><span class="how-bar"><i style="width:${Math.max(4, p / max * 100)}%"></i></span><b class="num">${p} pts</b></li>`).join('')}</ul></div>`; }).join('')}
       <a class="how-link" href="#ajuda">${icon('help')} Entenda Destaque e MVP</a>
     </section>`;
   }
