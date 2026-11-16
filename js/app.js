@@ -3287,13 +3287,25 @@
       <p class="muted earn-note">Valor estimado pelos números lançados no sistema; o valor final é o do fechamento do mês.</p>
     </section>`;
   }
+  // Minha performance › "Como seus pontos são calculados": até quantos pontos (de 100) vale cada indicador (pesos do dono).
+  function noteHowCard() {
+    const list = pctOf().filter(([, p]) => p > 0).sort((a, b) => b[1] - a[1]);
+    if (!list.length) return '';
+    const max = Math.max(...list.map(([, p]) => p));
+    return `<section class="section card how-card">
+      <h2 class="section-title">${icon('chart')} Como seus pontos são calculados</h2>
+      <p class="section-note">Sua pontuação vai até <b>100 pontos</b>. Cada indicador vale até os pontos abaixo: quem está em 1º no indicador ganha todos, o último ganha 0 e os outros ganham proporcional ao resultado.</p>
+      <ul class="how-list">${list.map(([i, p]) => `<li><span class="how-n">${esc(i.label)}</span><span class="how-bar"><i style="width:${Math.max(4, p / max * 100)}%"></i></span><b class="num">${p} pts</b></li>`).join('')}</ul>
+      <a class="how-link" href="#ajuda">${icon('help')} Entenda Destaque e MVP</a>
+    </section>`;
+  }
   function perfFor(barberId, user) {
     if (!seeNum(barberId)) return `<div class="card empty">${icon('lock')}<h2>Números reservados</h2><p>Você vê o ranking com os números de todos, e a performance detalhada só a sua.</p><a class="btn" href="#performance">Ver minha performance</a></div>`;
     const b = barberById(barberId);
     if (!b) return `<div class="card empty">${icon('users')}<h2>Barbeiro não encontrado</h2><p>Ele pode ter sido removido da equipe.</p></div>`;
     const R = computeRanking(state, range());
     const dk = isGestor(user) ? null : darkFor(range());
-    if (dk) return `${periodNav()}${suspenseCard(dk)}${earnCard(b.id, range().start.slice(0, 7), user)}${ownNumbers(R, b.id, ui.period === 'mes' ? range().start.slice(0, 7) : null)}`;
+    if (dk) return `${periodNav()}${noteHowCard()}${suspenseCard(dk)}${earnCard(b.id, range().start.slice(0, 7), user)}${ownNumbers(R, b.id, ui.period === 'mes' ? range().start.slice(0, 7) : null)}`;
     // Compara com o mesmo número de dias do período anterior, para não punir o período em andamento.
     const cur = range(), prevR = range(ui.offset - 1);
     if (ui.offset === 0) {
@@ -3339,6 +3351,7 @@
     }).join('') + cmdOwnCard(row, R);
 
     return `${picker}${periodNav()}
+      ${noteHowCard()}
       <div class="card">
         <div class="perf-head">${avatar(b, 72)}<div><h2>${esc(b.name)} ${titleChip(R, b.id)}</h2><p class="muted" style="margin:2px 0 0">${esc(goal)}</p></div></div>
         <div class="perf-stats">
