@@ -6894,7 +6894,21 @@ Content-Type: application/json</pre>
   }
 
   // ---------- render principal ----------
+  // Com o menu aberto, a página de trás fica travada (no iPhone, o arraste no menu não pode rolar a tela de trás).
+  let lockY = null;
+  function pageLock(on) {
+    const b = document.body;
+    if (on && lockY === null) {
+      lockY = window.scrollY || 0;
+      Object.assign(b.style, { position: 'fixed', top: `-${lockY}px`, left: '0', right: '0', width: '100%', overflow: 'hidden' });
+    } else if (!on && lockY !== null) {
+      const y = lockY; lockY = null;
+      Object.assign(b.style, { position: '', top: '', left: '', right: '', width: '', overflow: '' });
+      window.scrollTo(0, y);
+    }
+  }
   function render() {
+    if (lockY !== null) pageLock(false); // a tela foi redesenhada: o menu volta fechado
     syncInds();
     avPrime();
     { const k = logoColorsOn() ? String(state.company.logo || (demoKit() || {}).logo || '').slice(-80) + '|' + String((state.company.logo || '').length) : ''; if (k !== kitKey) applyKitColors().catch(() => {}); }
@@ -7004,8 +7018,8 @@ Content-Type: application/json</pre>
       const open = box.hidden; box.hidden = !open; el.setAttribute('aria-expanded', String(open));
       const set = new Set(navShut()); if (open) set.delete(g); else set.add(g); DB.pref.set('navShut', JSON.stringify([...set]));
     },
-    openDrawer() { $('.drawer').classList.add('open'); $('.scrim').hidden = false; },
-    closeDrawer() { $('.drawer').classList.remove('open'); $('.scrim').hidden = true; },
+    openDrawer() { $('.drawer').classList.add('open'); $('.scrim').hidden = false; pageLock(true); },
+    closeDrawer() { $('.drawer').classList.remove('open'); $('.scrim').hidden = true; pageLock(false); },
     togglePopover() { const p = $('.popover'); p.hidden = !p.hidden; },
     async logout() {
       if (DB.demo) { ACTIONS.demoExit(); return; } // na demonstração, "Sair" volta para a entrada da conta de verdade
