@@ -5267,19 +5267,21 @@ Content-Type: application/json</pre>
   const popIsExtra = it => !popArr(it) && (it.id === 'extra' || /^extra\b/i.test(String(it.title || '').trim()));
   const popOrder = items => [...items.filter(popArr), ...items.filter(popIsExtra), ...items.filter(it => !popArr(it) && !popIsExtra(it))];
   // O que o profissional vê no Horário de chegada (os botões são só da gestão).
+  // Nota do vermelho com o desconto de pontos configurado no checklist.
+  const arrNote = k => { const pen = Number(popCfg().redPen) || 0; return k === 'atraso' && pen > 0 ? `(registrado, sem bônus e −${fmtPts(pen)} pts no dia)` : ARR[k][4]; };
   const arrRules = () => `<span class="chip chip-soft arr-info">Informativo</span><ul class="arr-rules">
-      ${Object.entries(ARR).map(([k, [l, , i, d, n]]) => `<li class="arr-r-${k}">${icon(i)}<span><b>${l}</b>${d}<em class="arr-note">${n}</em></span></li>`).join('')}
+      ${Object.entries(ARR).map(([k, [l, , i, d]]) => `<li class="arr-r-${k}">${icon(i)}<span><b>${l}</b>${d}<em class="arr-note">${arrNote(k)}</em></span></li>`).join('')}
     </ul><p class="muted pop-gest">${icon('lock')} Marcado pelo dono, gestor ou líder.</p>`;
   function arrBlock(it, list, bid) {
     const e = list.find(GB.evLive), can = popMarkOk(it, bid);
     if (e) {
       const a = ARR[e.arr || 'ok'], sev = e.sev && DISC_SEV[e.sev];
       const undo = can && (isGestor(currentUser()) || e.byUser === (currentUser() || {}).id);
-      return `<div class="arr-done ${a[1]}">${icon(a[2])}<span><b>${a[0]}</b><small>${!e.arr || e.arr === 'ok' ? `+${fmtPts(it.pts)} pts` : can && sev ? `Fiscalização: ${sev[0].toLowerCase()}` : esc(a[3])}</small></span></div>
+      return `<div class="arr-done ${a[1]}">${icon(a[2])}<span><b>${a[0]}</b><small>${!e.arr || e.arr === 'ok' ? `+${fmtPts(it.pts)} pts` : (can && sev ? `Fiscalização: ${sev[0].toLowerCase()}` : esc(a[3])) + (e.arr === 'atraso' && Number(popCfg().redPen) > 0 ? ` · −${fmtPts(Number(popCfg().redPen))} pts no dia` : '')}</small></span></div>
         ${undo ? `<button class="link-btn arr-undo" data-action="arrUndo" data-it="${esc(it.id)}">${ui.confirm === 'arr' + it.id ? 'Confirmar: desfazer' + (e.disc ? ' e apagar a ocorrência' : '') : 'Desfazer'}</button>` : ''}`;
     }
     if (!can) return arrRules();
-    return `<div class="arr-btns">${Object.entries(ARR).map(([k, [l, c, i]]) => `<button class="btn arr-btn ${c}" data-action="arrMark" data-it="${esc(it.id)}" data-v="${k}" ${ui.arrBusy ? 'disabled' : ''}>${icon(i)} <span>${l}<small>${ARR[k][3]}</small><em class="arr-note">${ARR[k][4]}</em></span></button>`).join('')}</div>`;
+    return `<div class="arr-btns">${Object.entries(ARR).map(([k, [l, c, i]]) => `<button class="btn arr-btn ${c}" data-action="arrMark" data-it="${esc(it.id)}" data-v="${k}" ${ui.arrBusy ? 'disabled' : ''}>${icon(i)} <span>${l}<small>${ARR[k][3]}</small><em class="arr-note">${arrNote(k)}</em></span></button>`).join('')}</div>`;
   }
   function popStepper(it, list, t, bid, mayAdd) {
     if (!popMarkOk(it, bid)) return `<p class="muted pop-gest">${icon('lock')} Marcado pelo dono, gestor ou líder.</p>`;
@@ -5401,6 +5403,7 @@ Content-Type: application/json</pre>
       ${f('title', 'Programa')}${f('subtitle', 'Subtítulo')}${f('shop', 'Barbearia')}${f('phrase', 'Frase motivacional')}
       <div class="field"><span class="tm-flabel">Dias no mês</span><b>${daysInMonth(ui.popMonth)} (calendário real, automático)</b></div>
       ${f('minProfit', 'Meta de lucro mínimo (R$)', 'number')}
+      ${f('redPen', 'Desconto no vermelho — compromisso não atendido (pts no dia, 0 = sem desconto)', 'number')}
       <h3 class="pop-h3">Itens do checklist</h3>
       ${c.items.map((it, i) => it.until && it.until <= todayIso() ? '' : `<div class="pop-eitem">
         <div class="grid-2"><label class="field"><span class="tm-flabel">Nome</span><input class="input" id="pei-t-${i}" value="${esc(it.title)}" data-popitem="title" data-i="${i}"></label>
@@ -8603,7 +8606,7 @@ Content-Type: application/json</pre>
     const pc = e.target.closest('[data-popcfg],[data-popitem],[data-poplevel]');
     if (pc) {
       const c = popCfgW(), v = pc.value;
-      if (pc.dataset.popcfg) { const k = pc.dataset.popcfg; c[k] = k === 'minProfit' ? Number(v) || 0 : k === 'lose' ? v.split('\n').map(x => x.trim()).filter(Boolean) : v; }
+      if (pc.dataset.popcfg) { const k = pc.dataset.popcfg; c[k] = k === 'minProfit' || k === 'redPen' ? Math.max(0, Number(v) || 0) : k === 'lose' ? v.split('\n').map(x => x.trim()).filter(Boolean) : v; }
       if (pc.dataset.popitem) { const it = c.items[Number(pc.dataset.i)], k = pc.dataset.popitem; it[k] = k === 'gest' || k === 'arr' ? pc.checked : ['target', 'pts'].includes(k) ? Math.max(k === 'target' ? 1 : 0, Number(v) || 0) : v; if (k === 'type' && v === 'check') it.target = 1; if (k === 'arr' && pc.checked) it.gest = true; }
       if (pc.dataset.poplevel) { const l = c.levels[Number(pc.dataset.i)], k = pc.dataset.poplevel; l[k] = k === 'name' ? v : k === 'value' ? (v === '' ? null : Number(v)) : Number(v) || 0; }
       save(); render(); return;

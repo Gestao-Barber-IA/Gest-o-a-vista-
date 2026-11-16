@@ -339,6 +339,8 @@
       ],
       // Níveis pela MÉDIA de pontos por dia trabalhado (justo para quem trabalha 22 ou 28 dias no mês).
       levelMode: 'dia',
+      // Compromisso comercial não atendido (vermelho): desconta estes pontos do dia (o dia nunca fica negativo).
+      redPen: 3,
       levels: [
         { name: 'Elite', min: 20.5, max: 24, value: 4500, tone: 'gold' },
         { name: 'Ouro', min: 16, max: 20.4, value: 4250, tone: 'gold' },
@@ -387,8 +389,11 @@
     if (!rec) return 0;
     const adj = pending ? 0 : popAdj(rec);
     if (!rec.ev) return adj;
-    return popItemsFor(cfg, rec.day).reduce((a, it) => a + popItemPts(it, rec.ev[it.id], pending), 0) + adj;
+    const got = popItemsFor(cfg, rec.day).reduce((a, it) => a + popItemPts(it, rec.ev[it.id], pending), 0);
+    return (pending ? got : Math.max(0, got - popRedPen(cfg, rec))) + adj;
   }
+  // Desconto do vermelho: só quando o dia tem um "Compromisso comercial não atendido" válido.
+  const popRedPen = (cfg, rec) => { const pen = Number(cfg && cfg.redPen) || 0; return pen > 0 && rec && rec.ev && Object.values(rec.ev).some(l => Array.isArray(l) && l.some(e => evLive(e) && e.arr === 'atraso')) ? pen : 0; };
   const popHasEv = r => !!r.ev && Object.values(r.ev).some(l => Array.isArray(l) && l.length);
   // Dias trabalhados: cada dia com algum registro (prova ou Disponibilidade comercial marcada) conta 1.
   // Pontos trazidos de outro sistema (adj) contam os dias que cobrem (adjDays, padrão 1).
@@ -952,5 +957,5 @@
     }
   }
 
-  window.GB = Object.assign(window.GB || {}, { applyCustom, customKeys, indMode, fieldOff, MODE_TXT, extrasOf, normSvc, comboBase, svcPrices, RETIRED, BONUS_INDS, OCUP_DEFAULT, ocupCfgOf, ocupCfgFor, hoursPerDay, ocupCapacity, SUM_KEYS, manualEntries, manualTotal, applyManualTotal, evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, popItemsFor, popPerDay, popRecDays, popWorkDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
+  window.GB = Object.assign(window.GB || {}, { applyCustom, customKeys, indMode, fieldOff, MODE_TXT, extrasOf, normSvc, comboBase, svcPrices, RETIRED, BONUS_INDS, OCUP_DEFAULT, ocupCfgOf, ocupCfgFor, hoursPerDay, ocupCapacity, SUM_KEYS, manualEntries, manualTotal, applyManualTotal, evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, popItemsFor, popRedPen, popPerDay, popRecDays, popWorkDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
 })();

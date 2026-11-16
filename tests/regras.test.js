@@ -284,3 +284,13 @@ test('checklist: dia trabalhado vem da agenda (integração) mesmo sem checklist
   assert.equal(byId(res, 'a').values.check, 9 / 4);
   assert.equal(byId(res, 'b').values.check, 3);
 });
+
+test('checklist: vermelho desconta 3 pts do dia, sem ficar negativo', () => {
+  const cfg = GB.popCfgOf({}), ok = { status: 'aprovado' };
+  const red = { status: 'aprovado', noPhoto: true, arr: 'atraso' };
+  const day = (ev) => GB.popDayPts(cfg, { day: '2026-11-17', ev });
+  assert.equal(day({ chegada: [red], google: [ok, ok, ok], public: [ok, ok, ok] }), 3);
+  assert.equal(day({ chegada: [red], google: [ok, ok] }), 0);
+  assert.equal(day({ chegada: [{ ...red, arr: 'apos' }], google: [ok, ok, ok] }), 3);
+  assert.equal(day({ chegada: [{ ...red, status: 'recusado' }], google: [ok, ok, ok] }), 3);
+});
