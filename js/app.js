@@ -6931,14 +6931,23 @@ Content-Type: application/json</pre>
       return `<p>${lines.map(esc).join('<br>')}</p>`;
     }).join('');
   }
+  // CNPJ: 14 dígitos com os dois dígitos verificadores corretos.
+  const cnpjDigits = v => String(v || '').replace(/\D/g, '');
+  function cnpjOk(v) {
+    const d = cnpjDigits(v); if (d.length !== 14 || /^(\d)\1+$/.test(d)) return false;
+    const calc = n => { let s2 = 0, w = n - 7; for (let i = 0; i < n; i++) { s2 += Number(d[i]) * w--; if (w < 2) w = 9; } const r = s2 % 11; return r < 2 ? 0 : 11 - r; };
+    return calc(12) === Number(d[12]) && calc(13) === Number(d[13]);
+  }
+  const cnpjFmt = v => { const d = cnpjDigits(v).slice(0, 14); return d.replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2'); };
   function renderTerms(user) {
-    const t = termsCfg(), d = ui.termDraft || (ui.termDraft = { ok: false, name: '', drawn: false });
+    const t = termsCfg(), d = ui.termDraft || (ui.termDraft = { ok: false, name: '', cnpj: '', drawn: false });
     root.innerHTML = `<main class="tm-wrap">
       <section class="card tm-card">
-        <div class="tm-head">${companyAvatar(52)}<div><h1>${esc(t.title || 'Termos e regras da ' + (state.company.name || 'barbearia'))}</h1><p class="muted">Leia com atenção. Para continuar usando o sistema, aceite, escreva seu nome completo e assine.</p></div></div>
+        <div class="tm-head">${companyAvatar(52)}<div><h1>${esc(t.title || 'Termos e regras da ' + (state.company.name || 'barbearia'))}</h1><p class="muted">Leia com atenção. Para continuar usando o sistema, aceite, escreva seu nome completo e o CNPJ e assine.</p></div></div>
         <div class="tm-text" id="tm-text" tabindex="0">${termsHtml(t.text)}</div>
         <label class="check tm-ok"><input type="checkbox" id="tm-ok" ${d.ok ? 'checked' : ''}><span><b>Li e aceito os termos e as regras acima.</b></span></label>
         <label class="field"><span>Nome completo *</span><input class="input" id="tm-name" autocomplete="name" maxlength="80" value="${esc(d.name)}" placeholder="Seu nome e sobrenome"></label>
+        <label class="field"><span>CNPJ *</span><input class="input" id="tm-cnpj" inputmode="numeric" autocomplete="off" maxlength="18" value="${esc(d.cnpj)}" placeholder="00.000.000/0000-00"></label>
         <div class="field"><span class="tm-flabel">Assinatura * <small class="muted">(use o dedo ou o mouse)</small></span>
           <canvas id="tm-sig" class="tm-sig" width="900" height="300" aria-label="Espaço para assinar"></canvas>
           <button type="button" class="link-btn" data-action="termClear">${icon('undo')} Limpar assinatura</button></div>
@@ -6957,6 +6966,7 @@ Content-Type: application/json</pre>
     cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
     $('#tm-ok').addEventListener('change', e => { d.ok = e.target.checked; });
     $('#tm-name').addEventListener('input', e => { d.name = e.target.value; });
+    $('#tm-cnpj').addEventListener('input', e => { const f = cnpjFmt(e.target.value); if (f !== e.target.value) e.target.value = f; d.cnpj = f; });
   }
   async function termAccept() {
     const user = currentUser(), t = termsCfg(), d = ui.termDraft || {}, msg = $('#tm-msg');
@@ -6965,11 +6975,13 @@ Content-Type: application/json</pre>
     if (!user || !t) return;
     if (!d.ok) return say('Marque que leu e aceita os termos.');
     if (name.split(' ').filter(w => w.length > 1).length < 2) return say('Escreva seu nome completo (nome e sobrenome).');
+    if (!cnpjDigits(d.cnpj)) return say('Informe o seu CNPJ.');
+    if (!cnpjOk(d.cnpj)) return say('Esse CNPJ não é válido. Confira os números.');
     if (!d.drawn) return say('Assine no espaço indicado.');
     const cv = $('#tm-sig'), small = document.createElement('canvas'); small.width = 450; small.height = 150;
     small.getContext('2d').drawImage(cv, 0, 0, 450, 150);
     const sig = small.toDataURL('image/jpeg', 0.7);
-    state.termAccepts = [...termsAll().filter(a => !(a.userId === user.id && a.ver === t.ver)), { id: uid('ta_'), userId: user.id, ver: t.ver, name: name.slice(0, 80), sig, at: new Date().toISOString() }];
+    state.termAccepts = [...termsAll().filter(a => !(a.userId === user.id && a.ver === t.ver)), { id: uid('ta_'), userId: user.id, ver: t.ver, name: name.slice(0, 80), cnpj: cnpjFmt(d.cnpj), sig, at: new Date().toISOString() }];
     ui.termDraft = null; save(); toast('Termos aceitos. Bem-vindo(a)!'); render();
   }
   // Configurações › Empresa: o dono escreve os termos, publica e acompanha quem assinou.
@@ -6980,7 +6992,7 @@ Content-Type: application/json</pre>
     const when = s2 => new Date(s2).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     return `<section class="section card tmc-card" id="termos">
       <h2 class="section-title">${icon('file')} Termos e regras da barbearia</h2>
-      <p class="section-note">Cada profissional, ao entrar no sistema, lê estas regras, marca o aceite, escreve o nome completo e assina. Só depois o sistema libera. Ao <b>publicar uma nova versão</b>, todos precisam aceitar de novo.</p>
+      <p class="section-note">Cada profissional, gestor e líder, ao entrar no sistema, lê estas regras, marca o aceite, escreve o nome completo e o CNPJ e assina. Só depois o sistema libera. Ao <b>publicar uma nova versão</b>, todos precisam aceitar de novo.</p>
       <form class="form" data-form="terms" novalidate>
         <label class="field"><span>Título</span><input class="input" name="title" maxlength="80" value="${esc(t.title || '')}" placeholder="Termos e regras da ${esc(state.company.name || 'barbearia')}"></label>
         <label class="field"><span>Texto dos termos e regras *</span><textarea class="input tmc-ta" name="text" rows="12" maxlength="20000" placeholder="Cole aqui as regras da barbearia. Deixe uma linha em branco entre os parágrafos.">${esc(t.text || '')}</textarea></label>
@@ -6989,7 +7001,7 @@ Content-Type: application/json</pre>
         ${cur ? `<button type="button" class="btn ${ui.confirm === 'termsOff' ? 'btn-danger' : ''}" data-action="termsOff">${ui.confirm === 'termsOff' ? 'Confirmar: desligar os termos' : 'Desligar termos'}</button>` : ''}</div>
       </form>
       ${cur ? `<div class="tmc-status"><p><b>Versão publicada em ${esc(when(cur.ver))}</b> · ${done.length} de ${team.length} assinaram.</p>
-        ${done.length ? `<ul class="tmc-list">${done.map(u => { const a = acc.find(x => x.userId === u.id); return `<li><button type="button" class="tmc-sig" data-action="termView" data-id="${esc(a.id)}" aria-label="Ver assinatura de ${esc(u.name)}"><img src="${esc(a.sig)}" alt=""></button><span><b>${esc(a.name)}</b><small>${esc(u.name)} · ${esc(when(a.at))}</small></span><span class="chip chip-ok">Assinado</span></li>`; }).join('')}</ul>` : ''}
+        ${done.length ? `<ul class="tmc-list">${done.map(u => { const a = acc.find(x => x.userId === u.id); return `<li><button type="button" class="tmc-sig" data-action="termView" data-id="${esc(a.id)}" aria-label="Ver assinatura de ${esc(u.name)}"><img src="${esc(a.sig)}" alt=""></button><span><b>${esc(a.name)}</b><small>${a.cnpj ? 'CNPJ ' + esc(a.cnpj) + ' · ' : ''}${esc(u.name)} · ${esc(when(a.at))}</small></span><span class="chip chip-ok">Assinado</span></li>`; }).join('')}</ul>` : ''}
         ${miss.length ? `<p class="muted">Ainda não assinaram: ${miss.map(u => esc(u.name)).join(', ')}.</p>` : ''}</div>` : ''}
       ${termViewer()}
     </section>`;
@@ -6997,7 +7009,7 @@ Content-Type: application/json</pre>
   function termViewer() {
     const a = ui.termView && termsAll().find(x => x.id === ui.termView); if (!a) return '';
     return `<div class="pop-viewer" role="dialog" aria-modal="true" aria-label="Assinatura"><div class="inst-scrim" data-action="termView" data-id=""></div>
-      <figure><img class="full tmc-full" src="${esc(a.sig)}" alt="Assinatura de ${esc(a.name)}"><figcaption><b>${esc(a.name)}</b><span>Aceitou em ${esc(new Date(a.at).toLocaleString('pt-BR'))}</span></figcaption>
+      <figure><img class="full tmc-full" src="${esc(a.sig)}" alt="Assinatura de ${esc(a.name)}"><figcaption><b>${esc(a.name)}</b>${a.cnpj ? `<span>CNPJ ${esc(a.cnpj)}</span>` : ''}<span>Aceitou em ${esc(new Date(a.at).toLocaleString('pt-BR'))}</span></figcaption>
       <div class="btn-row pops-vnav"><button class="btn" data-action="termView" data-id="">${icon('x')} Fechar</button></div></figure></div>`;
   }
   function render() {

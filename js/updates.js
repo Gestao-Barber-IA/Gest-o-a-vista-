@@ -3,7 +3,7 @@
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
   { id: '2026-11-16-termos', date: '2026-11-16', title: 'Termos e regras com assinatura', items: [
-    ['novo', 'Em Configurações › Empresa › Termos e regras da barbearia, o dono publica as regras. Ao entrar, cada profissional lê, marca o aceite, escreve o nome completo e assina com o dedo; só então o sistema libera.'],
+    ['novo', 'Em Configurações › Empresa › Termos e regras da barbearia, o dono publica as regras. Ao entrar, cada profissional, gestor e líder lê, marca o aceite, escreve o nome completo e o CNPJ e assina com o dedo; só então o sistema libera.'],
     ['novo', 'O dono vê quem já assinou (com nome, data e a assinatura) e quem falta. Publicar uma nova versão pede o aceite de todos de novo.'],
   ] },
   { id: '2026-11-16-nota', date: '2026-11-16', title: 'Como seus pontos são calculados', items: [
