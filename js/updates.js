@@ -5,6 +5,7 @@ window.GB_UPDATES = [
   { id: '2026-11-16-contratos', date: '2026-11-16', title: 'Nova aba Contratos', items: [
     ['novo', 'Depois da assinatura dos termos e regras, o documento fica guardado na aba Contratos: o texto como estava no dia, nome completo, CNPJ, data e a assinatura. Dá para imprimir ou salvar em PDF.'],
     ['melhoria', 'O dono vê o contrato de todos; cada profissional, gestor e líder vê só o seu.'],
+    ['melhoria', 'No cartão de termos, o botão Ver como o profissional vê mostra a tela de aceite sem salvar nada. Na demonstração, Ver como profissional já abre a tela de termos.'],
   ] },
   { id: '2026-11-16-termos', date: '2026-11-16', title: 'Termos e regras com assinatura', items: [
     ['novo', 'Em Configurações › Empresa › Termos e regras da barbearia, o dono publica as regras. Ao entrar, cada profissional, gestor e líder lê, marca o aceite, escreve o nome completo e o CNPJ e assina com o dedo; só então o sistema libera.'],
