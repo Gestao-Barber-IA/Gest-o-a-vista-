@@ -349,7 +349,7 @@
         { name: 'Em desenvolvimento', min: 11, max: 12.4, value: 3500, tone: 'plain' },
         { name: 'Não elegível', min: 0, max: 10.9, value: null, tone: 'none' },
       ],
-      rules: 'A garantia de lucro é um benefício concedido aos novos profissionais durante os 3 primeiros meses, condicionado ao cumprimento integral do POP Agenda Lotada, ao alcance da pontuação mínima estabelecida e ao respeito às normas, cultura e padrão de atendimento da barbearia.',
+      rules: 'A garantia de lucro é um benefício concedido aos novos profissionais durante os 3 primeiros meses, condicionado ao cumprimento integral do POP Agenda Lotada, ao alcance da pontuação mínima estabelecida e ao respeito às normas, cultura e padrão de atendimento da barbearia. A apuração é feita por mês fechado, do dia 1º ao último dia do mês, considerando a comissão dos atendimentos realizados nesse período, e não a data de pagamento. A pontuação do checklist é a média de pontos por dia trabalhado no mesmo período.',
       lose: ['Não cumprir jornada estabelecida', 'Atrasos sem justificativa', 'Mau atendimento ao cliente', 'Quebra das regras e padrões da empresa', 'Falta sem aviso prévio'],
     };
   }
