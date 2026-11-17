@@ -2,7 +2,7 @@
 // Authorization: Bearer <SYNC_TOKEN>  (segredo da função no Supabase; nunca vai para o app)
 // GET  → lista as barbearias com sincronização automática ligada e assinatura em dia.
 // GET ?acao=lembretes → dados do dia para os lembretes no WhatsApp.
-// POST { company_id, acao: 'wa_status', status } → grava o estado dos lembretes no WhatsApp.
+// POST { company_id, acao: 'wa_status' | 'cl_status', status } → grava o estado dos lembretes (equipe | clientes).
 // POST → { company_id, ok, mensagem } grava o resultado da última sincronização.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
@@ -27,7 +27,8 @@ Deno.serve(async (req) => {
   // Lembretes no WhatsApp: dados do dia de quem ligou os lembretes (checklist, agenda e telefones).
   if (req.method === "GET" && url.searchParams.get("acao") === "lembretes") {
     const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
-    const { data: ints, error } = await db.from("integrations").select("company_id, wa_on, wa_hour, wa_min, wa_text").eq("wa_on", true);
+    const { data: ints, error } = await db.from("integrations")
+      .select("company_id, est_code, api_key, branch_code, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply").or("wa_on.eq.true,cl_on.eq.true");
     if (error) return json({ erro: error.message }, 500);
     const empresas = [];
     for (const i of ints || []) {
@@ -44,7 +45,9 @@ Deno.serve(async (req) => {
       const fone = new Map((profs || []).filter((p) => p.barber_id && p.phone && p.status !== "bloqueado").map((p) => [String(p.barber_id), p.phone]));
       empresas.push({
         company_id: co.id, nome: co.name, hoje,
-        cfg: { hora: i.wa_hour || "13:00", minimo: Number(i.wa_min) || 0, texto: i.wa_text || "" },
+        cfg: { ligado: !!i.wa_on, hora: i.wa_hour || "13:00", minimo: Number(i.wa_min) || 0, texto: i.wa_text || "" },
+        // Lembrete de agendamento para os clientes (o servidor consulta a agenda da AppBarber).
+        clientes: i.cl_on && i.est_code && i.api_key ? { antecedencia: Number(i.cl_lead) || 60, texto: i.cl_text || "", resposta: i.cl_reply || "", codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
         brand: co.settings?.brand || "barber", popCfg: co.settings?.pop || null,
         barbers: (barbers || []).filter((b) => b.active !== false).map((b) => ({ id: b.id, name: b.name, phone: fone.get(String(b.id)) || "" })),
         pop: (pop || []).map((r) => ({ barberId: r.barber_id, day: r.day, ...(r.data || {}) })),
@@ -89,8 +92,9 @@ Deno.serve(async (req) => {
     let b: any;
     try { b = await req.json(); } catch { return json({ erro: "JSON inválido." }, 400); }
     if (!b?.company_id) return json({ erro: "Falta company_id." }, 400);
-    if (b.acao === "wa_status") {
-      const { error } = await db.from("integrations").update({ wa_status: String(b.status || "").slice(0, 500), wa_status_at: new Date().toISOString() }).eq("company_id", b.company_id);
+    if (b.acao === "wa_status" || b.acao === "cl_status") {
+      const k = b.acao === "cl_status" ? "cl" : "wa";
+      const { error } = await db.from("integrations").update({ [k + "_status"]: String(b.status || "").slice(0, 500), [k + "_status_at"]: new Date().toISOString() }).eq("company_id", b.company_id);
       return error ? json({ erro: error.message }, 500) : json({ ok: true });
     }
     const msg = String(b.mensagem || "").slice(0, 500);

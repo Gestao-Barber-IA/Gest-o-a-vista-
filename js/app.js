@@ -4064,7 +4064,7 @@ ${rows.length ? '' : emptyBarbers()}
     const ex = JSON.stringify([
       { data: iso(new Date()), barbeiro: state.barbers[0]?.name || 'Nome do barbeiro', faturamento: 420.5, servicos: 9, clientes: 8, checklist_pop: 1, horas_disponiveis: 8, horas_ocupadas: 6.5, planos_mensais: 1, clientes_retorno: 5, venda_produtos: 2 },
     ], null, 2);
-    return `${apiTutorial()}${autoSyncCard()}${waRemindCard()}
+    return `${apiTutorial()}${autoSyncCard()}${waRemindCard()}${clRemindCard()}
       <section class="section card" id="api-ref">
         <h2 class="section-title">Como funciona ${tip('api')}</h2>
         <p class="section-note">Outro sistema (agenda, caixa, ERP) envia os resultados de cada barbeiro por dia. Os números entram no ranking na hora, junto com os lançados à mão.</p>
@@ -4201,6 +4201,32 @@ Content-Type: application/json</pre>
         <label class="field"><span>Mensagem</span><textarea class="input" name="text" rows="7" maxlength="1000">${esc(it.wa_text || WA_TEXT)}</textarea>
           <small class="muted">Use {nome}, {pontos}, {maximo}, {hora}, {link} e {barbearia}: o sistema troca pelos dados de cada um.</small></label>
         <details class="wa-prev"><summary>Ver como chega para o profissional</summary><p class="wa-bubble">${esc(prev).replace(/\n/g, '<br>')}</p></details>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
+      </form></section>`;
+  }
+  // Lembrete de agendamento para os clientes: o servidor lê a agenda da AppBarber e avisa antes do horário.
+  const CL_TEXT = 'Olá, {cliente}! 👋 Passando para lembrar do seu horário hoje às {hora} com {profissional} ({servico}) na {barbearia}.\n\nTe esperamos! 💈 Se não puder vir, avise a barbearia para liberarmos o horário.';
+  function clRemindCard() {
+    if (!isGestor(currentUser())) return '';
+    const it = Cloud.enabled ? ui.integ : (state.integ || {});
+    if (!it || it.erro) return '';
+    const st = String(it.cl_status || ''), on = !!it.cl_on, bad = /^erro/.test(st), noAb = !it.est_code;
+    const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const prev = (it.cl_text || CL_TEXT).replace(/\{cliente\}/g, 'João').replace(/\{hora\}/g, '14h30').replace(/\{profissional\}/g, 'Igor').replace(/\{servico\}/g, 'Corte e Barba').replace(/\{barbearia\}/g, state.company.name || '');
+    return `<section class="section card as-card">
+      <h2 class="section-title">${icon('clock')} Lembrete de agendamento para os clientes</h2>
+      <p class="section-note">O servidor confere a agenda da AppBarber a cada 5 minutos e manda um WhatsApp para o cliente antes do horário marcado. Horários seguidos do mesmo cliente viram uma mensagem só; quem agendou em cima da hora não recebe. Sai pelo mesmo número dos lembretes da equipe. Nome e telefone dos clientes não ficam guardados.</p>
+      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b> (acima): é por ela que o servidor lê a agenda.</p>` : ''}
+      <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.cl_status_at ? 'Atualizado ' + when(it.cl_status_at) : ''}</small><p class="muted as-msg">${esc(st.replace(/^(ok|erro): /, ''))}</p>` : '<span class="chip">Aguardando o servidor</span>'}</div>
+      <form class="form" data-form="clRemind" novalidate>
+        <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''} ${noAb ? 'disabled' : ''}><span><b>Lembretes para clientes ligados</b><small>Para os agendamentos com status Agendado na AppBarber.</small></span></label>
+        <label class="field"><span>Quanto tempo antes do horário</span><select class="input" name="lead">${[[30, '30 minutos'], [60, '1 hora'], [90, '1 hora e meia'], [120, '2 horas'], [180, '3 horas']].map(([v, l]) => `<option value="${v}" ${Number(it.cl_lead || 60) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        <label class="field"><span>Mensagem</span><textarea class="input" name="text" rows="6" maxlength="1000">${esc(it.cl_text || CL_TEXT)}</textarea>
+          <small class="muted">Use {cliente}, {hora}, {profissional}, {servico} e {barbearia}: o sistema troca pelos dados de cada agendamento.</small></label>
+        <details class="wa-prev"><summary>Ver como chega para o cliente</summary><p class="wa-bubble">${esc(prev).replace(/\n/g, '<br>')}</p></details>
+        <label class="field"><span>Resposta automática <small class="muted">(opcional)</small></span><textarea class="input" name="reply" rows="3" maxlength="500" placeholder="Ex.: Este número só envia lembretes. Para remarcar, chame a barbearia no (11) 99999-9999 ou agende pelo link: …">${esc(it.cl_reply || '')}</textarea>
+          <small class="muted">Quem responder ao lembrete recebe este recado (uma vez por dia), porque ninguém lê as mensagens desse número.</small></label>
         <p class="form-msg" data-msg></p>
         <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
       </form></section>`;
@@ -8496,6 +8522,15 @@ Content-Type: application/json</pre>
         const res = importEntries(state, Array.isArray(data) ? data : [data]); save();
         setMsg(f, `${res.ok} lançamento(s) importado(s).${res.errors.length ? ' Problemas: ' + res.errors.join(' ') : ''}`, res.errors.length === 0);
       } catch (e) { setMsg(f, e.message); }
+    },
+    clRemind(f) {
+      const row = { cl_on: !!f.elements.on.checked, cl_lead: Number(f.elements.lead.value) || 60, cl_text: (f.elements.text.value || '').trim().slice(0, 1000), cl_reply: (f.elements.reply.value || '').trim().slice(0, 500) };
+      if (row.cl_text === CL_TEXT) row.cl_text = '';
+      const cur = (Cloud.enabled ? ui.integ : state.integ) || {};
+      if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Lembretes de clientes salvos.'); return render(); }
+      setMsg(f, 'Salvando…', true);
+      Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(row.cl_on ? 'Lembretes de clientes ligados.' : 'Lembretes de clientes desligados.'); render(); })
+        .catch(e => { const m = Cloud.message(e); setMsg(f, /cl_|column|schema cache/i.test(m) ? 'Os lembretes de clientes ainda estão sendo ativados no servidor.' : m); });
     },
     waRemind(f) {
       const hour = val(f, 'hour') || '13:00', mn = Number(String(f.elements.min.value || '').replace(',', '.'));
