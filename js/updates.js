@@ -4,6 +4,7 @@
 window.GB_UPDATES = [
   { id: '2026-11-17-economia-creditos', date: '2026-11-17', title: 'Menos consultas à AppBarber (economia de créditos)', items: [
     ['melhoria', 'Cada consulta à API da AppBarber gasta crédito. A sincronização dos números passou a rodar a cada 15 minutos e o lembrete dos clientes confere a agenda a cada 15 minutos, só no horário de funcionamento.'],
+    ['melhoria', 'Comandas ainda abertas (cliente não pagou) são relidas a cada 45 minutos, e não mais a cada 20. Perto do fechamento, são relidas em toda sincronização, para o dia terminar com tudo atualizado.'],
     ['novo', 'Em Configurações › Horário de funcionamento, marque os dias em que a barbearia fecha (ex.: domingo): nesses dias não há consulta à AppBarber nem lembrete no WhatsApp.'],
   ] },
   { id: '2026-11-17-wa-principal', date: '2026-11-17', title: 'Lembrete dos clientes pelo WhatsApp principal', items: [
