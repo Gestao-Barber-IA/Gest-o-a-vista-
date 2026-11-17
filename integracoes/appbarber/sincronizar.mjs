@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSAO = "2.7";
+const VERSAO = "2.8";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const TESTE = process.argv.includes("--teste");
 const CARGA = process.argv.includes("--carga"); // carga inicial: lê todas as comandas no ritmo máximo permitido
@@ -118,7 +118,7 @@ async function autoAtualizar() {
   try { if (Date.now() - Number(readFileSync(marca, "utf8")) < 6 * 3600000) return; } catch { /* primeira vez */ }
   try { writeFileSync(marca, String(Date.now())); } catch { /* opcional */ }
   try {
-    const r = await fetch(cfg.atualizar_url || "https://gest-o-a-vista.vercel.app/integracoes/appbarber/sincronizar.mjs", { cache: "no-store" });
+    const r = await fetch(cfg.atualizar_url || "https://gestaoperformance.vercel.app/integracoes/appbarber/sincronizar.mjs", { cache: "no-store" });
     if (!r.ok) return;
     const novo = await r.text();
     const v = (novo.match(/const VERSAO = "([^"]+)"/) || [])[1];

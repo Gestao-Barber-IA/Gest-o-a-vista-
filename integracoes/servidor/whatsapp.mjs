@@ -20,7 +20,7 @@ const AUTH = join(DIR, "sessao");
 const ENVIADOS = join(DIR, "enviados.json");
 const TOKEN = process.env.SYNC_TOKEN || "";
 const SYNC_URL = process.env.SYNC_URL || "https://sekkmnkajnaqubyhpxvd.supabase.co/functions/v1/sync-servidor";
-const SITE = (process.env.SITE_URL || "https://gest-o-a-vista.vercel.app").replace(/\/$/, "");
+const SITE = (process.env.SITE_URL || "https://gestaoperformance.vercel.app").replace(/\/$/, "");
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 const log = (m) => console.log(`[${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}] ${m}`);
 const espera = (ms) => new Promise((r) => setTimeout(r, ms));

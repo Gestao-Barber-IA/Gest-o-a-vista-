@@ -4,7 +4,7 @@ Sistema de gestão de performance da equipe para barbearias (**Gestão Barber IA
 
 ## Como abrir
 
-É um app web estático, sem etapa de build: abra o `index.html` por um servidor (ex.: `python3 -m http.server`) ou publique a pasta (hoje: Vercel, gest-o-a-vista.vercel.app).
+É um app web estático, sem etapa de build: abra o `index.html` por um servidor (ex.: `python3 -m http.server`) ou publique a pasta (hoje: Vercel, gestaoperformance.vercel.app).
 
 - Modo apresentação com dados fictícios: `?demo=barber` ou `?demo=salao`
 - Página de vendas com quiz e planos: `/oferta` (`/vendas` redireciona para ela)
