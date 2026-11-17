@@ -74,6 +74,11 @@ atalho gbia-whatsapp-conectar-clientes gbia-whatsapp-clientes clientes --conecta
 atalho gbia-whatsapp-teste-clientes gbia-whatsapp-clientes clientes --teste
 atalho gbia-whatsapp-conectar-principal gbia-whatsapp-clientes clientes --conectar principal
 atalho gbia-whatsapp-teste-principal gbia-whatsapp-clientes clientes --teste principal
+cat > /usr/local/bin/gbia-whatsapp-agenda <<CMD
+#!/usr/bin/env bash
+sudo -u gbia env \$(cat /etc/gbia-sync.env | xargs) TZ=America/Sao_Paulo WA_PAPEL=clientes node $DIR/whatsapp.mjs --agenda
+CMD
+chmod 755 /usr/local/bin/gbia-whatsapp-agenda
 systemctl daemon-reload
 systemctl enable gbia-whatsapp gbia-whatsapp-clientes >/dev/null
 systemctl restart gbia-whatsapp gbia-whatsapp-clientes

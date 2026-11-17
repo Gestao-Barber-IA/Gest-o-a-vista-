@@ -17,7 +17,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "1.4";
+const VERSAO = "1.5";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -144,6 +144,13 @@ async function getExato(url, headers) {
     req.end();
   });
 }
+// Motivo legível de um erro da AppBarber (sem dados de clientes): mensagem do JSON ou o título da página de bloqueio.
+function motivo(t) {
+  try { const j = JSON.parse(t); const m = j.message || j.erro || j.error || j.mensagem || (j.errors && JSON.stringify(j.errors)); if (m) return ": " + String(m).slice(0, 160); } catch { /* não é JSON */ }
+  const tit = (String(t).match(/<title>([^<]*)<\/title>/i) || [])[1];
+  if (tit || /cloudflare|attention required|blocked/i.test(t)) return `: bloqueio no firewall da AppBarber (${(tit || "acesso negado").trim().slice(0, 80)})`;
+  return t ? ": " + String(t).replace(/\s+/g, " ").slice(0, 120) : "";
+}
 // "21/12/2026 14:30" → minutos desde 00:00 do dia, e o dia em ISO
 const hm = (s) => { const m = String(s || "").match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})/); return m ? { dia: `${m[3]}-${m[2]}-${m[1]}`, min: +m[4] * 60 + +m[5] } : null; };
 const hhmm = (n) => `${String(Math.floor(n / 60)).padStart(2, "0")}h${String(n % 60).padStart(2, "0")}`.replace(/h00$/, "h");
@@ -163,8 +170,9 @@ async function agendaHoje(e, hoje) {
   if (cache && cache.dia === hoje && Date.now() - cache.em < 5 * 60000) return cache.lista; // AppBarber: no máximo 1 consulta a cada 5 min
   const q = new URLSearchParams({ establishment_code: String(c.codigo_estabelecimento), start_date: hoje, end_date: hoje, status_type: "1" });
   if (c.codigo_filial) q.set("branch_code", String(c.codigo_filial));
-  const r = await getExato("https://api.appbarber.com/v1/appointments/history?" + q, { "X-API-Key": c.appbarber_api_key, Accept: "application/json", "User-Agent": "GestaoBarberIA-WhatsApp/" + VERSAO });
-  if (!r.ok) throw new Error(`AppBarber respondeu ${r.status}`);
+  // Mesmo cabeçalho da sincronização (que a AppBarber já aceita neste IP).
+  const r = await getExato("https://api.appbarber.com/v1/appointments/history?" + q, { "X-API-Key": c.appbarber_api_key, Accept: "application/json", "User-Agent": "GestaoBarberIA-Sync/2.8" });
+  if (!r.ok) throw new Error(`AppBarber respondeu ${r.status}${motivo(r.text)}`);
   const lista = ((JSON.parse(r.text).data) || []).filter((a) => !a.scheduling_status || /agendad|confirmad/i.test(a.scheduling_status));
   agendaCache[k] = { dia: hoje, em: Date.now(), lista };
   return lista;
@@ -313,6 +321,17 @@ if (process.argv.includes("--conectar") || arg("--codigo") !== null) {
   const ok = await conectar({ qr: process.argv.includes("--conectar"), codigo: arg("--codigo") || "" });
   if (ok) { console.log("\nPronto! Número conectado.\n"); await espera(3000); }
   process.exit(ok ? 0 : 1);
+}
+// Diagnóstico da agenda: mostra quantos agendamentos de hoje a AppBarber devolve (sem nomes nem telefones).
+if (process.argv.includes("--agenda")) {
+  const { empresas = [], hoje } = await api("GET", null, "?acao=lembretes");
+  let ip = "?"; try { ip = (await (await fetch("https://api.ipify.org")).text()).trim(); } catch { /* sem IP */ }
+  console.log(`IP deste servidor: ${ip} · hoje: ${hoje}`);
+  for (const e of empresas.filter((x) => x.clientes)) {
+    try { const l = await agendaHoje(e, hoje); console.log(`${e.nome}: ${l.length} agendamento(s) com status Agendado hoje; ${blocos(l, hoje).length} lembrete(s) a enviar no dia.`); }
+    catch (err) { console.log(`${e.nome}: ERRO ${err.message}`); }
+  }
+  process.exit(0);
 }
 if (arg("--teste") !== null) {
   if (!existsSync(AUTH)) { console.log(`Conecte o número primeiro: ${CMD}`); process.exit(1); }
