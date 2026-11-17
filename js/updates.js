@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-17-wa-principal', date: '2026-11-17', title: 'Lembrete dos clientes pelo WhatsApp principal', items: [
+    ['novo', 'No cartão Lembrete de agendamento para os clientes, escolha o número que envia: o 2º chip ou o WhatsApp principal da barbearia. No principal, o cliente reconhece o número e as respostas caem direto na recepção.'],
+    ['melhoria', 'Proteções no número principal: textos sorteados entre várias versões, de 40 a 90 segundos entre envios, até 20 por hora e 150 por dia, sem links e pausa automática se 3 envios seguidos falharem. O 2º chip continua de reserva: é só trocar no cartão.'],
+  ] },
   { id: '2026-11-17-wa-dois-numeros', date: '2026-11-17', title: 'Um número para a equipe e outro para os clientes', items: [
     ['melhoria', 'Os lembretes no WhatsApp podem sair por dois chips: um só para a equipe (checklist) e outro só para os clientes (lembrete de agendamento). Se um número tiver problema, o outro continua funcionando.'],
   ] },

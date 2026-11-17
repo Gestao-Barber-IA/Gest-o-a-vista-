@@ -6,3 +6,5 @@ alter table public.integrations add column if not exists cl_text text not null d
 alter table public.integrations add column if not exists cl_reply text not null default '';
 alter table public.integrations add column if not exists cl_status text;
 alter table public.integrations add column if not exists cl_status_at timestamptz;
+-- Número que envia o lembrete dos clientes: 'chip' (2º chip) ou 'principal' (WhatsApp principal da barbearia).
+alter table public.integrations add column if not exists cl_numero text not null default 'chip';

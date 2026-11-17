@@ -4213,20 +4213,24 @@ Content-Type: application/json</pre>
     if (!it || it.erro) return '';
     const st = String(it.cl_status || ''), on = !!it.cl_on, bad = /^(erro|desconectado)/.test(st), noAb = !it.est_code;
     const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-    const prev = (it.cl_text || CL_TEXT).replace(/\{cliente\}/g, 'João').replace(/\{hora\}/g, '14h30').replace(/\{profissional\}/g, 'Igor').replace(/\{servico\}/g, 'Corte e Barba').replace(/\{barbearia\}/g, state.company.name || '');
+    const prev = (it.cl_text || CL_TEXT).split(/\n\s*-{3,}\s*\n/)[0].replace(/\{cliente\}/g, 'João').replace(/\{hora\}/g, '14h30').replace(/\{profissional\}/g, 'Igor').replace(/\{servico\}/g, 'Corte e Barba').replace(/\{barbearia\}/g, state.company.name || '');
     return `<section class="section card as-card">
       <h2 class="section-title">${icon('clock')} Lembrete de agendamento para os clientes</h2>
-      <p class="section-note">O servidor confere a agenda da AppBarber a cada 5 minutos e manda um WhatsApp para o cliente antes do horário marcado. Horários seguidos do mesmo cliente viram uma mensagem só. Quem agendou em cima da hora recebe 20 minutos antes do horário. Sai pelo <b>número dos clientes</b> (um chip só para isso, conectado no servidor com <code>gbia-whatsapp-conectar-clientes</code>), separado do número dos lembretes da equipe. Nome e telefone dos clientes não ficam guardados.</p>
+      <p class="section-note">O servidor confere a agenda da AppBarber a cada 5 minutos e manda um WhatsApp para o cliente antes do horário marcado. Horários seguidos do mesmo cliente viram uma mensagem só. Quem agendou em cima da hora recebe 20 minutos antes do horário. Sai pelo número escolhido abaixo, separado do número dos lembretes da equipe. Nome e telefone dos clientes não ficam guardados.</p>
       ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b> (acima): é por ela que o servidor lê a agenda.</p>` : ''}
       <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.cl_status_at ? 'Atualizado ' + when(it.cl_status_at) : ''}</small><p class="muted as-msg">${esc(st.replace(/^(ok|erro|desconectado): /, ''))}</p>` : '<span class="chip">Aguardando o servidor</span>'}</div>
       <form class="form" data-form="clRemind" novalidate>
         <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''} ${noAb ? 'disabled' : ''}><span><b>Lembretes para clientes ligados</b><small>Para os agendamentos com status Agendado na AppBarber.</small></span></label>
+        <fieldset class="field cl-num"><span>Número que envia</span>
+          <label class="check"><input type="radio" name="num" value="chip" ${it.cl_numero !== 'principal' ? 'checked' : ''}><span><b>2º chip</b><small>Conectado no servidor com <code>gbia-whatsapp-conectar-clientes</code>. Se for bloqueado, só esse chip é perdido.</small></span></label>
+          <label class="check"><input type="radio" name="num" value="principal" ${it.cl_numero === 'principal' ? 'checked' : ''}><span><b>WhatsApp principal da barbearia</b><small>O cliente reconhece o número e as respostas caem direto na recepção. Conectado com <code>gbia-whatsapp-conectar-principal</code>. Proteções: textos sorteados, ritmo mais lento (40 a 90 s entre envios, até 20 por hora e 150 por dia), sem links e pausa automática se 3 envios seguidos falharem. O risco de bloqueio diminui, mas não some.</small></span></label>
+        </fieldset>
         <label class="field"><span>Quanto tempo antes do horário</span><select class="input" name="lead">${[[30, '30 minutos'], [60, '1 hora'], [90, '1 hora e meia'], [120, '2 horas'], [180, '3 horas']].map(([v, l]) => `<option value="${v}" ${Number(it.cl_lead || 60) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
         <label class="field"><span>Mensagem</span><textarea class="input" name="text" rows="6" maxlength="1000">${esc(it.cl_text || CL_TEXT)}</textarea>
-          <small class="muted">Use {cliente}, {hora}, {profissional}, {servico} e {barbearia}: o sistema troca pelos dados de cada agendamento.</small></label>
+          <small class="muted">Use {cliente}, {hora}, {profissional}, {servico} e {barbearia}: o sistema troca pelos dados de cada agendamento. Para ter versões diferentes sorteadas a cada envio, separe cada versão com uma linha só com <b>---</b>. Com o texto padrão, o sistema já sorteia entre 4 versões.</small></label>
         <details class="wa-prev"><summary>Ver como chega para o cliente</summary><p class="wa-bubble">${esc(prev).replace(/\n/g, '<br>')}</p></details>
         <label class="field"><span>Resposta automática <small class="muted">(opcional)</small></span><textarea class="input" name="reply" rows="3" maxlength="500" placeholder="Ex.: Este número só envia lembretes. Para remarcar, chame a barbearia no (11) 99999-9999 ou agende pelo link: …">${esc(it.cl_reply || '')}</textarea>
-          <small class="muted">Quem responder ao lembrete recebe este recado (uma vez por dia), porque ninguém lê as mensagens desse número.</small></label>
+          <small class="muted">Só no 2º chip: quem responder ao lembrete recebe este recado (uma vez por dia), porque ninguém lê as mensagens desse número. No WhatsApp principal, quem responde fala direto com a recepção.</small></label>
         <p class="form-msg" data-msg></p>
         <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
       </form></section>`;
@@ -8524,7 +8528,7 @@ Content-Type: application/json</pre>
       } catch (e) { setMsg(f, e.message); }
     },
     clRemind(f) {
-      const row = { cl_on: !!f.elements.on.checked, cl_lead: Number(f.elements.lead.value) || 60, cl_text: (f.elements.text.value || '').trim().slice(0, 1000), cl_reply: (f.elements.reply.value || '').trim().slice(0, 500) };
+      const row = { cl_on: !!f.elements.on.checked, cl_numero: f.elements.num.value === 'principal' ? 'principal' : 'chip', cl_lead: Number(f.elements.lead.value) || 60, cl_text: (f.elements.text.value || '').trim().slice(0, 1000), cl_reply: (f.elements.reply.value || '').trim().slice(0, 500) };
       if (row.cl_text === CL_TEXT) row.cl_text = '';
       const cur = (Cloud.enabled ? ui.integ : state.integ) || {};
       if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Lembretes de clientes salvos.'); return render(); }

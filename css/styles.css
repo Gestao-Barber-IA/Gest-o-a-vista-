@@ -3036,3 +3036,4 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 /* Integração › Lembretes no WhatsApp: prévia da mensagem */
 .wa-prev summary { cursor: pointer; color: var(--gold, #d6b46a); font-weight: 600; }
 .wa-bubble { margin: 10px 0 0; padding: 12px 14px; border-radius: 12px 12px 12px 4px; background: #1f3b2c; color: #f2f7f3; line-height: 1.45; max-width: 440px; }
+.cl-num { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; min-width: 0; }
