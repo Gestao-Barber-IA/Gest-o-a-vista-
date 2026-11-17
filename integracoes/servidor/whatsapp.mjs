@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "1.1";
+const VERSAO = "1.2";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const AUTH = join(DIR, "sessao");
 const ENVIADOS = join(DIR, "enviados.json");
@@ -177,8 +177,11 @@ async function lembretesClientes(e, hoje) {
   const env = lerCli(); for (const d of Object.keys(env)) if (d < hoje) delete env[d];
   const feitos = new Set((env[hoje] = env[hoje] || {})[e.company_id] || []);
   const lista = blocos(await agendaHoje(e, hoje), hoje);
-  // Hora de mandar: faltam no máximo `lead` minutos (e ainda falta pelo menos 10). Quem agendou depois disso não recebe.
-  const fila = lista.filter((b) => !b.cods.some((k) => feitos.has(k)) && b.min - agora <= lead && b.min - agora >= 10 && (b.reg < 0 || b.min - b.reg >= lead));
+  // Hora de mandar: faltam no máximo `lead` minutos (e ainda falta pelo menos 10).
+  // Quem agendou em cima da hora (depois desse momento) recebe 20 minutos antes, se agendou com pelo menos 20 minutos.
+  const hora = (b) => { const falta = b.min - agora, cedo = b.reg < 0 || b.min - b.reg >= lead;
+    return cedo ? falta <= lead && falta >= 10 : b.min - b.reg >= 20 && falta <= 20 && falta >= 5; };
+  const fila = lista.filter((b) => !b.cods.some((k) => feitos.has(k)) && hora(b));
   let n = 0;
   for (const [i, b] of fila.entries()) {
     const texto = (c.texto || TEXTO_CLI).replace(/\{cliente\}/g, b.nome || "tudo bem").replace(/\{hora\}/g, hhmm(b.min)).replace(/\{profissional\}/g, junta(b.profs) || "a nossa equipe")
