@@ -17,7 +17,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "2.2";
+const VERSAO = "2.3";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -104,6 +104,7 @@ async function quemRecebe(e) {
   for (const b of e.barbers) {
     if (so(b.phone).length < 10) continue;
     const rec = e.pop.find((r) => r.barberId === b.id);
+    if (rec && rec.folga) continue; // dia de folga marcado no checklist: não recebe lembrete
     const temEv = rec && rec.ev && Object.values(rec.ev).some((l) => Array.isArray(l) && l.length);
     const atendeu = e.entries.some((x) => x.barberId === b.id && (Number(x.cli) > 0 || Number(x.fat) > 0));
     if (!temEv && !atendeu) continue; // sem sinal de que está trabalhando hoje (folga): não manda

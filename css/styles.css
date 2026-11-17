@@ -3041,3 +3041,7 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .chip-check { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--line, rgba(255,255,255,.15)); border-radius: 999px; cursor: pointer; }
 .chip-check input { accent-color: var(--gold, #d6b46a); }
 .wb-range { display: flex; align-items: center; gap: 8px; min-width: 0; } .wb-range .input { flex: 1 1 0; min-width: 0; width: auto; }
+/* Checklist: dia de folga do profissional */
+.pop-dot.folga { background: #8a8f98; } .pop-dn.st-folga { border-color: #8a8f98; color: #8a8f98; border-style: dashed; }
+.pop-today .folga { color: #a3a8b0; }
+.arr-folga { background: #3a3f47; color: #e8eaed; }
