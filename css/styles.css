@@ -3033,3 +3033,6 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .dv-text { min-height: 3.2em; font-size: 1.05rem; line-height: 1.4; margin: 0; }
 .dv-filled { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: rgba(214, 180, 106, .12); border: 1px solid rgba(214, 180, 106, .4); line-height: 1.4; }
 .dv-warn { display: block; color: #f2c230; margin-top: 4px; }
+/* Integração › Lembretes no WhatsApp: prévia da mensagem */
+.wa-prev summary { cursor: pointer; color: var(--gold, #d6b46a); font-weight: 600; }
+.wa-bubble { margin: 10px 0 0; padding: 12px 14px; border-radius: 12px 12px 12px 4px; background: #1f3b2c; color: #f2f7f3; line-height: 1.45; max-width: 440px; }

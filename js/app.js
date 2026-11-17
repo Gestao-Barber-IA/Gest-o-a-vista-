@@ -4064,7 +4064,7 @@ ${rows.length ? '' : emptyBarbers()}
     const ex = JSON.stringify([
       { data: iso(new Date()), barbeiro: state.barbers[0]?.name || 'Nome do barbeiro', faturamento: 420.5, servicos: 9, clientes: 8, checklist_pop: 1, horas_disponiveis: 8, horas_ocupadas: 6.5, planos_mensais: 1, clientes_retorno: 5, venda_produtos: 2 },
     ], null, 2);
-    return `${apiTutorial()}${autoSyncCard()}
+    return `${apiTutorial()}${autoSyncCard()}${waRemindCard()}
       <section class="section card" id="api-ref">
         <h2 class="section-title">Como funciona ${tip('api')}</h2>
         <p class="section-note">Outro sistema (agenda, caixa, ERP) envia os resultados de cada barbeiro por dia. Os números entram no ranking na hora, junto com os lançados à mão.</p>
@@ -4177,6 +4177,34 @@ Content-Type: application/json</pre>
   }
   // Integração & API › Sincronização automática: o servidor do Gestão (IP fixo) busca na AppBarber
   // a cada 10 minutos, 24 horas por dia, sem computador ligado na barbearia.
+  // Lembretes automáticos no WhatsApp: o servidor manda, no horário escolhido, para quem fez pouco do checklist.
+  const WA_TEXT = 'Oi, {nome}! 👋 Já são {hora} e o seu Checklist Agenda Cheia de hoje está com {pontos} de {maximo} pts.\n\nCada story, convite, avaliação e retorno agendado é o que enche a sua agenda nos próximos dias. É o nosso plano estratégico para você crescer e faturar mais.\n\nAinda dá tempo! Abra o checklist e bora: {link} 💪\n\n{barbearia}';
+  function waRemindCard() {
+    if (!isGestor(currentUser())) return '';
+    const it = Cloud.enabled ? ui.integ : (state.integ || {});
+    if (!it || it.erro) return '';
+    const st = String(it.wa_status || ''), on = !!it.wa_on, bad = /^desconectado|^erro/.test(st);
+    const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const semFone = state.barbers.filter(b => b.active !== false && !String((state.users.find(u => u.barberId === b.id) || {}).phone || '').replace(/\D/g, '').length).map(b => b.name.split(' ')[0]);
+    const prev = (it.wa_text || WA_TEXT).replace(/\{nome\}/g, 'Carlos').replace(/\{pontos\}/g, '2').replace(/\{maximo\}/g, '24').replace(/\{hora\}/g, String(it.wa_hour || '13:00').replace(':00', 'h').replace(':', 'h')).replace(/\{link\}/g, location.origin + '/#checklist').replace(/\{barbearia\}/g, state.company.name || '');
+    return `<section class="section card as-card">
+      <h2 class="section-title">${icon('chat')} Lembretes automáticos no WhatsApp</h2>
+      <p class="section-note">No horário escolhido, o servidor manda uma mensagem para quem <b>está trabalhando hoje</b> (tem atendimento ou registro no checklist) e ainda fez menos que o mínimo de pontos do Checklist Agenda Cheia. Uma mensagem por pessoa por dia, com intervalo entre os envios.</p>
+      <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Precisa de atenção' : 'Funcionando'}</span> <small class="muted">${it.wa_status_at ? 'Atualizado ' + when(it.wa_status_at) : ''}</small><p class="muted as-msg">${esc(st.replace(/^(ok|erro|conectado|desconectado): /, ''))}</p>` : '<span class="chip">Aguardando o servidor</span>'}</div>
+      ${semFone.length ? `<p class="section-note">${icon('alert')} Sem telefone cadastrado (não recebem): <b>${esc(semFone.join(', '))}</b>. O telefone fica no cadastro de acesso de cada profissional.</p>` : ''}
+      <form class="form" data-form="waRemind" novalidate>
+        <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''}><span><b>Lembretes ligados</b><small>O número que envia é o chip conectado no servidor.</small></span></label>
+        <div class="grid-2">
+          <label class="field"><span>Horário do lembrete</span><input class="input" type="time" name="hour" value="${esc(it.wa_hour || '13:00')}"></label>
+          <label class="field"><span>Mínimo de pontos até esse horário</span><input class="input num" type="number" min="0" max="${GB.popDayMax(GB.popCfgOf(state))}" step="0.5" name="min" value="${esc(String(it.wa_min ?? 6))}"><small class="muted">Conta as provas aprovadas e as que aguardam conferência.</small></label>
+        </div>
+        <label class="field"><span>Mensagem</span><textarea class="input" name="text" rows="7" maxlength="1000">${esc(it.wa_text || WA_TEXT)}</textarea>
+          <small class="muted">Use {nome}, {pontos}, {maximo}, {hora}, {link} e {barbearia}: o sistema troca pelos dados de cada um.</small></label>
+        <details class="wa-prev"><summary>Ver como chega para o profissional</summary><p class="wa-bubble">${esc(prev).replace(/\n/g, '<br>')}</p></details>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
+      </form></section>`;
+  }
   function autoSyncCard() {
     if (Cloud.enabled && ui.integ === undefined) {
       ui.integ = null;
@@ -8468,6 +8496,18 @@ Content-Type: application/json</pre>
         const res = importEntries(state, Array.isArray(data) ? data : [data]); save();
         setMsg(f, `${res.ok} lançamento(s) importado(s).${res.errors.length ? ' Problemas: ' + res.errors.join(' ') : ''}`, res.errors.length === 0);
       } catch (e) { setMsg(f, e.message); }
+    },
+    waRemind(f) {
+      const hour = val(f, 'hour') || '13:00', mn = Number(String(f.elements.min.value || '').replace(',', '.'));
+      if (!/^\d{2}:\d{2}$/.test(hour)) return setMsg(f, 'Escolha o horário.');
+      if (!Number.isFinite(mn) || mn < 0) return setMsg(f, 'Digite o mínimo de pontos.');
+      const row = { wa_on: f.elements.on.checked, wa_hour: hour, wa_min: mn, wa_text: (f.elements.text.value || '').trim().slice(0, 1000) };
+      if (row.wa_text === WA_TEXT) row.wa_text = '';
+      const cur = (Cloud.enabled ? ui.integ : state.integ) || {};
+      if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Lembretes salvos.'); return render(); }
+      setMsg(f, 'Salvando…', true);
+      Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(row.wa_on ? `Lembretes ligados: todo dia às ${hour}.` : 'Lembretes desligados.'); render(); })
+        .catch(e => { const m = Cloud.message(e); setMsg(f, /wa_|column|schema cache/i.test(m) ? 'Os lembretes no WhatsApp ainda estão sendo ativados no servidor.' : m); });
     },
     autoSync(f) {
       const est = val(f, 'est').replace(/\s/g, ''), key = val(f, 'key'), cur = (Cloud.enabled ? ui.integ : state.integ) || {};

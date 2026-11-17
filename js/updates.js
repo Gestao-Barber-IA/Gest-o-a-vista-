@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-17-wa-lembretes', date: '2026-11-17', title: 'Lembretes do checklist no WhatsApp', items: [
+    ['novo', 'Em Integração, o cartão Lembretes automáticos no WhatsApp: no horário escolhido (ex.: 13h), quem está trabalhando hoje e fez menos que o mínimo de pontos do Checklist Agenda Cheia recebe uma mensagem no WhatsApp.'],
+    ['melhoria', 'O dono escolhe o horário, o mínimo de pontos e o texto da mensagem, e vê se o envio está funcionando. Uma mensagem por pessoa por dia, com intervalo entre os envios.'],
+  ] },
   { id: '2026-11-17-fisc-audio', date: '2026-11-17', title: 'Fiscalização por áudio', items: [
     ['novo', 'Na Fiscalização, o botão Registrar por áudio: o dono, o gestor ou o líder fala o que aconteceu e o sistema preenche o registro sozinho, com o profissional, o tipo de falta, a data (hoje, ontem, sábado, dia 12) e o relato. A gravidade segue a sugestão de sempre.'],
     ['melhoria', 'Nada é salvo sem conferência: o formulário abre preenchido e avisa quando não entendeu o nome ou o tipo. Usa o reconhecimento de voz do próprio celular, sem custo; o áudio não fica guardado, só o texto.'],
