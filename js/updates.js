@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-17-checklist-ordem', date: '2026-11-17', title: 'Checklist: nova ordem das tarefas', items: [
+    ['melhoria', 'O card Registro do dia agora se chama Posicionamento estratégico nas redes sociais e fica logo abaixo da Disponibilidade comercial.'],
+    ['melhoria', 'Ordem das tarefas seguindo o dia, da mais fácil para a mais difícil: Pró Atividade, 5 Stories, 10 Convites no Instagram, 3 Publicações com o cliente, 3 Retornos agendados, 3 Avaliações no Google e 5 Abordagens.'],
+  ] },
   { id: '2026-11-17-fisc-cores', date: '2026-11-17', title: 'Fiscalização com a cor do botão', items: [
     ['melhoria', 'Registros que vêm da Disponibilidade comercial aparecem na cor do botão: vermelho para compromisso comercial não atendido e amarelo para disponibilidade alterada. O relato também usa os nomes novos.'],
   ] },
