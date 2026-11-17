@@ -17,7 +17,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "1.9";
+const VERSAO = "2.0";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -293,7 +293,6 @@ const TEXTOS_WB = [
   "{Saudacao}, {cliente}! Tudo bem? 😊\nAqui é da {barbearia}. Sentimos sua falta por aqui! Faz um tempinho que você não aparece…\nPosso te enviar um presente de retorno? 🎁",
   "{Saudacao}, {cliente}! Como você está? 😊\nAqui é da {barbearia}. Faz um tempo que a gente não te vê por aqui e sentimos sua falta!\nTenho um presente de retorno separado pra você. Posso te enviar? 🎁",
   "{Saudacao}, {cliente}! Tudo certo por aí? 😊\nPassando pra dizer que a {barbearia} sentiu sua falta!\nPreparamos um presente especial para o seu retorno. Quer que eu te mande? 🎁"];
-const SAIR = "Se não quiser receber nossas mensagens, é só responder SAIR.";
 const WB_CLI = join(DIR, "reconquista-clientes.json"), WB_ENV = join(DIR, "reconquista-enviados.json"), WB_SAIR = join(DIR, "reconquista-sair.json");
 const chaveFone = (f) => { let d = so(f); if (d.length > 11 && d.startsWith("55")) d = d.slice(2); if (d.length === 11) d = d.slice(0, 2) + d.slice(3); return d.slice(-10); }; // DDD + 8 dígitos
 const lerJ = (f, pad) => { try { return JSON.parse(readFileSync(f, "utf8")); } catch { return pad; } };
@@ -346,7 +345,6 @@ async function reconquista(e, hoje) {
       const versoes = (c.texto ? c.texto.split(/\n\s*-{3,}\s*\n/) : TEXTOS_WB).map((t) => t.trim()).filter(Boolean);
       let texto = versoes[Math.floor(Math.random() * versoes.length)].replace(/\{Saudacao\}/g, sd).replace(/\{saudacao\}/g, sd.toLowerCase())
         .replace(/\{cliente\}/g, nome || "tudo bem").replace(/\{barbearia\}/g, e.nome).replace(/https?:\/\/\S+/gi, "").trim();
-      if (!/\bSAIR\b/.test(texto)) texto += "\n\n" + SAIR; // sempre com a opção de sair
       env[k] = { em: hoje }; writeFileSync(WB_ENV, JSON.stringify(env)); wbUltimo = Date.now();
       try { await enviar(f, texto); erroSeguido = 0; log(`${e.nome}: reconquista enviada (${nome || "cliente"}).`); }
       catch (err) { log(`${e.nome}: reconquista não enviada (${err.message}).`); if (!/sem WhatsApp/.test(err.message) && ++erroSeguido >= 3) pausadoDia = hoje; }
@@ -360,7 +358,7 @@ async function reconquista(e, hoje) {
     await api("POST", { company_id: e.company_id, acao: "wb_status", status: `ok: ${quando} · ${vals.filter((x) => x.em === hoje).length} de ${c.porDia} enviadas hoje · ${fila.length} na fila · ${vals.length} enviadas no total · ${vals.filter((x) => x.voltou).length} voltaram a agendar.` }).catch(() => {});
   }
 }
-// Quem responde SAIR não recebe mais a reconquista (e recebe a confirmação).
+// A mensagem não oferece o SAIR, mas se alguém responder SAIR, a reconquista não manda mais para ele.
 async function sairDaLista(msg) {
   if (!msg || !msg.key || msg.key.fromMe) return;
   const t = String((msg.message && (msg.message.conversation || (msg.message.extendedTextMessage && msg.message.extendedTextMessage.text))) || "").trim();
