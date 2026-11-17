@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-17-fisc-audio', date: '2026-11-17', title: 'Fiscalização por áudio', items: [
+    ['novo', 'Na Fiscalização, o botão Registrar por áudio: o dono, o gestor ou o líder fala o que aconteceu e o sistema preenche o registro sozinho, com o profissional, o tipo de falta, a data (hoje, ontem, sábado, dia 12) e o relato. A gravidade segue a sugestão de sempre.'],
+    ['melhoria', 'Nada é salvo sem conferência: o formulário abre preenchido e avisa quando não entendeu o nome ou o tipo. Usa o reconhecimento de voz do próprio celular, sem custo; o áudio não fica guardado, só o texto.'],
+  ] },
   { id: '2026-11-17-fisc-relatorio', date: '2026-11-17', title: 'Relatório mensal da Fiscalização', items: [
     ['novo', 'Nova aba Relatório do mês na Fiscalização: total de registros e comparação com o mês anterior, por gravidade, por tipo, vermelhos e amarelos da Disponibilidade por dia da semana, e o resumo de cada profissional.'],
     ['novo', 'Sugestões de atitudes por regras claras: plano de ação para penalidade ou reincidência, conversa e revisão da agenda para 2 ou mais vermelhos, treinamento quando a mesma falta aparece em 3 ou mais profissionais, e reconhecimento para quem fechou o mês sem registros.'],

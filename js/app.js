@@ -2052,6 +2052,7 @@
         <select class="input input-sm" data-change="discFs" aria-label="Gravidade">${opt('', 'Todas as gravidades', f.s || '')}${Object.entries(DISC_SEV).map(([k, [l]]) => opt(k, l, f.s || '')).join('')}</select>
         <select class="input input-sm" data-change="discFm" aria-label="Mês">${opt('', 'Todos os meses', f.m || '')}${months.map(m => opt(m, ymLabel(m), f.m || '')).join('')}</select>
         <button class="btn btn-primary disc-add" data-action="discNew">${icon('plus')} Novo registro</button>
+        <button class="btn disc-add disc-voice" data-action="discVoice">🎙️ Registrar por áudio</button>
       </div>
       ${list.length ? `<div class="disc-wrap"><table class="disc-table">
         <thead><tr><th>Profissional</th><th>Gravidade</th><th>Data da ocorrência</th><th>Tipo de falta</th><th>Relato do líder</th></tr></thead>
@@ -2170,13 +2171,21 @@
       </article>`; }).join('')}</div></section>`;
   }
   function discModal(user, all) {
+    if (ui.voice) return `<div class="hp-ov dv-ov" role="presentation"><div class="hp-card card dv-card" role="dialog" aria-modal="true" aria-label="Registrar por áudio">
+      <div class="dv-mic" aria-hidden="true">🎙️</div><h2>Ouvindo…</h2>
+      <p class="dv-text" id="dv-text" aria-live="polite"></p>
+      <p class="muted dv-tip">Diga o nome do profissional, o que aconteceu e quando (hoje, ontem, sábado…).</p>
+      <div class="btn-row"><button class="btn btn-primary" data-action="discVoiceDone">${icon('check')} Concluir</button><button class="btn" data-action="discVoiceCancel">Cancelar</button></div>
+    </div></div>`;
     const m = ui.discEdit; if (!m) return '';
-    const x = m === 'new' ? { barber_id: (ui.discF || {}).b || '', day: todayIso(), kind: 'atraso', severity: '', note: '' } : all.find(y => y.id === m);
+    const dr = m === 'new' && ui.discDraft;
+    const x = m === 'new' ? (dr ? { barber_id: dr.barberId || (ui.discF || {}).b || '', day: dr.day, kind: dr.kind, severity: '', note: dr.note } : { barber_id: (ui.discF || {}).b || '', day: todayIso(), kind: 'atraso', severity: '', note: '' }) : all.find(y => y.id === m);
     if (!x) return '';
     const people = discPeople(user), sev = x.severity || (x.barber_id ? discSuggest(all, x.barber_id, x.kind, x.day) : 'ocorrencia');
     return `<div class="hp-ov" data-action="discClose" role="presentation"><div class="hp-card card" role="dialog" aria-modal="true" aria-label="Registro disciplinar">
       <div class="hp-head"><h2>${icon('alert')} ${m === 'new' ? 'Novo registro' : 'Registro'}</h2><button class="icon-btn" data-action="discClose" aria-label="Fechar">${icon('x')}</button></div>
       <form class="form" data-form="discSave" novalidate>
+        ${dr ? `<div class="dv-filled">🎙️ <span><b>Preenchido pelo áudio.</b> Confira antes de salvar.${!dr.sure.barber ? ' <b class="dv-warn">Não entendi o nome do profissional: escolha abaixo.</b>' : ''}${!dr.sure.kind ? ' <b class="dv-warn">Não identifiquei o tipo de falta: escolha abaixo.</b>' : ''}</span></div>` : ''}
         <label class="field"><span>Profissional *</span><select class="input" name="b" required data-change="discSug"><option value="">Escolha</option>${people.map(b => `<option value="${esc(b.id)}" ${x.barber_id === b.id ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>
         <div class="grid-2">
           <label class="field"><span>Data da ocorrência *</span><input class="input" type="date" name="day" value="${esc(String(x.day).slice(0, 10))}" max="${todayIso()}" data-change="discSug"></label>
@@ -7512,7 +7521,29 @@ Content-Type: application/json</pre>
     popRevMore() { ui.popRevAll = true; render(); },
     popCsv() { popCsv(); },
     exportJson() { exportJson(); },
-    discNew() { ui.discEdit = 'new'; render(); },
+    discNew() { ui.discDraft = null; ui.discEdit = 'new'; render(); },
+    // Fiscalização por áudio: reconhecimento de voz do próprio aparelho (gratuito); só o texto é usado.
+    discVoice() {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) { toast('Este navegador não tem reconhecimento de voz. Use o Chrome ou o Safari atualizado, ou toque em Novo registro e use o microfone do teclado.', 7000, 'alert'); return; }
+      const rec = new SR(); rec.lang = 'pt-BR'; rec.continuous = true; rec.interimResults = true;
+      const v = ui.voice = { rec, final: '', interim: '', done: false };
+      const show = () => { const el = $('#dv-text'); if (el) el.textContent = (v.final + ' ' + v.interim).trim() || 'Fale agora… Ex.: "O Carlos chegou atrasado hoje, o cliente das 10h esperou."'; };
+      rec.onresult = e => { v.interim = ''; for (let i = e.resultIndex; i < e.results.length; i++) { const t = e.results[i][0].transcript; if (e.results[i].isFinal) v.final = (v.final + ' ' + t).trim(); else v.interim += t; } show(); };
+      rec.onerror = e => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { ui.voice = null; render(); toast('Permita o uso do microfone para registrar por áudio.', 6000, 'alert'); } };
+      rec.onend = () => { if (ui.voice !== v) return; if (v.done || (v.final + v.interim).trim()) ACTIONS.discVoiceDone(); else { try { rec.start(); } catch { /* já parou */ } } };
+      try { rec.start(); } catch { toast('Não consegui ligar o microfone.', 4000, 'alert'); ui.voice = null; return; }
+      render(); show();
+    },
+    discVoiceDone() {
+      const v = ui.voice; if (!v) return;
+      if (!v.done) { v.done = true; try { v.rec.stop(); } catch { /* já parou */ } if (!(v.final + v.interim).trim()) return; }
+      const text = (v.final + ' ' + v.interim).trim(); ui.voice = null;
+      if (!text) { render(); toast('Não ouvi nada. Tente de novo, falando perto do celular.', 4000, 'alert'); return; }
+      ui.discDraft = GB.parseDiscVoice(text, discPeople(currentUser()), todayIso());
+      ui.discEdit = 'new'; render();
+    },
+    discVoiceCancel() { const v = ui.voice; ui.voice = null; if (v) { v.done = true; try { v.rec.abort(); } catch { /* já parou */ } } render(); },
     rtAud(el) { ui.rtAud = el.dataset.a; ui.rtDraft = null; render(); },
     rtToday() { ui.rtDay = null; ui.rtData = null; ui.rtDraft = null; render(); },
     rtNew() { ui.rtEdit = 'new'; ui.confirm = null; render(); },
@@ -7552,7 +7583,7 @@ Content-Type: application/json</pre>
       try { await RT.untick(id); if (d && d.photo && Cloud.enabled && !d.photo.startsWith('data:')) Cloud.removeProof(d.photo); ui.rtData = null; toast('Tarefa desmarcada.'); render(); } catch (e) { toast(rtMsg(e)); render(); }
     },
     discOpen(el) { ui.discEdit = el.dataset.id; render(); },
-    discClose(el, e) { if (el.classList.contains('hp-ov') && e.target.closest('.hp-card')) return; ui.discEdit = null; render(); },
+    discClose(el, e) { if (el.classList.contains('hp-ov') && e.target.closest('.hp-card')) return; ui.discEdit = null; ui.discDraft = null; render(); },
     discPick(el) { const f = { ...(ui.discF || {}) }; f.b = f.b === el.dataset.b ? '' : el.dataset.b; ui.discF = f; render(); },
     discCsv() { discCsv(); },
     async discDel(el) {
@@ -8031,7 +8062,7 @@ Content-Type: application/json</pre>
       const btn = f.querySelector('[type=submit]'); btn.disabled = true;
       try {
         if (ui.discEdit === 'new') await DISC.add({ ...row, author: (u && u.name ? u.name : 'Gestor').slice(0, 80) }); else await DISC.upd(ui.discEdit, row);
-        ui.discEdit = null; ui.discData = null; toast('Registro salvo.'); render();
+        ui.discEdit = null; ui.discDraft = null; ui.discData = null; toast('Registro salvo.'); render();
       } catch (e) { btn.disabled = false; const msg = Cloud.enabled ? Cloud.message(e) : e.message; setMsg(f, /relation|does not exist|schema cache/i.test(msg) ? 'A Fiscalização ainda está sendo ativada no servidor.' : 'Não foi possível salvar: ' + msg); }
     },
     comCfg(f) {

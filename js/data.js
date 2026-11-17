@@ -990,5 +990,44 @@
     }
   }
 
-  window.GB = Object.assign(window.GB || {}, { applyCustom, customKeys, indMode, fieldOff, MODE_TXT, extrasOf, normSvc, comboBase, svcPrices, RETIRED, BONUS_INDS, OCUP_DEFAULT, ocupCfgOf, ocupCfgFor, hoursPerDay, ocupCapacity, SUM_KEYS, manualEntries, manualTotal, applyManualTotal, evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, popItemsFor, popRedPen, popPerDay, popRecDays, popWorkDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
+  // ---------- Fiscalização por áudio: entende o texto falado ----------
+  // Acha o profissional pelo nome, o tipo de falta por palavras-chave e a data ("hoje", "ontem", "sábado", "dia 12").
+  const VOICE_KINDS = [
+    ['falta', ['faltou', 'nao veio', 'nao apareceu', 'nao compareceu', 'falta no trabalho', 'nao trabalhou', 'sumiu', 'nao avisou e nao veio']],
+    ['atraso', ['atrasad', 'atraso', 'atrasou', 'chegou tarde', 'chegou depois', 'nao chegou no horario', 'fora do horario', 'chegou as', 'demorou pra chegar', 'demorou para chegar', 'compromisso comercial']],
+    ['uniforme', ['uniforme', 'avental', 'camisa', 'camiseta', 'roupa', 'bone', 'cracha', 'bermuda', 'chinelo', 'sapato']],
+    ['higiene', ['suj', 'limp', 'bancada', 'higien', 'cabelo no chao', 'toalha', 'lixo', 'esteriliz', 'navalha usada', 'cheiro', 'banheiro']],
+    ['organizacao', ['organiz', 'bagunc', 'desarrum', 'estoque', 'ferramenta', 'gaveta', 'material', 'fora do lugar']],
+    ['comportamento', ['discut', 'briga', 'brigou', 'palavrao', 'desrespeit', 'comportamento', 'xing', 'fofoc', 'grit', 'falou mal', 'ironia']],
+    ['atendimento', ['cliente reclam', 'reclamou', 'reclamacao', 'atendimento', 'atendeu mal', 'grosso', 'grosseir', 'mal educ', 'nao ofereceu', 'cafe', 'agua', 'celular', 'deixou o cliente', 'cliente esperando', 'cliente esperou', 'corte errado', 'errou o corte']],
+  ];
+  const WD = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
+  const nrm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  function parseDiscVoice(text, barbers, todayStr) {
+    const t = ' ' + nrm(text) + ' ';
+    // Profissional: nome completo vale mais; depois primeiro nome, sobrenome ou apelido entre aspas no cadastro.
+    let best = null, bestSc = 0, tie = false;
+    for (const b of barbers || []) {
+      const parts = nrm(b.name).split(' ').filter(w => w.length >= 3 && !['dos', 'das', 'del', 'van'].includes(w));
+      let sc = 0;
+      if (parts.length && t.includes(' ' + parts.join(' ') + ' ')) sc = 10;
+      else parts.forEach((w, i) => { if (t.includes(' ' + w + ' ')) sc += i === 0 ? 4 : 2; });
+      if (sc > bestSc) { best = b; bestSc = sc; tie = false; } else if (sc && sc === bestSc) tie = true;
+    }
+    // Tipo de falta: a categoria com mais palavras encontradas (na ordem da lista em caso de empate).
+    let kind = 'outro', kSc = 0;
+    for (const [k, words] of VOICE_KINDS) { const n = words.filter(w => t.includes(w)).length; if (n > kSc) { kind = k; kSc = n; } }
+    // Data
+    const today = fromIso(todayStr || iso(new Date()));
+    let d = new Date(today);
+    const m = t.match(/ dia (\d{1,2}) /);
+    if (/ anteontem /.test(t)) d.setDate(d.getDate() - 2);
+    else if (/ ontem /.test(t)) d.setDate(d.getDate() - 1);
+    else if (m) { const n = Number(m[1]); if (n >= 1 && n <= 31) { d = new Date(today.getFullYear(), today.getMonth(), n); if (d > today) d = new Date(today.getFullYear(), today.getMonth() - 1, n); } }
+    else if (!/ hoje /.test(t)) { const w = WD.findIndex(x => t.includes(' ' + x + ' ') || t.includes(' ' + x + ' feira ')); if (w >= 0) { const back = (today.getDay() - w + 7) % 7; d.setDate(d.getDate() - back); } }
+    const note = String(text || '').trim().replace(/^./, c => c.toUpperCase());
+    return { barberId: best && !tie ? best.id : '', kind, day: iso(d), note: note && !/[.!?]$/.test(note) ? note + '.' : note, sure: { barber: !!best && !tie, kind: kSc > 0 } };
+  }
+
+  window.GB = Object.assign(window.GB || {}, { parseDiscVoice, applyCustom, customKeys, indMode, fieldOff, MODE_TXT, extrasOf, normSvc, comboBase, svcPrices, RETIRED, BONUS_INDS, OCUP_DEFAULT, ocupCfgOf, ocupCfgFor, hoursPerDay, ocupCapacity, SUM_KEYS, manualEntries, manualTotal, applyManualTotal, evOk, evLive, popDefault, popCfgOf, popItemPts, popDayPts, popDayMax, popDays, popItemsFor, popRedPen, popPerDay, popRecDays, popWorkDays, validPhone, visibleInds, FIELD_IND, DB, INDICATORS, FIELDS, PERIOD_NAMES, periodRange, computeRanking, aggregate, importEntries, upsertEntry, gapTo, simulate, MONTH_FIELDS, monthRange, addMonths, monthFromIntegration, DEFAULT_GOALS, goalFor, LEVELS, levelOf, isNum, emptyState, passHash, uid, iso, fromIso, hash });
 })();
