@@ -5713,7 +5713,7 @@ Content-Type: application/json</pre>
           ${ro ? '' : `<button class="icon-btn pop-tb ${ui.confirm === 'popReset' ? 'is-confirm' : ''}" data-action="popReset" title="${editing ? 'Restaurar modelo padrão' : 'Limpar o registro do dia'}" aria-label="${editing ? 'Restaurar modelo padrão' : 'Limpar o registro do dia'}">${ui.confirm === 'popReset' ? 'Confirmar' : icon('undo')}</button>`}
         </div>
       </div>
-      ${editing ? popEditor() : `<section class="section card pop-hero"><h2>${esc(cfg.title)}</h2><p>${esc(cfg.subtitle || '')}</p>${cfg.shop ? `<span class="muted">${esc(cfg.shop)}</span>` : ''}</section>`}
+      ${editing ? popEditor() : ''}
       <section class="section card pop-day">
         <span class="tm-flabel">Dia do mês</span>
         <div class="pop-days" id="pop-days">${Array.from({ length: n }, (_, i) => { const d = `${ym}-${String(i + 1).padStart(2, '0')}`; const s2 = popStatus(bid, d); return `<button class="pop-dn ${i + 1 === ui.popDay ? 'on' : ''} st-${s2} ${d > today ? 'future' : ''}" data-action="popDay" data-d="${i + 1}" aria-label="Dia ${i + 1}">${i + 1}</button>`; }).join('')}</div>
@@ -5721,7 +5721,7 @@ Content-Type: application/json</pre>
         ${dayItems.some(popArr) ? `<div class="pop-items pop-items-top">${dayItems.filter(popArr).map(it => popItemCard(it, rec, bid)).join('')}</div>` : ''}
       </section>
       <section class="section card pop-day pop-tasks">
-        <div class="pop-dhead"><div><h2 class="pop-h2">${icon('sparkle')} Posicionamento estratégico nas redes sociais ${tip('proof')}</h2><p class="muted">Preencha stories, posts, abordagens e convites. Salva sozinho.</p></div>
+        <div class="pop-dhead"><div><h2 class="pop-h2">${icon('checksq')} Checklist de performance ${tip('proof')}</h2><p class="muted">Preencha stories, posts, abordagens e convites. Salva sozinho.</p></div>
           <span class="pop-cloud" id="pop-saved" title="Salvo">${icon('cloud')}</span></div>
         <p class="section-note">Cada unidade precisa de uma prova: foto ou print. Anexe, escreva uma descrição se quiser e toque em Confirmar. As fotos são apagadas ${PROOF_DAYS} dias depois do envio (as que ainda aguardam conferência ficam até serem conferidas); a prova e os pontos continuam.</p>
         ${ro ? '<p class="section-note">Você está vendo este checklist sem poder editar.</p>' : ''}

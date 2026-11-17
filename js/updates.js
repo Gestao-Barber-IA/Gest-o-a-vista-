@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-17-checklist-performance', date: '2026-11-17', title: 'Checklist: card Checklist de performance', items: [
+    ['melhoria', 'O card das tarefas agora se chama Checklist de performance e fica logo abaixo da Disponibilidade comercial. O card do topo (POP — Agenda Lotada) saiu da página.'],
+  ] },
   { id: '2026-11-17-amarelo-texto', date: '2026-11-17', title: 'Texto do cartão amarelo', items: [
     ['melhoria', 'Disponibilidade alterada (amarelo) agora diz: Alteração não comunicada para reorganização da agenda e dos clientes.'],
   ] },
