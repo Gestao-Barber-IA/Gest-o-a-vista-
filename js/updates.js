@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-17-fisc-cores', date: '2026-11-17', title: 'Fiscalização com a cor do botão', items: [
+    ['melhoria', 'Registros que vêm da Disponibilidade comercial aparecem na cor do botão: vermelho para compromisso comercial não atendido e amarelo para disponibilidade alterada. O relato também usa os nomes novos.'],
+  ] },
   { id: '2026-11-16-ranking-justo', date: '2026-11-16', title: 'Ranking mais justo', items: [
     ['melhoria', 'Nota de cada indicador proporcional ao líder: o 1º tira 100 e quem fez 70% do resultado dele tira 70. Antes, o último levava 0 mesmo quando estava perto.'],
     ['melhoria', 'Retenção de clientes antigos e Fidelização de clientes novos: quem ainda tem poucos clientes fica de fora do indicador, sem nota zero. A nota geral usa os outros pesos.'],

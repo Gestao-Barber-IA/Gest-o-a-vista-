@@ -2998,3 +2998,6 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .how-grp .how-list { margin: 4px 0 0; }
 /* Ranking: quem ainda não tem os dias mínimos (sem posição). */
 .rank-row.is-entering { opacity: .72; border-style: dashed; }
+/* Fiscalização: registros vindos dos botões da Disponibilidade comercial, na mesma cor do botão. */
+.dtag.dtag-red { background: #d64545; color: #fff; }
+.dtag.dtag-yel { background: #f2c230; color: #1d1600; }
