@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-17-feedback', date: '2026-11-17', title: 'Pedido de feedback para clientes novos', items: [
+    ['novo', 'Em Integração, o cartão Pedido de feedback para clientes novos: quando a comanda de um cliente que não veio nos últimos 180 dias é paga, ele recebe no WhatsApp um pedido de opinião sobre o atendimento do profissional.'],
+    ['melhoria', 'Sai pelo mesmo número do lembrete de agendamento, entre 8h e 21h, uma vez por comanda. Comandas de plano ficam de fora. Não gasta créditos da AppBarber.'],
+  ] },
   { id: '2026-11-17-checklist-performance', date: '2026-11-17', title: 'Checklist: card Checklist de performance', items: [
     ['melhoria', 'O card das tarefas agora se chama Checklist de performance e fica logo abaixo da Disponibilidade comercial. O card do topo (POP — Agenda Lotada) saiu da página.'],
   ] },

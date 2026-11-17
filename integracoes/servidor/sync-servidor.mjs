@@ -8,7 +8,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSAO = "1.3";
+const VERSAO = "1.4";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const TOKEN = process.env.SYNC_TOKEN || "";
 const SYNC_URL = process.env.SYNC_URL || "https://sekkmnkajnaqubyhpxvd.supabase.co/functions/v1/sync-servidor";
@@ -67,7 +67,7 @@ function rodar(e) {
   mkdirSync(pasta, { recursive: true });
   const cfg = {
     appbarber_api_key: e.appbarber_api_key, codigo_estabelecimento: e.codigo_estabelecimento,
-    gestao_api_key: e.gestao_api_key, nomes: e.nomes || {}, auto_atualizar: false,
+    gestao_api_key: e.gestao_api_key, nomes: e.nomes || {}, auto_atualizar: false, feedback: !!e.feedback,
   };
   if (e.codigo_filial) cfg.codigo_filial = e.codigo_filial;
   if (process.env.GESTAO_URL) cfg.gestao_url = process.env.GESTAO_URL;

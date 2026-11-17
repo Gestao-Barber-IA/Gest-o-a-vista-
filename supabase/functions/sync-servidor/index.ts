@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
   if (req.method === "GET" && url.searchParams.get("acao") === "lembretes") {
     const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
     const { data: ints, error } = await db.from("integrations")
-      .select("company_id, est_code, api_key, branch_code, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero").or("wa_on.eq.true,cl_on.eq.true");
+      .select("company_id, est_code, api_key, branch_code, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true");
     if (error) return json({ erro: error.message }, 500);
     const empresas = [];
     for (const i of ints || []) {
@@ -46,6 +46,8 @@ Deno.serve(async (req) => {
       const fone = new Map((profs || []).filter((p) => p.barber_id && p.phone && p.status !== "bloqueado").map((p) => [String(p.barber_id), p.phone]));
       empresas.push({
         company_id: co.id, nome: co.name, hoje,
+        numero: i.cl_numero === "principal" ? "principal" : "chip", // número que fala com os clientes
+        feedback: i.fb_on ? { texto: i.fb_text || "" } : null,
         cfg: { ligado: !!i.wa_on, hora: i.wa_hour || "13:00", minimo: Number(i.wa_min) || 0, texto: i.wa_text || "" },
         // Lembrete de agendamento para os clientes (o servidor consulta a agenda da AppBarber).
         clientes: i.cl_on && i.est_code && i.api_key ? { numero: i.cl_numero === "principal" ? "principal" : "chip", antecedencia: Number(i.cl_lead) || 60, texto: i.cl_text || "", resposta: i.cl_reply || "", codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
@@ -63,7 +65,7 @@ Deno.serve(async (req) => {
 
   if (req.method === "GET") {
     const { data: ints, error } = await db.from("integrations")
-      .select("company_id, provider, est_code, api_key, branch_code, names").eq("active", true);
+      .select("company_id, provider, est_code, api_key, branch_code, names, fb_on").eq("active", true);
     if (error) return json({ erro: error.message }, 500);
     const ids = (ints || []).filter((i) => i.est_code && i.api_key).map((i) => i.company_id);
     if (!ids.length) return json({ empresas: [] });
@@ -87,6 +89,7 @@ Deno.serve(async (req) => {
         codigo_estabelecimento: i.est_code, appbarber_api_key: i.api_key,
         codigo_filial: i.branch_code || undefined, nomes: i.names || {},
         gestao_api_key: keyOf.get(i.company_id),
+        feedback: !!i.fb_on, // a sincronização separa as comandas pagas de clientes novos para o pedido de feedback
       });
     }
     return json({ empresas });
@@ -100,8 +103,8 @@ Deno.serve(async (req) => {
     const usoN = Math.max(0, Math.min(5000, Number(b.creditos) || 0)), zero = b.sem_saldo === true;
     if (usoN || zero) await db.rpc("ab_add_uso", { p_company: b.company_id, p_n: usoN, p_zero: zero });
     if (b.acao === "ab_uso") return json({ ok: true });
-    if (b.acao === "wa_status" || b.acao === "cl_status") {
-      const k = b.acao === "cl_status" ? "cl" : "wa";
+    if (b.acao === "wa_status" || b.acao === "cl_status" || b.acao === "fb_status") {
+      const k = b.acao === "cl_status" ? "cl" : b.acao === "fb_status" ? "fb" : "wa";
       const { error } = await db.from("integrations").update({ [k + "_status"]: String(b.status || "").slice(0, 500), [k + "_status_at"]: new Date().toISOString() }).eq("company_id", b.company_id);
       return error ? json({ erro: error.message }, 500) : json({ ok: true });
     }
