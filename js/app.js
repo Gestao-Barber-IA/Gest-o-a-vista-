@@ -466,6 +466,7 @@
     return `<div class="notif-panel" role="dialog" aria-label="Notificações">
       <div class="notif-head"><b>Notificações</b><button class="icon-btn" data-action="notifOpen" aria-label="Fechar">${icon('x')}</button></div>
       ${pending ? `<a class="notif-item notif-app" href="#barbeiros">${icon('users')}<span><b>${pending} aprovação${pending > 1 ? 'ões' : ''} pendente${pending > 1 ? 's' : ''}</b><small>Toque para aprovar em Adicionar profissional</small></span></a>` : ''}
+      ${relUnseen(user) ? `<p class="notif-sub">${icon('chart')} Relatório da Fiscalização</p><ul class="notif-list"><li class="notif-item new notif-pen"><button class="notif-penbtn" data-action="relOpen">${icon('chart')}<span><span><b>Relatório de ${esc(monthRange(relPrevYm()).label)} pronto</b></span><small>Resumo do mês, quem precisa de atenção e sugestões de atitudes · toque para abrir</small></span></button></li></ul>` : ''}
       ${(() => { const pu = penUnseen(user); if (!pu) return ''; const l = penList().slice().sort((a, b) => String(b.created_at || b.day).localeCompare(String(a.created_at || a.day))).slice(0, pu); return `<p class="notif-sub">${icon('alert')} Penalidades novas</p><ul class="notif-list">${l.map(x => `<li class="notif-item new notif-pen"><button class="notif-penbtn" data-action="penOpen">${avatar(barberById(x.barber_id) || { name: '?' }, 36)}<span><span><b>${esc((barberById(x.barber_id) || { name: 'Profissional' }).name)}</b> levou penalidade (${esc((DISC_KIND[x.kind] || ['falta'])[0].toLowerCase())})</span><small>${dayLabel(String(x.day).slice(0, 10))} · toque para ver em Fiscalização</small></span></button></li>`).join('')}</ul>`; })()}
       <p class="notif-sub">${icon('trophy')} Ultrapassagens no ranking</p>
       ${f.length ? `<ul class="notif-list">${f.map((e, i) => `<li class="notif-item ${cut === -1 ? (seen ? 'new' : (i < 3 ? 'new' : '')) : (i < cut ? 'new' : '')}">
@@ -2030,15 +2031,17 @@
     const cnt = {}; list.forEach(x => { const c = cnt[x.barber_id] || (cnt[x.barber_id] = { n: 0, adv: 0, rei: 0, sus: 0 }); c.n++; if (x.severity === 'advertencia') c.adv++; if (x.severity === 'reincidencia') c.rei++; if (x.severity === 'penalidade') c.sus++; });
     const top = Object.entries(cnt).sort((a, b) => b[1].n - a[1].n).slice(0, 6);
     const opt = (v, l, cur) => `<option value="${esc(v)}" ${cur === v ? 'selected' : ''}>${esc(l)}</option>`;
-    const pens = r.list.filter(x => x.severity === 'penalidade' && (ids.has(x.barber_id) || isGestor(user))), tab = ui.discTab === 'pen' ? 'pen' : 'reg';
+    const pens = r.list.filter(x => x.severity === 'penalidade' && (ids.has(x.barber_id) || isGestor(user))), tab = ui.discTab === 'pen' || ui.discTab === 'rel' ? ui.discTab : 'reg';
     if (tab === 'pen') setTimeout(() => { if (penUnseen(user)) { penMarkSeen(); render(); } }, 1200);
     const head = `<section class="section disc-hero">
       <h2 class="disc-title">${icon('alert')} Controle disciplinar</h2>
       <p class="muted">Registre atrasos, faltas e problemas de atendimento, higiene ou uniforme com o relato do líder. Só o gestor e os líderes veem esta página.</p>
       <div class="disc-tabs" role="tablist"><button role="tab" class="disc-tab ${tab === 'reg' ? 'on' : ''}" aria-selected="${tab === 'reg'}" data-action="discTab" data-t="reg">${icon('file')} Registros</button>
-        <button role="tab" class="disc-tab ${tab === 'pen' ? 'on' : ''}" aria-selected="${tab === 'pen'}" data-action="discTab" data-t="pen">${icon('alert')} Penalidades${pens.length ? ` <span class="disc-tabn">${pens.length}</span>` : ''}${penUnseen(user) ? ' <span class="nav-new">novo</span>' : ''}</button></div>
+        <button role="tab" class="disc-tab ${tab === 'pen' ? 'on' : ''}" aria-selected="${tab === 'pen'}" data-action="discTab" data-t="pen">${icon('alert')} Penalidades${pens.length ? ` <span class="disc-tabn">${pens.length}</span>` : ''}${penUnseen(user) ? ' <span class="nav-new">novo</span>' : ''}</button>
+        <button role="tab" class="disc-tab ${tab === 'rel' ? 'on' : ''}" aria-selected="${tab === 'rel'}" data-action="discTab" data-t="rel">${icon('chart')} Relatório do mês${relUnseen(user) ? ' <span class="nav-new">novo</span>' : ''}</button></div>
     </section>`;
     if (tab === 'pen') return head + discPenTab(pens, name) + discModal(user, r.list);
+    if (tab === 'rel') return head + discRelTab(user, r.list.filter(x => ids.has(x.barber_id) || isGestor(user)), people, name);
     return `${head}
     ${top.length ? `<section class="section"><div class="disc-sum">${top.map(([id, c]) => `<button class="card disc-sumc ${f.b === id ? 'on' : ''}" data-action="discPick" data-b="${esc(id)}">${avatar(barberById(id) || { name: name(id) }, 36)}<span><b>${esc(name(id).split(' ')[0])}</b><small>${c.n} ${c.n === 1 ? 'registro' : 'registros'}${c.rei ? ` · ${c.rei} reincid.` : ''}${c.adv ? ` · ${c.adv} advert.` : ''}${c.sus ? ` · ${c.sus} penal.` : ''}</small></span></button>`).join('')}</div></section>` : ''}
     <section class="section">
@@ -2063,6 +2066,98 @@
     </section>
     ${discModal(user, r.list)}`;
   }
+  // ---------- Relatório mensal da Fiscalização ----------
+  // Pronto no dia 1º (mês anterior). Aviso no sino e na tela para quem vê a Fiscalização, até abrir o relatório.
+  const relSeenKey = () => 'relSeen.' + ((currentUser() || {}).id || '');
+  const relPrevYm = () => addMonths(curYm(), -1);
+  const relUnseen = u => (discOk(u) && DB.pref.get(relSeenKey(), '') < relPrevYm() ? 1 : 0);
+  const WEEKDAYS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+  const plural = (n, a, b) => `${n} ${n === 1 ? a : b}`;
+  function discRelData(list, people, ym) {
+    const inM = x => String(x.day).slice(0, 7) === ym, prevYm = addMonths(ym, -1);
+    const M = list.filter(inM), P = list.filter(x => String(x.day).slice(0, 7) === prevYm);
+    const by = (arr, f) => arr.reduce((o, x) => { const k = f(x); o[k] = (o[k] || 0) + 1; return o; }, {});
+    const arrs = M.filter(x => discArr(x));
+    const wd = by(arrs, x => fromIso(String(x.day).slice(0, 10)).getDay());
+    const pros = people.filter(b => b.active !== false || M.some(x => x.barber_id === b.id)).map(b => {
+      const mine = M.filter(x => x.barber_id === b.id), sev = by(mine, x => x.severity);
+      return { b, n: mine.length, prev: P.filter(x => x.barber_id === b.id).length, sev, kinds: by(mine, x => x.kind),
+        red: mine.filter(x => discArr(x) === 'red').length, yel: mine.filter(x => discArr(x) === 'yel').length, list: mine };
+    }).sort((a, c) => c.n - a.n || a.b.name.localeCompare(c.b.name));
+    // Sugestões por regras simples e claras.
+    const team = [];
+    const kindPros = {}; M.forEach(x => { (kindPros[x.kind] = kindPros[x.kind] || new Set()).add(x.barber_id); });
+    for (const [k, set] of Object.entries(kindPros)) if (set.size >= 3) team.push(['proc', `${(DISC_KIND[k] || ['Outro'])[0]} apareceu com ${set.size} profissionais: o problema é do processo, não de uma pessoa. Faça um treinamento rápido com a equipe toda ou atualize o POP desse assunto.`]);
+    if (arrs.length >= 3) { const [d, c] = Object.entries(wd).sort((a, b2) => b2[1] - a[1])[0]; if (c / arrs.length >= 0.4) team.push(['dia', `${Math.round(c / arrs.length * 100)}% dos vermelhos e amarelos da Disponibilidade foram em ${WEEKDAYS[d]}. Revise a escala e os horários desse dia.`]); }
+    if (P.length && M.length < P.length) team.push(['ok', `Os registros caíram de ${P.length} para ${M.length} em relação ao mês anterior. Reconheça a evolução da equipe na próxima reunião.`]);
+    if (M.length > P.length && P.length) team.push(['alerta', `Os registros subiram de ${P.length} para ${M.length}. Vale uma reunião curta com a equipe para reforçar as regras.`]);
+    if (!M.length) team.push(['ok', 'Mês sem nenhum registro na Fiscalização. Parabenize a equipe.']);
+    for (const p of pros) {
+      const t = p.tips = [];
+      if (p.sev.penalidade) t.push(['grave', 'Levou penalidade: faça um plano de ação por escrito, com prazo, e acompanhe toda semana.']);
+      else if (p.sev.reincidencia) t.push(['grave', 'Teve reincidência: conversa individual e plano de ação por escrito, com prazo.']);
+      if (p.red >= 2) t.push(['alerta', `${plural(p.red, 'compromisso comercial não atendido', 'compromissos comerciais não atendidos')}: conversa individual e revisão da agenda e dos horários dele.`]);
+      if (p.yel >= 2) t.push(['alerta', `${plural(p.yel, 'disponibilidade alterada', 'disponibilidades alteradas')}: reveja com ele a disponibilidade combinada.`]);
+      if (!t.length && p.n) t.push(['alerta', p.n >= 2 ? 'Mais de um registro no mês: uma conversa rápida para alinhar as expectativas.' : 'Um registro no mês: um alinhamento rápido para não se repetir.']);
+      if (!p.n) t.push(['ok', 'Mês sem registros: reconheça em público. Pode valer um bônus.']);
+      else if (p.prev > p.n) t.push(['ok', `Melhorou: de ${p.prev} para ${p.n} registro(s). Elogie a evolução.`]);
+    }
+    return { M, P, prevYm, sev: by(M, x => x.severity), kinds: by(M, x => x.kind), red: arrs.filter(x => discArr(x) === 'red').length, yel: arrs.filter(x => discArr(x) === 'yel').length, wd, pros, team };
+  }
+  function relWaText(p, ym) {
+    const first = p.b.name.split(' ')[0], mes = monthRange(ym).label;
+    const lines = [`${first}, aqui vai o resumo da Fiscalização de ${mes}:`];
+    if (!p.n) lines.push('✅ Nenhum registro no mês. Parabéns pela disciplina, continue assim!');
+    else {
+      lines.push(`📋 ${plural(p.n, 'registro', 'registros')} no mês.`);
+      const sv = Object.entries(p.sev).map(([k, c]) => `${c} ${(DISC_SEV[k] || [k])[0].toLowerCase()}`).join(', ');
+      if (sv) lines.push(`• Gravidade: ${sv}.`);
+      if (p.red) lines.push(`• 🔴 ${plural(p.red, 'compromisso comercial não atendido', 'compromissos comerciais não atendidos')}.`);
+      if (p.yel) lines.push(`• 🟡 ${plural(p.yel, 'disponibilidade alterada', 'disponibilidades alteradas')}.`);
+      if (p.prev > p.n) lines.push(`👏 Melhorou em relação ao mês anterior (${p.prev} → ${p.n}).`);
+      lines.push('👉 Vamos juntos deixar o próximo mês sem nenhum registro.');
+    }
+    return lines.join('\n');
+  }
+  function discRelTab(user, list, people, name) {
+    const months = [...new Set([relPrevYm(), curYm(), ...list.map(x => String(x.day).slice(0, 7))])].sort().reverse();
+    const ym = ui.relYm && months.includes(ui.relYm) ? ui.relYm : relPrevYm();
+    if (ym === relPrevYm() && relUnseen(user)) setTimeout(() => { DB.pref.set(relSeenKey(), relPrevYm()); render(); }, 1200);
+    const D = discRelData(list, people, ym), running = ym === curYm();
+    const chip = (map, k, c) => `<span class="rel-chip">${discTag(map, k)}<b class="num">${c}</b></span>`;
+    const tipCls = { grave: 'rel-grave', alerta: 'rel-alerta', ok: 'rel-ok', proc: 'rel-alerta', dia: 'rel-alerta' };
+    const tipIco = { grave: 'alert', alerta: 'alert', ok: 'check', proc: 'book', dia: 'clock' };
+    const tip2 = ([k, t]) => `<li class="${tipCls[k]}">${icon(tipIco[k])}<span>${esc(t)}</span></li>`;
+    const diff = D.P.length ? D.M.length - D.P.length : null;
+    return `<section class="section card rel-card" id="rel-report">
+      <div class="rel-head"><div><h2 class="section-title">${icon('chart')} Relatório da Fiscalização</h2><p class="muted">${esc(ymLabel(ym))}${running ? ' · mês em andamento (parcial)' : ' · mês fechado'}</p></div>
+        <div class="rel-tools no-print"><select class="input input-sm" data-change="relYm" aria-label="Mês do relatório">${months.map(m => `<option value="${m}" ${m === ym ? 'selected' : ''}>${esc(ymLabel(m))}</option>`).join('')}</select>
+        <button class="btn btn-sm" data-action="relPrint">${icon('file')} Imprimir ou PDF</button></div></div>
+      <div class="pc-totals rel-kpis">
+        <div class="pc-stat"><span>Registros no mês</span><b class="num">${D.M.length}</b>${diff !== null ? `<small class="${diff > 0 ? 'bad' : diff < 0 ? 'good' : ''}">${diff > 0 ? '+' : ''}${diff} vs. ${esc(monthRange(D.prevYm).label.split(' ')[0])}</small>` : ''}</div>
+        <div class="pc-stat"><span>🔴 Compromisso não atendido</span><b class="num">${D.red}</b></div>
+        <div class="pc-stat"><span>🟡 Disponibilidade alterada</span><b class="num">${D.yel}</b></div>
+        <div class="pc-stat"><span>Sem nenhum registro</span><b class="num">${D.pros.filter(p => !p.n).length} de ${D.pros.length}</b></div>
+      </div>
+      ${D.M.length ? `<h3 class="rel-h3">Por gravidade</h3><div class="rel-chips">${Object.keys(DISC_SEV).filter(k => D.sev[k]).map(k => chip(DISC_SEV, k, D.sev[k])).join('')}</div>
+      <h3 class="rel-h3">Por tipo</h3><div class="rel-chips">${Object.keys(DISC_KIND).filter(k => D.kinds[k]).map(k => chip(DISC_KIND, k, D.kinds[k])).join('')}</div>` : ''}
+      ${D.red + D.yel ? `<h3 class="rel-h3">Disponibilidade comercial por dia da semana</h3><div class="rel-chips">${[1, 2, 3, 4, 5, 6, 0].filter(d => D.wd[d]).map(d => `<span class="rel-chip"><span class="dtag dtag-red">${WEEKDAYS[d]}</span><b class="num">${D.wd[d]}</b></span>`).join('')}</div>` : ''}
+      <h3 class="rel-h3">${icon('sparkle')} Sugestões para a equipe</h3>
+      ${D.team.length ? `<ul class="rel-tips">${D.team.map(tip2).join('')}</ul>` : '<p class="muted">Nada a destacar para a equipe toda neste mês.</p>'}
+    </section>
+    <section class="section">
+      <h2 class="section-title">Por profissional</h2>
+      <div class="rel-pros">${D.pros.map(p => `<article class="card rel-pro ${p.sev.penalidade || p.sev.reincidencia ? 'is-grave' : p.n ? '' : 'is-clean'}">
+        <div class="rel-pro-h">${avatar(p.b, 40)}<div><b>${esc(p.b.name)}</b><small class="muted">${p.n ? plural(p.n, 'registro', 'registros') : 'Nenhum registro'}${D.P.length || p.prev ? ` · mês anterior: ${p.prev}` : ''}</small></div></div>
+        ${p.n ? `<div class="rel-chips">${Object.keys(DISC_SEV).filter(k => p.sev[k]).map(k => chip(DISC_SEV, k, p.sev[k])).join('')}${Object.keys(DISC_KIND).filter(k => p.kinds[k]).map(k => chip(DISC_KIND, k, p.kinds[k])).join('')}</div>` : ''}
+        ${p.red || p.yel ? `<p class="rel-arr">${p.red ? `<span class="dtag dtag-red">🔴 ${p.red}</span> ` : ''}${p.yel ? `<span class="dtag dtag-yel">🟡 ${p.yel}</span>` : ''}</p>` : ''}
+        <ul class="rel-tips">${p.tips.map(tip2).join('')}</ul>
+        <a class="btn btn-sm no-print" target="_blank" rel="noopener" href="${(() => { const u = state.users.find(x => x.barberId === p.b.id), ph = String((u && u.phone) || '').replace(/\D/g, ''); return `https://wa.me/${ph ? (ph.length <= 11 ? '55' + ph : ph) : ''}?text=${encodeURIComponent(relWaText(p, ym))}`; })()}">${icon('chat')} Enviar resumo no WhatsApp</a>
+      </article>`).join('')}</div>
+      <p class="section-note">As sugestões seguem regras fixas: penalidade ou reincidência pedem plano de ação por escrito; 2 ou mais vermelhos pedem conversa e revisão da agenda; 2 ou mais amarelos pedem rever a disponibilidade combinada; a mesma falta em 3 ou mais profissionais indica problema de processo; mês sem registro merece reconhecimento.</p>
+    </section>`;
+  }
+
   function discPenTab(pens, name) {
     if (!pens.length) return `<section class="section"><div class="card muted">Nenhuma penalidade registrada. A penalidade aparece aqui sozinha quando um profissional chega atrasado pela 3ª vez no mês (Checklist › Horário de chegada › Chegou atrasado) ou quando alguém registra uma.</div></section>`;
     const by = {};
@@ -7162,7 +7257,8 @@ Content-Type: application/json</pre>
         ${isGestor(user) ? `<a class="icon-btn" href="#apresentacao" aria-label="Tela da loja" title="Tela da loja">${icon('monitor')}</a>` : ''}
         <button class="icon-btn" data-action="fontSize" aria-label="Tamanho da letra" title="Tamanho da letra">${icon('type')}</button>
         <button class="icon-btn theme-btn" data-action="toggleTheme" aria-label="${getTheme() === 'light' ? 'Ativar modo escuro' : 'Ativar modo claro'}" title="${getTheme() === 'light' ? 'Modo escuro' : 'Modo claro'}">${icon(getTheme() === 'light' ? 'moon' : 'sun')}</button>
-        ${(() => { if (discOk(user) && !ui.discData) fbLoad('discData', DISC.list); const n = pending + unseenOvertakes() + penUnseen(user); return `<button class="icon-btn" data-action="notifOpen" aria-expanded="${!!ui.notifOpen}" aria-label="Notificações${n ? ': ' + n + ' novas' : ''}">${icon('bell')}${n ? `<span class="badge-dot">${n > 9 ? '9+' : n}</span>` : ''}</button>`; })()}
+        ${(() => { if (discOk(user) && !ui.discData) fbLoad('discData', DISC.list); const ru = relUnseen(user), n = pending + unseenOvertakes() + penUnseen(user) + ru;
+          if (ru && !ui.relToasted) { ui.relToasted = true; setTimeout(() => toast(`O relatório da Fiscalização de ${monthRange(relPrevYm()).label} está pronto. Veja no sininho ou em Fiscalização › Relatório do mês.`, 7000, 'chart'), 1500); } return `<button class="icon-btn" data-action="notifOpen" aria-expanded="${!!ui.notifOpen}" aria-label="Notificações${n ? ': ' + n + ' novas' : ''}">${icon('bell')}${n ? `<span class="badge-dot">${n > 9 ? '9+' : n}</span>` : ''}</button>`; })()}
         <button class="avatar-btn" data-action="togglePopover" aria-label="Perfil e conta">${avatar(who, 40)}</button>
       </header>
       ${demoBar(user)}
@@ -7377,6 +7473,8 @@ Content-Type: application/json</pre>
       l.splice(i, 1); save(); toast('Marcação desfeita.'); render();
     },
     discTab(el) { ui.discTab = el.dataset.t; render(); },
+    relOpen() { ui.discTab = 'rel'; ui.relYm = relPrevYm(); ui.notifOpen = false; if (location.hash !== '#fiscalizacao') location.hash = 'fiscalizacao'; else render(); },
+    relPrint() { const t = document.title; document.title = 'Relatório da Fiscalização'; document.body.classList.add('printing', 'printing-rel'); setTimeout(() => { window.print(); document.body.classList.remove('printing', 'printing-rel'); document.title = t; }, 80); },
     penOpen() { ui.discTab = 'pen'; ui.notifOpen = false; if (location.hash === '#fiscalizacao') render(); else location.hash = '#fiscalizacao'; },
     popAddCancel() { ui.popDraft = null; render(); },
     async popConfirm() {
@@ -8508,6 +8606,7 @@ Content-Type: application/json</pre>
     evoFull(el) { ui.evo = { ...(ui.evo || {}), full: el.checked }; evoRefresh(); },
     evoDate(el) { if (!el.value) return; ui.evo = { ...(ui.evo || {}), [el.dataset.k]: el.value }; evoRefresh(); },
     popMonth(el) { ui.teamMonth = ui.popMonth = el.value; ui.popDraft = null; render(); },
+    relYm(el) { ui.relYm = el.value; render(); },
     async popPhoto(el) {
       const f = el.files && el.files[0]; if (!f || !ui.popDraft) return;
       try { ui.popDraft.photo = await readImage(f, 1100, 0.72); render(); } catch (e) { toast(e.message); }
