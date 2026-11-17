@@ -326,14 +326,15 @@
       title: 'POP — Agenda Lotada', subtitle: 'Checklist diário de performance', shop: '',
       phrase: 'A sua atitude de hoje gera o teu resultado de amanhã.', minProfit: 4500,
       items: [
+        // Ordem do dia: começa pelo mais fácil e termina na mais difícil (a Pró Atividade fica logo abaixo da Disponibilidade).
         { id: 'stories', title: '5 Stories', desc: 'Poste 5 stories nas redes sociais, sendo 3 nos horários estratégicos: 8h30, 12h e 17h30', type: 'count', target: 5, pts: 3 },
-        { id: 'abord', title: '5 Abordagens', desc: 'Abordar 5 clientes em frente à barbearia e captar o telefone', type: 'phones', target: 5, pts: 4 },
-        { id: 'convites', title: '10 Convites Instagram', desc: 'Mande mensagem para 10 potenciais clientes e anexe o print', type: 'count', target: 10, pts: 2 },
-        { id: 'public', title: '3 Publicações com o cliente', desc: 'Self ou espelho junto com cliente e marcando @', type: 'count', target: 3, pts: 3 },
-        { id: 'google', title: '3 Avaliações no Google', desc: 'Peça e conquiste 3 avaliações de clientes no Google', type: 'count', target: 3, pts: 3 },
         // Juntou com os 5 Stories em 16/11/2026: os dias anteriores continuam com os pontos que já tinham.
         { id: 'estrat', title: 'Stories Estratégico', desc: 'postar às 8h30, 12h, 17h30', type: 'count', target: 3, pts: 2, until: '2026-11-16' },
+        { id: 'convites', title: '10 Convites Instagram', desc: 'Mande mensagem para 10 potenciais clientes e anexe o print', type: 'count', target: 10, pts: 2 },
+        { id: 'public', title: '3 Publicações com o cliente', desc: 'Self ou espelho junto com cliente e marcando @', type: 'count', target: 3, pts: 3 },
         { id: 'retorno', title: '3 Retornos agendados', desc: 'Cliente sai com o próximo horário marcado. Prova: print da agenda com o retorno', type: 'count', target: 3, pts: 3, from: '2026-11-16' },
+        { id: 'google', title: '3 Avaliações no Google', desc: 'Peça e conquiste 3 avaliações de clientes no Google', type: 'count', target: 3, pts: 3 },
+        { id: 'abord', title: '5 Abordagens', desc: 'Abordar 5 clientes em frente à barbearia e captar o telefone', type: 'phones', target: 5, pts: 4 },
         { id: 'extra', title: 'Pró Atividade', desc: 'Atitudes além do combinado. Ex.: ajudar a recepção, organizar o estoque, repor produtos, limpar e organizar o espaço, indicar a barbearia para um novo cliente, ajudar um colega', type: 'count', target: 5, pts: 3 },
         { id: 'chegada', title: 'Disponibilidade comercial', desc: 'Organização da agenda e dos atendimentos oferecidos aos clientes.', type: 'check', target: 1, pts: 3 },
       ],

@@ -1958,7 +1958,11 @@
   // ---------- Fiscalização (controle disciplinar) ----------
   const DISC_SEV = { ocorrencia: ['Ocorrência', 'sev-oc'], advertencia: ['Advertência', 'sev-adv'], reincidencia: ['Reincidência', 'sev-rei'], penalidade: ['Penalidade', 'sev-sus'] };
   const DISC_KIND = { atraso: ['Atraso', 'k-atraso'], falta: ['Falta', 'k-falta'], atendimento: ['Atendimento', 'k-atend'], higiene: ['Higiene', 'k-hig'], uniforme: ['Uniforme', 'k-unif'], organizacao: ['Organização', 'k-org'], comportamento: ['Comportamento', 'k-comp'], outro: ['Outro', 'k-outro'] };
-  const discTag = (map, k) => { const [l, c] = map[k] || Object.values(map)[0]; return `<span class="dtag ${c}">${l}</span>`; };
+  // Registro gerado pelos botões da Disponibilidade comercial: vermelho (compromisso não atendido) ou amarelo (alterada).
+  const discArr = x => (/^Chegou atrasado/.test((x && x.note) || '') ? 'red' : /^Chegou após o horário/.test((x && x.note) || '') ? 'yel' : '');
+  const discTag = (map, k, x) => { const [l, c] = map[k] || Object.values(map)[0], a = discArr(x); return `<span class="dtag ${a ? 'dtag-' + a : c}">${l}</span>`; };
+  // Texto mostrado (o texto gravado continua o mesmo, porque a contagem do mês usa o começo dele).
+  const discNote = x => { const a = discArr(x); return a === 'red' ? 'Compromisso comercial não atendido: sem bônus e −3 pts no dia (botão vermelho no Checklist › Disponibilidade comercial).' : a === 'yel' ? 'Disponibilidade alterada: registrado e sem bônus (botão amarelo no Checklist › Disponibilidade comercial).' : (x && x.note) || ''; };
   const discDemo = () => {
     const bs = state.barbers.filter(b => b.active !== false), ym = curYm(), d = n => `${ym}-${String(n).padStart(2, '0')}`;
     const rows = [[0, 'advertencia', 'atraso', 3, 'Avisou 8h32 que chegaria atrasado. Chegou 9h10.'], [1, 'reincidencia', 'atraso', 5, 'Chegou 8h58, segunda vez no mês.'], [2, 'ocorrencia', 'atraso', 6, 'Chegou 9h07 e foi ajeitar o cabelo antes de atender.'],
@@ -2050,10 +2054,10 @@
         <thead><tr><th>Profissional</th><th>Gravidade</th><th>Data da ocorrência</th><th>Tipo de falta</th><th>Relato do líder</th></tr></thead>
         <tbody>${list.map(x => `<tr>
           <td class="disc-name"><span>${icon('file')} ${esc(name(x.barber_id))}</span><button class="disc-open" data-action="discOpen" data-id="${esc(x.id)}">Abrir</button></td>
-          <td>${discTag(DISC_SEV, x.severity)}</td>
+          <td>${discTag(DISC_SEV, x.severity, x)}</td>
           <td class="num">${esc(fmtDayBR(x.day))}</td>
-          <td>${discTag(DISC_KIND, x.kind)}</td>
-          <td class="disc-note" title="${esc(x.note)}">${esc(x.note)}</td></tr>`).join('')}</tbody></table></div>
+          <td>${discTag(DISC_KIND, x.kind, x)}</td>
+          <td class="disc-note" title="${esc(discNote(x))}">${esc(discNote(x))}</td></tr>`).join('')}</tbody></table></div>
         <div class="btn-row" style="margin-top:10px"><small class="muted">${list.length} ${list.length === 1 ? 'registro' : 'registros'}</small><button class="btn btn-sm" data-action="discCsv">${icon('download')} Baixar planilha</button></div>`
       : `<div class="card muted">${r.list.length ? 'Nenhum registro com esses filtros.' : 'Nenhum registro ainda. Toque em Novo registro para começar.'}</div>`}
     </section>
@@ -2067,7 +2071,7 @@
     return `<section class="section"><p class="section-note">Profissionais que levaram penalidade. A penalidade reduz a comissão nos dias definidos em Comissões e prêmios.</p>
       <div class="pen-list">${rows.map(([id, l]) => { l.sort((a, b) => (a.day < b.day ? 1 : -1)); return `<article class="card pen-card">
         <div class="pen-head">${avatar(barberById(id) || { name: name(id) }, 44)}<div><b>${esc(name(id))}</b><small>${l.length} ${l.length === 1 ? 'penalidade' : 'penalidades'} · última em ${esc(fmtDayBR(l[0].day))}</small></div><span class="dtag sev-sus">${l.length}</span></div>
-        <ul class="pen-items">${l.map(x => `<li><button class="link-btn" data-action="discOpen" data-id="${esc(x.id)}">${esc(fmtDayBR(x.day))}</button> ${discTag(DISC_KIND, x.kind)} <span class="muted">${esc(x.note || '')}</span></li>`).join('')}</ul>
+        <ul class="pen-items">${l.map(x => `<li><button class="link-btn" data-action="discOpen" data-id="${esc(x.id)}">${esc(fmtDayBR(x.day))}</button> ${discTag(DISC_KIND, x.kind, x)} <span class="muted">${esc(discNote(x))}</span></li>`).join('')}</ul>
       </article>`; }).join('')}</div></section>`;
   }
   function discModal(user, all) {
@@ -5505,12 +5509,14 @@ Content-Type: application/json</pre>
       </div>
       ${editing ? popEditor() : `<section class="section card pop-hero"><h2>${esc(cfg.title)}</h2><p>${esc(cfg.subtitle || '')}</p>${cfg.shop ? `<span class="muted">${esc(cfg.shop)}</span>` : ''}</section>`}
       <section class="section card pop-day">
-        <div class="pop-dhead"><div><h2 class="pop-h2">${icon('sparkle')} Registro do dia ${tip('proof')}</h2><p class="muted">Preencha stories, posts, abordagens e convites. Salva sozinho.</p></div>
-          <span class="pop-cloud" id="pop-saved" title="Salvo">${icon('cloud')}</span></div>
         <span class="tm-flabel">Dia do mês</span>
         <div class="pop-days" id="pop-days">${Array.from({ length: n }, (_, i) => { const d = `${ym}-${String(i + 1).padStart(2, '0')}`; const s2 = popStatus(bid, d); return `<button class="pop-dn ${i + 1 === ui.popDay ? 'on' : ''} st-${s2} ${d > today ? 'future' : ''}" data-action="popDay" data-d="${i + 1}" aria-label="Dia ${i + 1}">${i + 1}</button>`; }).join('')}</div>
         <p class="pop-sum"><b class="num" id="pop-daypts">${fmtPts(dayPts)}/${fmtPts(dayMax)} pts aprovados no dia</b>${GB.popDayPts(cfg, rec, true) ? ` · <span class="pend num">+${fmtPts(GB.popDayPts(cfg, rec, true))} pts aguardando conferência</span>` : ''}</p>${rec && Number(rec.adj) > 0 ? `<p class="pop-adj">${icon('plus')} <b class="num">+${fmtPts(Number(rec.adj))} pts</b> ${esc(rec.adjNote || 'acrescentados pela gestão')}</p>` : ''}
         ${dayItems.some(popArr) ? `<div class="pop-items pop-items-top">${dayItems.filter(popArr).map(it => popItemCard(it, rec, bid)).join('')}</div>` : ''}
+      </section>
+      <section class="section card pop-day pop-tasks">
+        <div class="pop-dhead"><div><h2 class="pop-h2">${icon('sparkle')} Posicionamento estratégico nas redes sociais ${tip('proof')}</h2><p class="muted">Preencha stories, posts, abordagens e convites. Salva sozinho.</p></div>
+          <span class="pop-cloud" id="pop-saved" title="Salvo">${icon('cloud')}</span></div>
         <p class="section-note">Cada unidade precisa de uma prova: foto ou print. Anexe, escreva uma descrição se quiser e toque em Confirmar. As fotos são apagadas ${PROOF_DAYS} dias depois do envio (as que ainda aguardam conferência ficam até serem conferidas); a prova e os pontos continuam.</p>
         ${ro ? '<p class="section-note">Você está vendo este checklist sem poder editar.</p>' : ''}
         <div class="pop-items">${popOrder(dayItems).filter(it => !popArr(it)).map(it => popItemCard(it, rec, bid)).join('')}</div>
