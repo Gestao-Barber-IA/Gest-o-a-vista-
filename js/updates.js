@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-17-reconquista', date: '2026-11-17', title: 'Reconquista de clientes sumidos', items: [
+    ['novo', 'Em Integração, o cartão Reconquista de clientes sumidos: quem não vem há 3 a 12 meses recebe, aos poucos, um convite perguntando se pode receber um presente de retorno. Quem responder fala com a recepção.'],
+    ['melhoria', 'Começa por quem sumiu há menos tempo, até o número de mensagens por dia escolhido (padrão 15), entre 10h e 18h. Cada cliente recebe no máximo 1 vez a cada 6 meses, o sistema confere se ele já não marcou horário e quem responder SAIR não recebe mais. O cartão mostra quantos voltaram a agendar.'],
+  ] },
   { id: '2026-11-17-feedback', date: '2026-11-17', title: 'Pedido de feedback para clientes novos', items: [
     ['novo', 'Em Integração, o cartão Pedido de feedback para clientes novos: quando a comanda de um cliente que não veio nos últimos 180 dias é paga, ele recebe no WhatsApp um pedido de opinião sobre o atendimento do profissional.'],
     ['melhoria', 'Sai pelo mesmo número do lembrete de agendamento, entre 8h e 21h, uma vez por comanda. Comandas de plano ficam de fora. Não gasta créditos da AppBarber.'],
