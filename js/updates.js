@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-18-checklist-centro', date: '2026-11-18', title: 'Checklist: profissional e dia escolhidos à vista', items: [
+    ['correcao', 'No celular, as listas de profissionais e de dias do mês rolam sozinhas até o profissional escolhido e o dia de hoje (ou o dia escolhido).'],
+  ] },
   { id: '2026-11-17-folga', date: '2026-11-17', title: 'Checklist: dia de folga', items: [
     ['novo', 'No card Disponibilidade comercial, o botão Folga hoje (dono, gestor ou líder): o profissional fica com o ponto cinza, entra como "de folga" e não como "sem registro", não conta como dia trabalhado e não recebe o lembrete de 13h no WhatsApp.'],
   ] },

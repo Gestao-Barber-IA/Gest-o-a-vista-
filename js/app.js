@@ -5669,6 +5669,23 @@ Content-Type: application/json</pre>
       <button class="btn" data-action="popViewClose">${icon('x')} Fechar</button></figure></div>`;
   }
 
+  // Listas que rolam para o lado (profissionais e dias do checklist): deixa o item escolhido visível, no meio,
+  // sem mexer na rolagem da página.
+  // Só recentraliza quando a escolha muda (ou ao abrir a página), para não brigar com quem está rolando a lista.
+  const centrado = {};
+  function centerSelected() {
+    for (const [box, sel] of [['.pop-people', '.pop-person.on'], ['#pop-days', '.pop-dn.on']]) {
+      const c = document.querySelector(box), el = c && c.querySelector(sel);
+      if (!c) { delete centrado[box]; continue; }
+      const chave = (el && (el.dataset.id || el.dataset.d)) + '|' + ui.popMonth + '|' + ui.popBarber;
+      if (centrado[box] === chave && c.scrollLeft) continue;
+      centrado[box] = chave;
+      if (!c || !el || c.scrollWidth <= c.clientWidth) continue;
+      const alvo = el.offsetLeft - c.offsetLeft - (c.clientWidth - el.offsetWidth) / 2;
+      if (Math.abs(c.scrollLeft - alvo) > 4) c.scrollLeft = Math.max(0, alvo);
+    }
+  }
+
   // Busca as fotos guardadas na nuvem (links temporários).
   function hydrateProofs() {
     if (!Cloud.enabled) return;
@@ -7450,6 +7467,7 @@ Content-Type: application/json</pre>
     maybeRemindPop(user);
     maybeOvertakeToast();
     hydrateProofs();
+    centerSelected();
     if (document.querySelector('img[data-card]')) hydrateCards();
     if (document.querySelector('.pm-wave')) pmDraw();
     setTimeout(maybeAutoReveal, 700);
