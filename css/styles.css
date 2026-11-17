@@ -3001,3 +3001,27 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 /* Fiscalização: registros vindos dos botões da Disponibilidade comercial, na mesma cor do botão. */
 .dtag.dtag-red { background: #d64545; color: #fff; }
 .dtag.dtag-yel { background: #f2c230; color: #1d1600; }
+/* Fiscalização › Relatório do mês */
+.rel-head { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: flex-start; }
+.rel-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.rel-kpis small { display: block; font-size: .8rem; margin-top: 2px; }
+.rel-kpis small.bad { color: #e06060; } .rel-kpis small.good { color: #4fbf7a; }
+.rel-h3 { font-size: 1rem; margin: 16px 0 8px; display: flex; gap: 6px; align-items: center; }
+.rel-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.rel-chip { display: inline-flex; align-items: center; gap: 6px; }
+.rel-chip b { font-size: .95rem; }
+.rel-tips { list-style: none; padding: 0; margin: 10px 0; display: grid; gap: 8px; }
+.rel-tips li { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: var(--surface-2, rgba(255,255,255,.04)); line-height: 1.4; }
+.rel-tips li .ico { flex: 0 0 auto; margin-top: 2px; }
+.rel-tips .rel-grave { border-left: 4px solid #d64545; } .rel-tips .rel-alerta { border-left: 4px solid #f2c230; } .rel-tips .rel-ok { border-left: 4px solid #4fbf7a; }
+.rel-pros { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
+.rel-pro { display: grid; gap: 8px; align-content: start; }
+.rel-pro.is-grave { border-color: rgba(214, 69, 69, .6); } .rel-pro.is-clean { border-color: rgba(79, 191, 122, .5); }
+.rel-pro-h { display: flex; gap: 10px; align-items: center; } .rel-pro-h small { display: block; }
+.rel-arr { margin: 0; display: flex; gap: 6px; }
+@media print {
+  body.printing-rel .disc-hero, body.printing-rel .no-print, body.printing-rel .demo-bar, body.printing-rel .trial-banner, body.printing-rel .gc-ov { display: none !important; }
+  body.printing-rel * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body.printing-rel .rel-tips li { background: #f4f4f4 !important; color: #111 !important; }
+  body.printing-rel .rel-pro, body.printing-rel .rel-card { break-inside: avoid; }
+}

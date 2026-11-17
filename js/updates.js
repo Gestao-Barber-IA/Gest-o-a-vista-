@@ -2,6 +2,11 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-17-fisc-relatorio', date: '2026-11-17', title: 'Relatório mensal da Fiscalização', items: [
+    ['novo', 'Nova aba Relatório do mês na Fiscalização: total de registros e comparação com o mês anterior, por gravidade, por tipo, vermelhos e amarelos da Disponibilidade por dia da semana, e o resumo de cada profissional.'],
+    ['novo', 'Sugestões de atitudes por regras claras: plano de ação para penalidade ou reincidência, conversa e revisão da agenda para 2 ou mais vermelhos, treinamento quando a mesma falta aparece em 3 ou mais profissionais, e reconhecimento para quem fechou o mês sem registros.'],
+    ['novo', 'No dia 1º de cada mês, aviso no sininho e na tela de que o relatório do mês anterior está pronto, para o dono, o gestor e os líderes com acesso à Fiscalização. Dá para imprimir, salvar em PDF e mandar o resumo de cada um pelo WhatsApp.'],
+  ] },
   { id: '2026-11-17-checklist-ordem', date: '2026-11-17', title: 'Checklist: nova ordem das tarefas', items: [
     ['melhoria', 'O card Registro do dia agora se chama Posicionamento estratégico nas redes sociais e fica logo abaixo da Disponibilidade comercial.'],
     ['melhoria', 'Ordem das tarefas seguindo o dia, da mais fácil para a mais difícil: Pró Atividade, 5 Stories, 10 Convites no Instagram, 3 Publicações com o cliente, 3 Retornos agendados, 3 Avaliações no Google e 5 Abordagens.'],
