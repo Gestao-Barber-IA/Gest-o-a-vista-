@@ -17,7 +17,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "2.1";
+const VERSAO = "2.2";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -296,6 +296,8 @@ const TEXTOS_WB = [
 const WB_CLI = join(DIR, "reconquista-clientes.json"), WB_ENV = join(DIR, "reconquista-enviados.json"), WB_SAIR = join(DIR, "reconquista-sair.json");
 const chaveFone = (f) => { let d = so(f); if (d.length > 11 && d.startsWith("55")) d = d.slice(2); if (d.length === 11) d = d.slice(0, 2) + d.slice(3); return d.slice(-10); }; // DDD + 8 dígitos
 const lerJ = (f, pad) => { try { return JSON.parse(readFileSync(f, "utf8")); } catch { return pad; } };
+// A AppBarber manda a data como "10/03/2026" (dia/mês/ano) — a documentação dizia "2026-03-10". Aceita os dois.
+const isoData = (t) => { const v = String(t || "").trim(), m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : v.slice(0, 10); };
 const diasDesde = (isoD, hoje) => Math.round((new Date(hoje + "T12:00:00") - new Date(String(isoD).slice(0, 10) + "T12:00:00")) / 86400000);
 async function abGet(e, caminho) {
   const c = e.reconquista;
@@ -311,7 +313,7 @@ async function baixarClientes(e, hoje) {
     const d = await abGet(e, `/v1/establishment/clients?pages=${pg}`);
     if (!d.length) break;
     total = Number(d[0].total_pages) || total;
-    for (const x of d) { const f = so(x.person_cellphone || x.person_phone); if (f.length >= 10 && x.last_scheduling) lista.push([f, primeiro(x.person_name), String(x.last_scheduling).slice(0, 10)]); }
+    for (const x of d) { const f = so(x.person_cellphone || x.person_phone); if (f.length >= 10 && x.last_scheduling) lista.push([f, primeiro(x.person_name), isoData(x.last_scheduling)]); }
     await espera(2500);
   }
   const env = lerJ(WB_ENV, {});
@@ -328,6 +330,7 @@ async function reconquista(e, hoje) {
   if (fechadoHoje(e) || agora < 10 * 60 || agora > 18 * 60) return;
   let base = lerJ(WB_CLI, null);
   if (!base || diasDesde(base.em, hoje) >= 30) { await baixarClientes(e, hoje); base = lerJ(WB_CLI, { lista: [] }); }
+  for (const x of base.lista) x[2] = isoData(x[2]); // lista baixada antes da correção da data
   const env = lerJ(WB_ENV, {}), sair = new Set(lerJ(WB_SAIR, []));
   const hojeEnv = Object.values(env).filter((x) => x.em === hoje).length;
   const fila = base.lista.filter(([f, , last]) => { const k = chaveFone(f), d = diasDesde(last, hoje);
@@ -338,7 +341,7 @@ async function reconquista(e, hoje) {
     for (const [f, nome] of fila.slice(0, 5)) {
       // Confere na hora: se o cliente já marcou horário, não manda.
       const atual = await abGet(e, `/v1/establishment/clients?cellphone=${so(f).replace(/^55(?=\d{10,11}$)/, "")}`).catch(() => null);
-      const last = atual && atual[0] && atual[0].last_scheduling ? String(atual[0].last_scheduling).slice(0, 10) : null;
+      const last = atual && atual[0] && atual[0].last_scheduling ? isoData(atual[0].last_scheduling) : null;
       const k = chaveFone(f);
       if (last && diasDesde(last, hoje) < c.minDias) { env[k] = { em: hoje, pulado: true }; writeFileSync(WB_ENV, JSON.stringify(env)); continue; }
       const h = Math.floor(agora / 60), sd = h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
