@@ -1,5 +1,5 @@
 // Gestão Barber IA — servidor de sincronização (IP fixo, 24 horas por dia).
-// Substitui o computador da barbearia: a cada 10 minutos, busca na AppBarber os dados
+// Substitui o computador da barbearia: a cada 15 minutos, busca na AppBarber os dados
 // de TODAS as barbearias que ligaram a "Sincronização automática" no app e envia ao Gestão.
 // Roda como serviço (systemd), instalado por instalar-servidor.sh. Precisa do Node.js 18+.
 // Variáveis (em /etc/gbia-sync.env): SYNC_TOKEN (obrigatória), SYNC_URL, SITE_URL, INTERVALO_MIN.
@@ -8,12 +8,12 @@ import { spawn, spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSAO = "1.1";
+const VERSAO = "1.2";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const TOKEN = process.env.SYNC_TOKEN || "";
 const SYNC_URL = process.env.SYNC_URL || "https://sekkmnkajnaqubyhpxvd.supabase.co/functions/v1/sync-servidor";
 const SITE = (process.env.SITE_URL || "https://gestaoperformance.vercel.app").replace(/\/$/, "");
-const INTERVALO = Math.max(5, Number(process.env.INTERVALO_MIN) || 10) * 60000;
+const INTERVALO = Math.max(5, Number(process.env.INTERVALO_MIN) || 15) * 60000; // cada consulta à AppBarber gasta crédito
 const BASE = join(DIR, "sincronizar.mjs");
 const DADOS = join(DIR, "dados");
 const UMA_VEZ = process.argv.includes("--uma-vez");

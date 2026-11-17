@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSAO = "2.8";
+const VERSAO = "2.9";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const TESTE = process.argv.includes("--teste");
 const CARGA = process.argv.includes("--carga"); // carga inicial: lê todas as comandas no ritmo máximo permitido
@@ -107,6 +107,8 @@ async function dentroDoHorario() {
   h = h || { abertura: cfg.abertura || "08:00", fechamento: cfg.fechamento || "22:00" };
   const min = (t) => { const [a, b] = String(t).split(":").map(Number); return (a || 0) * 60 + (b || 0); };
   const agora = new Date(), m = agora.getHours() * 60 + agora.getMinutes();
+  // Dia em que a barbearia fecha (ex.: domingo): não consulta a AppBarber, porque cada consulta gasta crédito.
+  if (Array.isArray(h.fechados) && h.fechados.includes(agora.getDay())) return { ok: false, fechado: true, ...h };
   return { ok: m >= min(h.abertura) && m <= min(h.fechamento) + 10, ...h };
 }
 
@@ -160,7 +162,7 @@ async function main() {
   await autoAtualizar();
   if (!TESTE && !CARGA && !process.argv.includes("--agora")) {
     const h = await dentroDoHorario();
-    if (!h.ok) { console.log(`Fora do horário de funcionamento (${h.abertura} às ${h.fechamento}, definido no app). Nada foi buscado.`); return; }
+    if (!h.ok) { console.log(h.fechado ? "Fora do horário de funcionamento: hoje a barbearia fecha (definido no app). Nada foi buscado." : `Fora do horário de funcionamento (${h.abertura} às ${h.fechamento}, definido no app). Nada foi buscado.`); return; }
   }
   const q = new URLSearchParams({ establishment_code: String(cfg.codigo_estabelecimento), start_date: iso(ini), end_date: iso(hoje), status_type: "2" });
   if (cfg.codigo_filial) q.set("branch_code", String(cfg.codigo_filial));

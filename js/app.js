@@ -4029,6 +4029,9 @@ ${rows.length ? '' : emptyBarbers()}
             <label class="field"><span>Almoço (minutos)</span><input class="input num" type="number" id="oc-lunch" name="lunch" min="0" max="240" step="5" value="${oc.lunch}"></label>
             <label class="field"><span>Dias trabalhados no mês</span><input class="input num" type="number" id="oc-days" name="days" min="1" max="31" step="1" value="${oc.days}"></label>
           </div>
+          <fieldset class="field cl-num"><span>Dias em que a barbearia fecha</span><small class="muted">Nesses dias a integração não consulta a AppBarber (cada consulta gasta crédito) e não sai lembrete no WhatsApp.</small>
+            <div class="oc-days">${['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'].map((d, i) => `<label class="chip-check"><input type="checkbox" name="closed" value="${i}" ${(oc.closed || []).includes(i) ? 'checked' : ''}><span>${d}</span></label>`).join('')}</div>
+          </fieldset>
           ${ocupByBarber(oc)}
           <p class="form-msg" data-msg></p>
           <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar regra</button>
@@ -4143,7 +4146,7 @@ Content-Type: application/json</pre>
           <li><b>Peça à AppBarber</b> (suporte ou gerente de conta) a <b>chave da API</b> do seu estabelecimento e a liberação do IP que aparece no cartão <i>Sincronização automática</i> logo abaixo.</li>
           <li><b>Confira os nomes.</b> Cada profissional precisa estar com o mesmo nome aqui e na AppBarber (ex.: "Carlos Silva" nos dois).</li>
           <li><b>Preencha o cartão abaixo</b> com o código do estabelecimento e a chave, e toque em Salvar.</li>
-          <li><b>Pronto.</b> Em até 10 minutos o cartão mostra <i>Funcionando</i> e os números aparecem no ranking e em Lançamentos. Depois disso, tudo se atualiza sozinho a cada 10 minutos, no horário de funcionamento.</li>
+          <li><b>Pronto.</b> Em até 15 minutos o cartão mostra <i>Funcionando</i> e os números aparecem no ranking e em Lançamentos. Depois disso, tudo se atualiza sozinho a cada 10 minutos, no horário de funcionamento.</li>
         </ol></details>
       <details class="tut"><summary><b>Uso outro sistema de agenda ou caixa</b><small>O seu sistema envia os números para cá pela API.</small></summary>
         <ol class="tut-steps">
@@ -4176,7 +4179,7 @@ Content-Type: application/json</pre>
     </section>`;
   }
   // Integração & API › Sincronização automática: o servidor do Gestão (IP fixo) busca na AppBarber
-  // a cada 10 minutos, 24 horas por dia, sem computador ligado na barbearia.
+  // a cada 15 minutos, no horário de funcionamento, sem computador ligado na barbearia.
   // Lembretes automáticos no WhatsApp: o servidor manda, no horário escolhido, para quem fez pouco do checklist.
   const WA_TEXT = 'Oi, {nome}! 👋 Já são {hora} e o seu Checklist Agenda Cheia de hoje está com {pontos} de {maximo} pts.\n\nCada story, convite, avaliação e retorno agendado é o que enche a sua agenda nos próximos dias. É o nosso plano estratégico para você crescer e faturar mais.\n\nAinda dá tempo! Abra o checklist e bora: {link} 💪\n\n{barbearia}';
   function waRemindCard() {
@@ -4216,7 +4219,7 @@ Content-Type: application/json</pre>
     const prev = (it.cl_text || CL_TEXT).split(/\n\s*-{3,}\s*\n/)[0].replace(/\{cliente\}/g, 'João').replace(/\{hora\}/g, '14h30').replace(/\{profissional\}/g, 'Igor').replace(/\{servico\}/g, 'Corte e Barba').replace(/\{barbearia\}/g, state.company.name || '');
     return `<section class="section card as-card">
       <h2 class="section-title">${icon('clock')} Lembrete de agendamento para os clientes</h2>
-      <p class="section-note">O servidor confere a agenda da AppBarber a cada 5 minutos e manda um WhatsApp para o cliente antes do horário marcado. Horários seguidos do mesmo cliente viram uma mensagem só. Quem agendou em cima da hora recebe 20 minutos antes do horário. Sai pelo número escolhido abaixo, separado do número dos lembretes da equipe. Nome e telefone dos clientes não ficam guardados.</p>
+      <p class="section-note">O servidor confere a agenda da AppBarber a cada 15 minutos (só nos dias e horários de funcionamento) e manda um WhatsApp para o cliente antes do horário marcado. Horários seguidos do mesmo cliente viram uma mensagem só. Quem agendou em cima da hora recebe 20 minutos antes do horário. Sai pelo número escolhido abaixo, separado do número dos lembretes da equipe. Nome e telefone dos clientes não ficam guardados.</p>
       ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b> (acima): é por ela que o servidor lê a agenda.</p>` : ''}
       <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.cl_status_at ? 'Atualizado ' + when(it.cl_status_at) : ''}</small><p class="muted as-msg">${esc(st.replace(/^(ok|erro|desconectado): /, ''))}</p>` : '<span class="chip">Aguardando o servidor</span>'}</div>
       <form class="form" data-form="clRemind" novalidate>
@@ -4252,11 +4255,11 @@ Content-Type: application/json</pre>
       : `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">Última: ${when(it.last_sync_at)}</small>`;
     return `<section class="section card as-card">
       <h2 class="section-title">${icon('plug')} Sincronização automática AppBarber</h2>
-      <p class="section-note">O servidor do ${esc(B().name)} busca os atendimentos e as comandas na AppBarber a cada 10 minutos, 24 horas por dia. <b>Não precisa deixar nenhum computador ligado na barbearia.</b></p>
+      <p class="section-note">O servidor do ${esc(B().name)} busca os atendimentos e as comandas na AppBarber a cada 15 minutos, no horário de funcionamento (cada consulta à AppBarber gasta crédito). <b>Não precisa deixar nenhum computador ligado na barbearia.</b></p>
       <div class="as-status">${status}${st && it.est_code ? `<p class="muted as-msg">${esc(st.replace(/^(ok|erro): /, ''))}</p>` : ''}</div>
       <ol class="as-steps">
         <li>Peça à AppBarber a <b>chave da API</b> e a liberação deste IP: ${ip ? `<span class="invite-link as-ip" id="as-ip">${esc(ip)}</span> <button class="btn btn-sm" type="button" data-action="copyIp">${icon('copy')} Copiar IP</button>` : '<i>o IP do servidor aparece aqui assim que ele estiver no ar.</i>'}</li>
-        <li>Preencha abaixo e salve. Em até 10 minutos os números começam a entrar.</li>
+        <li>Preencha abaixo e salve. Em até 15 minutos os números começam a entrar.</li>
         ${on ? '<li>Se o computador da barbearia ainda roda a sincronização antiga, pode desinstalar: o servidor assume.</li>' : ''}
       </ol>
       <form class="form" data-form="autoSync" novalidate>
@@ -8433,6 +8436,9 @@ Content-Type: application/json</pre>
       if (!Number.isFinite(lunch) || lunch < 0 || lunch > 240) return setMsg(f, 'O almoço deve ficar entre 0 e 240 minutos.');
       if (!Number.isInteger(days) || days < 1 || days > 31) return setMsg(f, 'Os dias trabalhados devem ficar entre 1 e 31.');
       const cfg = { open, close, lunch, days };
+      const closed = [...f.querySelectorAll('input[name=closed]:checked')].map(x => Number(x.value));
+      if (closed.length === 7) return setMsg(f, 'Deixe pelo menos um dia aberto.');
+      if (closed.length) cfg.closed = closed;
       if (GB.hoursPerDay(cfg) <= 0) return setMsg(f, 'O fechamento precisa ser depois da abertura, descontado o almoço.');
       if (Object.keys(by).length) cfg.by = by;
       state.ocupCfg = cfg; save(); toast(`Horários salvos: 100% = ${nf0.format(GB.hoursPerDay(cfg) * days)} h no mês${Object.keys(by).length ? ` (e ${Object.keys(by).length} profissional${Object.keys(by).length > 1 ? 'is' : ''} com horário próprio)` : ''}.`); render();
@@ -8557,7 +8563,7 @@ Content-Type: application/json</pre>
       if (key) row.api_key = key;
       if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Sincronização automática salva.'); return render(); }
       setMsg(f, 'Salvando…', true);
-      Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(row.active ? 'Salvo. Em até 10 minutos os números começam a entrar.' : 'Sincronização pausada.'); render(); })
+      Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(row.active ? 'Salvo. Em até 15 minutos os números começam a entrar.' : 'Sincronização pausada.'); render(); })
         .catch(e => setMsg(f, Cloud.message(e)));
     },
     company(f) {

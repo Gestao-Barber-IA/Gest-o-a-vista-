@@ -44,7 +44,9 @@ Deno.serve(async (req) => {
       if (h && typeof h.open === "string" && /^\d{2}:\d{2}$/.test(h.open) && h.open < ab) ab = h.open;
       if (h && typeof h.close === "string" && /^\d{2}:\d{2}$/.test(h.close) && h.close > fe) fe = h.close;
     }
-    return json({ abertura: ab, fechamento: fe });
+    // Dias da semana em que a barbearia fecha (0 = domingo): nesses dias os sincronizadores não consultam a AppBarber.
+    const fechados = Array.isArray(o.closed) ? o.closed.map(Number).filter((d: number) => Number.isInteger(d) && d >= 0 && d <= 6) : [];
+    return json({ abertura: ab, fechamento: fe, fechados });
   }
   // A integração por API só vale nos planos pagos e com a assinatura em dia.
   const { data: co } = await db.from("companies").select("sub_status, paid_until, plan_id").eq("id", k.company_id).single();

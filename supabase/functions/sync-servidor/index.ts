@@ -49,6 +49,9 @@ Deno.serve(async (req) => {
         // Lembrete de agendamento para os clientes (o servidor consulta a agenda da AppBarber).
         clientes: i.cl_on && i.est_code && i.api_key ? { numero: i.cl_numero === "principal" ? "principal" : "chip", antecedencia: Number(i.cl_lead) || 60, texto: i.cl_text || "", resposta: i.cl_reply || "", codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
         brand: co.settings?.brand || "barber", popCfg: co.settings?.pop || null,
+        // Horário de funcionamento (Configurações): fora dele e nos dias fechados não consulta a AppBarber nem manda lembrete.
+        horario: (() => { const o = co.settings?.ocup || {}, ok = (v: unknown, d: string) => (typeof v === "string" && /^\d{2}:\d{2}$/.test(v) ? v : d);
+          return { abertura: ok(o.open, "09:00"), fechamento: ok(o.close, "20:00"), fechados: Array.isArray(o.closed) ? o.closed.map(Number) : [] }; })(),
         barbers: (barbers || []).filter((b) => b.active !== false).map((b) => ({ id: b.id, name: b.name, phone: fone.get(String(b.id)) || "" })),
         pop: (pop || []).map((r) => ({ barberId: r.barber_id, day: r.day, ...(r.data || {}) })),
         entries: (entries || []).map((e) => ({ barberId: e.barber_id, date: e.date, source: e.source, ...(e.data || {}) })),
