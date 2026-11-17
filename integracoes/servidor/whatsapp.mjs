@@ -17,7 +17,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "1.6";
+const VERSAO = "1.7";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -172,6 +172,9 @@ async function agendaHoje(e, hoje) {
   if (c.codigo_filial) q.set("branch_code", String(c.codigo_filial));
   // Mesmo cabeçalho da sincronização (que a AppBarber já aceita neste IP).
   const r = await getExato("https://api.appbarber.com/v1/appointments/history?" + q, { "X-API-Key": c.appbarber_api_key, Accept: "application/json", "User-Agent": "GestaoBarberIA-Sync/2.8" });
+  // Créditos: cada consulta bem-sucedida gasta 1; o total vai para o contador do app.
+  if (r.ok) api("POST", { company_id: k, acao: "ab_uso", creditos: 1 }).catch(() => {});
+  else if (/saldo insuficiente/i.test(r.text)) api("POST", { company_id: k, acao: "ab_uso", creditos: 0, sem_saldo: true }).catch(() => {});
   if (!r.ok) throw new Error(`AppBarber respondeu ${r.status}${motivo(r.text)}`);
   const lista = ((JSON.parse(r.text).data) || []).filter((a) => !a.scheduling_status || /agendad|confirmad/i.test(a.scheduling_status));
   agendaCache[k] = { dia: hoje, em: Date.now(), lista };

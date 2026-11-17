@@ -466,6 +466,7 @@
     return `<div class="notif-panel" role="dialog" aria-label="Notificações">
       <div class="notif-head"><b>Notificações</b><button class="icon-btn" data-action="notifOpen" aria-label="Fechar">${icon('x')}</button></div>
       ${pending ? `<a class="notif-item notif-app" href="#barbeiros">${icon('users')}<span><b>${pending} aprovação${pending > 1 ? 'ões' : ''} pendente${pending > 1 ? 's' : ''}</b><small>Toque para aprovar em Adicionar profissional</small></span></a>` : ''}
+      ${(() => { const ab = abAviso(); return ab ? `<p class="notif-sub">${icon('wallet')} Créditos da AppBarber</p><ul class="notif-list"><li class="notif-item new notif-pen"><a class="notif-penbtn" href="#integracao">${icon('alert')}<span><span><b>${ab.nivel === 'zero' ? 'Os créditos acabaram' : 'Créditos acabando'}</b></span><small>${ab.nivel === 'zero' ? 'A sincronização e o lembrete dos clientes pararam. Recarregue na AppBarber e registre a recarga.' : `Saldo estimado: ${nf0.format(ab.saldo)}${ab.restam !== null ? ` · dura cerca de ${nf0.format(Math.floor(ab.restam))} dias` : ''}`} · toque para abrir</small></span></a></li></ul>` : ''; })()}
       ${relUnseen(user) ? `<p class="notif-sub">${icon('chart')} Relatório da Fiscalização</p><ul class="notif-list"><li class="notif-item new notif-pen"><button class="notif-penbtn" data-action="relOpen">${icon('chart')}<span><span><b>Relatório de ${esc(monthRange(relPrevYm()).label)} pronto</b></span><small>Resumo do mês, quem precisa de atenção e sugestões de atitudes · toque para abrir</small></span></button></li></ul>` : ''}
       ${(() => { const pu = penUnseen(user); if (!pu) return ''; const l = penList().slice().sort((a, b) => String(b.created_at || b.day).localeCompare(String(a.created_at || a.day))).slice(0, pu); return `<p class="notif-sub">${icon('alert')} Penalidades novas</p><ul class="notif-list">${l.map(x => `<li class="notif-item new notif-pen"><button class="notif-penbtn" data-action="penOpen">${avatar(barberById(x.barber_id) || { name: '?' }, 36)}<span><span><b>${esc((barberById(x.barber_id) || { name: 'Profissional' }).name)}</b> levou penalidade (${esc((DISC_KIND[x.kind] || ['falta'])[0].toLowerCase())})</span><small>${dayLabel(String(x.day).slice(0, 10))} · toque para ver em Fiscalização</small></span></button></li>`).join('')}</ul>`; })()}
       <p class="notif-sub">${icon('trophy')} Ultrapassagens no ranking</p>
@@ -4067,7 +4068,7 @@ ${rows.length ? '' : emptyBarbers()}
     const ex = JSON.stringify([
       { data: iso(new Date()), barbeiro: state.barbers[0]?.name || 'Nome do barbeiro', faturamento: 420.5, servicos: 9, clientes: 8, checklist_pop: 1, horas_disponiveis: 8, horas_ocupadas: 6.5, planos_mensais: 1, clientes_retorno: 5, venda_produtos: 2 },
     ], null, 2);
-    return `${apiTutorial()}${autoSyncCard()}${waRemindCard()}${clRemindCard()}
+    return `${apiTutorial()}${autoSyncCard()}${abCard()}${waRemindCard()}${clRemindCard()}
       <section class="section card" id="api-ref">
         <h2 class="section-title">Como funciona ${tip('api')}</h2>
         <p class="section-note">Outro sistema (agenda, caixa, ERP) envia os resultados de cada barbeiro por dia. Os números entram no ranking na hora, junto com os lançados à mão.</p>
@@ -4237,6 +4238,46 @@ Content-Type: application/json</pre>
         <p class="form-msg" data-msg></p>
         <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
       </form></section>`;
+  }
+  // ---------- Créditos da API da AppBarber (pré-paga) ----------
+  // A API não informa o saldo: o servidor conta as consultas e o dono registra cada recarga.
+  function abCred(it) {
+    if (!it || !it.est_code) return null;
+    const pack = Number(it.ab_pack) || 0, used = Number(it.ab_used) || 0, since = it.ab_reset_at ? new Date(it.ab_reset_at).getTime() : 0;
+    const dias = since ? Math.max(1, (Date.now() - since) / 86400000) : 0, porDia = dias ? used / dias : 0, saldo = Math.max(0, pack - used);
+    const zero = !!it.ab_zero_at && (!since || new Date(it.ab_zero_at).getTime() >= since);
+    const restam = porDia > 0 ? saldo / porDia : null;
+    const nivel = zero ? 'zero' : !pack ? 'sem' : (saldo <= pack * 0.15 || (restam !== null && restam <= 5)) ? 'baixo' : 'ok';
+    return { pack, used, saldo, porDia, restam, zero, nivel, since };
+  }
+  // Avisa no sino (dono) quando os créditos estão acabando ou acabaram.
+  const abAviso = () => { const u = currentUser(); if (!u || !isGestor(u) || !Cloud.enabled) return null; if (ui.integ === undefined) { ui.integ = null; Cloud.integ.get().then(r => { ui.integ = r || {}; render(); }).catch(() => { ui.integ = { erro: true }; }); } const c = abCred(ui.integ); return c && (c.nivel === 'zero' || c.nivel === 'baixo') ? c : null; };
+  function abCard() {
+    if (!isGestor(currentUser())) return '';
+    const it = Cloud.enabled ? ui.integ : (state.integ || {});
+    if (!it || it.erro || !it.est_code) return '';
+    const c = abCred(it);
+    const chip = c.nivel === 'zero' ? '<span class="chip chip-bad">Créditos acabaram</span>' : c.nivel === 'baixo' ? '<span class="chip chip-bad">Créditos acabando</span>' : c.nivel === 'sem' ? '<span class="chip">Registre a sua recarga</span>' : '<span class="chip chip-ok">Saldo ok</span>';
+    return `<section class="section card as-card" id="creditos-ab">
+      <h2 class="section-title">${icon('wallet')} Créditos da API AppBarber</h2>
+      <p class="section-note">A API da AppBarber é pré-paga: cada consulta gasta 1 crédito (R$ 100 = 5.000 créditos). Ela não informa o saldo, então o sistema <b>conta as consultas</b> que faz e compara com a recarga que você registrar aqui. Estimativa para a sua barbearia: cerca de 4.700 por mês.</p>
+      <div class="as-status">${chip}</div>
+      ${c.nivel === 'zero' ? `<p class="section-note">${icon('alert')} A AppBarber respondeu <b>"Saldo insuficiente"</b>: a sincronização dos números e o lembrete dos clientes pararam. Recarregue no painel da AppBarber (Configurações › Créditos da API Externa) e registre a recarga abaixo.</p>` : ''}
+      ${c.pack ? `<div class="pc-totals rel-kpis">
+        <div class="pc-stat"><span>Saldo estimado</span><b class="num">${nf0.format(c.saldo)}</b><small>de ${nf0.format(c.pack)} na última recarga</small></div>
+        <div class="pc-stat"><span>Usados desde a recarga</span><b class="num">${nf0.format(c.used)}</b><small>${c.since ? 'desde ' + new Date(c.since).toLocaleDateString('pt-BR') : ''}</small></div>
+        <div class="pc-stat"><span>Média por dia</span><b class="num">${nf0.format(Math.round(c.porDia))}</b></div>
+        <div class="pc-stat"><span>Dura mais</span><b class="num">${c.restam === null ? '—' : nf0.format(Math.floor(c.restam)) + ' dias'}</b></div>
+      </div><div class="pop-bar"><i style="width:${c.pack ? Math.min(100, c.saldo / c.pack * 100) : 0}%"></i></div>` : ''}
+      <form class="form" data-form="abRecarga" novalidate>
+        <div class="grid-2">
+          <label class="field"><span>Créditos comprados nesta recarga</span><input class="input num" type="number" name="n" min="1" step="1" value="5000"></label>
+          <label class="field"><span>Saldo antes da recarga</span><select class="input" name="modo"><option value="soma">Somar ao saldo estimado (${nf0.format(c.saldo)})</option><option value="zero" ${c.zero || !c.pack ? 'selected' : ''}>Começar do zero (o saldo tinha acabado)</option></select></label>
+        </div>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('check')} Registrar recarga</button></div>
+      </form>
+      <p class="section-note">Você recebe um aviso no sininho quando o saldo estimado ficar abaixo de 15% ou durar menos de 5 dias, e também se a AppBarber avisar que o saldo acabou.</p></section>`;
   }
   function autoSyncCard() {
     if (Cloud.enabled && ui.integ === undefined) {
@@ -7327,7 +7368,8 @@ Content-Type: application/json</pre>
         ${isGestor(user) ? `<a class="icon-btn" href="#apresentacao" aria-label="Tela da loja" title="Tela da loja">${icon('monitor')}</a>` : ''}
         <button class="icon-btn" data-action="fontSize" aria-label="Tamanho da letra" title="Tamanho da letra">${icon('type')}</button>
         <button class="icon-btn theme-btn" data-action="toggleTheme" aria-label="${getTheme() === 'light' ? 'Ativar modo escuro' : 'Ativar modo claro'}" title="${getTheme() === 'light' ? 'Modo escuro' : 'Modo claro'}">${icon(getTheme() === 'light' ? 'moon' : 'sun')}</button>
-        ${(() => { if (discOk(user) && !ui.discData) fbLoad('discData', DISC.list); const ru = relUnseen(user), n = pending + unseenOvertakes() + penUnseen(user) + ru;
+        ${(() => { if (discOk(user) && !ui.discData) fbLoad('discData', DISC.list); const ru = relUnseen(user), ab = abAviso(), n = pending + unseenOvertakes() + penUnseen(user) + ru + (ab ? 1 : 0);
+          if (ab && !ui.abToasted) { ui.abToasted = true; setTimeout(() => toast(ab.nivel === 'zero' ? 'Os créditos da API da AppBarber acabaram: a sincronização parou. Recarregue e registre em Integração.' : `Os créditos da AppBarber estão acabando: cerca de ${nf0.format(ab.saldo)} restantes. Veja em Integração.`, 8000, 'alert'), 2500); }
           if (ru && !ui.relToasted) { ui.relToasted = true; setTimeout(() => toast(`O relatório da Fiscalização de ${monthRange(relPrevYm()).label} está pronto. Veja no sininho ou em Fiscalização › Relatório do mês.`, 7000, 'chart'), 1500); } return `<button class="icon-btn" data-action="notifOpen" aria-expanded="${!!ui.notifOpen}" aria-label="Notificações${n ? ': ' + n + ' novas' : ''}">${icon('bell')}${n ? `<span class="badge-dot">${n > 9 ? '9+' : n}</span>` : ''}</button>`; })()}
         <button class="avatar-btn" data-action="togglePopover" aria-label="Perfil e conta">${avatar(who, 40)}</button>
       </header>
@@ -8532,6 +8574,16 @@ Content-Type: application/json</pre>
         const res = importEntries(state, Array.isArray(data) ? data : [data]); save();
         setMsg(f, `${res.ok} lançamento(s) importado(s).${res.errors.length ? ' Problemas: ' + res.errors.join(' ') : ''}`, res.errors.length === 0);
       } catch (e) { setMsg(f, e.message); }
+    },
+    abRecarga(f) {
+      const n = Math.round(Number(f.elements.n.value) || 0);
+      if (n < 1) return setMsg(f, 'Digite quantos créditos você comprou.');
+      const cur = (Cloud.enabled ? ui.integ : state.integ) || {}, c = abCred(cur) || { saldo: 0 };
+      const row = { ab_pack: (f.elements.modo.value === 'zero' ? 0 : c.saldo) + n, ab_used: 0, ab_reset_at: new Date().toISOString(), ab_zero_at: null };
+      if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Recarga registrada.'); return render(); }
+      setMsg(f, 'Salvando…', true);
+      Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(`Recarga registrada: saldo estimado de ${nf0.format(row.ab_pack)} créditos.`); render(); })
+        .catch(e => { const m = Cloud.message(e); setMsg(f, /ab_|column|schema cache/i.test(m) ? 'O contador de créditos ainda está sendo ativado no servidor.' : m); });
     },
     clRemind(f) {
       const row = { cl_on: !!f.elements.on.checked, cl_numero: f.elements.num.value === 'principal' ? 'principal' : 'chip', cl_lead: Number(f.elements.lead.value) || 60, cl_text: (f.elements.text.value || '').trim().slice(0, 1000), cl_reply: (f.elements.reply.value || '').trim().slice(0, 500) };

@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSAO = "3.1";
+const VERSAO = "3.2";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const TESTE = process.argv.includes("--teste");
 const CARGA = process.argv.includes("--carga"); // carga inicial: lê todas as comandas no ritmo máximo permitido
@@ -83,13 +83,21 @@ const dia = (s) => { const m = String(s || "").match(/^(\d{2})\/(\d{2})\/(\d{4})
 
 // Sai sempre pelo IPv4 (o IP fixo cadastrado na AppBarber); se a internet tiver IPv6, a AppBarber veria outro endereço.
 // GET com os cabeçalhos exatamente como escritos (ex.: "X-API-Key"); o fetch do Node os envia em minúsculas.
+const USO = { n: 0, zero: false };
+// Ao terminar, informa ao servidor quantas consultas foram feitas (ele soma no contador de créditos do app).
+process.on("exit", () => { if (USO.n || USO.zero) console.log(`CREDITOS_USADOS=${USO.n}${USO.zero ? " SEM_SALDO" : ""}`); });
 async function getExato(url, headers) {
   const u = new URL(url);
   const mod = await import(u.protocol === "http:" ? "node:http" : "node:https");
   return new Promise((ok, fail) => {
     const req = mod.request(u, { method: "GET", headers, family: 4 }, (res) => {
       let b = ""; res.setEncoding("utf8"); res.on("data", (c) => (b += c));
-      res.on("end", () => ok({ ok: res.statusCode >= 200 && res.statusCode < 300, status: res.statusCode, text: b }));
+      res.on("end", () => {
+        const r = { ok: res.statusCode >= 200 && res.statusCode < 300, status: res.statusCode, text: b };
+        // Créditos: cada consulta bem-sucedida à AppBarber gasta 1. "Saldo insuficiente" = créditos acabaram.
+        if (url.startsWith(BASE)) { if (r.ok) USO.n++; else if (/saldo insuficiente/i.test(b)) USO.zero = true; }
+        ok(r);
+      });
     });
     req.on("error", fail); req.setTimeout(60000, () => req.destroy(new Error("a AppBarber não respondeu em 60 segundos.")));
     req.end();

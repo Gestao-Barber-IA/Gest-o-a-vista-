@@ -3,6 +3,7 @@
 // GET  → lista as barbearias com sincronização automática ligada e assinatura em dia.
 // GET ?acao=lembretes → dados do dia para os lembretes no WhatsApp.
 // POST { company_id, acao: 'wa_status' | 'cl_status', status } → grava o estado dos lembretes (equipe | clientes).
+// POST { company_id, creditos, sem_saldo } (com qualquer ação, ou acao: 'ab_uso') → soma as consultas gastas na AppBarber.
 // POST → { company_id, ok, mensagem } grava o resultado da última sincronização.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
@@ -95,6 +96,10 @@ Deno.serve(async (req) => {
     let b: any;
     try { b = await req.json(); } catch { return json({ erro: "JSON inválido." }, 400); }
     if (!b?.company_id) return json({ erro: "Falta company_id." }, 400);
+    // Consultas à AppBarber feitas pelo servidor (cada uma gasta 1 crédito) e aviso de saldo esgotado.
+    const usoN = Math.max(0, Math.min(5000, Number(b.creditos) || 0)), zero = b.sem_saldo === true;
+    if (usoN || zero) await db.rpc("ab_add_uso", { p_company: b.company_id, p_n: usoN, p_zero: zero });
+    if (b.acao === "ab_uso") return json({ ok: true });
     if (b.acao === "wa_status" || b.acao === "cl_status") {
       const k = b.acao === "cl_status" ? "cl" : "wa";
       const { error } = await db.from("integrations").update({ [k + "_status"]: String(b.status || "").slice(0, 500), [k + "_status_at"]: new Date().toISOString() }).eq("company_id", b.company_id);
