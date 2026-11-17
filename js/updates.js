@@ -2,6 +2,11 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-16-ranking-justo', date: '2026-11-16', title: 'Ranking mais justo', items: [
+    ['melhoria', 'Nota de cada indicador proporcional ao líder: o 1º tira 100 e quem fez 70% do resultado dele tira 70. Antes, o último levava 0 mesmo quando estava perto.'],
+    ['melhoria', 'Retenção de clientes antigos e Fidelização de clientes novos: quem ainda tem poucos clientes fica de fora do indicador, sem nota zero. A nota geral usa os outros pesos.'],
+    ['novo', 'Mínimo de dias para disputar posição: metade dos dias de quem mais trabalhou no período, no máximo 5. Antes disso, a pessoa aparece como Entrando no ranking, com os números dela, sem mexer na nota dos outros.'],
+  ] },
   { id: '2026-11-16-checklist-dia', date: '2026-11-16', title: 'Checklist: níveis pela média por dia trabalhado', items: [
     ['melhoria', 'Os níveis e a garantia do Checklist Agenda Cheia agora usam a média de pontos por dia trabalhado, e não o total do mês. Quem trabalha 22 ou 28 dias concorre de igual para igual. Dia trabalhado é o dia com atendimento na agenda (AppBarber) ou com registro no checklist; quem trabalhou e não fez o checklist tem o dia contado com zero.'],
     ['melhoria', 'Novas faixas (por dia, de 24 pts possíveis): Elite 20,5 · Ouro 16 · Prata 14,5 · Bronze 12,5 · Em desenvolvimento 11. As garantias continuam as mesmas.'],

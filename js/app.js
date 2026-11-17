@@ -137,7 +137,7 @@
       default: return nf0.format(v);
     }
   }
-  const score = v => nf1.format(v);
+  const score = v => (v === null || v === undefined ? '—' : nf1.format(v));
 
   // ---------- Ajuda "?": explicação de regras e indicadores (mouse no computador, toque no celular) ----------
   const ocupTipText = () => { const c = GB.ocupCfgOf(state), h = GB.hoursPerDay(c); return `Horas em comandas finalizadas ÷ horas da agenda no período. Hoje, 100% = ${nf1.format(h)} h por dia (${c.open} às ${c.close}, menos ${c.lunch} min de almoço) × ${c.days} dias = ${nf0.format(h * c.days)} h no mês. As ausências do barbeiro (férias, atestado) descontam da capacidade. Atendimentos antes da abertura, depois do fechamento ou no almoço compensam horários vagos; quem passa da capacidade fica acima de 100%. No mês em andamento, a capacidade cresce dia a dia.`; };
@@ -156,7 +156,7 @@
     prod: ['Venda de produtos', 'Quantidade de produtos (pomadas, shampoos, óleos…) vendidos pelo barbeiro no período.'],
     agend: ['Agendamentos', 'Quantidade de agendamentos do barbeiro no mês. Aparece nos totais da Performance; não entra na pontuação.'],
     aus: ['Dias de ausência', 'Dias em que o barbeiro não trabalhou por férias, atestado ou folga extra. Cada dia desconta um dia da capacidade da taxa de ocupação.'],
-    score: ['Como a pontuação funciona', 'Em cada indicador, o 1º do período recebe nota 100, o último 0 e os outros ficam no meio, proporcional ao resultado. A pontuação geral é a média dessas notas, ponderada pelos pesos. Quem tem título (MVP ou Destaque) fica em 1º; os demais seguem pela pontuação.'],
+    score: ['Como a pontuação funciona', 'Em cada indicador, a nota é a porcentagem do que o 1º fez: o líder tira 100 e quem fez 70% do resultado dele tira 70. A pontuação geral é a média dessas notas, ponderada pelos pesos. Em Retenção e Fidelização, quem ainda tem poucos clientes fica de fora do indicador (sem nota zero). Para disputar posição é preciso ter trabalhado pelo menos metade dos dias de quem mais trabalhou no período (no máximo 5 dias); antes disso a pessoa aparece como Entrando no ranking. Quem tem título (MVP ou Destaque) fica em 1º; os demais seguem pela pontuação.'],
     title: ['MVP e Destaque', 'Destaque: 1º lugar em pelo menos metade dos indicadores com dados (arredonda para cima; com 8, são 4). MVP: um a mais que a metade (5 de 8). Nunca há os dois ao mesmo tempo. Empate no 1º lugar conta para todos os empatados.'],
     live: ['Ranking em tempo real', 'Atualiza assim que entram lançamentos ou dados da integração. As setas mostram quantas posições cada um subiu ou desceu em relação ao período anterior.'],
     leaders: ['Destaques por indicador', 'Quem está em 1º em cada indicador. O número ao lado do nome do indicador é o peso dele na pontuação. Empates aparecem juntos.'],
@@ -284,7 +284,9 @@
   const ACCESS_TIP = () => ACCESS.map(([, l, d]) => `${l}: ${d}`).join(' ');
   const tip = key => TIPS[key] ? `<button type="button" class="tip" data-tip="${key}" aria-label="Explicação: ${esc(TIPS[key][0])}">?</button>` : '';
   const FIELD_TIP = { fat: 'fat', cli: 'cli', serv: 'serv', ticket: 'ticket', ocupPct: 'ocup', fidPct: 'fid', prod: 'prod', check: 'check', planos: 'planos', agend: 'agend', aus: 'aus', comanda: 'comanda' };
-  const ord = n => n + 'º';
+  const ord = n => (n === null || n === undefined ? '—' : n + 'º');
+  // Posição no ranking: quem ainda não tem os dias mínimos aparece como "Entrando no ranking".
+  const posTxt = (R, r) => (r.entering ? 'Entrando no ranking' : `${ord(r.pos)} de ${R.ranked ?? R.rows.length}`);
   const dateBR = s => { const d = fromIso(s); return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }); };
 
   // ---------- sessão ----------
@@ -430,11 +432,12 @@
       if (darkFor({ start: day, end: day })) break; // pódio surpresa: não entrega colocações
       const R = computeRanking({ ...state, entries: state.entries.filter(e => e.date <= day), pop: (state.pop || []).filter(r => r.day.length !== 10 || r.day <= day) }, mr);
       if (!R.active.length) { prev = null; continue; }
-      const pos = Object.fromEntries(R.rows.map(r => [r.barber.id, r.pos]));
-      if (prev) for (const r of R.rows) {
+      const board = R.board || R.rows;
+      const pos = Object.fromEntries(board.map(r => [r.barber.id, r.pos]));
+      if (prev) for (const r of board) {
         const o = prev[r.barber.id];
         if (!o || o <= r.pos) continue;
-        const passed = R.rows.filter(x => prev[x.barber.id] && prev[x.barber.id] < o && x.pos > r.pos).map(x => x.barber);
+        const passed = board.filter(x => prev[x.barber.id] && prev[x.barber.id] < o && x.pos > r.pos).map(x => x.barber);
         if (passed.length) ev.push({ key: day + '|' + r.barber.id + '|' + r.pos, day, up: r.barber, pos: r.pos, passed });
       }
       prev = pos;
@@ -1070,7 +1073,7 @@
   const barsSvg = `<svg viewBox="0 0 24 20" aria-hidden="true"><rect x="1" y="12" width="5" height="8" rx="1" fill="var(--tc)"/><rect x="9.5" y="7" width="5" height="13" rx="1" fill="var(--tc)"/><rect x="18" y="1" width="5" height="19" rx="1" fill="var(--tc)" opacity=".75"/></svg>`;
 
   function podium(R) {
-    const rows = R.rows;
+    const rows = R.board || R.rows;
     if (!rows.length) return emptyBarbers();
     const sparks = Array.from({ length: 12 }, (_, i) =>
       `<span style="left:${8 + ((i * 37) % 84)}%;--dl:${((i * 0.73) % 4).toFixed(2)}s;--dur:${(3.2 + (i % 4) * 0.6).toFixed(1)}s"></span>`).join('');
@@ -1128,14 +1131,22 @@
     if (darkFor(range(ui.offset - 1))) return {};
     const P = computeRanking(rkState(), range(ui.offset - 1));
     const hasData = P.active.length > 0;
-    return hasData ? Object.fromEntries(P.rows.map(r => [r.barber.id, r.pos])) : {};
+    return hasData ? Object.fromEntries((P.board || P.rows).map(r => [r.barber.id, r.pos])) : {};
   }
 
   function rankingList(R, limit) {
     if (!R.rows.length) return '';
     const prev = prevPositions();
-    const n = R.rows.length;
+    const n = R.ranked ?? R.rows.length;
     const rows = (limit ? R.rows.slice(0, limit) : R.rows).map(r => {
+      if (r.entering) {
+        return `<li><a class="rank-row is-entering" data-id="${esc(r.barber.id)}" href="#perfil-${esc(r.barber.id)}">
+        <span class="rank-pos num" title="Ainda sem os dias mínimos para disputar posição">—</span>
+        ${avatar(r.barber, 46)}
+        <span class="rank-who"><b><span class="rank-name">${esc(r.barber.name)}</span><span class="rank-money num">${money0(r.sums.fat)}</span></b><small class="rank-sub" title="Entrando no ranking: faltam ${r.needDays} dia(s) trabalhado(s) para disputar posição">Entrando · falta${r.needDays > 1 ? 'm' : ''} ${r.needDays} dia${r.needDays > 1 ? 's' : ''}</small></span>
+        <span class="rank-score num muted">—</span>
+      </a></li>`;
+      }
       const p = prev[r.barber.id];
       const diff = p ? p - r.pos : 0;
       const trend = diff === 0
@@ -1789,10 +1800,10 @@
     const inds = R.active.map(ind => ({ ind, rank: row.ranks[ind.key], sc: row.scores[ind.key], v: row.values[ind.key] })).filter(x => x.v !== null && x.v !== undefined);
     const strong = inds.filter(x => x.rank === 1 || x.sc >= 70).sort((a, b) => b.sc - a.sc).slice(0, 3);
     const weak = inds.filter(x => x.sc < 50).sort((a, b) => a.sc - b.sc).slice(0, 2);
-    const n = R.rows.length, lines = [];
+    const n = R.ranked ?? R.rows.length, lines = [];
     lines.push(`${first}, aqui vai o seu resumo de ${mes}:`);
     const tt = R.title.barberId === bid ? (R.title.type === 'mvp' ? ' e foi o MVP do mês' : ' e foi o Destaque do mês') : '';
-    lines.push(`📊 Você ficou em ${row.pos}º lugar de ${n}, com ${score(row.overall)} pontos${tt}.`);
+    lines.push(row.entering ? `📊 Você ainda está entrando no ranking (faltam ${row.needDays} dia(s) trabalhado(s) para disputar posição).` : `📊 Você ficou em ${row.pos}º lugar de ${n}, com ${score(row.overall)} pontos${tt}.`);
     if (strong.length) lines.push(`💪 Pontos fortes: ${strong.map(x => `${x.ind.label} (${fmt(x.ind, x.v)}${x.rank === 1 ? ', 1º da equipe' : ''})`).join('; ')}.`);
     if (weak.length) lines.push(`🎯 Para crescer: ${weak.map(x => `${x.ind.label} (hoje ${fmt(x.ind, x.v)}, ${x.rank}º da equipe)`).join('; ')}.`);
     const gFat = GB.goalFor(state, bid, 'fat');
@@ -2803,7 +2814,7 @@
       <section class="card pp-head">
         ${avatar(b, 64)}
         <div class="pp-who"><small class="tm-eyebrow">Profissional selecionado</small><h2>${esc(b.name)} ${titleChip(R, b.id)}</h2>
-          <p class="pp-chips"><span class="chip chip-soft num">${ord(row.pos)} de ${R.rows.length}</span><span class="chip chip-soft num">${score(row.overall)} pts</span><span class="chip lv-chip ${lv.cls}">${lv.name}</span><span class="chip chip-soft num">Carreira ${nf1.format(c.value)} pts${tip('career')}</span></p></div>
+          <p class="pp-chips"><span class="chip chip-soft num">${posTxt(R, row)}</span><span class="chip chip-soft num">${score(row.overall)} pts</span><span class="chip lv-chip ${lv.cls}">${lv.name}</span><span class="chip chip-soft num">Carreira ${nf1.format(c.value)} pts${tip('career')}</span></p></div>
         <div class="pp-acts"><button class="btn btn-sm" data-action="cmpWith" data-id="${esc(b.id)}">${icon('users')} Comparar com…</button><a class="btn btn-sm" href="#perfil-${esc(b.id)}">${icon('chart')} Performance completa</a>
           <button class="icon-btn" data-action="profClose" aria-label="Fechar">${icon('x')}</button></div>
       </section>`;
@@ -2946,7 +2957,7 @@
     } else {
       const rB = R.rows.find(r => r.barber.id === b);
       vb = cmpVals(R, rB); bBarber = rB.barber;
-      infoB = `<small class="num">${ord(rB.pos)} de ${R.rows.length} · ${score(rB.overall)} pts</small>${titleChip(R, b)}`;
+      infoB = `<small class="num">${posTxt(R, rB)} · ${score(rB.overall)} pts</small>${titleChip(R, b)}`;
     }
     const L = cmpList(va, vb, { b: subB });
     const n = GB.visibleInds(state).filter(i => va[i.key] != null && vb[i.key] != null).length;
@@ -2966,7 +2977,7 @@
       <p class="section-note">${isGestor(u) || people.length > 1 ? 'Escolha dois profissionais' : 'Compare seus números com o líder de cada indicador'} em ${esc(ymLabel(ym).replace(' de ', '/'))}. Verde com ▲ é quem está à frente no indicador; vermelho com ▼, quem está atrás.</p>
       <div class="cmp-pick">${pickA}<span class="cmp-vs">×</span>${pickB}</div>
       <div class="cmp-sum">
-        ${cmpWhoCard(rA.barber, `<small class="num">${ord(rA.pos)} de ${R.rows.length} · ${score(rA.overall)} pts</small>${titleChip(R, a)}`, b === 'lider' ? `Lidera ${rA.leads.length} de ${R.N}` : `Vence ${L.wa} de ${n}`, 'a')}
+        ${cmpWhoCard(rA.barber, `<small class="num">${posTxt(R, rA)} · ${score(rA.overall)} pts</small>${titleChip(R, a)}`, b === 'lider' ? `Lidera ${rA.leads.length} de ${R.N}` : `Vence ${L.wa} de ${n}`, 'a')}
         ${cmpWhoCard(bBarber, infoB, b === 'lider' ? '' : `Vence ${L.wb} de ${n}`, 'b')}
       </div>
       ${L.html}
@@ -3070,7 +3081,7 @@
     const va = cmpVals(A, rowA), vb = cmpVals(B, rowB);
     const L = cmpList(va, vb);
     const n = GB.visibleInds(state).filter(i => va[i.key] != null && vb[i.key] != null).length;
-    const pos = (R, row) => row && R.active.length ? `${ord(row.pos)} de ${R.rows.length} · ${score(row.overall)} pts` : 'sem dados';
+    const pos = (R, row) => row && R.active.length ? `${posTxt(R, row)} · ${score(row.overall)} pts` : 'sem dados';
     return `<section class="section card evo">
       <h2 class="section-title">Evolução de ${first(b.name)} ${tip('evo')}</h2>
       ${evoControls(ym, ra, rb)}
@@ -3314,7 +3325,7 @@
     const max = Math.max(...list.map(([, p]) => p));
     return `<section class="section card how-card">
       <h2 class="section-title">${icon('chart')} Como seus pontos são calculados</h2>
-      <p class="section-note">Sua pontuação vai até <b>100 pontos</b>. Cada indicador vale até os pontos abaixo: quem está em 1º no indicador ganha todos, o último ganha 0 e os outros ganham proporcional ao resultado.</p>
+      <p class="section-note">Sua pontuação vai até <b>100 pontos</b>. Cada indicador vale até os pontos abaixo: quem está em 1º no indicador ganha todos e os outros ganham a porcentagem do que o 1º fez (quem fez 70% do líder ganha 70% dos pontos). Em Retenção e Fidelização, com poucos clientes você fica de fora do indicador e a sua nota usa só os outros.</p>
       ${HOW_GROUPS.map(([gk, gl, gi, gd]) => { const its = list.filter(([i]) => howGroup(i) === gk); if (!its.length) return '';
         const tot = its.reduce((x, [, p]) => x + p, 0);
         return `<div class="how-grp"><div class="how-gh">${icon(gi)}<span><b>${gl}</b><small>${gd}</small></span><b class="num how-gt">${tot} pts</b></div>
@@ -3345,7 +3356,8 @@
     if (!row) return `${picker}<div class="card muted">Este barbeiro está inativo e não aparece no ranking.</div>`;
 
     let goal = '';
-    if (R.N >= 2) {
+    if (row.entering) goal = `Entrando no ranking: falta${row.needDays > 1 ? 'm' : ''} ${row.needDays} dia${row.needDays > 1 ? 's' : ''} trabalhado${row.needDays > 1 ? 's' : ''} para disputar posição. A pontuação ao lado é só uma prévia.`;
+    else if (R.N >= 2) {
       if (R.title.barberId === b.id && R.title.type === 'mvp') goal = `É o MVP do período. Mantenha a liderança em ${R.mvpNeed} indicadores.`;
       else if (R.title.barberId === b.id) goal = `É o Destaque do período. Falta 1 indicador em 1º lugar para virar MVP.`;
       else {
@@ -3369,7 +3381,7 @@
         <div class="ind-top"><span>${esc(ind.label)} ${tip(ind.key)}</span>${lead ? '<span class="chip chip-destaque">1º lugar</span>' : `<span class="chip chip-soft">${act.weight} pts</span>`}</div>
         <div class="ind-val num">${fmt(ind, v)}</div>
         <div class="bar" title="Nota ${score(row.scores[ind.key])}"><i style="width:${Math.max(2, row.scores[ind.key])}%"></i></div>
-        <div class="ind-foot"><span class="num">${ord(row.ranks[ind.key])} de ${R.rows.length} · nota ${score(row.scores[ind.key])}</span>${delta}</div>
+        <div class="ind-foot"><span class="num">${row.ranks[ind.key] == null ? (row.entering ? 'Entrando no ranking' : 'Fora: ainda com poucos clientes') : `${ord(row.ranks[ind.key])} de ${R.ranked ?? R.rows.length} · nota ${score(row.scores[ind.key])}`}</span>${delta}</div>
       </div>`;
     }).join('') + cmdOwnCard(row, R);
 
@@ -3378,7 +3390,7 @@
       <div class="card">
         <div class="perf-head">${avatar(b, 72)}<div><h2>${esc(b.name)} ${titleChip(R, b.id)}</h2><p class="muted" style="margin:2px 0 0">${esc(goal)}</p></div></div>
         <div class="perf-stats">
-          <div class="stat"><span>Posição</span><b class="num">${ord(row.pos)} de ${R.rows.length}</b></div>
+          <div class="stat"><span>Posição</span><b class="num">${posTxt(R, row)}</b></div>
           <div class="stat"><span>Pontuação</span><b class="num">${score(row.overall)}</b></div>
           <div class="stat"><span>1º lugares</span><b class="num">${row.leads.length} de ${R.N}</b></div>
           <div class="stat"><span>Faturamento</span><b class="num">${money0(row.sums.fat)}</b></div>
@@ -3865,7 +3877,7 @@ ${rows.length ? '' : emptyBarbers()}
     return `
       <section class="section card">
         <h2 class="section-title">Indicadores e pesos ${tip('weights')}</h2>
-        <p class="section-note"><b>Ative ou desative</b> cada indicador na chave ao lado do nome (salva na hora). Em Serviços e em Venda de produtos, escolha se conta a <b>quantidade</b> ou o <b>valor em R$</b>. Indicador desativado sai da nota, das metas e de Lançamentos; os números já lançados ficam guardados. Escolha a <b>prioridade</b> de cada indicador e o sistema calcula os pesos sozinho. Como funciona: em cada indicador, quem está em 1º ganha nota 100 e o último ganha 0. A nota geral é a média dessas notas, e os indicadores <b>essenciais</b> pesam mais. A porcentagem mostra quanto cada um vale na nota geral.</p>
+        <p class="section-note"><b>Ative ou desative</b> cada indicador na chave ao lado do nome (salva na hora). Em Serviços e em Venda de produtos, escolha se conta a <b>quantidade</b> ou o <b>valor em R$</b>. Indicador desativado sai da nota, das metas e de Lançamentos; os números já lançados ficam guardados. Escolha a <b>prioridade</b> de cada indicador e o sistema calcula os pesos sozinho. Como funciona: em cada indicador, quem está em 1º ganha nota 100 e os outros ganham a porcentagem do que o 1º fez. A nota geral é a média dessas notas, e os indicadores <b>essenciais</b> pesam mais. A porcentagem mostra quanto cada um vale na nota geral.</p>
         <div class="wp-presets"><span class="muted">Modelos prontos:</span>${Object.entries(W_PRESETS).map(([k, p]) => `<button type="button" class="btn btn-sm" data-action="wPreset" data-p="${k}" title="${esc(p.d)}">${icon(p.i)} ${esc(p.t)}</button>`).join('')}</div>
         <form class="form" data-form="weights" novalidate>
           <div class="wp-list">${INDICATORS.map(i => { const off = hidden.includes(i.key), pr = off ? 0 : wPrioOf(w, i), pct = off || !total ? 0 : Math.round((Number(w[i.key] ?? i.weight) / total) * 100);
@@ -4186,7 +4198,7 @@ Content-Type: application/json</pre>
       <p>Cada indicador vale um peso. Só entram no cálculo os indicadores que têm dados no período.</p>
       <ul>${GB.visibleInds(state).map(i => `<li>${esc(i.label)}: <b>${w[i.key] ?? i.weight} pts</b></li>`).join('')}</ul>
       <h3>2. Nota de cada indicador</h3>
-      <p>Quem está em 1º recebe 100 e o último recebe 0. Os outros ficam no meio, proporcional ao resultado.</p>
+      <p>Quem está em 1º recebe 100. Os outros recebem a porcentagem do que o 1º fez (quem fez 70% do líder recebe 70).</p>
       <h3>3. Pontuação geral</h3>
       <p>É a média das notas, ponderada pelos pesos.</p>
       <h3>4. Destaque e MVP</h3>
@@ -5956,7 +5968,7 @@ Content-Type: application/json</pre>
       const k = ym + '|' + bid, dl = log[k];
       return `<div class="cd-item">
         <img class="cd-thumb" data-card="${k}" alt="Card de ${esc(ymLabel(ym))}" width="270" height="480">
-        <div class="cd-info"><b>${esc(ymLabel(ym))}</b><span class="num">${ord(r.pos)} de ${R.rows.length} · ${score(r.overall)} pts</span>
+        <div class="cd-info"><b>${esc(ymLabel(ym))}</b><span class="num">${posTxt(R, r)} · ${score(r.overall)} pts</span>
           ${dl ? `<span class="chip chip-ok">${icon('check')} Baixado em ${esc(dl.split('-').reverse().slice(0, 2).join('/'))}</span>` : ym === curYm() ? '<span class="chip chip-soft">mês em andamento</span>' : ''}
           <button class="btn btn-sm btn-primary" data-action="cardDl" data-k="${k}">${icon('download')} ${dl ? 'Baixar de novo' : 'Baixar card'}</button></div>
       </div>`;

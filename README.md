@@ -45,7 +45,9 @@ Cobrem as regras de pontuação, Destaque, MVP, desempate, ranking e níveis (`t
 
 - Indicadores: Faturamento (22), Checklist POP (15), Taxa de ocupação (10), Ticket médio (10), Serviços (9), Clientes (6), Planos mensais (10), Fidelização (10), Venda de produtos (8). Pesos editáveis.
 - Só contam indicadores com dados no período.
-- Nota por indicador: 1º = 100, último = 0, proporcional ao valor. Pontuação geral = média ponderada.
+- Nota por indicador: proporcional ao líder (1º = 100; quem fez 70% do 1º tira 70). Pontuação geral = média ponderada.
+- Retenção e Fidelização: quem tem amostra pequena fica de fora do indicador (sem nota zero) e a nota geral usa os outros pesos.
+- Mínimo de dias para disputar posição: metade dos dias de quem mais trabalhou no período (no máximo 5). Antes disso: "Entrando no ranking".
 - **Destaque**: 1º lugar em pelo menos metade dos indicadores (arredonda para cima). **MVP**: metade + 1. Nunca os dois ao mesmo tempo.
 - Empate no 1º lugar conta para todos. Desempate do título: mais lideranças e, depois, maior pontuação.
 - Quem tem o título fica em 1º no ranking; os demais seguem pela pontuação.

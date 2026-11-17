@@ -83,9 +83,9 @@
       calc: s => MODES.prod === 'valor' ? (s.n.prodV ? s.prodV : null) : (s.n.prod ? s.prod : null) },
     // Retenção (clientes antigos) e fidelização (clientes novos): % que voltou com o mesmo profissional em até 45 dias.
     // Vêm da sincronização (base e quantos voltaram); mínimo de clientes para não premiar amostra pequena. Começam desligados.
-    { key: 'retAnt', label: 'Retenção de clientes antigos', weight: 8, fmt: 'pct',
+    { key: 'retAnt', label: 'Retenção de clientes antigos', weight: 8, fmt: 'pct', sample: true,
       calc: s => s.raB >= 10 ? (s.raV / s.raB) * 100 : null },
-    { key: 'fidNov', label: 'Fidelização de clientes novos', weight: 8, fmt: 'pct',
+    { key: 'fidNov', label: 'Fidelização de clientes novos', weight: 8, fmt: 'pct', sample: true,
       calc: s => s.fnB >= 5 ? (s.fnV / s.fnB) * 100 : null },
     // Serviços extras: tudo o que não é serviço tradicional (o dono marca os tradicionais). Começa desligado.
     { key: 'extra', label: 'Serviços extras', weight: 8, fmt: 'int',
@@ -471,11 +471,26 @@
     return { ...LEVELS[i], next: next ? next.name : null, need: next ? Math.max(0, next.min - v) : 0 };
   }
 
+  // Dias trabalhados no período (atendimento lançado ou registro no checklist). null = só há totais do mês (sem dias).
+  function workedDays(state, barberId, range) {
+    const set = new Set();
+    for (const e of state.entries || []) if (e.barberId === barberId && e.date >= range.start && e.date <= range.end && (Number(e.cli) > 0 || Number(e.fat) > 0 || Number(e.comanda) > 0)) set.add(e.date);
+    for (const r of state.pop || []) if (r.barberId === barberId && r.day.length === 10 && r.day >= range.start && r.day <= range.end && popHasEv(r)) set.add(r.day);
+    const monthOnly = (state.monthly || []).some(m => m.barberId === barberId && fullMonths(range).includes(m.month) && (isNum(m.fat) || isNum(m.cli)));
+    return set.size ? set.size : monthOnly ? null : 0;
+  }
+  // Nota do indicador: % do que o líder fez (líder = 100). Sem resultado = 0.
+  const indScore = (v, max) => (max > 0 ? Math.max(0, Math.min(100, (v / max) * 100)) : 0);
+
   /**
    * Regras:
    * - Indicador só conta se algum barbeiro tiver dado no período.
-   * - Nota por indicador: 1º = 100, último = 0, proporcional ao valor.
+   * - Nota por indicador: proporcional ao líder (quem fez 70% do 1º tira 70; o 1º tira 100).
+   * - Indicadores de amostra (retenção e fidelização): quem ainda não tem clientes suficientes fica de fora
+   *   daquele indicador (sem nota), e a pontuação geral dele usa só os outros pesos.
    * - Pontuação geral = média ponderada das notas pelos pesos.
+   * - Mínimo de dias: para disputar posição, metade dos dias de quem mais trabalhou no período (no máximo 5).
+   *   Quem ainda não chegou fica "Entrando no ranking": aparece no fim, sem afetar a nota dos outros.
    * - Empate no 1º lugar conta como liderança para todos os empatados.
    * - Destaque: 1º em pelo menos metade dos indicadores (arredonda para cima).
    * - MVP: 1º em metade + 1. Só existe um título por período: ou MVP, ou Destaque.
@@ -486,7 +501,11 @@
     applyCustom(state);
     const barbers = state.barbers.filter(b => b.active !== false);
     const weights = state.weights || {};
-    const rows = barbers.map(b => ({ barber: b, sums: aggregate(state, b.id, range), values: {}, ranks: {}, scores: {}, leads: [], overall: 0 }));
+    const all = barbers.map(b => ({ barber: b, sums: aggregate(state, b.id, range), values: {}, ranks: {}, scores: {}, leads: [], overall: 0, days: workedDays(state, b.id, range) }));
+    const maxDays = Math.max(0, ...all.map(r => r.days || 0));
+    const minDays = Math.min(5, Math.ceil(maxDays / 2));
+    all.forEach(r => { r.entering = r.days !== null && maxDays > 0 && r.days < minDays; r.needDays = r.entering ? minDays - r.days : 0; });
+    const rows = all.filter(r => !r.entering), entering = all.filter(r => r.entering);
 
     const active = [], inactive = [];
     const hidden = [...(state.hidden || []), ...RETIRED];
@@ -496,16 +515,25 @@
       const vals = rows.map(r => ind.calc(r.sums));
       if (w <= 0) { inactive.push({ ...ind, weight: w, reason: 'peso zero' }); continue; }
       if (vals.every(v => v === null)) { inactive.push({ ...ind, weight: w, reason: 'sem dados' }); continue; }
+      const out = v => ind.sample && v === null; // sem amostra suficiente: fica de fora
       const nums = vals.map(v => v ?? 0);
-      const max = Math.max(...nums), min = Math.min(...nums);
+      const max = Math.max(...nums.filter((v, i) => !out(vals[i])));
       const leaders = [];
       rows.forEach((r, i) => {
-        const v = nums[i];
         r.values[ind.key] = vals[i];
-        r.ranks[ind.key] = 1 + nums.filter(x => x > v).length;
-        r.scores[ind.key] = max === min ? (max > 0 ? 100 : 0) : ((v - min) / (max - min)) * 100;
+        if (out(vals[i])) { r.ranks[ind.key] = null; r.scores[ind.key] = null; return; }
+        const v = nums[i];
+        r.ranks[ind.key] = 1 + nums.filter((x, k) => !out(vals[k]) && x > v).length;
+        r.scores[ind.key] = indScore(v, max);
         if (v === max && max > 0) { leaders.push(r.barber.id); r.leads.push(ind.key); }
       });
+      // Quem está entrando no ranking vê os próprios números e a nota que teria, sem mexer na dos outros.
+      for (const r of entering) {
+        const v = ind.calc(r.sums);
+        r.values[ind.key] = v;
+        r.ranks[ind.key] = null;
+        r.scores[ind.key] = out(v) ? null : indScore(v ?? 0, max);
+      }
       active.push({ ...ind, weight: w, leaders, max });
     }
 
@@ -514,6 +542,7 @@
     for (const ind of BONUS_INDS) {
       if (hidden.includes(ind.key)) continue;
       const vals = rows.map(r => ind.calc(r.sums));
+      for (const r of entering) r.values[ind.key] = ind.calc(r.sums);
       if (vals.every(v => v === null)) continue;
       const max = Math.max(...vals.map(v => v ?? 0));
       const leaders = [];
@@ -522,8 +551,10 @@
     }
 
     const totalW = active.reduce((a, i) => a + i.weight, 0);
-    for (const r of rows) {
-      r.overall = totalW ? active.reduce((a, i) => a + i.weight * r.scores[i.key], 0) / totalW : 0;
+    for (const r of all) {
+      const used = active.filter(i => r.scores[i.key] !== null && r.scores[i.key] !== undefined);
+      const wSum = used.reduce((a, i) => a + i.weight, 0);
+      r.overall = wSum ? used.reduce((a, i) => a + i.weight * r.scores[i.key], 0) / wSum : 0;
     }
 
     const N = active.length;
@@ -543,30 +574,31 @@
       if (b.barber.id === title.barberId) return 1;
       return b.overall - a.overall || (b.sums.fat - a.sums.fat);
     });
-    rows.forEach((r, i) => { r.pos = i + 1; });
-
-    return { rows, active, bonus, inactive, N, Nrule, half, mvpNeed, title, range };
+    entering.sort((a, b) => (b.days || 0) - (a.days || 0) || b.overall - a.overall);
+    const ranked = rows.length;
+    // Quem está entrando fica no fim da lista (sem disputar posição).
+    const list = [...rows, ...entering];
+    list.forEach((r, i) => { r.pos = i + 1; });
+    return { rows: list, board: rows, ranked, entering, minDays, maxDays, active, bonus, inactive, N, Nrule, half, mvpNeed, title, range, totalW };
   }
 
 
   // ---------- quanto falta para subir ----------
   // Recalcula a pontuação geral trocando alguns valores de um barbeiro.
   function simulate(R, meId, otherId, changes) {
-    const vals = R.rows.map(r => ({ id: r.barber.id, v: { ...r.values } }));
+    const vals = R.rows.filter(r => !r.entering || r.barber.id === meId).map(r => ({ id: r.barber.id, v: { ...r.values } }));
     const me = vals.find(x => x.id === meId);
     Object.assign(me.v, changes);
-    const totalW = R.active.reduce((a, i) => a + i.weight, 0) || 1;
-    const overall = { };
-    for (const x of vals) overall[x.id] = 0;
+    const num = {}, den = {};
+    for (const x of vals) { num[x.id] = 0; den[x.id] = 0; }
     for (const ind of R.active) {
+      const out = v => ind.sample && (v === null || v === undefined);
       const nums = vals.map(x => x.v[ind.key] ?? 0);
-      const max = Math.max(...nums), min = Math.min(...nums);
-      vals.forEach((x, i) => {
-        const sc = max === min ? (max > 0 ? 100 : 0) : ((nums[i] - min) / (max - min)) * 100;
-        overall[x.id] += ind.weight * sc / totalW;
-      });
+      const max = Math.max(0, ...vals.filter(x => !out(x.v[ind.key])).map(x => x.v[ind.key] ?? 0));
+      vals.forEach((x, i) => { if (out(x.v[ind.key])) return; num[x.id] += ind.weight * indScore(nums[i], max); den[x.id] += ind.weight; });
     }
-    return { me: overall[meId], other: overall[otherId] };
+    const ov = id => (den[id] ? num[id] / den[id] : 0);
+    return { me: ov(meId), other: ov(otherId) };
   }
 
   // Menor aumento, em cada indicador, que faz `me` passar `target` na pontuação.
