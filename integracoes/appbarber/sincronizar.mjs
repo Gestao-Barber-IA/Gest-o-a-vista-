@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSAO = "3.0";
+const VERSAO = "3.1";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const TESTE = process.argv.includes("--teste");
 const CARGA = process.argv.includes("--carga"); // carga inicial: lê todas as comandas no ritmo máximo permitido
@@ -97,7 +97,9 @@ async function getExato(url, headers) {
 }
 
 // Horário de funcionamento: vem do app (Configurações › Indicadores e metas › Regra da taxa de ocupação).
-// Fora dele não chama a AppBarber (cada chamada é cobrada). Inclui 10 min depois do fechamento para pegar o fim do dia.
+// Fora dele não chama a AppBarber (cada chamada é cobrada). Depois do fechamento, roda UMA última vez,
+// 10 minutos depois (até 40 min depois, conforme o intervalo), para reler as comandas que ficaram abertas.
+const FIM_DIA = join(DIR, "fim-do-dia.txt");
 let HORARIO = null; // horário de funcionamento lido nesta execução (para a última releitura do dia)
 async function dentroDoHorario() {
   let h = null;
@@ -110,7 +112,14 @@ async function dentroDoHorario() {
   const agora = new Date(), m = agora.getHours() * 60 + agora.getMinutes();
   // Dia em que a barbearia fecha (ex.: domingo): não consulta a AppBarber, porque cada consulta gasta crédito.
   if (Array.isArray(h.fechados) && h.fechados.includes(agora.getDay())) return { ok: false, fechado: true, ...h };
-  return { ok: m >= min(h.abertura) && m <= min(h.fechamento) + 10, ...h };
+  const hojeIso = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-${String(agora.getDate()).padStart(2, "0")}`;
+  if (m >= min(h.abertura) && m <= min(h.fechamento)) return { ok: true, ...h };
+  let feito = ""; try { feito = readFileSync(FIM_DIA, "utf8").trim(); } catch { /* ainda não rodou */ }
+  if (m >= min(h.fechamento) + 10 && m <= min(h.fechamento) + 40 && feito !== hojeIso) {
+    try { writeFileSync(FIM_DIA, hojeIso); } catch { /* sem disco: roda mesmo assim */ }
+    return { ok: true, fimDoDia: true, ...h };
+  }
+  return { ok: false, ...h };
 }
 
 // Atualização automática: no máximo a cada 6 horas, baixa a versão mais nova do site do Gestão Barber IA.
@@ -421,12 +430,10 @@ async function main() {
   }
   const codigos = [...new Set(lista.map((a) => a.invoice_code).filter((c) => c && Number(c) > 0).map(String))];
   // Comanda ainda não paga é relida a cada 20 minutos (e depois que o dia vira, uma última vez).
-  // Comanda ainda aberta: relida a cada 45 min (cada leitura gasta crédito); perto do fechamento, em toda execução,
-  // para o dia terminar com tudo atualizado. Comanda nova entra na primeira execução depois do atendimento.
-  const minAgora = new Date().getHours() * 60 + new Date().getMinutes();
-  const hmMin = (t) => { const [a, b] = String(t || "").split(":").map(Number); return (a || 0) * 60 + (b || 0); };
-  const fimDoDia = HORARIO && HORARIO.fechamento && minAgora >= hmMin(HORARIO.fechamento) - 20;
-  const releAberta = fimDoDia ? 10 * 60000 : 45 * 60000;
+  // Comanda ainda aberta: relida a cada 45 min (cada leitura gasta crédito). Na última execução do dia,
+  // 10 min depois do fechamento, todas as abertas são relidas, para o dia terminar com tudo atualizado.
+  // Comanda nova entra na primeira execução depois do atendimento.
+  const releAberta = HORARIO && HORARIO.fimDoDia ? 0 : 45 * 60000;
   let faltam = codigos.filter((c) => !cache[c] || (cache[c].itens && (cache[c].h || 0) < 3) || (cache[c].final && !cache[c].pago && Date.now() - (cache[c].lida || 0) > 6 * 3600000) || (!cache[c].final && (Date.now() - (cache[c].lida || 0) > releAberta || (cache[c].d && cache[c].d < iso(hoje)))));
   // Só lê as comandas do mês atual (o ranking é por mês). Nos 3 primeiros dias, também as do mês anterior,
   // para o fechamento sair com as comandas finais. Os meses anteriores não são reenviados.
