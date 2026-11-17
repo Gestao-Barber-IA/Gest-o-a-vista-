@@ -4068,7 +4068,7 @@ ${rows.length ? '' : emptyBarbers()}
     const ex = JSON.stringify([
       { data: iso(new Date()), barbeiro: state.barbers[0]?.name || 'Nome do barbeiro', faturamento: 420.5, servicos: 9, clientes: 8, checklist_pop: 1, horas_disponiveis: 8, horas_ocupadas: 6.5, planos_mensais: 1, clientes_retorno: 5, venda_produtos: 2 },
     ], null, 2);
-    return `${apiTutorial()}${autoSyncCard()}${abCard()}${waRemindCard()}${clRemindCard()}${fbCard()}
+    return `${apiTutorial()}${autoSyncCard()}${abCard()}${waRemindCard()}${clRemindCard()}${fbCard()}${wbCard()}
       <section class="section card" id="api-ref">
         <h2 class="section-title">Como funciona ${tip('api')}</h2>
         <p class="section-note">Outro sistema (agenda, caixa, ERP) envia os resultados de cada barbeiro por dia. Os números entram no ranking na hora, junto com os lançados à mão.</p>
@@ -4303,6 +4303,38 @@ Content-Type: application/json</pre>
         <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
       </form>
 </section>`;
+  }
+  // Reconquista de clientes sumidos: quem não vem há 3 a 12 meses recebe, aos poucos, um convite com presente de retorno.
+  const WB_TEXT = ['{Saudacao}, {cliente}! Tudo bem? 😊\nAqui é da {barbearia}. Sentimos sua falta por aqui! Faz um tempinho que você não aparece…\nPosso te enviar um presente de retorno? 🎁',
+    '{Saudacao}, {cliente}! Como você está? 😊\nAqui é da {barbearia}. Faz um tempo que a gente não te vê por aqui e sentimos sua falta!\nTenho um presente de retorno separado pra você. Posso te enviar? 🎁',
+    '{Saudacao}, {cliente}! Tudo certo por aí? 😊\nPassando pra dizer que a {barbearia} sentiu sua falta!\nPreparamos um presente especial para o seu retorno. Quer que eu te mande? 🎁'].join('\n---\n');
+  function wbCard() {
+    if (!isGestor(currentUser())) return '';
+    const it = Cloud.enabled ? ui.integ : (state.integ || {});
+    if (!it || it.erro) return '';
+    const st = String(it.wb_status || ''), on = !!it.wb_on, noAb = !it.est_code, bad = /^erro/.test(st);
+    const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const h = new Date().getHours(), sd = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+    const prev = (it.wb_text || WB_TEXT).split(/\n\s*-{3,}\s*\n/)[0].replace(/\{Saudacao\}/g, sd).replace(/\{cliente\}/g, 'João').replace(/\{barbearia\}/g, state.company.name || '');
+    const mes = d => Math.round(Number(d) / 30);
+    return `<section class="section card as-card">
+      <h2 class="section-title">${icon('rocket')} Reconquista de clientes sumidos</h2>
+      <p class="section-note">Clientes que não vêm há algum tempo recebem um convite perguntando se podem receber um <b>presente de retorno</b>. Quem responder fala com a recepção, que envia o presente. A fila começa por quem sumiu há menos tempo; cada cliente recebe no máximo 1 vez a cada 6 meses, e antes de cada envio o sistema confere se ele já não marcou horário.</p>
+      <p class="section-note">${icon('alert')} É a mensagem com <b>maior risco de bloqueio</b> (é marketing para quem não fala com a barbearia há meses): mantenha poucas por dia. Sai pelo ${it.cl_numero === 'principal' ? '<b>WhatsApp principal</b>' : '<b>2º chip</b> (troque para o principal no lembrete de agendamento, para a recepção receber as respostas)'}, entre 10h e 18h. Gasta cerca de 1 crédito da AppBarber por mensagem, mais a lista semanal de clientes.</p>
+      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}
+      <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.wb_status_at ? 'Atualizado ' + when(it.wb_status_at) : ''}</small><p class="muted as-msg">${esc(st.replace(/^(ok|erro): /, ''))}</p>` : '<span class="chip">Aguardando o servidor</span>'}</div>
+      <form class="form" data-form="wbRemind" novalidate>
+        <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''} ${noAb ? 'disabled' : ''}><span><b>Reconquista ligada</b><small>De segunda a sábado, espalhadas entre 10h e 18h.</small></span></label>
+        <div class="grid-2">
+          <label class="field"><span>Mensagens por dia</span><input class="input num" type="number" name="daily" min="1" max="40" step="1" value="${esc(String(it.wb_daily || 15))}"></label>
+          <label class="field"><span>Sem vir há (meses)</span><span class="wb-range"><input class="input num" type="number" name="min" min="1" max="24" value="${mes(it.wb_min_days || 90)}"> a <input class="input num" type="number" name="max" min="2" max="36" value="${mes(it.wb_max_days || 365)}"></span></label>
+        </div>
+        <label class="field"><span>Mensagem</span><textarea class="input" name="text" rows="9" maxlength="2000">${esc(it.wb_text || WB_TEXT)}</textarea>
+          <small class="muted">Use {Saudacao} (Bom dia, Boa tarde…), {cliente} e {barbearia}. As versões separadas por uma linha com <b>---</b> são sorteadas a cada envio. Links são retirados (aumentam a chance de bloqueio).</small></label>
+        <details class="wa-prev"><summary>Ver como chega para o cliente</summary><p class="wa-bubble">${esc(prev).replace(/\n/g, '<br>')}</p></details>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
+      </form></section>`;
   }
   function autoSyncCard() {
     if (Cloud.enabled && ui.integ === undefined) {
@@ -8599,6 +8631,18 @@ Content-Type: application/json</pre>
         const res = importEntries(state, Array.isArray(data) ? data : [data]); save();
         setMsg(f, `${res.ok} lançamento(s) importado(s).${res.errors.length ? ' Problemas: ' + res.errors.join(' ') : ''}`, res.errors.length === 0);
       } catch (e) { setMsg(f, e.message); }
+    },
+    wbRemind(f) {
+      const daily = Math.round(Number(f.elements.daily.value) || 0), mn = Math.round(Number(f.elements.min.value) || 0), mx = Math.round(Number(f.elements.max.value) || 0);
+      if (daily < 1 || daily > 40) return setMsg(f, 'Mensagens por dia: de 1 a 40.');
+      if (mn < 1 || mx <= mn) return setMsg(f, 'Confira os meses: o segundo número precisa ser maior que o primeiro.');
+      const row = { wb_on: !!f.elements.on.checked, wb_daily: daily, wb_min_days: mn * 30, wb_max_days: mx * 30 + 5, wb_text: (f.elements.text.value || '').trim().slice(0, 2000) };
+      if (row.wb_text === WB_TEXT) row.wb_text = '';
+      const cur = (Cloud.enabled ? ui.integ : state.integ) || {};
+      if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Reconquista salva.'); return render(); }
+      setMsg(f, 'Salvando…', true);
+      Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(row.wb_on ? `Reconquista ligada: até ${daily} por dia.` : 'Reconquista desligada.'); render(); })
+        .catch(e => { const m = Cloud.message(e); setMsg(f, /wb_|column|schema cache/i.test(m) ? 'A reconquista ainda está sendo ativada no servidor.' : m); });
     },
     fbRemind(f) {
       const row = { fb_on: !!f.elements.on.checked, fb_text: (f.elements.text.value || '').trim().slice(0, 1000) };

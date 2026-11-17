@@ -17,7 +17,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "1.8";
+const VERSAO = "2.0";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -285,9 +285,97 @@ async function feedbacks(e, hoje) {
   }
 }
 
+// ---------- reconquista de clientes sumidos (3 a 12 meses sem vir) ----------
+// Lista de clientes da AppBarber (com a data do último agendamento) baixada 1 vez por semana (1 crédito por página).
+// Cada dia, até N mensagens entre 10h e 18h, começando por quem sumiu há menos tempo. Antes de cada envio,
+// confere o cliente na AppBarber (1 crédito) para não mandar a quem já marcou. Cada cliente: no máximo 1 vez a cada 6 meses.
+const TEXTOS_WB = [
+  "{Saudacao}, {cliente}! Tudo bem? 😊\nAqui é da {barbearia}. Sentimos sua falta por aqui! Faz um tempinho que você não aparece…\nPosso te enviar um presente de retorno? 🎁",
+  "{Saudacao}, {cliente}! Como você está? 😊\nAqui é da {barbearia}. Faz um tempo que a gente não te vê por aqui e sentimos sua falta!\nTenho um presente de retorno separado pra você. Posso te enviar? 🎁",
+  "{Saudacao}, {cliente}! Tudo certo por aí? 😊\nPassando pra dizer que a {barbearia} sentiu sua falta!\nPreparamos um presente especial para o seu retorno. Quer que eu te mande? 🎁"];
+const WB_CLI = join(DIR, "reconquista-clientes.json"), WB_ENV = join(DIR, "reconquista-enviados.json"), WB_SAIR = join(DIR, "reconquista-sair.json");
+const chaveFone = (f) => { let d = so(f); if (d.length > 11 && d.startsWith("55")) d = d.slice(2); if (d.length === 11) d = d.slice(0, 2) + d.slice(3); return d.slice(-10); }; // DDD + 8 dígitos
+const lerJ = (f, pad) => { try { return JSON.parse(readFileSync(f, "utf8")); } catch { return pad; } };
+const diasDesde = (isoD, hoje) => Math.round((new Date(hoje + "T12:00:00") - new Date(String(isoD).slice(0, 10) + "T12:00:00")) / 86400000);
+async function abGet(e, caminho) {
+  const c = e.reconquista;
+  const r = await getExato(`https://api.appbarber.com${caminho}${caminho.includes("?") ? "&" : "?"}establishment_code=${encodeURIComponent(c.codigo_estabelecimento)}`, { "X-API-Key": c.appbarber_api_key, Accept: "application/json", "User-Agent": "GestaoBarberIA-Sync/2.8" });
+  if (r.ok) api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: 1 }).catch(() => {});
+  else if (/saldo insuficiente/i.test(r.text)) api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: 0, sem_saldo: true }).catch(() => {});
+  if (!r.ok) throw new Error(`AppBarber respondeu ${r.status}${motivo(r.text)}`);
+  return (JSON.parse(r.text).data) || [];
+}
+async function baixarClientes(e, hoje) {
+  const lista = [];
+  for (let pg = 0, total = 1; pg < total && pg < 400; pg++) {
+    const d = await abGet(e, `/v1/establishment/clients?pages=${pg}`);
+    if (!d.length) break;
+    total = Number(d[0].total_pages) || total;
+    for (const x of d) { const f = so(x.person_cellphone || x.person_phone); if (f.length >= 10 && x.last_scheduling) lista.push([f, primeiro(x.person_name), String(x.last_scheduling).slice(0, 10)]); }
+    await espera(2500);
+  }
+  const env = lerJ(WB_ENV, {});
+  // Quem recebeu a mensagem e marcou horário depois dela: "voltou".
+  for (const [f, , last] of lista) { const k = chaveFone(f); if (env[k] && !env[k].voltou && last >= env[k].em) env[k].voltou = last; }
+  writeFileSync(WB_ENV, JSON.stringify(env));
+  writeFileSync(WB_CLI, JSON.stringify({ em: hoje, lista }), { mode: 0o600 });
+  log(`${e.nome}: reconquista — ${lista.length} clientes baixados da AppBarber.`);
+}
+let wbUltimo = 0;
+const wbStatusEm = {};
+async function reconquista(e, hoje) {
+  const c = e.reconquista, agora = agoraSP();
+  if (fechadoHoje(e) || agora < 10 * 60 || agora > 18 * 60) return;
+  let base = lerJ(WB_CLI, null);
+  if (!base || diasDesde(base.em, hoje) >= 7) { await baixarClientes(e, hoje); base = lerJ(WB_CLI, { lista: [] }); }
+  const env = lerJ(WB_ENV, {}), sair = new Set(lerJ(WB_SAIR, []));
+  const hojeEnv = Object.values(env).filter((x) => x.em === hoje).length;
+  const fila = base.lista.filter(([f, , last]) => { const k = chaveFone(f), d = diasDesde(last, hoje);
+    return d >= c.minDias && d <= c.maxDias && !sair.has(k) && !(env[k] && diasDesde(env[k].em, hoje) < 180); })
+    .sort((a, b) => (a[2] < b[2] ? 1 : a[2] > b[2] ? -1 : 0)); // quem sumiu há menos tempo primeiro
+  const intervalo = (8 * 60 / c.porDia) * 60000; // espalha as N mensagens entre 10h e 18h
+  if (hojeEnv < c.porDia && fila.length && Date.now() - wbUltimo >= intervalo && pausadoDia !== hoje) {
+    for (const [f, nome] of fila.slice(0, 5)) {
+      // Confere na hora: se o cliente já marcou horário, não manda.
+      const atual = await abGet(e, `/v1/establishment/clients?cellphone=${so(f).replace(/^55(?=\d{10,11}$)/, "")}`).catch(() => null);
+      const last = atual && atual[0] && atual[0].last_scheduling ? String(atual[0].last_scheduling).slice(0, 10) : null;
+      const k = chaveFone(f);
+      if (last && diasDesde(last, hoje) < c.minDias) { env[k] = { em: hoje, pulado: true }; writeFileSync(WB_ENV, JSON.stringify(env)); continue; }
+      const h = Math.floor(agora / 60), sd = h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
+      const versoes = (c.texto ? c.texto.split(/\n\s*-{3,}\s*\n/) : TEXTOS_WB).map((t) => t.trim()).filter(Boolean);
+      let texto = versoes[Math.floor(Math.random() * versoes.length)].replace(/\{Saudacao\}/g, sd).replace(/\{saudacao\}/g, sd.toLowerCase())
+        .replace(/\{cliente\}/g, nome || "tudo bem").replace(/\{barbearia\}/g, e.nome).replace(/https?:\/\/\S+/gi, "").trim();
+      env[k] = { em: hoje }; writeFileSync(WB_ENV, JSON.stringify(env)); wbUltimo = Date.now();
+      try { await enviar(f, texto); erroSeguido = 0; log(`${e.nome}: reconquista enviada (${nome || "cliente"}).`); }
+      catch (err) { log(`${e.nome}: reconquista não enviada (${err.message}).`); if (!/sem WhatsApp/.test(err.message) && ++erroSeguido >= 3) pausadoDia = hoje; }
+      break; // uma por vez; a próxima no próximo intervalo
+    }
+  }
+  if (!wbStatusEm[e.company_id] || Date.now() - wbStatusEm[e.company_id] > 1800000) {
+    wbStatusEm[e.company_id] = Date.now();
+    const env2 = lerJ(WB_ENV, {}), vals = Object.values(env2).filter((x) => !x.pulado);
+    const quando = new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+    await api("POST", { company_id: e.company_id, acao: "wb_status", status: `ok: ${quando} · ${vals.filter((x) => x.em === hoje).length} de ${c.porDia} enviadas hoje · ${fila.length} na fila · ${vals.length} enviadas no total · ${vals.filter((x) => x.voltou).length} voltaram a agendar.` }).catch(() => {});
+  }
+}
+// A mensagem não oferece o SAIR, mas se alguém responder SAIR, a reconquista não manda mais para ele.
+async function sairDaLista(msg) {
+  if (!msg || !msg.key || msg.key.fromMe) return;
+  const t = String((msg.message && (msg.message.conversation || (msg.message.extendedTextMessage && msg.message.extendedTextMessage.text))) || "").trim();
+  if (!/^sair\b/i.test(t) || t.length > 30) return;
+  const jid = [msg.key.remoteJid, msg.key.remoteJidAlt, msg.key.senderPn, msg.key.participantPn].find((j) => j && /@s\.whatsapp\.net$/.test(j));
+  if (!jid) return;
+  const lista = new Set(lerJ(WB_SAIR, [])); const k = chaveFone(jid.split("@")[0]);
+  if (lista.has(k)) return;
+  lista.add(k); writeFileSync(WB_SAIR, JSON.stringify([...lista]));
+  await espera(4000 + Math.random() * 4000);
+  await sock.sendMessage(msg.key.remoteJid, { text: "Pronto! Você não vai mais receber essas mensagens. Se precisar, é só chamar a gente por aqui. 😊" }).catch(() => {});
+}
+
 // Resposta automática: este número só envia lembretes. Quem responder recebe, uma vez por dia, o recado do dono.
 let respostas = [], respondidos = {};
 async function responder(m) {
+  if (m.type === "notify") for (const msg of m.messages || []) await sairDaLista(msg).catch(() => {});
   if (m.type !== "notify" || !respostas.length || NUMERO === "principal") return; // no principal, quem responde é a recepção
   const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
   if (respondidos.dia !== hoje) respondidos = { dia: hoje };
@@ -330,7 +418,7 @@ async function ciclo() {
   await atualizar();
   const { empresas = [], hoje } = await api("GET", null, "?acao=lembretes");
   // Cada número cuida só das empresas com o seu tipo de lembrete ligado.
-  const minhas = empresas.filter((e) => (CLI ? !!(e.clientes || e.feedback) : e.cfg.ligado !== false));
+  const minhas = empresas.filter((e) => (CLI ? !!(e.clientes || e.feedback || e.reconquista) : e.cfg.ligado !== false));
   empresasConhecidas = minhas.map((e) => e.company_id);
   if (CLI) await escolherNumero(minhas);
   if (!aberto) { if (Date.now() - avisouOff > 3600000) { avisouOff = Date.now(); await status(`desconectado: conecte o número no servidor (${CMD}).`); } return; }
@@ -339,6 +427,7 @@ async function ciclo() {
     respostas = minhas.map((e) => e.clientes && e.clientes.resposta).filter(Boolean);
     for (const e of minhas) if (e.clientes) await lembretesClientes(e, hoje).catch((err) => { log(`${e.nome}: lembretes de clientes: ${err.message}`); status("erro: " + err.message, [e.company_id]); });
     for (const e of minhas) if (e.feedback) await feedbacks(e, hoje).catch((err) => log(`${e.nome}: feedback: ${err.message}`));
+    for (const e of minhas) if (e.reconquista) await reconquista(e, hoje).catch((err) => { log(`${e.nome}: reconquista: ${err.message}`); api("POST", { company_id: e.company_id, acao: "wb_status", status: "erro: " + err.message }).catch(() => {}); });
     return;
   }
   const env = lerEnviados(); for (const d of Object.keys(env)) if (d < hoje) delete env[d];
