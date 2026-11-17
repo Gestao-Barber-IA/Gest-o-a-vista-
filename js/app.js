@@ -5509,6 +5509,7 @@ Content-Type: application/json</pre>
   }
   function popStatus(bid, day) {
     const cfg = popCfg(), rec = popRec(bid, day);
+    if (rec && rec.folga) return 'folga'; // dia de folga marcado pela gestão: não é "sem registro"
     if (!rec || !rec.ev || !Object.values(rec.ev).some(l => Array.isArray(l) && l.some(GB.evLive))) return 'none';
     return GB.popDayPts(cfg, rec) >= GB.popDayMax(cfg, day) - 0.01 ? 'done' : 'part';
   }
@@ -5553,6 +5554,11 @@ Content-Type: application/json</pre>
     </ul><p class="muted pop-gest">${icon('lock')} Marcado pelo dono, gestor ou líder.</p>`;
   function arrBlock(it, list, bid) {
     const e = list.find(GB.evLive), can = popMarkOk(it, bid);
+    const day = `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`, rf = popRec(bid, day);
+    if (rf && rf.folga && !e) {
+      return `<div class="arr-done arr-folga">${icon('moon')}<span><b>Folga</b><small>Dia de folga: não conta como dia trabalhado, não entra como "sem registro" e não recebe o lembrete no WhatsApp.</small></span></div>
+        ${can ? `<button class="link-btn arr-undo" data-action="popFolga" data-off="1">${ui.confirm === 'folga' ? 'Confirmar: desfazer a folga' : 'Desfazer'}</button>` : ''}`;
+    }
     if (e) {
       const a = ARR[e.arr || 'ok'], sev = e.sev && DISC_SEV[e.sev];
       const undo = can && (isGestor(currentUser()) || e.byUser === (currentUser() || {}).id);
@@ -5560,7 +5566,7 @@ Content-Type: application/json</pre>
         ${undo ? `<button class="link-btn arr-undo" data-action="arrUndo" data-it="${esc(it.id)}">${ui.confirm === 'arr' + it.id ? 'Confirmar: desfazer' + (e.disc ? ' e apagar a ocorrência' : '') : 'Desfazer'}</button>` : ''}`;
     }
     if (!can) return arrRules();
-    return `<div class="arr-btns">${Object.entries(ARR).map(([k, [l, c, i]]) => `<button class="btn arr-btn ${c}" data-action="arrMark" data-it="${esc(it.id)}" data-v="${k}" ${ui.arrBusy ? 'disabled' : ''}>${icon(i)} <span>${l}<small>${ARR[k][3]}</small><em class="arr-note">${arrNote(k)}</em></span></button>`).join('')}</div>`;
+    return `<div class="arr-btns">${Object.entries(ARR).map(([k, [l, c, i]]) => `<button class="btn arr-btn ${c}" data-action="arrMark" data-it="${esc(it.id)}" data-v="${k}" ${ui.arrBusy ? 'disabled' : ''}>${icon(i)} <span>${l}<small>${ARR[k][3]}</small><em class="arr-note">${arrNote(k)}</em></span></button>`).join('')}<button class="btn arr-btn arr-folga" data-action="popFolga" ${ui.arrBusy ? 'disabled' : ''}>${icon('moon')} <span>Folga hoje<small>Dia de folga do profissional: não conta como dia trabalhado.</small></span></button></div>`;
   }
   function popStepper(it, list, t, bid, mayAdd) {
     if (!popMarkOk(it, bid)) return `<p class="muted pop-gest">${icon('lock')} Marcado pelo dono, gestor ou líder.</p>`;
@@ -5663,6 +5669,23 @@ Content-Type: application/json</pre>
       <button class="btn" data-action="popViewClose">${icon('x')} Fechar</button></figure></div>`;
   }
 
+  // Listas que rolam para o lado (profissionais e dias do checklist): deixa o item escolhido visível, no meio,
+  // sem mexer na rolagem da página.
+  // Só recentraliza quando a escolha muda (ou ao abrir a página), para não brigar com quem está rolando a lista.
+  const centrado = {};
+  function centerSelected() {
+    for (const [box, sel] of [['.pop-people', '.pop-person.on'], ['#pop-days', '.pop-dn.on']]) {
+      const c = document.querySelector(box), el = c && c.querySelector(sel);
+      if (!c) { delete centrado[box]; continue; }
+      const chave = (el && (el.dataset.id || el.dataset.d)) + '|' + ui.popMonth + '|' + ui.popBarber;
+      if (centrado[box] === chave && c.scrollLeft) continue;
+      centrado[box] = chave;
+      if (!c || !el || c.scrollWidth <= c.clientWidth) continue;
+      const alvo = el.offsetLeft - c.offsetLeft - (c.clientWidth - el.offsetWidth) / 2;
+      if (Math.abs(c.scrollLeft - alvo) > 4) c.scrollLeft = Math.max(0, alvo);
+    }
+  }
+
   // Busca as fotos guardadas na nuvem (links temporários).
   function hydrateProofs() {
     if (!Cloud.enabled) return;
@@ -5754,7 +5777,7 @@ Content-Type: application/json</pre>
     return `
       <section class="section card">
         <h2 class="pop-h2">Escolha o profissional</h2>
-        <p class="pop-today">Hoje: <b class="ok">${cnt('done')} completos</b> · <b class="part">${cnt('part')} incompletos</b> · <b class="none">${cnt('none')} sem registro</b></p>
+        <p class="pop-today">Hoje: <b class="ok">${cnt('done')} completos</b> · <b class="part">${cnt('part')} incompletos</b> · <b class="none">${cnt('none')} sem registro</b>${cnt('folga') ? ` · <b class="folga">${cnt('folga')} de folga</b>` : ''}</p>
         <div class="pop-month"><select class="input" id="pop-month" data-change="popMonth">${monthOptions(ym)}</select></div>
         <div class="pop-people">${people.map((x, i) => `<button class="pop-person ${x.id === bid ? 'on' : ''}" data-action="popPick" data-id="${esc(x.id)}"><span class="pop-av">${avatar(x, 42)}${dot(st[i])}</span><b>${esc(x.name)}</b><span class="num">${popScoreTxt(popMonth(x.id, ym))}</span>${canReview(x.id) && popPendingCount(x.id, ym) ? `<span class="pop-pcount" title="Provas aguardando conferência">${popPendingCount(x.id, ym)}</span>` : ''}</button>`).join('')}</div>
       </section>
@@ -7444,6 +7467,7 @@ Content-Type: application/json</pre>
     maybeRemindPop(user);
     maybeOvertakeToast();
     hydrateProofs();
+    centerSelected();
     if (document.querySelector('img[data-card]')) hydrateCards();
     if (document.querySelector('.pm-wave')) pmDraw();
     setTimeout(maybeAutoReveal, 700);
@@ -7626,6 +7650,17 @@ Content-Type: application/json</pre>
       else if (e.sev) toast(`${nm}: compromisso comercial não atendido. ${DISC_SEV[e.sev][0]} registrada na Fiscalização (${e.sev === 'advertencia' ? '1º' : '2º'} no mês).`, 5000, 'alert');
       else toast(`${nm}: ${ARR[v][0].toLowerCase()}.`);
       render();
+    },
+    // Folga do dia (dono, gestor ou líder): marca o dia como folga do profissional.
+    popFolga(el) {
+      const bid = ui.popBarber, it = popCfg().items.find(popArr);
+      if (!it || !popMarkOk(it, bid)) return;
+      const day = `${ui.popMonth}-${String(ui.popDay).padStart(2, '0')}`, nm = ((barberById(bid) || {}).name || 'Profissional').split(' ')[0];
+      if (el.dataset.off) {
+        if (ui.confirm !== 'folga') { ui.confirm = 'folga'; render(); return; }
+        ui.confirm = null; const r = popRecW(bid, day); delete r.folga; save(); toast('Folga desfeita.'); return render();
+      }
+      const r = popRecW(bid, day); r.folga = true; save(); toast(`${nm}: dia de folga marcado.`, 3500, 'moon'); render();
     },
     async arrUndo(el) {
       const it = popCfg().items.find(x => x.id === el.dataset.it), bid = ui.popBarber;
