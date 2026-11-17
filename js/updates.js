@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-17-creditos-ab', date: '2026-11-17', title: 'Contador de créditos da API AppBarber', items: [
+    ['novo', 'Em Integração, o cartão Créditos da API AppBarber: o sistema conta as consultas que faz (cada uma gasta 1 crédito) e mostra o saldo estimado, a média por dia e quantos dias ainda dura. Registre ali cada recarga.'],
+    ['novo', 'Aviso no sininho e na tela quando o saldo estimado fica abaixo de 15% ou dura menos de 5 dias, e quando a AppBarber avisa que o saldo acabou.'],
+  ] },
   { id: '2026-11-17-economia-creditos', date: '2026-11-17', title: 'Menos consultas à AppBarber (economia de créditos)', items: [
     ['melhoria', 'Cada consulta à API da AppBarber gasta crédito. A sincronização dos números passou a rodar a cada 15 minutos e o lembrete dos clientes confere a agenda a cada 15 minutos, só no horário de funcionamento.'],
     ['melhoria', 'Comandas ainda abertas (cliente não pagou) são relidas a cada 45 minutos, e não mais a cada 20. 10 minutos depois do fechamento, a sincronização roda uma última vez e relê todas as que ficaram abertas, para o dia terminar com tudo atualizado.'],

@@ -8,7 +8,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSAO = "1.2";
+const VERSAO = "1.3";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const TOKEN = process.env.SYNC_TOKEN || "";
 const SYNC_URL = process.env.SYNC_URL || "https://sekkmnkajnaqubyhpxvd.supabase.co/functions/v1/sync-servidor";
@@ -85,9 +85,10 @@ function rodar(e) {
     const t = setTimeout(() => p.kill("SIGTERM"), 9 * 60000);
     p.on("close", (code) => {
       clearTimeout(t);
-      const linhas = out.trim().split("\n").map((l) => l.replace(/^\[[^\]]*\]\s*/, "").trim()).filter(Boolean);
+      const cr = out.match(/CREDITOS_USADOS=(\d+)( SEM_SALDO)?/);
+      const linhas = out.trim().split("\n").map((l) => l.replace(/^\[[^\]]*\]\s*/, "").trim()).filter((l) => l && !/^CREDITOS_USADOS=/.test(l));
       const imp = linhas.filter((l) => /ERRO|ATENÇÃO|gravados|Fora do horário|Nada para enviar|Problemas|limite/i.test(l));
-      ok({ ok: code === 0 && !imp.some((l) => /^ERRO/.test(l)), mensagem: (imp.length ? imp : linhas).slice(-2).join(" | ") || `terminou (código ${code})` });
+      ok({ ok: code === 0 && !imp.some((l) => /^ERRO/.test(l)), mensagem: (imp.length ? imp : linhas).slice(-2).join(" | ") || `terminou (código ${code})`, creditos: cr ? Number(cr[1]) : 0, sem_saldo: !!(cr && cr[2]) });
     });
   });
 }
@@ -101,7 +102,7 @@ async function ciclo() {
   for (const e of lista) {
     const r = await rodar(e);
     log(`${e.nome}: ${r.ok ? "ok" : "ERRO"} · ${r.mensagem}`);
-    await api("POST", { company_id: e.company_id, ok: r.ok, mensagem: r.mensagem }).catch((x) => log("Falha ao gravar o status: " + x.message));
+    await api("POST", { company_id: e.company_id, ok: r.ok, mensagem: r.mensagem, creditos: r.creditos, sem_saldo: r.sem_saldo }).catch((x) => log("Falha ao gravar o status: " + x.message));
     // Uma barbearia de cada vez: o limite da AppBarber (30 chamadas por minuto) é por IP.
     await espera(3000);
   }
