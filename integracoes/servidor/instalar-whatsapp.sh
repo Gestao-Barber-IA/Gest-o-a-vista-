@@ -28,10 +28,12 @@ PKG
 node --check "$DIR/whatsapp.mjs"
 chown -R gbia:gbia "$DIR" && chmod 700 "$DIR"
 
-echo "==> Criando o serviço (liga sozinho e reinicia se cair)"
-cat > /etc/systemd/system/gbia-whatsapp.service <<UNIT
+echo "==> Criando os serviços (ligam sozinhos e reiniciam se caírem)"
+# Dois números: gbia-whatsapp (equipe, checklist) e gbia-whatsapp-clientes (lembrete de agendamento dos clientes).
+servico() { # $1 = nome do serviço, $2 = papel, $3 = descrição
+cat > /etc/systemd/system/$1.service <<UNIT
 [Unit]
-Description=Gestão Barber IA - lembretes no WhatsApp
+Description=Gestão Barber IA - $3
 After=network-online.target
 Wants=network-online.target
 
@@ -40,40 +42,48 @@ User=gbia
 WorkingDirectory=$DIR
 EnvironmentFile=/etc/gbia-sync.env
 Environment=TZ=America/Sao_Paulo
-Environment=NODE_OPTIONS=--max-old-space-size=256
+Environment=WA_PAPEL=$2
+Environment=NODE_OPTIONS=--max-old-space-size=200
 ExecStart=/usr/bin/node $DIR/whatsapp.mjs
 Restart=always
 RestartSec=30
-MemoryMax=450M
+MemoryMax=400M
 
 [Install]
 WantedBy=multi-user.target
 UNIT
+}
+servico gbia-whatsapp equipe "lembretes da equipe no WhatsApp"
+servico gbia-whatsapp-clientes clientes "lembrete de agendamento dos clientes no WhatsApp"
 
-# Atalhos: conectar o número (QR code ou código) e mandar um teste.
-cat > /usr/local/bin/gbia-whatsapp-conectar <<CMD
+# Atalhos: conectar cada número (QR code ou código) e mandar um teste.
+atalho() { # $1 = comando, $2 = serviço, $3 = papel, $4 = opção do node (--conectar ou --teste)
+cat > /usr/local/bin/$1 <<CMD
 #!/usr/bin/env bash
-systemctl stop gbia-whatsapp
-if [ -n "\${1:-}" ]; then sudo -u gbia env \$(cat /etc/gbia-sync.env | xargs) TZ=America/Sao_Paulo node $DIR/whatsapp.mjs --codigo "\$1"
-else sudo -u gbia env \$(cat /etc/gbia-sync.env | xargs) TZ=America/Sao_Paulo node $DIR/whatsapp.mjs --conectar; fi
-systemctl start gbia-whatsapp
+systemctl stop $2
+if [ "$4" = "--teste" ]; then sudo -u gbia env \$(cat /etc/gbia-sync.env | xargs) TZ=America/Sao_Paulo WA_PAPEL=$3 node $DIR/whatsapp.mjs --teste "\$1"
+elif [ -n "\${1:-}" ]; then sudo -u gbia env \$(cat /etc/gbia-sync.env | xargs) TZ=America/Sao_Paulo WA_PAPEL=$3 node $DIR/whatsapp.mjs --codigo "\$1"
+else sudo -u gbia env \$(cat /etc/gbia-sync.env | xargs) TZ=America/Sao_Paulo WA_PAPEL=$3 node $DIR/whatsapp.mjs --conectar; fi
+systemctl start $2
 CMD
-cat > /usr/local/bin/gbia-whatsapp-teste <<CMD
-#!/usr/bin/env bash
-systemctl stop gbia-whatsapp
-sudo -u gbia env \$(cat /etc/gbia-sync.env | xargs) TZ=America/Sao_Paulo node $DIR/whatsapp.mjs --teste "\$1"
-systemctl start gbia-whatsapp
-CMD
-chmod 755 /usr/local/bin/gbia-whatsapp-conectar /usr/local/bin/gbia-whatsapp-teste
+chmod 755 /usr/local/bin/$1
+}
+atalho gbia-whatsapp-conectar gbia-whatsapp equipe --conectar
+atalho gbia-whatsapp-teste gbia-whatsapp equipe --teste
+atalho gbia-whatsapp-conectar-clientes gbia-whatsapp-clientes clientes --conectar
+atalho gbia-whatsapp-teste-clientes gbia-whatsapp-clientes clientes --teste
 systemctl daemon-reload
-systemctl enable gbia-whatsapp >/dev/null
+systemctl enable gbia-whatsapp gbia-whatsapp-clientes >/dev/null
+systemctl restart gbia-whatsapp gbia-whatsapp-clientes
 
 echo
 echo "============================================================"
-echo " Instalado! Agora conecte o chip:"
-echo "   gbia-whatsapp-conectar"
-echo " (vai aparecer um QR code: no celular do chip, WhatsApp ›"
+echo " Instalado! Dois números de WhatsApp:"
+echo "  • Equipe (checklist):     gbia-whatsapp-conectar"
+echo "                            gbia-whatsapp-teste 55DDDNUMERO"
+echo "  • Clientes (agendamento): gbia-whatsapp-conectar-clientes"
+echo "                            gbia-whatsapp-teste-clientes 55DDDNUMERO"
+echo " (aparece um QR code: no celular do chip, WhatsApp ›"
 echo "  Aparelhos conectados › Conectar um aparelho)"
-echo " Depois, teste com o seu número:  gbia-whatsapp-teste 5511999998888"
-echo " Ver o funcionamento:  journalctl -u gbia-whatsapp -f"
+echo " Ver o funcionamento:  journalctl -u gbia-whatsapp-clientes -f"
 echo "============================================================"

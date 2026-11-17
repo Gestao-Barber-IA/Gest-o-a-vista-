@@ -8,6 +8,7 @@
 //   node whatsapp.mjs --conectar            mostra o QR code para ligar o número (WhatsApp › Aparelhos conectados)
 //   node whatsapp.mjs --codigo 5511999998888  liga pelo código de 8 letras (Conectar com número de telefone)
 //   node whatsapp.mjs --teste 5511999998888   envia uma mensagem de teste para esse número
+//   + --clientes (ou WA_PAPEL=clientes): usa o segundo número, só para o lembrete de agendamento dos clientes
 //   node whatsapp.mjs                        serviço (systemd gbia-whatsapp)
 // Variáveis (em /etc/gbia-sync.env): SYNC_TOKEN (obrigatória), SYNC_URL, SITE_URL.
 import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync, renameSync } from "node:fs";
@@ -16,9 +17,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "1.2";
+const VERSAO = "1.3";
 const DIR = dirname(fileURLToPath(import.meta.url));
-const AUTH = join(DIR, "sessao");
+// Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
+// Cada papel roda como um serviço separado, com a sua própria sessão (QR code).
+const PAPEL = (process.argv.includes("--clientes") || process.env.WA_PAPEL === "clientes") ? "clientes" : "equipe";
+const CLI = PAPEL === "clientes";
+const AUTH = join(DIR, CLI ? "sessao-clientes" : "sessao");
+const CMD = CLI ? "gbia-whatsapp-conectar-clientes" : "gbia-whatsapp-conectar";
 const ENVIADOS = join(DIR, "enviados.json");
 const ENV_CLI = join(DIR, "enviados-clientes.json");
 const TOKEN = process.env.SYNC_TOKEN || "";
@@ -46,8 +52,8 @@ async function conectar({ qr = false, codigo = "" } = {}) {
     sock.ev.on("connection.update", async (u) => {
       if (u.qr && qr) { const qrt = (await import("qrcode-terminal")).default; console.log("\nAbra o WhatsApp do chip › Aparelhos conectados › Conectar um aparelho e leia o QR code:\n"); qrt.generate(u.qr, { small: true }); }
       if (u.qr && codigo && !pediuCodigo) { pediuCodigo = true; const c = await sock.requestPairingCode(so(codigo)); console.log(`\nNo WhatsApp do chip: Aparelhos conectados › Conectar um aparelho › Conectar com número de telefone e digite: ${c}\n`); }
-      if (u.qr && !qr && !codigo) { aberto = false; await status("desconectado: o número precisa ser conectado de novo (no servidor: gbia-whatsapp-conectar)."); log("Sem sessão: rode gbia-whatsapp-conectar no servidor."); }
-      if (u.connection === "open") { aberto = true; log("WhatsApp conectado."); ok(true); }
+      if (u.qr && !qr && !codigo) { aberto = false; await status(`desconectado: o número precisa ser conectado de novo (no servidor: ${CMD}).`); log(`Sem sessão: rode ${CMD} no servidor.`); }
+      if (u.connection === "open") { aberto = true; log(`WhatsApp conectado (${PAPEL}).`); ok(true); }
       if (u.connection === "close") {
         aberto = false;
         const code = u.lastDisconnect?.error?.output?.statusCode;
@@ -68,8 +74,9 @@ async function api(method, body, q = "") {
   return j;
 }
 async function status(msg, ids = empresasConhecidas) {
-  for (const id of ids) await api("POST", { company_id: id, acao: "wa_status", status: msg }).catch(() => {});
+  for (const id of ids) await api("POST", { company_id: id, acao: CLI ? "cl_status" : "wa_status", status: msg }).catch(() => {});
 }
+let avisarConectado = false;
 
 // ---------- regras do checklist: as mesmas do app (js/data.js do site) ----------
 let GB = null, gbEm = 0;
@@ -230,14 +237,19 @@ async function atualizar() {
 async function ciclo() {
   await atualizar();
   const { empresas = [], hoje } = await api("GET", null, "?acao=lembretes");
-  empresasConhecidas = empresas.map((e) => e.company_id);
-  respostas = empresas.map((e) => e.clientes && e.clientes.resposta).filter(Boolean);
-  if (aberto) for (const e of empresas) if (e.clientes) await lembretesClientes(e, hoje).catch((err) => { log(`${e.nome}: lembretes de clientes: ${err.message}`); api("POST", { company_id: e.company_id, acao: "cl_status", status: "erro: " + err.message }).catch(() => {}); });
-  if (!aberto) { if (Date.now() - avisouOff > 3600000) { avisouOff = Date.now(); await status("desconectado: conecte o número no servidor (gbia-whatsapp-conectar)."); } return; }
+  // Cada número cuida só das empresas com o seu tipo de lembrete ligado.
+  const minhas = empresas.filter((e) => (CLI ? !!e.clientes : e.cfg.ligado !== false));
+  empresasConhecidas = minhas.map((e) => e.company_id);
+  if (!aberto) { if (Date.now() - avisouOff > 3600000) { avisouOff = Date.now(); await status(`desconectado: conecte o número no servidor (${CMD}).`); } return; }
+  if (avisarConectado) { avisarConectado = false; await status(CLI ? "ok: número dos clientes conectado, aguardando os horários." : "conectado: aguardando o horário dos lembretes."); }
+  if (CLI) {
+    respostas = minhas.map((e) => e.clientes.resposta).filter(Boolean);
+    for (const e of minhas) await lembretesClientes(e, hoje).catch((err) => { log(`${e.nome}: lembretes de clientes: ${err.message}`); status("erro: " + err.message, [e.company_id]); });
+    return;
+  }
   const env = lerEnviados(); for (const d of Object.keys(env)) if (d < hoje) delete env[d];
   env[hoje] = env[hoje] || {};
-  for (const e of empresas) {
-    if (e.cfg.ligado === false) continue; // só os lembretes de clientes estão ligados
+  for (const e of minhas) {
     const ini = min(e.cfg.hora), agora = agoraSP();
     // Só na janela de 3 horas a partir do horário escolhido (se o servidor ficar fora do ar, não manda tarde demais).
     if (agora < ini || agora > ini + 180 || env[hoje][e.company_id]) continue;
@@ -263,13 +275,13 @@ if (process.argv.includes("--conectar") || arg("--codigo") !== null) {
   process.exit(ok ? 0 : 1);
 }
 if (arg("--teste") !== null) {
-  if (!existsSync(AUTH)) { console.log("Conecte o número primeiro: gbia-whatsapp-conectar"); process.exit(1); }
-  await conectar(); await enviar(arg("--teste"), "Teste do Gestão Barber IA: os lembretes do checklist no WhatsApp estão funcionando. ✅");
+  if (!existsSync(AUTH)) { console.log(`Conecte o número primeiro: ${CMD}`); process.exit(1); }
+  await conectar(); await enviar(arg("--teste"), CLI ? "Teste do Gestão Barber IA: o lembrete de agendamento dos clientes está funcionando. ✅" : "Teste do Gestão Barber IA: os lembretes do checklist no WhatsApp estão funcionando. ✅");
   console.log("Mensagem de teste enviada."); await espera(2000); process.exit(0);
 }
-log(`Lembretes no WhatsApp ${VERSAO} iniciado.`);
-if (existsSync(join(AUTH, "creds.json"))) conectar().then((ok) => ok && status("conectado: aguardando o horário dos lembretes."));
-else log("Sem número conectado: rode gbia-whatsapp-conectar no servidor.");
+log(`Lembretes no WhatsApp ${VERSAO} iniciado (número da ${CLI ? "agenda dos clientes" : "equipe"}).`);
+if (existsSync(join(AUTH, "creds.json"))) conectar().then((ok) => { if (ok) avisarConectado = true; });
+else log(`Sem número conectado: rode ${CMD} no servidor.`);
 for (;;) {
   await ciclo().catch((e) => log("ERRO no ciclo: " + e.message));
   if (saiu) { await espera(600000); continue; }
