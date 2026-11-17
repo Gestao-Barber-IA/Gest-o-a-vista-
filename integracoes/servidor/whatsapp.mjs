@@ -17,7 +17,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "2.0";
+const VERSAO = "2.1";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -286,7 +286,7 @@ async function feedbacks(e, hoje) {
 }
 
 // ---------- reconquista de clientes sumidos (3 a 12 meses sem vir) ----------
-// Lista de clientes da AppBarber (com a data do último agendamento) baixada 1 vez por semana (1 crédito por página).
+// Lista de clientes da AppBarber (com a data do último agendamento) baixada 1 vez por mês (1 crédito por página).
 // Cada dia, até N mensagens entre 10h e 18h, começando por quem sumiu há menos tempo. Antes de cada envio,
 // confere o cliente na AppBarber (1 crédito) para não mandar a quem já marcou. Cada cliente: no máximo 1 vez a cada 6 meses.
 const TEXTOS_WB = [
@@ -327,7 +327,7 @@ async function reconquista(e, hoje) {
   const c = e.reconquista, agora = agoraSP();
   if (fechadoHoje(e) || agora < 10 * 60 || agora > 18 * 60) return;
   let base = lerJ(WB_CLI, null);
-  if (!base || diasDesde(base.em, hoje) >= 7) { await baixarClientes(e, hoje); base = lerJ(WB_CLI, { lista: [] }); }
+  if (!base || diasDesde(base.em, hoje) >= 30) { await baixarClientes(e, hoje); base = lerJ(WB_CLI, { lista: [] }); }
   const env = lerJ(WB_ENV, {}), sair = new Set(lerJ(WB_SAIR, []));
   const hojeEnv = Object.values(env).filter((x) => x.em === hoje).length;
   const fila = base.lista.filter(([f, , last]) => { const k = chaveFone(f), d = diasDesde(last, hoje);
