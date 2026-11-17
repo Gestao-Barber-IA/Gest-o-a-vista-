@@ -17,7 +17,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "1.7";
+const VERSAO = "1.8";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -249,6 +249,42 @@ async function lembretesClientes(e, hoje) {
   }
 }
 const cliStatusEm = {};
+// ---------- pedido de feedback: cliente novo com comanda paga (fila gravada pela sincronização) ----------
+const TEXTO_FB = "Olá {cliente}, {saudacao}!\nVenho através dessa mensagem lhe pedir a gentileza de nos enviar um feedback🙏🏾\n\nO que achou do atendimento do barbeiro {profissional}?";
+const ENV_FB = join(DIR, "enviados-feedback.json");
+const saudacao = () => { const h = Math.floor(agoraSP() / 60); return h < 12 ? "bom dia" : h < 18 ? "boa tarde" : "boa noite"; };
+const fbStatusEm = {};
+async function feedbacks(e, hoje) {
+  const agora = agoraSP();
+  if (agora < 8 * 60 || agora > 21 * 60) return; // só entre 8h e 21h (o que ficar para depois sai na manhã seguinte)
+  let fila = { itens: [] }; try { fila = JSON.parse(readFileSync(join(DIR, "..", "dados", e.company_id.replace(/[^a-zA-Z0-9-]/g, ""), "feedback-fila.json"), "utf8")); } catch { return; }
+  let env = {}; try { env = JSON.parse(readFileSync(ENV_FB, "utf8")); } catch { /* primeira vez */ }
+  const feitos = new Set(env[e.company_id] || []);
+  const principal = NUMERO === "principal", L = LIMITE[principal ? "principal" : "chip"];
+  if (ritmo.dia !== hoje) { ritmo = { dia: hoje, envios: [] }; erroSeguido = 0; }
+  const fila2 = (fila.itens || []).filter((x) => !feitos.has(x.cod) && Date.now() - x.em < 20 * 3600000);
+  const versoes = (e.feedback.texto ? e.feedback.texto.split(/\n\s*-{3,}\s*\n/) : [TEXTO_FB]).map((t) => t.trim()).filter(Boolean);
+  let n = 0;
+  for (const [i, x] of fila2.entries()) {
+    if (pausadoDia === hoje) break;
+    const ultHora = ritmo.envios.filter((t) => Date.now() - t < 3600000).length;
+    if (ultHora >= L.hora || ritmo.envios.length >= L.dia) break;
+    let texto = versoes[Math.floor(Math.random() * versoes.length)].replace(/\{cliente\}/g, x.nome || "tudo bem").replace(/\{saudacao\}/g, saudacao())
+      .replace(/\{profissional\}/g, x.prof || "da nossa equipe").replace(/\{barbearia\}/g, e.nome);
+    if (principal) texto = texto.replace(/https?:\/\/\S+/gi, "").trim();
+    feitos.add(x.cod); env[e.company_id] = [...feitos].slice(-3000); writeFileSync(ENV_FB, JSON.stringify(env));
+    try { await enviar(x.fone, texto); n++; erroSeguido = 0; ritmo.envios.push(Date.now()); }
+    catch (err) { log(`${e.nome}: feedback não enviado (${err.message}).`); if (!/sem WhatsApp/.test(err.message) && ++erroSeguido >= 3) { pausadoDia = hoje; break; } }
+    if (i < fila2.length - 1) await espera(L.de + Math.random() * (L.ate - L.de));
+  }
+  if (n || !fbStatusEm[e.company_id] || Date.now() - fbStatusEm[e.company_id] > 3600000) {
+    fbStatusEm[e.company_id] = Date.now();
+    const hojeN = (fila.itens || []).filter((x) => x.dia === hoje && feitos.has(x.cod)).length;
+    const quando = new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+    await api("POST", { company_id: e.company_id, acao: "fb_status", status: `ok: ${quando} · ${hojeN ? `${hojeN} pedido(s) de feedback enviado(s) hoje` : "nenhum cliente novo com comanda paga hoje ainda"}.` }).catch(() => {});
+  }
+}
+
 // Resposta automática: este número só envia lembretes. Quem responder recebe, uma vez por dia, o recado do dono.
 let respostas = [], respondidos = {};
 async function responder(m) {
@@ -280,7 +316,7 @@ async function atualizar() {
 
 // Lembrete dos clientes: usa o número escolhido no app (principal ou 2º chip) e troca sozinho quando o dono muda.
 async function escolherNumero(minhas) {
-  const quer = (minhas[0] && minhas[0].clientes && minhas[0].clientes.numero) === "principal" ? "principal" : "chip";
+  const m0 = minhas[0] || {}, quer = (m0.numero || (m0.clientes && m0.clientes.numero)) === "principal" ? "principal" : "chip";
   if (quer === NUMERO && (aberto || !existsSync(join(AUTH, "creds.json")))) return;
   if (quer !== NUMERO) {
     if (sock) { geracao++; try { sock.end(undefined); } catch { /* já fechado */ } }
@@ -294,14 +330,15 @@ async function ciclo() {
   await atualizar();
   const { empresas = [], hoje } = await api("GET", null, "?acao=lembretes");
   // Cada número cuida só das empresas com o seu tipo de lembrete ligado.
-  const minhas = empresas.filter((e) => (CLI ? !!e.clientes : e.cfg.ligado !== false));
+  const minhas = empresas.filter((e) => (CLI ? !!(e.clientes || e.feedback) : e.cfg.ligado !== false));
   empresasConhecidas = minhas.map((e) => e.company_id);
   if (CLI) await escolherNumero(minhas);
   if (!aberto) { if (Date.now() - avisouOff > 3600000) { avisouOff = Date.now(); await status(`desconectado: conecte o número no servidor (${CMD}).`); } return; }
   if (avisarConectado) { avisarConectado = false; await status(CLI ? `ok: ${NUMERO === "principal" ? "WhatsApp principal" : "2º chip"} conectado, aguardando os horários.` : "conectado: aguardando o horário dos lembretes."); }
   if (CLI) {
-    respostas = minhas.map((e) => e.clientes.resposta).filter(Boolean);
-    for (const e of minhas) await lembretesClientes(e, hoje).catch((err) => { log(`${e.nome}: lembretes de clientes: ${err.message}`); status("erro: " + err.message, [e.company_id]); });
+    respostas = minhas.map((e) => e.clientes && e.clientes.resposta).filter(Boolean);
+    for (const e of minhas) if (e.clientes) await lembretesClientes(e, hoje).catch((err) => { log(`${e.nome}: lembretes de clientes: ${err.message}`); status("erro: " + err.message, [e.company_id]); });
+    for (const e of minhas) if (e.feedback) await feedbacks(e, hoje).catch((err) => log(`${e.nome}: feedback: ${err.message}`));
     return;
   }
   const env = lerEnviados(); for (const d of Object.keys(env)) if (d < hoje) delete env[d];
