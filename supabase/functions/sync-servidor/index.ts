@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
   if (req.method === "GET" && url.searchParams.get("acao") === "lembretes") {
     const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
     const { data: ints, error } = await db.from("integrations")
-      .select("company_id, est_code, api_key, branch_code, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true");
+      .select("company_id, est_code, api_key, branch_code, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, bd_on, bd_text").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,bd_on.eq.true");
     if (error) return json({ erro: error.message }, 500);
     const empresas = [];
     for (const i of ints || []) {
@@ -48,6 +48,9 @@ Deno.serve(async (req) => {
         company_id: co.id, nome: co.name, hoje,
         numero: i.cl_numero === "principal" ? "principal" : "chip", // número que fala com os clientes
         feedback: i.fb_on ? { texto: i.fb_text || "" } : null,
+        // Parabéns aos aniversariantes do dia (lista de aniversariantes da AppBarber, 1 crédito por dia).
+        aniversario: i.bd_on && i.est_code && i.api_key ? { texto: i.bd_text || "" } : null,
+        appbarber: i.est_code && i.api_key ? { codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
         // Reconquista de clientes sumidos (lista de clientes da AppBarber, 1 crédito por página).
         reconquista: i.wb_on && i.est_code && i.api_key ? { porDia: Math.max(1, Math.min(40, Number(i.wb_daily) || 15)), minDias: Math.max(30, Number(i.wb_min_days) || 90), maxDias: Math.max(60, Number(i.wb_max_days) || 365), texto: i.wb_text || "", codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
         cfg: { ligado: !!i.wa_on, hora: i.wa_hour || "13:00", minimo: Number(i.wa_min) || 0, texto: i.wa_text || "" },
@@ -105,7 +108,7 @@ Deno.serve(async (req) => {
     const usoN = Math.max(0, Math.min(5000, Number(b.creditos) || 0)), zero = b.sem_saldo === true;
     if (usoN || zero) await db.rpc("ab_add_uso", { p_company: b.company_id, p_n: usoN, p_zero: zero });
     if (b.acao === "ab_uso") return json({ ok: true });
-    if (["wa_status", "cl_status", "fb_status", "wb_status"].includes(b.acao)) {
+    if (["wa_status", "cl_status", "fb_status", "wb_status", "bd_status"].includes(b.acao)) {
       const k = String(b.acao).slice(0, 2);
       const { error } = await db.from("integrations").update({ [k + "_status"]: String(b.status || "").slice(0, 500), [k + "_status_at"]: new Date().toISOString() }).eq("company_id", b.company_id);
       return error ? json({ erro: error.message }, 500) : json({ ok: true });

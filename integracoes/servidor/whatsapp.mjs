@@ -17,7 +17,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "2.3";
+const VERSAO = "2.4";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -301,7 +301,7 @@ const lerJ = (f, pad) => { try { return JSON.parse(readFileSync(f, "utf8")); } c
 const isoData = (t) => { const v = String(t || "").trim(), m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : v.slice(0, 10); };
 const diasDesde = (isoD, hoje) => Math.round((new Date(hoje + "T12:00:00") - new Date(String(isoD).slice(0, 10) + "T12:00:00")) / 86400000);
 async function abGet(e, caminho) {
-  const c = e.reconquista;
+  const c = e.appbarber || e.reconquista;
   const r = await getExato(`https://api.appbarber.com${caminho}${caminho.includes("?") ? "&" : "?"}establishment_code=${encodeURIComponent(c.codigo_estabelecimento)}`, { "X-API-Key": c.appbarber_api_key, Accept: "application/json", "User-Agent": "GestaoBarberIA-Sync/2.8" });
   if (r.ok) api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: 1 }).catch(() => {});
   else if (/saldo insuficiente/i.test(r.text)) api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: 0, sem_saldo: true }).catch(() => {});
@@ -362,6 +362,49 @@ async function reconquista(e, hoje) {
     await api("POST", { company_id: e.company_id, acao: "wb_status", status: `ok: ${quando} · ${vals.filter((x) => x.em === hoje).length} de ${c.porDia} enviadas hoje · ${fila.length} na fila · ${vals.length} enviadas no total · ${vals.filter((x) => x.voltou).length} voltaram a agendar.` }).catch(() => {});
   }
 }
+// ---------- parabéns aos aniversariantes do dia ----------
+// 1 consulta por dia à lista de aniversariantes da AppBarber (próximos 7 dias); manda para quem faz aniversário hoje,
+// a partir das 9h, com o ritmo e as proteções de sempre. Cada cliente recebe no máximo 1 vez por ano.
+const TEXTO_BD = "🎉💈 Feliz Aniversário {cliente}! 💈🎉\nHoje é um dia especial, e nós, da {barbearia}, queremos desejar a você um novo ciclo repleto de saúde, felicidade, sucesso e muitas conquistas! 🙏🏻🎂\nQue Deus abençoe sua vida, ilumine seus caminhos e que não faltem motivos para sorrir e comemorar! 🥳✨\n\nCaso você venha realizar um serviço de corte ou barba hoje, daremos um serviço extra de cortesia pra você! Gostaria de saber as opções de serviços extras?";
+const BD_HOJE = join(DIR, "aniversario-hoje.json"), BD_ENV = join(DIR, "aniversario-enviados.json");
+const bdStatusEm = {};
+async function aniversarios(e, hoje) {
+  const agora = agoraSP();
+  if (fechadoHoje(e) || agora < 9 * 60 || agora > 19 * 60) return; // a mensagem convida para vir hoje: só em dia aberto
+  let base = lerJ(BD_HOJE, null);
+  if (!base || base.dia !== hoje || base.cid !== e.company_id) {
+    const d = await abGet(e, "/v1/establishment/birthday");
+    const [, mm, dd] = hoje.split("-");
+    const lista = d.filter((x) => { const m = String(x.birth_date || "").match(/^(\d{2})\/(\d{2})/); return m && m[1] === dd && m[2] === mm; })
+      .map((x) => [so(x.person_cell_phone || x.person_cellphone || x.person_phone), primeiro(x.person_name)]).filter(([f]) => f.length >= 10);
+    base = { dia: hoje, cid: e.company_id, lista };
+    writeFileSync(BD_HOJE, JSON.stringify(base), { mode: 0o600 });
+    log(`${e.nome}: ${lista.length} aniversariante(s) hoje.`);
+  }
+  const env = lerJ(BD_ENV, {}), ano = hoje.slice(0, 4);
+  const fila = base.lista.filter(([f]) => env[chaveFone(f)] !== ano);
+  const principal = NUMERO === "principal", L = LIMITE[principal ? "principal" : "chip"];
+  if (ritmo.dia !== hoje) { ritmo = { dia: hoje, envios: [] }; erroSeguido = 0; }
+  const versoes = (e.aniversario.texto ? e.aniversario.texto.split(/\n\s*-{3,}\s*\n/) : [TEXTO_BD]).map((t) => t.trim()).filter(Boolean);
+  for (const [i, [f, nome]] of fila.entries()) {
+    if (pausadoDia === hoje) break;
+    const ultHora = ritmo.envios.filter((t) => Date.now() - t < 3600000).length;
+    if (ultHora >= L.hora || ritmo.envios.length >= L.dia) break;
+    let texto = versoes[Math.floor(Math.random() * versoes.length)].replace(/\{cliente\}/g, nome || "").replace(/\{barbearia\}/g, e.nome).replace(/ !/g, "!");
+    if (principal) texto = texto.replace(/https?:\/\/\S+/gi, "").trim();
+    env[chaveFone(f)] = ano; writeFileSync(BD_ENV, JSON.stringify(env));
+    try { await enviar(f, texto); erroSeguido = 0; ritmo.envios.push(Date.now()); log(`${e.nome}: parabéns enviado (${nome || "cliente"}).`); }
+    catch (err) { log(`${e.nome}: parabéns não enviado (${err.message}).`); if (!/sem WhatsApp/.test(err.message) && ++erroSeguido >= 3) { pausadoDia = hoje; break; } }
+    if (i < fila.length - 1) await espera(L.de + Math.random() * (L.ate - L.de));
+  }
+  if (!bdStatusEm[e.company_id] || Date.now() - bdStatusEm[e.company_id] > 1800000) {
+    bdStatusEm[e.company_id] = Date.now();
+    const env2 = lerJ(BD_ENV, {}), feitos = base.lista.filter(([f]) => env2[chaveFone(f)] === ano).length;
+    const quando = new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+    await api("POST", { company_id: e.company_id, acao: "bd_status", status: `ok: ${quando} · ${base.lista.length ? `${feitos} de ${base.lista.length} aniversariante(s) de hoje parabenizado(s)` : "nenhum aniversariante hoje"}.` }).catch(() => {});
+  }
+}
+
 // A mensagem não oferece o SAIR, mas se alguém responder SAIR, a reconquista não manda mais para ele.
 async function sairDaLista(msg) {
   if (!msg || !msg.key || msg.key.fromMe) return;
@@ -422,7 +465,7 @@ async function ciclo() {
   await atualizar();
   const { empresas = [], hoje } = await api("GET", null, "?acao=lembretes");
   // Cada número cuida só das empresas com o seu tipo de lembrete ligado.
-  const minhas = empresas.filter((e) => (CLI ? !!(e.clientes || e.feedback || e.reconquista) : e.cfg.ligado !== false));
+  const minhas = empresas.filter((e) => (CLI ? !!(e.clientes || e.feedback || e.reconquista || e.aniversario) : e.cfg.ligado !== false));
   empresasConhecidas = minhas.map((e) => e.company_id);
   if (CLI) await escolherNumero(minhas);
   if (!aberto) { if (Date.now() - avisouOff > 3600000) { avisouOff = Date.now(); await status(`desconectado: conecte o número no servidor (${CMD}).`); } return; }
@@ -431,6 +474,7 @@ async function ciclo() {
     respostas = minhas.map((e) => e.clientes && e.clientes.resposta).filter(Boolean);
     for (const e of minhas) if (e.clientes) await lembretesClientes(e, hoje).catch((err) => { log(`${e.nome}: lembretes de clientes: ${err.message}`); status("erro: " + err.message, [e.company_id]); });
     for (const e of minhas) if (e.feedback) await feedbacks(e, hoje).catch((err) => log(`${e.nome}: feedback: ${err.message}`));
+    for (const e of minhas) if (e.aniversario && e.appbarber) await aniversarios(e, hoje).catch((err) => { log(`${e.nome}: aniversário: ${err.message}`); api("POST", { company_id: e.company_id, acao: "bd_status", status: "erro: " + err.message }).catch(() => {}); });
     for (const e of minhas) if (e.reconquista) await reconquista(e, hoje).catch((err) => { log(`${e.nome}: reconquista: ${err.message}`); api("POST", { company_id: e.company_id, acao: "wb_status", status: "erro: " + err.message }).catch(() => {}); });
     return;
   }

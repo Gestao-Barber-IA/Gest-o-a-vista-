@@ -4068,7 +4068,7 @@ ${rows.length ? '' : emptyBarbers()}
     const ex = JSON.stringify([
       { data: iso(new Date()), barbeiro: state.barbers[0]?.name || 'Nome do barbeiro', faturamento: 420.5, servicos: 9, clientes: 8, checklist_pop: 1, horas_disponiveis: 8, horas_ocupadas: 6.5, planos_mensais: 1, clientes_retorno: 5, venda_produtos: 2 },
     ], null, 2);
-    return `${apiTutorial()}${autoSyncCard()}${abCard()}${waRemindCard()}${clRemindCard()}${fbCard()}${wbCard()}
+    return `${apiTutorial()}${autoSyncCard()}${abCard()}${waRemindCard()}${clRemindCard()}${fbCard()}${bdCard()}${wbCard()}
       <section class="section card" id="api-ref">
         <h2 class="section-title">Como funciona ${tip('api')}</h2>
         <p class="section-note">Outro sistema (agenda, caixa, ERP) envia os resultados de cada barbeiro por dia. Os números entram no ranking na hora, junto com os lançados à mão.</p>
@@ -4331,6 +4331,29 @@ Content-Type: application/json</pre>
         </div>
         <label class="field"><span>Mensagem</span><textarea class="input" name="text" rows="9" maxlength="2000">${esc(it.wb_text || WB_TEXT)}</textarea>
           <small class="muted">Use {Saudacao} (Bom dia, Boa tarde…), {cliente} e {barbearia}. As versões separadas por uma linha com <b>---</b> são sorteadas a cada envio. Links são retirados (aumentam a chance de bloqueio).</small></label>
+        <details class="wa-prev"><summary>Ver como chega para o cliente</summary><p class="wa-bubble">${esc(prev).replace(/\n/g, '<br>')}</p></details>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
+      </form></section>`;
+  }
+  // Parabéns aos clientes aniversariantes do dia (lista de aniversariantes da AppBarber).
+  const BD_TEXT = '🎉💈 Feliz Aniversário {cliente}! 💈🎉\nHoje é um dia especial, e nós, da {barbearia}, queremos desejar a você um novo ciclo repleto de saúde, felicidade, sucesso e muitas conquistas! 🙏🏻🎂\nQue Deus abençoe sua vida, ilumine seus caminhos e que não faltem motivos para sorrir e comemorar! 🥳✨\n\nCaso você venha realizar um serviço de corte ou barba hoje, daremos um serviço extra de cortesia pra você! Gostaria de saber as opções de serviços extras?';
+  function bdCard() {
+    if (!isGestor(currentUser())) return '';
+    const it = Cloud.enabled ? ui.integ : (state.integ || {});
+    if (!it || it.erro) return '';
+    const st = String(it.bd_status || ''), on = !!it.bd_on, noAb = !it.est_code, bad = /^erro/.test(st);
+    const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const prev = (it.bd_text || BD_TEXT).split(/\n\s*-{3,}\s*\n/)[0].replace(/\{cliente\}/g, 'David').replace(/\{barbearia\}/g, state.company.name || '');
+    return `<section class="section card as-card">
+      <h2 class="section-title">${icon('gift')} Parabéns aos aniversariantes</h2>
+      <p class="section-note">Todo dia, a partir das 9h, o servidor consulta os aniversariantes na AppBarber e manda a mensagem de parabéns para quem faz aniversário hoje. Sai pelo mesmo número dos clientes (${it.cl_numero === 'principal' ? '<b>WhatsApp principal</b>: as respostas chegam na recepção' : '<b>2º chip</b>'}), com o ritmo de sempre; cada cliente recebe 1 vez por ano. Nos dias em que a barbearia fecha, não envia (a mensagem convida para vir hoje). Gasta 1 crédito da AppBarber por dia.</p>
+      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}
+      <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.bd_status_at ? 'Atualizado ' + when(it.bd_status_at) : ''}</small><p class="muted as-msg">${esc(st.replace(/^(ok|erro): /, ''))}</p>` : '<span class="chip">Aguardando o servidor</span>'}</div>
+      <form class="form" data-form="bdRemind" novalidate>
+        <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''} ${noAb ? 'disabled' : ''}><span><b>Parabéns automático ligado</b><small>Para os clientes com data de nascimento cadastrada na AppBarber.</small></span></label>
+        <label class="field"><span>Mensagem</span><textarea class="input" name="text" rows="9" maxlength="1500">${esc(it.bd_text || BD_TEXT)}</textarea>
+          <small class="muted">Use {cliente} (primeiro nome) e {barbearia}. Para versões diferentes sorteadas a cada envio, separe com uma linha só com <b>---</b>.</small></label>
         <details class="wa-prev"><summary>Ver como chega para o cliente</summary><p class="wa-bubble">${esc(prev).replace(/\n/g, '<br>')}</p></details>
         <p class="form-msg" data-msg></p>
         <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
@@ -8666,6 +8689,15 @@ Content-Type: application/json</pre>
         const res = importEntries(state, Array.isArray(data) ? data : [data]); save();
         setMsg(f, `${res.ok} lançamento(s) importado(s).${res.errors.length ? ' Problemas: ' + res.errors.join(' ') : ''}`, res.errors.length === 0);
       } catch (e) { setMsg(f, e.message); }
+    },
+    bdRemind(f) {
+      const row = { bd_on: !!f.elements.on.checked, bd_text: (f.elements.text.value || '').trim().slice(0, 1500) };
+      if (row.bd_text === BD_TEXT) row.bd_text = '';
+      const cur = (Cloud.enabled ? ui.integ : state.integ) || {};
+      if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Parabéns automático salvo.'); return render(); }
+      setMsg(f, 'Salvando…', true);
+      Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(row.bd_on ? 'Parabéns automático ligado.' : 'Parabéns automático desligado.'); render(); })
+        .catch(e => { const m = Cloud.message(e); setMsg(f, /bd_|column|schema cache/i.test(m) ? 'O parabéns automático ainda está sendo ativado no servidor.' : m); });
     },
     wbRemind(f) {
       const daily = Math.round(Number(f.elements.daily.value) || 0), mn = Math.round(Number(f.elements.min.value) || 0), mx = Math.round(Number(f.elements.max.value) || 0);
