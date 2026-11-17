@@ -1,7 +1,8 @@
-// Gestão Barber IA — lembretes do checklist no WhatsApp (roda no servidor de sincronização).
-// Conecta um número de WhatsApp (como o WhatsApp Web, pelo motor Baileys, sem Docker e sem banco de dados)
-// e, no horário escolhido pelo dono (ex.: 13h), manda um lembrete a quem está trabalhando hoje e fez
-// pouco do Checklist Agenda Cheia. Uma mensagem por pessoa por dia, com intervalo entre os envios.
+// Gestão Barber IA — lembretes no WhatsApp (roda no servidor de sincronização, IP fixo liberado na AppBarber).
+// Conecta um número de WhatsApp (como o WhatsApp Web, pelo motor Baileys, sem Docker e sem banco de dados) e manda:
+//  • Equipe: no horário escolhido (ex.: 13h), lembrete a quem está trabalhando hoje e fez pouco do Checklist Agenda Cheia.
+//  • Clientes: lembrete do horário marcado na AppBarber, com a antecedência escolhida (ex.: 1 hora antes).
+// Uma mensagem por pessoa/agendamento, com intervalo entre os envios. Nome e telefone dos clientes não são guardados.
 //
 // Uso:
 //   node whatsapp.mjs --conectar            mostra o QR code para ligar o número (WhatsApp › Aparelhos conectados)
@@ -9,15 +10,17 @@
 //   node whatsapp.mjs --teste 5511999998888   envia uma mensagem de teste para esse número
 //   node whatsapp.mjs                        serviço (systemd gbia-whatsapp)
 // Variáveis (em /etc/gbia-sync.env): SYNC_TOKEN (obrigatória), SYNC_URL, SITE_URL.
-import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync, renameSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "1.0";
+const VERSAO = "1.1";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const AUTH = join(DIR, "sessao");
 const ENVIADOS = join(DIR, "enviados.json");
+const ENV_CLI = join(DIR, "enviados-clientes.json");
 const TOKEN = process.env.SYNC_TOKEN || "";
 const SYNC_URL = process.env.SYNC_URL || "https://sekkmnkajnaqubyhpxvd.supabase.co/functions/v1/sync-servidor";
 const SITE = (process.env.SITE_URL || "https://gestaoperformance.vercel.app").replace(/\/$/, "");
@@ -37,6 +40,7 @@ async function conectar({ qr = false, codigo = "" } = {}) {
   const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: undefined }));
   sock = makeWASocket({ auth: state, version, logger: pino({ level: "silent" }), browser: Browsers.ubuntu("Gestão Barber IA"), markOnlineOnConnect: false, syncFullHistory: false });
   sock.ev.on("creds.update", saveCreds);
+  sock.ev.on("messages.upsert", (m) => responder(m).catch(() => {}));
   let pediuCodigo = false;
   return new Promise((ok) => {
     sock.ev.on("connection.update", async (u) => {
@@ -114,13 +118,123 @@ async function enviar(numero, texto) {
 const agoraSP = () => { const p = new Intl.DateTimeFormat("en-GB", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date()); const [h, m] = p.split(":").map(Number); return h * 60 + m; };
 const min = (t) => { const [h, m] = String(t || "13:00").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
 
+// ---------- clientes: lembrete do horário marcado na AppBarber ----------
+// GET com os cabeçalhos exatamente como escritos e sempre pelo IPv4 (o IP liberado na AppBarber).
+async function getExato(url, headers) {
+  const u = new URL(url), mod = await import("node:https");
+  return new Promise((ok, fail) => {
+    const req = mod.request(u, { method: "GET", headers, family: 4 }, (res) => {
+      let b = ""; res.setEncoding("utf8"); res.on("data", (c) => (b += c));
+      res.on("end", () => ok({ ok: res.statusCode >= 200 && res.statusCode < 300, status: res.statusCode, text: b }));
+    });
+    req.on("error", fail); req.setTimeout(60000, () => req.destroy(new Error("a AppBarber não respondeu em 60 segundos.")));
+    req.end();
+  });
+}
+// "21/12/2026 14:30" → minutos desde 00:00 do dia, e o dia em ISO
+const hm = (s) => { const m = String(s || "").match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})/); return m ? { dia: `${m[3]}-${m[2]}-${m[1]}`, min: +m[4] * 60 + +m[5] } : null; };
+const hhmm = (n) => `${String(Math.floor(n / 60)).padStart(2, "0")}h${String(n % 60).padStart(2, "0")}`.replace(/h00$/, "h");
+const primeiro = (n) => { const w = String(n || "").trim().split(/\s+/)[0] || ""; return w ? w[0].toUpperCase() + w.slice(1).toLowerCase() : ""; };
+const TEXTO_CLI = "Olá, {cliente}! 👋 Passando para lembrar do seu horário hoje às {hora} com {profissional} ({servico}) na {barbearia}.\n\nTe esperamos! 💈 Se não puder vir, avise a barbearia para liberarmos o horário.";
+const agendaCache = {};
+async function agendaHoje(e, hoje) {
+  const c = e.clientes, k = e.company_id, cache = agendaCache[k];
+  if (cache && cache.dia === hoje && Date.now() - cache.em < 5 * 60000) return cache.lista; // AppBarber: no máximo 1 consulta a cada 5 min
+  const q = new URLSearchParams({ establishment_code: String(c.codigo_estabelecimento), start_date: hoje, end_date: hoje, status_type: "1" });
+  if (c.codigo_filial) q.set("branch_code", String(c.codigo_filial));
+  const r = await getExato("https://api.appbarber.com/v1/appointments/history?" + q, { "X-API-Key": c.appbarber_api_key, Accept: "application/json", "User-Agent": "GestaoBarberIA-WhatsApp/" + VERSAO });
+  if (!r.ok) throw new Error(`AppBarber respondeu ${r.status}`);
+  const lista = ((JSON.parse(r.text).data) || []).filter((a) => !a.scheduling_status || /agendad|confirmad/i.test(a.scheduling_status));
+  agendaCache[k] = { dia: hoje, em: Date.now(), lista };
+  return lista;
+}
+// Um lembrete por cliente para cada bloco de horários seguidos (ex.: corte 14h + barba 14h30 = uma mensagem às 13h).
+function blocos(lista, hoje) {
+  const porCli = new Map();
+  for (const a of lista) {
+    const t = hm(a.scheduling_start), fone = so(a.client_phone);
+    if (!t || t.dia !== hoje || fone.length < 10) continue;
+    const reg = hm(a.scheduling_registration_date);
+    const x = { cod: String(a.appointment_code || a.scheduling_code), min: t.min, prof: primeiro(a.employee_name), serv: String(a.service_description || "").trim(), nome: primeiro(a.client_name), fone, reg: reg && reg.dia === hoje ? reg.min : -1 };
+    (porCli.get(fone) || porCli.set(fone, []).get(fone)).push(x);
+  }
+  const out = [];
+  for (const arr of porCli.values()) {
+    arr.sort((a, b) => a.min - b.min);
+    let cur = null;
+    for (const x of arr) {
+      if (cur && x.min - cur.fim <= 60) { cur.cods.push(x.cod); cur.fim = x.min; if (x.serv && !cur.servs.includes(x.serv)) cur.servs.push(x.serv); if (x.prof && !cur.profs.includes(x.prof)) cur.profs.push(x.prof); continue; }
+      cur = { cods: [x.cod], min: x.min, fim: x.min, reg: x.reg, nome: x.nome, fone: x.fone, servs: x.serv ? [x.serv] : [], profs: x.prof ? [x.prof] : [] };
+      out.push(cur);
+    }
+  }
+  return out;
+}
+const junta = (l) => (l.length <= 1 ? l.join("") : l.slice(0, -1).join(", ") + " e " + l[l.length - 1]);
+const lerCli = () => { try { return JSON.parse(readFileSync(ENV_CLI, "utf8")); } catch { return {}; } };
+async function lembretesClientes(e, hoje) {
+  const c = e.clientes, lead = Math.max(15, Math.min(240, Number(c.antecedencia) || 60)), agora = agoraSP();
+  const env = lerCli(); for (const d of Object.keys(env)) if (d < hoje) delete env[d];
+  const feitos = new Set((env[hoje] = env[hoje] || {})[e.company_id] || []);
+  const lista = blocos(await agendaHoje(e, hoje), hoje);
+  // Hora de mandar: faltam no máximo `lead` minutos (e ainda falta pelo menos 10). Quem agendou depois disso não recebe.
+  const fila = lista.filter((b) => !b.cods.some((k) => feitos.has(k)) && b.min - agora <= lead && b.min - agora >= 10 && (b.reg < 0 || b.min - b.reg >= lead));
+  let n = 0;
+  for (const [i, b] of fila.entries()) {
+    const texto = (c.texto || TEXTO_CLI).replace(/\{cliente\}/g, b.nome || "tudo bem").replace(/\{hora\}/g, hhmm(b.min)).replace(/\{profissional\}/g, junta(b.profs) || "a nossa equipe")
+      .replace(/\{servico\}/g, junta(b.servs) || "seu atendimento").replace(/\{barbearia\}/g, e.nome).replace(/ \(\)/g, "");
+    try { await enviar(b.fone, texto); n++; } catch (err) { log(`${e.nome}: lembrete de cliente não enviado (${err.message}).`); }
+    b.cods.forEach((k) => feitos.add(k)); env[hoje][e.company_id] = [...feitos]; writeFileSync(ENV_CLI, JSON.stringify(env));
+    if (i < fila.length - 1) await espera(20000 + Math.random() * 20000);
+  }
+  if (n || !cliStatusEm[e.company_id] || Date.now() - cliStatusEm[e.company_id] > 3600000) {
+    cliStatusEm[e.company_id] = Date.now();
+    const total = (env[hoje][e.company_id] || []).length, prox = lista.filter((b) => !b.cods.some((k) => feitos.has(k)) && b.min > agora).sort((a, b) => a.min - b.min)[0];
+    const quando = new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+    await api("POST", { company_id: e.company_id, acao: "cl_status", status: `ok: ${quando} · ${total ? `${total} agendamento(s) lembrado(s) hoje` : "nenhum lembrete enviado hoje ainda"}${prox ? ` · próximo horário às ${hhmm(prox.min)}` : ""}.` }).catch(() => {});
+  }
+}
+const cliStatusEm = {};
+// Resposta automática: este número só envia lembretes. Quem responder recebe, uma vez por dia, o recado do dono.
+let respostas = [], respondidos = {};
+async function responder(m) {
+  if (m.type !== "notify" || !respostas.length) return;
+  const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+  if (respondidos.dia !== hoje) respondidos = { dia: hoje };
+  for (const msg of m.messages || []) {
+    const jid = msg.key && msg.key.remoteJid;
+    if (!jid || msg.key.fromMe || !/@(s\.whatsapp\.net|lid)$/.test(jid) || respondidos[jid]) continue;
+    respondidos[jid] = 1;
+    await espera(3000 + Math.random() * 4000);
+    await sock.sendMessage(jid, { text: respostas[0] }).catch(() => {});
+  }
+}
+
+// Atualização automática: a cada 6 horas baixa a versão nova do site; se mudar, sai e o systemd reinicia.
+let atualizouEm = 0;
+async function atualizar() {
+  if (Date.now() - atualizouEm < 6 * 3600000) return; atualizouEm = Date.now();
+  try {
+    const r = await fetch(`${SITE}/integracoes/servidor/whatsapp.mjs`, { cache: "no-store" }); if (!r.ok) return;
+    const novo = await r.text(), v = (novo.match(/const VERSAO = "([^"]+)"/) || [])[1];
+    if (!v || v === VERSAO || novo.length < 1000) return;
+    const eu = fileURLToPath(import.meta.url), tmp = eu.replace(/\.mjs$/, ".novo.mjs");
+    writeFileSync(tmp, novo); if (spawnSync(process.execPath, ["--check", tmp]).status !== 0) return;
+    renameSync(tmp, eu); log(`Atualizado para a versão ${v}. Reiniciando…`); process.exit(0);
+  } catch { /* sem internet: tenta depois */ }
+}
+
 async function ciclo() {
+  await atualizar();
   const { empresas = [], hoje } = await api("GET", null, "?acao=lembretes");
   empresasConhecidas = empresas.map((e) => e.company_id);
+  respostas = empresas.map((e) => e.clientes && e.clientes.resposta).filter(Boolean);
+  if (aberto) for (const e of empresas) if (e.clientes) await lembretesClientes(e, hoje).catch((err) => { log(`${e.nome}: lembretes de clientes: ${err.message}`); api("POST", { company_id: e.company_id, acao: "cl_status", status: "erro: " + err.message }).catch(() => {}); });
   if (!aberto) { if (Date.now() - avisouOff > 3600000) { avisouOff = Date.now(); await status("desconectado: conecte o número no servidor (gbia-whatsapp-conectar)."); } return; }
   const env = lerEnviados(); for (const d of Object.keys(env)) if (d < hoje) delete env[d];
   env[hoje] = env[hoje] || {};
   for (const e of empresas) {
+    if (e.cfg.ligado === false) continue; // só os lembretes de clientes estão ligados
     const ini = min(e.cfg.hora), agora = agoraSP();
     // Só na janela de 3 horas a partir do horário escolhido (se o servidor ficar fora do ar, não manda tarde demais).
     if (agora < ini || agora > ini + 180 || env[hoje][e.company_id]) continue;
