@@ -57,13 +57,13 @@ servico gbia-whatsapp equipe "lembretes da equipe no WhatsApp"
 servico gbia-whatsapp-clientes clientes "lembrete de agendamento dos clientes no WhatsApp"
 
 # Atalhos: conectar cada número (QR code ou código) e mandar um teste.
-atalho() { # $1 = comando, $2 = serviço, $3 = papel, $4 = opção do node (--conectar ou --teste)
+atalho() { # $1 = comando, $2 = serviço, $3 = papel, $4 = opção do node (--conectar ou --teste), $5 = sessão (chip ou principal)
 cat > /usr/local/bin/$1 <<CMD
 #!/usr/bin/env bash
 systemctl stop $2
-if [ "$4" = "--teste" ]; then sudo -u gbia env \$(cat /etc/gbia-sync.env | xargs) TZ=America/Sao_Paulo WA_PAPEL=$3 node $DIR/whatsapp.mjs --teste "\$1"
-elif [ -n "\${1:-}" ]; then sudo -u gbia env \$(cat /etc/gbia-sync.env | xargs) TZ=America/Sao_Paulo WA_PAPEL=$3 node $DIR/whatsapp.mjs --codigo "\$1"
-else sudo -u gbia env \$(cat /etc/gbia-sync.env | xargs) TZ=America/Sao_Paulo WA_PAPEL=$3 node $DIR/whatsapp.mjs --conectar; fi
+if [ "$4" = "--teste" ]; then sudo -u gbia env \$(cat /etc/gbia-sync.env | xargs) TZ=America/Sao_Paulo WA_PAPEL=$3 WA_SESSAO=${5:-chip} node $DIR/whatsapp.mjs --teste "\$1"
+elif [ -n "\${1:-}" ]; then sudo -u gbia env \$(cat /etc/gbia-sync.env | xargs) TZ=America/Sao_Paulo WA_PAPEL=$3 WA_SESSAO=${5:-chip} node $DIR/whatsapp.mjs --codigo "\$1"
+else sudo -u gbia env \$(cat /etc/gbia-sync.env | xargs) TZ=America/Sao_Paulo WA_PAPEL=$3 WA_SESSAO=${5:-chip} node $DIR/whatsapp.mjs --conectar; fi
 systemctl start $2
 CMD
 chmod 755 /usr/local/bin/$1
@@ -72,6 +72,8 @@ atalho gbia-whatsapp-conectar gbia-whatsapp equipe --conectar
 atalho gbia-whatsapp-teste gbia-whatsapp equipe --teste
 atalho gbia-whatsapp-conectar-clientes gbia-whatsapp-clientes clientes --conectar
 atalho gbia-whatsapp-teste-clientes gbia-whatsapp-clientes clientes --teste
+atalho gbia-whatsapp-conectar-principal gbia-whatsapp-clientes clientes --conectar principal
+atalho gbia-whatsapp-teste-principal gbia-whatsapp-clientes clientes --teste principal
 systemctl daemon-reload
 systemctl enable gbia-whatsapp gbia-whatsapp-clientes >/dev/null
 systemctl restart gbia-whatsapp gbia-whatsapp-clientes
@@ -83,6 +85,8 @@ echo "  • Equipe (checklist):     gbia-whatsapp-conectar"
 echo "                            gbia-whatsapp-teste 55DDDNUMERO"
 echo "  • Clientes (agendamento): gbia-whatsapp-conectar-clientes"
 echo "                            gbia-whatsapp-teste-clientes 55DDDNUMERO"
+echo "  • WhatsApp principal (clientes, opcional): gbia-whatsapp-conectar-principal"
+echo "                            gbia-whatsapp-teste-principal 55DDDNUMERO"
 echo " (aparece um QR code: no celular do chip, WhatsApp ›"
 echo "  Aparelhos conectados › Conectar um aparelho)"
 echo " Ver o funcionamento:  journalctl -u gbia-whatsapp-clientes -f"

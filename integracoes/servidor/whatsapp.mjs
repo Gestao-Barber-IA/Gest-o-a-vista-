@@ -17,20 +17,24 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "1.3";
+const VERSAO = "1.4";
 const DIR = dirname(fileURLToPath(import.meta.url));
+const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
 // Cada papel roda como um serviço separado, com a sua própria sessão (QR code).
 const PAPEL = (process.argv.includes("--clientes") || process.env.WA_PAPEL === "clientes") ? "clientes" : "equipe";
 const CLI = PAPEL === "clientes";
-const AUTH = join(DIR, CLI ? "sessao-clientes" : "sessao");
-const CMD = CLI ? "gbia-whatsapp-conectar-clientes" : "gbia-whatsapp-conectar";
+// Lembrete dos clientes: sai pelo 2º chip ("chip") ou pelo WhatsApp principal da barbearia ("principal").
+// As duas sessões ficam guardadas; o dono escolhe no app qual usar (o 2º chip fica de reserva).
+const pasta = (n) => join(DIR, !CLI ? "sessao" : n === "principal" ? "sessao-principal" : "sessao-clientes");
+const cmdDe = (n) => (!CLI ? "gbia-whatsapp-conectar" : n === "principal" ? "gbia-whatsapp-conectar-principal" : "gbia-whatsapp-conectar-clientes");
+let NUMERO = CLI ? (arg("--sessao") || process.env.WA_SESSAO || "") : "";
+let AUTH = pasta(NUMERO), CMD = cmdDe(NUMERO);
 const ENVIADOS = join(DIR, "enviados.json");
 const ENV_CLI = join(DIR, "enviados-clientes.json");
 const TOKEN = process.env.SYNC_TOKEN || "";
 const SYNC_URL = process.env.SYNC_URL || "https://sekkmnkajnaqubyhpxvd.supabase.co/functions/v1/sync-servidor";
 const SITE = (process.env.SITE_URL || "https://gestaoperformance.vercel.app").replace(/\/$/, "");
-const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 const log = (m) => console.log(`[${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}] ${m}`);
 const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 const so = (t) => String(t || "").replace(/\D/g, "");
@@ -39,8 +43,9 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLat
 const pino = (await import("pino")).default;
 
 // ---------- conexão ----------
-let sock = null, aberto = false, saiu = false;
+let sock = null, aberto = false, saiu = false, geracao = 0;
 async function conectar({ qr = false, codigo = "" } = {}) {
+  const minha = ++geracao; // ao trocar de número, as conexões antigas param de reagir
   mkdirSync(AUTH, { recursive: true });
   const { state, saveCreds } = await useMultiFileAuthState(AUTH);
   const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: undefined }));
@@ -50,14 +55,15 @@ async function conectar({ qr = false, codigo = "" } = {}) {
   let pediuCodigo = false;
   return new Promise((ok) => {
     sock.ev.on("connection.update", async (u) => {
-      if (u.qr && qr) { const qrt = (await import("qrcode-terminal")).default; console.log("\nAbra o WhatsApp do chip › Aparelhos conectados › Conectar um aparelho e leia o QR code:\n"); qrt.generate(u.qr, { small: true }); }
+      if (minha !== geracao) return;
+      if (u.qr && qr) { const qrt = (await import("qrcode-terminal")).default; console.log("\nAbra o WhatsApp do número que vai enviar › Aparelhos conectados › Conectar um aparelho e leia o QR code:\n"); qrt.generate(u.qr, { small: true }); }
       if (u.qr && codigo && !pediuCodigo) { pediuCodigo = true; const c = await sock.requestPairingCode(so(codigo)); console.log(`\nNo WhatsApp do chip: Aparelhos conectados › Conectar um aparelho › Conectar com número de telefone e digite: ${c}\n`); }
       if (u.qr && !qr && !codigo) { aberto = false; await status(`desconectado: o número precisa ser conectado de novo (no servidor: ${CMD}).`); log(`Sem sessão: rode ${CMD} no servidor.`); }
       if (u.connection === "open") { aberto = true; log(`WhatsApp conectado (${PAPEL}).`); ok(true); }
       if (u.connection === "close") {
         aberto = false;
         const code = u.lastDisconnect?.error?.output?.statusCode;
-        if (code === DisconnectReason.loggedOut) { saiu = true; log("O número foi desconectado no celular."); await status("desconectado: o número foi removido em Aparelhos conectados. Conecte de novo no servidor."); rmSync(AUTH, { recursive: true, force: true }); ok(false); return; }
+        if (code === DisconnectReason.loggedOut) { saiu = true; log("O número foi desconectado no celular."); await status(`desconectado: o número foi removido em Aparelhos conectados (ou bloqueado). Os envios pararam. Conecte de novo no servidor: ${CMD}.`); rmSync(AUTH, { recursive: true, force: true }); ok(false); return; }
         if (code === DisconnectReason.restartRequired || qr || codigo) { conectar({ qr, codigo }).then(ok); return; }
         log(`Conexão caiu (${code || "?"}); tentando de novo em 30 s.`); await espera(30000); conectar().then(ok);
       }
@@ -143,6 +149,14 @@ const hm = (s) => { const m = String(s || "").match(/^(\d{2})\/(\d{2})\/(\d{4}) 
 const hhmm = (n) => `${String(Math.floor(n / 60)).padStart(2, "0")}h${String(n % 60).padStart(2, "0")}`.replace(/h00$/, "h");
 const primeiro = (n) => { const w = String(n || "").trim().split(/\s+/)[0] || ""; return w ? w[0].toUpperCase() + w.slice(1).toLowerCase() : ""; };
 const TEXTO_CLI = "Olá, {cliente}! 👋 Passando para lembrar do seu horário hoje às {hora} com {profissional} ({servico}) na {barbearia}.\n\nTe esperamos! 💈 Se não puder vir, avise a barbearia para liberarmos o horário.";
+// Versões do texto padrão, sorteadas a cada envio (mensagens idênticas em série parecem spam).
+const VERSOES_CLI = [TEXTO_CLI,
+  "Oi, {cliente}! Tudo certo? 😊 Seu horário na {barbearia} é hoje às {hora}, com {profissional} ({servico}).\n\nEstamos te esperando! Se surgir algum imprevisto, é só avisar por aqui.",
+  "{cliente}, bom te ver por aqui! ✂️ Lembrete: hoje às {hora} você tem {servico} com {profissional} na {barbearia}.\n\nAté já! Se precisar remarcar, responda esta mensagem.",
+  "Fala, {cliente}! 💈 Só confirmando: seu atendimento com {profissional} é hoje às {hora} ({servico}).\n\nTe aguardamos na {barbearia}. Qualquer coisa, chama a gente aqui."];
+// Proteções no WhatsApp principal: ritmo mais lento, limite por hora e por dia, sem links e freio automático.
+const LIMITE = { principal: { hora: 20, dia: 150, de: 40000, ate: 90000 }, chip: { hora: 40, dia: 300, de: 20000, ate: 40000 } };
+let ritmo = { dia: "", envios: [] }, erroSeguido = 0, pausadoDia = "";
 const agendaCache = {};
 async function agendaHoje(e, hoje) {
   const c = e.clientes, k = e.company_id, cache = agendaCache[k];
@@ -189,26 +203,39 @@ async function lembretesClientes(e, hoje) {
   const hora = (b) => { const falta = b.min - agora, cedo = b.reg < 0 || b.min - b.reg >= lead;
     return cedo ? falta <= lead && falta >= 10 : b.min - b.reg >= 20 && falta <= 20 && falta >= 5; };
   const fila = lista.filter((b) => !b.cods.some((k) => feitos.has(k)) && hora(b));
+  const principal = NUMERO === "principal", L = LIMITE[principal ? "principal" : "chip"];
+  if (ritmo.dia !== hoje) { ritmo = { dia: hoje, envios: [] }; erroSeguido = 0; }
+  const versoes = (c.texto ? c.texto.split(/\n\s*-{3,}\s*\n/) : VERSOES_CLI).map((t) => t.trim()).filter(Boolean);
   let n = 0;
   for (const [i, b] of fila.entries()) {
-    const texto = (c.texto || TEXTO_CLI).replace(/\{cliente\}/g, b.nome || "tudo bem").replace(/\{hora\}/g, hhmm(b.min)).replace(/\{profissional\}/g, junta(b.profs) || "a nossa equipe")
+    if (pausadoDia === hoje) break;
+    const ultHora = ritmo.envios.filter((t) => Date.now() - t < 3600000).length;
+    if (ultHora >= L.hora || ritmo.envios.length >= L.dia) { log(`${e.nome}: limite de envios atingido (${ultHora}/h, ${ritmo.envios.length}/dia); o resto fica para o próximo ciclo.`); break; }
+    let texto = versoes[Math.floor(Math.random() * versoes.length)].replace(/\{cliente\}/g, b.nome || "tudo bem").replace(/\{hora\}/g, hhmm(b.min)).replace(/\{profissional\}/g, junta(b.profs) || "a nossa equipe")
       .replace(/\{servico\}/g, junta(b.servs) || "seu atendimento").replace(/\{barbearia\}/g, e.nome).replace(/ \(\)/g, "");
-    try { await enviar(b.fone, texto); n++; } catch (err) { log(`${e.nome}: lembrete de cliente não enviado (${err.message}).`); }
+    if (principal) texto = texto.replace(/https?:\/\/\S+/gi, "").replace(/[ \t]+\n/g, "\n").replace(/:\s*$/gm, ".").trim(); // sem links no número principal
+    try { await enviar(b.fone, texto); n++; erroSeguido = 0; ritmo.envios.push(Date.now()); }
+    catch (err) {
+      log(`${e.nome}: lembrete de cliente não enviado (${err.message}).`);
+      // "número sem WhatsApp" é do cliente; outros erros seguidos podem ser o WhatsApp barrando: freio automático.
+      if (!/sem WhatsApp/.test(err.message) && ++erroSeguido >= 3) { pausadoDia = hoje; await status(`erro: pausado até amanhã por segurança — 3 envios seguidos falharam (${err.message}). Confira o WhatsApp no celular.`, [e.company_id]); break; }
+    }
     b.cods.forEach((k) => feitos.add(k)); env[hoje][e.company_id] = [...feitos]; writeFileSync(ENV_CLI, JSON.stringify(env));
-    if (i < fila.length - 1) await espera(20000 + Math.random() * 20000);
+    if (i < fila.length - 1) await espera(L.de + Math.random() * (L.ate - L.de));
   }
+  if (pausadoDia === hoje) return;
   if (n || !cliStatusEm[e.company_id] || Date.now() - cliStatusEm[e.company_id] > 3600000) {
     cliStatusEm[e.company_id] = Date.now();
     const total = (env[hoje][e.company_id] || []).length, prox = lista.filter((b) => !b.cods.some((k) => feitos.has(k)) && b.min > agora).sort((a, b) => a.min - b.min)[0];
     const quando = new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
-    await api("POST", { company_id: e.company_id, acao: "cl_status", status: `ok: ${quando} · ${total ? `${total} agendamento(s) lembrado(s) hoje` : "nenhum lembrete enviado hoje ainda"}${prox ? ` · próximo horário às ${hhmm(prox.min)}` : ""}.` }).catch(() => {});
+    await api("POST", { company_id: e.company_id, acao: "cl_status", status: `ok: ${quando} · ${principal ? "WhatsApp principal" : "2º chip"} · ${total ? `${total} agendamento(s) lembrado(s) hoje` : "nenhum lembrete enviado hoje ainda"}${prox ? ` · próximo horário às ${hhmm(prox.min)}` : ""}.` }).catch(() => {});
   }
 }
 const cliStatusEm = {};
 // Resposta automática: este número só envia lembretes. Quem responder recebe, uma vez por dia, o recado do dono.
 let respostas = [], respondidos = {};
 async function responder(m) {
-  if (m.type !== "notify" || !respostas.length) return;
+  if (m.type !== "notify" || !respostas.length || NUMERO === "principal") return; // no principal, quem responde é a recepção
   const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
   if (respondidos.dia !== hoje) respondidos = { dia: hoje };
   for (const msg of m.messages || []) {
@@ -234,14 +261,27 @@ async function atualizar() {
   } catch { /* sem internet: tenta depois */ }
 }
 
+// Lembrete dos clientes: usa o número escolhido no app (principal ou 2º chip) e troca sozinho quando o dono muda.
+async function escolherNumero(minhas) {
+  const quer = (minhas[0] && minhas[0].clientes && minhas[0].clientes.numero) === "principal" ? "principal" : "chip";
+  if (quer === NUMERO && (aberto || !existsSync(join(AUTH, "creds.json")))) return;
+  if (quer !== NUMERO) {
+    if (sock) { geracao++; try { sock.end(undefined); } catch { /* já fechado */ } }
+    aberto = false; saiu = false; avisouOff = 0; NUMERO = quer; AUTH = pasta(quer); CMD = cmdDe(quer);
+    log(`Lembrete dos clientes agora pelo ${quer === "principal" ? "WhatsApp principal" : "2º chip"}.`);
+  }
+  if (!aberto && existsSync(join(AUTH, "creds.json"))) { await Promise.race([conectar(), espera(30000)]); if (aberto) avisarConectado = true; }
+}
+
 async function ciclo() {
   await atualizar();
   const { empresas = [], hoje } = await api("GET", null, "?acao=lembretes");
   // Cada número cuida só das empresas com o seu tipo de lembrete ligado.
   const minhas = empresas.filter((e) => (CLI ? !!e.clientes : e.cfg.ligado !== false));
   empresasConhecidas = minhas.map((e) => e.company_id);
+  if (CLI) await escolherNumero(minhas);
   if (!aberto) { if (Date.now() - avisouOff > 3600000) { avisouOff = Date.now(); await status(`desconectado: conecte o número no servidor (${CMD}).`); } return; }
-  if (avisarConectado) { avisarConectado = false; await status(CLI ? "ok: número dos clientes conectado, aguardando os horários." : "conectado: aguardando o horário dos lembretes."); }
+  if (avisarConectado) { avisarConectado = false; await status(CLI ? `ok: ${NUMERO === "principal" ? "WhatsApp principal" : "2º chip"} conectado, aguardando os horários.` : "conectado: aguardando o horário dos lembretes."); }
   if (CLI) {
     respostas = minhas.map((e) => e.clientes.resposta).filter(Boolean);
     for (const e of minhas) await lembretesClientes(e, hoje).catch((err) => { log(`${e.nome}: lembretes de clientes: ${err.message}`); status("erro: " + err.message, [e.company_id]); });
@@ -271,7 +311,7 @@ if (TOKEN.length < 32) { log("ERRO: falta o SYNC_TOKEN em /etc/gbia-sync.env.");
 if (process.argv.includes("--conectar") || arg("--codigo") !== null) {
   rmSync(AUTH, { recursive: true, force: true });
   const ok = await conectar({ qr: process.argv.includes("--conectar"), codigo: arg("--codigo") || "" });
-  if (ok) { console.log("\nPronto! Número conectado. Agora rode: systemctl start gbia-whatsapp\n"); await espera(3000); }
+  if (ok) { console.log("\nPronto! Número conectado.\n"); await espera(3000); }
   process.exit(ok ? 0 : 1);
 }
 if (arg("--teste") !== null) {
@@ -280,8 +320,10 @@ if (arg("--teste") !== null) {
   console.log("Mensagem de teste enviada."); await espera(2000); process.exit(0);
 }
 log(`Lembretes no WhatsApp ${VERSAO} iniciado (número da ${CLI ? "agenda dos clientes" : "equipe"}).`);
-if (existsSync(join(AUTH, "creds.json"))) conectar().then((ok) => { if (ok) avisarConectado = true; });
-else log(`Sem número conectado: rode ${CMD} no servidor.`);
+if (!CLI) {
+  if (existsSync(join(AUTH, "creds.json"))) conectar().then((ok) => { if (ok) avisarConectado = true; });
+  else log(`Sem número conectado: rode ${CMD} no servidor.`);
+}
 for (;;) {
   await ciclo().catch((e) => log("ERRO no ciclo: " + e.message));
   if (saiu) { await espera(600000); continue; }
