@@ -4216,7 +4216,7 @@ Content-Type: application/json</pre>
     const prev = (it.cl_text || CL_TEXT).replace(/\{cliente\}/g, 'João').replace(/\{hora\}/g, '14h30').replace(/\{profissional\}/g, 'Igor').replace(/\{servico\}/g, 'Corte e Barba').replace(/\{barbearia\}/g, state.company.name || '');
     return `<section class="section card as-card">
       <h2 class="section-title">${icon('clock')} Lembrete de agendamento para os clientes</h2>
-      <p class="section-note">O servidor confere a agenda da AppBarber a cada 5 minutos e manda um WhatsApp para o cliente antes do horário marcado. Horários seguidos do mesmo cliente viram uma mensagem só; quem agendou em cima da hora não recebe. Sai pelo mesmo número dos lembretes da equipe. Nome e telefone dos clientes não ficam guardados.</p>
+      <p class="section-note">O servidor confere a agenda da AppBarber a cada 5 minutos e manda um WhatsApp para o cliente antes do horário marcado. Horários seguidos do mesmo cliente viram uma mensagem só. Quem agendou em cima da hora recebe 20 minutos antes do horário. Sai pelo mesmo número dos lembretes da equipe. Nome e telefone dos clientes não ficam guardados.</p>
       ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b> (acima): é por ela que o servidor lê a agenda.</p>` : ''}
       <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.cl_status_at ? 'Atualizado ' + when(it.cl_status_at) : ''}</small><p class="muted as-msg">${esc(st.replace(/^(ok|erro): /, ''))}</p>` : '<span class="chip">Aguardando o servidor</span>'}</div>
       <form class="form" data-form="clRemind" novalidate>
