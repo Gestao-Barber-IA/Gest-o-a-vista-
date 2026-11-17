@@ -15,7 +15,7 @@ for (const name of await readdir('.')) if (!SKIP.has(name)) await cp(name, join(
 await mkdir(join(OUT, 'integracoes/appbarber'), { recursive: true });
 for (const f of ['sincronizar.mjs', 'instalar.bat', 'sincronizar.bat', 'testar.bat']) await cp(join('integracoes/appbarber', f), join(OUT, 'integracoes/appbarber', f));
 await mkdir(join(OUT, 'integracoes/servidor'), { recursive: true });
-for (const f of ['sync-servidor.mjs', 'instalar-servidor.sh']) await cp(join('integracoes/servidor', f), join(OUT, 'integracoes/servidor', f));
+for (const f of ['sync-servidor.mjs', 'instalar-servidor.sh', 'whatsapp.mjs', 'instalar-whatsapp.sh']) await cp(join('integracoes/servidor', f), join(OUT, 'integracoes/servidor', f));
 
 for (const f of JS) {
   const src = await readFile(f, 'utf8');
