@@ -3025,3 +3025,11 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
   body.printing-rel .rel-tips li { background: #f4f4f4 !important; color: #111 !important; }
   body.printing-rel .rel-pro, body.printing-rel .rel-card { break-inside: avoid; }
 }
+/* Fiscalização por áudio */
+.dv-card { text-align: center; display: grid; gap: 10px; justify-items: center; max-width: 460px; }
+.dv-mic { font-size: 2.6rem; width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center; background: rgba(214, 69, 69, .18); animation: dvPulse 1.4s ease-in-out infinite; }
+@keyframes dvPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(214, 69, 69, .45); } 50% { box-shadow: 0 0 0 16px rgba(214, 69, 69, 0); } }
+@media (prefers-reduced-motion: reduce) { .dv-mic { animation: none; } }
+.dv-text { min-height: 3.2em; font-size: 1.05rem; line-height: 1.4; margin: 0; }
+.dv-filled { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: rgba(214, 180, 106, .12); border: 1px solid rgba(214, 180, 106, .4); line-height: 1.4; }
+.dv-warn { display: block; color: #f2c230; margin-top: 4px; }

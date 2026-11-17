@@ -318,3 +318,17 @@ test('mínimo de dias: quem trabalhou menos da metade (até 5) entra no fim, sem
   assert.equal(byId(res, 'a').scores.fat, 100); // c (900 em 1 dia) não vira o líder
   assert.equal(Math.round(byId(res, 'b').scores.fat), 83);
 });
+
+test('fiscalização por áudio: acha profissional, tipo de falta e data', () => {
+  const bs = [{ id: 'c', name: 'Carlos Santos' }, { id: 'i', name: 'Izaque Macedo' }, { id: 'n', name: 'Nicolas Antony' }, { id: 'm', name: 'Makenzo Prestes Taborda dos Santos' }];
+  let r = GB.parseDiscVoice('o Carlos chegou atrasado hoje e o cliente das 10 esperou', bs, '2026-11-17');
+  assert.equal(r.barberId, 'c'); assert.equal(r.kind, 'atraso'); assert.equal(r.day, '2026-11-17');
+  r = GB.parseDiscVoice('Izaque estava sem avental ontem', bs, '2026-11-17');
+  assert.equal(r.barberId, 'i'); assert.equal(r.kind, 'uniforme'); assert.equal(r.day, '2026-11-16');
+  r = GB.parseDiscVoice('cliente reclamou do atendimento do Nicolas no sábado, não ofereceu café', bs, '2026-11-17');
+  assert.equal(r.barberId, 'n'); assert.equal(r.kind, 'atendimento'); assert.equal(r.day, '2026-11-14');
+  r = GB.parseDiscVoice('bancada suja do Makenzo dia 20', bs, '2026-11-17');
+  assert.equal(r.barberId, 'm'); assert.equal(r.kind, 'higiene'); assert.equal(r.day, '2026-10-20');
+  r = GB.parseDiscVoice('o Santos não veio trabalhar', bs, '2026-11-17');
+  assert.equal(r.barberId, ''); assert.equal(r.kind, 'falta'); // "Santos" está em dois nomes: o líder escolhe
+});
