@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Gestão Barber IA — instala o servidor de sincronização (Ubuntu 22.04 ou 24.04).
 # Uso (no console do servidor, como root):
-#   curl -fsSL https://gest-o-a-vista.vercel.app/integracoes/servidor/instalar-servidor.sh | bash -s -- SEU_SYNC_TOKEN
+#   curl -fsSL https://gestaoperformance.vercel.app/integracoes/servidor/instalar-servidor.sh | bash -s -- SEU_SYNC_TOKEN
 set -euo pipefail
-SITE="${SITE_URL:-https://gest-o-a-vista.vercel.app}"
+SITE="${SITE_URL:-https://gestaoperformance.vercel.app}"
 TOKEN="${1:-}"
 if [ "$(id -u)" != "0" ]; then echo "Rode como root (use sudo)."; exit 1; fi
 if [ ${#TOKEN} -lt 32 ]; then echo "Informe o SYNC_TOKEN: ... | bash -s -- SEU_SYNC_TOKEN"; exit 1; fi

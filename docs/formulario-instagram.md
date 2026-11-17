@@ -26,7 +26,7 @@ O formulário instantâneo abre **dentro do Instagram**, já preenchido com os d
 
 **Política de privacidade**
 - Texto do link: **Política de privacidade**
-- Link: `https://gest-o-a-vista.vercel.app/privacidade.html`
+- Link: `https://gestaoperformance.vercel.app/privacidade.html`
 - Aviso personalizado (marque *Adicionar aviso personalizado*): *Autorizo o contato por WhatsApp, telefone ou e-mail sobre o sistema.* com a caixa de seleção obrigatória.
 
 **Tela de conclusão**
@@ -34,7 +34,7 @@ O formulário instantâneo abre **dentro do Instagram**, já preenchido com os d
 - Descrição: *Responda 2 perguntas rápidas e veja como o sistema funciona na sua equipe.*
 - Chamada para ação: **Visualizar site**
 - Texto do botão: **Ver meu plano ideal**
-- Link do site: `https://gest-o-a-vista.vercel.app/oferta/?cadastro=ok&utm_source=instagram&utm_medium=formulario`
+- Link do site: `https://gestaoperformance.vercel.app/oferta/?cadastro=ok&utm_source=instagram&utm_medium=formulario`
 
 > O `?cadastro=ok` faz a página abrir o quiz e, no final, pular o cadastro (a pessoa já preencheu no Instagram).
 > Para anúncios de um público só, acrescente o tipo: `&tipo=barbearia`, `&tipo=salao`, `&tipo=esmalteria` ou `&tipo=estetica` (o quiz já começa na pergunta do tamanho da equipe).
@@ -50,8 +50,8 @@ Quem entra pelo link da bio, stories ou WhatsApp (sem o formulário do Instagram
 ## 5. Links prontos
 | Uso | Link |
 |---|---|
-| Bio do Instagram | `https://gest-o-a-vista.vercel.app/oferta/?utm_source=instagram&utm_medium=bio` |
-| Stories | `https://gest-o-a-vista.vercel.app/oferta/?utm_source=instagram&utm_medium=stories` |
-| Tela final do formulário | `https://gest-o-a-vista.vercel.app/oferta/?cadastro=ok&utm_source=instagram&utm_medium=formulario` |
+| Bio do Instagram | `https://gestaoperformance.vercel.app/oferta/?utm_source=instagram&utm_medium=bio` |
+| Stories | `https://gestaoperformance.vercel.app/oferta/?utm_source=instagram&utm_medium=stories` |
+| Tela final do formulário | `https://gestaoperformance.vercel.app/oferta/?cadastro=ok&utm_source=instagram&utm_medium=formulario` |
 
 O `utm_source` e o `utm_medium` aparecem na coluna *Origem* da lista de Interessados, para você saber de onde veio cada contato.

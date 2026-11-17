@@ -47,7 +47,7 @@ Reenviar o mesmo dia **substitui** o valor anterior, então nada é contado em d
 3. Cole o comando abaixo e aperte Enter. Ele baixa o programa para `C:\GestaoBarberIA\appbarber` e abre o instalador.
 
 ```powershell
-$d="C:\GestaoBarberIA\appbarber"; New-Item -ItemType Directory -Force $d | Out-Null; foreach($f in "sincronizar.mjs","instalar.bat","sincronizar.bat","testar.bat"){ Invoke-WebRequest "https://gest-o-a-vista.vercel.app/integracoes/appbarber/$f" -OutFile "$d\$f" -UseBasicParsing }; Start-Process "$d\instalar.bat"
+$d="C:\GestaoBarberIA\appbarber"; New-Item -ItemType Directory -Force $d | Out-Null; foreach($f in "sincronizar.mjs","instalar.bat","sincronizar.bat","testar.bat"){ Invoke-WebRequest "https://gestaoperformance.vercel.app/integracoes/appbarber/$f" -OutFile "$d\$f" -UseBasicParsing }; Start-Process "$d\instalar.bat"
 ```
 
 4. O instalador pede, um de cada vez:

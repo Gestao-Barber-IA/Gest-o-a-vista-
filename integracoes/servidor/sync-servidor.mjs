@@ -8,11 +8,11 @@ import { spawn, spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSAO = "1.0";
+const VERSAO = "1.1";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const TOKEN = process.env.SYNC_TOKEN || "";
 const SYNC_URL = process.env.SYNC_URL || "https://sekkmnkajnaqubyhpxvd.supabase.co/functions/v1/sync-servidor";
-const SITE = (process.env.SITE_URL || "https://gest-o-a-vista.vercel.app").replace(/\/$/, "");
+const SITE = (process.env.SITE_URL || "https://gestaoperformance.vercel.app").replace(/\/$/, "");
 const INTERVALO = Math.max(5, Number(process.env.INTERVALO_MIN) || 10) * 60000;
 const BASE = join(DIR, "sincronizar.mjs");
 const DADOS = join(DIR, "dados");

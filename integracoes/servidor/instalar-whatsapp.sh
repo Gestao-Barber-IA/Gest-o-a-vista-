@@ -2,9 +2,9 @@
 # Gestão Barber IA — instala os lembretes no WhatsApp no servidor de sincronização (já instalado).
 # Leve: sem Docker e sem banco de dados. Cria também 1 GB de memória reserva no disco (swap) para os picos.
 # Uso (no console do servidor, como root):
-#   curl -fsSL https://gest-o-a-vista.vercel.app/integracoes/servidor/instalar-whatsapp.sh | bash
+#   curl -fsSL https://gestaoperformance.vercel.app/integracoes/servidor/instalar-whatsapp.sh | bash
 set -euo pipefail
-SITE="${SITE_URL:-https://gest-o-a-vista.vercel.app}"
+SITE="${SITE_URL:-https://gestaoperformance.vercel.app}"
 DIR=/opt/gbia-sync/whatsapp
 if [ "$(id -u)" != "0" ]; then echo "Rode como root (use sudo)."; exit 1; fi
 if [ ! -f /etc/gbia-sync.env ]; then echo "Instale primeiro o servidor de sincronização (instalar-servidor.sh)."; exit 1; fi
