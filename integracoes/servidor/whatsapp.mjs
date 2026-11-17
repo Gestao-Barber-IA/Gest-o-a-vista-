@@ -17,7 +17,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "2.4";
+const VERSAO = "2.5";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -366,6 +366,8 @@ async function reconquista(e, hoje) {
 // 1 consulta por dia à lista de aniversariantes da AppBarber (próximos 7 dias); manda para quem faz aniversário hoje,
 // a partir das 9h, com o ritmo e as proteções de sempre. Cada cliente recebe no máximo 1 vez por ano.
 const TEXTO_BD = "🎉💈 Feliz Aniversário {cliente}! 💈🎉\nHoje é um dia especial, e nós, da {barbearia}, queremos desejar a você um novo ciclo repleto de saúde, felicidade, sucesso e muitas conquistas! 🙏🏻🎂\nQue Deus abençoe sua vida, ilumine seus caminhos e que não faltem motivos para sorrir e comemorar! 🥳✨\n\nCaso você venha realizar um serviço de corte ou barba hoje, daremos um serviço extra de cortesia pra você! Gostaria de saber as opções de serviços extras?";
+// Quem faz aniversário num dia em que a barbearia fecha (ex.: domingo) recebe o parabéns antecipado no último dia aberto antes.
+const TEXTO_BD_VESPERA = "🎉💈 Feliz Aniversário antecipado, {cliente}! 💈🎉\nAmanhã é o seu dia especial, e nós, da {barbearia}, queremos desejar a você um novo ciclo repleto de saúde, felicidade, sucesso e muitas conquistas! 🙏🏻🎂\nQue Deus abençoe sua vida, ilumine seus caminhos e que não faltem motivos para sorrir e comemorar! 🥳✨\n\nComo amanhã a barbearia não abre, caso você venha realizar um serviço de corte ou barba hoje, daremos um serviço extra de cortesia pra você! Gostaria de saber as opções de serviços extras?";
 const BD_HOJE = join(DIR, "aniversario-hoje.json"), BD_ENV = join(DIR, "aniversario-enviados.json");
 const bdStatusEm = {};
 async function aniversarios(e, hoje) {
@@ -374,9 +376,11 @@ async function aniversarios(e, hoje) {
   let base = lerJ(BD_HOJE, null);
   if (!base || base.dia !== hoje || base.cid !== e.company_id) {
     const d = await abGet(e, "/v1/establishment/birthday");
-    const [, mm, dd] = hoje.split("-");
-    const lista = d.filter((x) => { const m = String(x.birth_date || "").match(/^(\d{2})\/(\d{2})/); return m && m[1] === dd && m[2] === mm; })
-      .map((x) => [so(x.person_cell_phone || x.person_cellphone || x.person_phone), primeiro(x.person_name)]).filter(([f]) => f.length >= 10);
+    // Dias cobertos hoje: o próprio dia e os dias fechados logo em seguida (ex.: sábado cobre o domingo).
+    const fech = (e.horario && e.horario.fechados) || [], dias = { [hoje.slice(5)]: "hoje" };
+    for (let k = 1; k <= 6; k++) { const x = new Date(hoje + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() + k); if (!fech.includes(x.getUTCDay())) break; dias[x.toISOString().slice(5, 10)] = "vespera"; }
+    const lista = d.map((x) => { const m = String(x.birth_date || "").match(/^(\d{2})\/(\d{2})/); return [so(x.person_cell_phone || x.person_cellphone || x.person_phone), primeiro(x.person_name), m ? dias[`${m[2]}-${m[1]}`] : null]; })
+      .filter(([f, , tipo]) => tipo && f.length >= 10);
     base = { dia: hoje, cid: e.company_id, lista };
     writeFileSync(BD_HOJE, JSON.stringify(base), { mode: 0o600 });
     log(`${e.nome}: ${lista.length} aniversariante(s) hoje.`);
@@ -386,11 +390,11 @@ async function aniversarios(e, hoje) {
   const principal = NUMERO === "principal", L = LIMITE[principal ? "principal" : "chip"];
   if (ritmo.dia !== hoje) { ritmo = { dia: hoje, envios: [] }; erroSeguido = 0; }
   const versoes = (e.aniversario.texto ? e.aniversario.texto.split(/\n\s*-{3,}\s*\n/) : [TEXTO_BD]).map((t) => t.trim()).filter(Boolean);
-  for (const [i, [f, nome]] of fila.entries()) {
+  for (const [i, [f, nome, tipo]] of fila.entries()) {
     if (pausadoDia === hoje) break;
     const ultHora = ritmo.envios.filter((t) => Date.now() - t < 3600000).length;
     if (ultHora >= L.hora || ritmo.envios.length >= L.dia) break;
-    let texto = versoes[Math.floor(Math.random() * versoes.length)].replace(/\{cliente\}/g, nome || "").replace(/\{barbearia\}/g, e.nome).replace(/ !/g, "!");
+    let texto = (tipo === "vespera" ? TEXTO_BD_VESPERA : versoes[Math.floor(Math.random() * versoes.length)]).replace(/\{cliente\}/g, nome || "").replace(/\{barbearia\}/g, e.nome).replace(/ !/g, "!");
     if (principal) texto = texto.replace(/https?:\/\/\S+/gi, "").trim();
     env[chaveFone(f)] = ano; writeFileSync(BD_ENV, JSON.stringify(env));
     try { await enviar(f, texto); erroSeguido = 0; ritmo.envios.push(Date.now()); log(`${e.nome}: parabéns enviado (${nome || "cliente"}).`); }

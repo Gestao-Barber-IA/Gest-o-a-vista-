@@ -4,7 +4,7 @@
 window.GB_UPDATES = [
   { id: '2026-11-18-aniversario', date: '2026-11-18', title: 'Parabéns aos aniversariantes no WhatsApp', items: [
     ['novo', 'Em Integração, o cartão Parabéns aos aniversariantes: todo dia, a partir das 9h, os clientes que fazem aniversário recebem a mensagem de parabéns com o convite para um serviço extra de cortesia. Quem responder fala com a recepção.'],
-    ['melhoria', 'Usa a lista de aniversariantes da AppBarber (1 crédito por dia), sai pelo número dos clientes com o ritmo de sempre, 1 vez por ano por cliente e só em dia aberto.'],
+    ['melhoria', 'Usa a lista de aniversariantes da AppBarber (1 crédito por dia), sai pelo número dos clientes com o ritmo de sempre, 1 vez por ano por cliente. Quem faz aniversário num dia fechado (ex.: domingo) recebe o parabéns antecipado no último dia aberto (ex.: sábado), com a oferta para vir nesse dia.'],
   ] },
   { id: '2026-11-18-checklist-centro', date: '2026-11-18', title: 'Checklist: profissional e dia escolhidos à vista', items: [
     ['correcao', 'No celular, as listas de profissionais e de dias do mês rolam sozinhas até o profissional escolhido e o dia de hoje (ou o dia escolhido).'],
