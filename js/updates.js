@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-17-wa-dois-numeros', date: '2026-11-17', title: 'Um número para a equipe e outro para os clientes', items: [
+    ['melhoria', 'Os lembretes no WhatsApp podem sair por dois chips: um só para a equipe (checklist) e outro só para os clientes (lembrete de agendamento). Se um número tiver problema, o outro continua funcionando.'],
+  ] },
   { id: '2026-11-17-wa-clientes', date: '2026-11-17', title: 'Lembrete de agendamento para os clientes no WhatsApp', items: [
     ['novo', 'Em Integração, o cartão Lembrete de agendamento para os clientes: o servidor confere a agenda da AppBarber a cada 5 minutos e manda um WhatsApp para o cliente antes do horário (por padrão, 1 hora antes).'],
     ['melhoria', 'Horários seguidos do mesmo cliente viram uma mensagem só, e quem agendou em cima da hora recebe o lembrete 20 minutos antes. O dono escolhe a antecedência, o texto e uma resposta automática para quem responder ao lembrete.'],

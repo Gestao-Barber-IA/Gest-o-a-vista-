@@ -4193,7 +4193,7 @@ Content-Type: application/json</pre>
       <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Precisa de atenção' : 'Funcionando'}</span> <small class="muted">${it.wa_status_at ? 'Atualizado ' + when(it.wa_status_at) : ''}</small><p class="muted as-msg">${esc(st.replace(/^(ok|erro|conectado|desconectado): /, ''))}</p>` : '<span class="chip">Aguardando o servidor</span>'}</div>
       ${semFone.length ? `<p class="section-note">${icon('alert')} Sem telefone cadastrado (não recebem): <b>${esc(semFone.join(', '))}</b>. O telefone fica no cadastro de acesso de cada profissional.</p>` : ''}
       <form class="form" data-form="waRemind" novalidate>
-        <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''}><span><b>Lembretes ligados</b><small>O número que envia é o chip conectado no servidor.</small></span></label>
+        <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''}><span><b>Lembretes ligados</b><small>O número que envia é o chip da equipe conectado no servidor.</small></span></label>
         <div class="grid-2">
           <label class="field"><span>Horário do lembrete</span><input class="input" type="time" name="hour" value="${esc(it.wa_hour || '13:00')}"></label>
           <label class="field"><span>Mínimo de pontos até esse horário</span><input class="input num" type="number" min="0" max="${GB.popDayMax(GB.popCfgOf(state))}" step="0.5" name="min" value="${esc(String(it.wa_min ?? 6))}"><small class="muted">Conta as provas aprovadas e as que aguardam conferência.</small></label>
@@ -4211,14 +4211,14 @@ Content-Type: application/json</pre>
     if (!isGestor(currentUser())) return '';
     const it = Cloud.enabled ? ui.integ : (state.integ || {});
     if (!it || it.erro) return '';
-    const st = String(it.cl_status || ''), on = !!it.cl_on, bad = /^erro/.test(st), noAb = !it.est_code;
+    const st = String(it.cl_status || ''), on = !!it.cl_on, bad = /^(erro|desconectado)/.test(st), noAb = !it.est_code;
     const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const prev = (it.cl_text || CL_TEXT).replace(/\{cliente\}/g, 'João').replace(/\{hora\}/g, '14h30').replace(/\{profissional\}/g, 'Igor').replace(/\{servico\}/g, 'Corte e Barba').replace(/\{barbearia\}/g, state.company.name || '');
     return `<section class="section card as-card">
       <h2 class="section-title">${icon('clock')} Lembrete de agendamento para os clientes</h2>
-      <p class="section-note">O servidor confere a agenda da AppBarber a cada 5 minutos e manda um WhatsApp para o cliente antes do horário marcado. Horários seguidos do mesmo cliente viram uma mensagem só. Quem agendou em cima da hora recebe 20 minutos antes do horário. Sai pelo mesmo número dos lembretes da equipe. Nome e telefone dos clientes não ficam guardados.</p>
+      <p class="section-note">O servidor confere a agenda da AppBarber a cada 5 minutos e manda um WhatsApp para o cliente antes do horário marcado. Horários seguidos do mesmo cliente viram uma mensagem só. Quem agendou em cima da hora recebe 20 minutos antes do horário. Sai pelo <b>número dos clientes</b> (um chip só para isso, conectado no servidor com <code>gbia-whatsapp-conectar-clientes</code>), separado do número dos lembretes da equipe. Nome e telefone dos clientes não ficam guardados.</p>
       ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b> (acima): é por ela que o servidor lê a agenda.</p>` : ''}
-      <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.cl_status_at ? 'Atualizado ' + when(it.cl_status_at) : ''}</small><p class="muted as-msg">${esc(st.replace(/^(ok|erro): /, ''))}</p>` : '<span class="chip">Aguardando o servidor</span>'}</div>
+      <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.cl_status_at ? 'Atualizado ' + when(it.cl_status_at) : ''}</small><p class="muted as-msg">${esc(st.replace(/^(ok|erro|desconectado): /, ''))}</p>` : '<span class="chip">Aguardando o servidor</span>'}</div>
       <form class="form" data-form="clRemind" novalidate>
         <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''} ${noAb ? 'disabled' : ''}><span><b>Lembretes para clientes ligados</b><small>Para os agendamentos com status Agendado na AppBarber.</small></span></label>
         <label class="field"><span>Quanto tempo antes do horário</span><select class="input" name="lead">${[[30, '30 minutos'], [60, '1 hora'], [90, '1 hora e meia'], [120, '2 horas'], [180, '3 horas']].map(([v, l]) => `<option value="${v}" ${Number(it.cl_lead || 60) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
