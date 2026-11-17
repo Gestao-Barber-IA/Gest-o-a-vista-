@@ -17,7 +17,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "1.5";
+const VERSAO = "1.6";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -167,7 +167,7 @@ let ritmo = { dia: "", envios: [] }, erroSeguido = 0, pausadoDia = "";
 const agendaCache = {};
 async function agendaHoje(e, hoje) {
   const c = e.clientes, k = e.company_id, cache = agendaCache[k];
-  if (cache && cache.dia === hoje && Date.now() - cache.em < 5 * 60000) return cache.lista; // AppBarber: no máximo 1 consulta a cada 5 min
+  if (cache && cache.dia === hoje && Date.now() - cache.em < 15 * 60000) return cache.lista; // AppBarber: no máximo 1 consulta a cada 15 min (cada consulta gasta crédito)
   const q = new URLSearchParams({ establishment_code: String(c.codigo_estabelecimento), start_date: hoje, end_date: hoje, status_type: "1" });
   if (c.codigo_filial) q.set("branch_code", String(c.codigo_filial));
   // Mesmo cabeçalho da sincronização (que a AppBarber já aceita neste IP).
@@ -201,8 +201,14 @@ function blocos(lista, hoje) {
 }
 const junta = (l) => (l.length <= 1 ? l.join("") : l.slice(0, -1).join(", ") + " e " + l[l.length - 1]);
 const lerCli = () => { try { return JSON.parse(readFileSync(ENV_CLI, "utf8")); } catch { return {}; } };
+// Dia fechado (ex.: domingo) ou fora do horário: não consulta a AppBarber.
+const diaSemanaSP = () => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", weekday: "short" }).format(new Date()));
+const fechadoHoje = (e) => !!(e.horario && Array.isArray(e.horario.fechados) && e.horario.fechados.includes(diaSemanaSP()));
 async function lembretesClientes(e, hoje) {
   const c = e.clientes, lead = Math.max(15, Math.min(240, Number(c.antecedencia) || 60)), agora = agoraSP();
+  if (fechadoHoje(e)) return;
+  // Janela: da abertura menos a antecedência (lembrete do primeiro horário) até o fechamento.
+  if (e.horario && (agora < min(e.horario.abertura) - lead - 15 || agora > min(e.horario.fechamento))) return;
   const env = lerCli(); for (const d of Object.keys(env)) if (d < hoje) delete env[d];
   const feitos = new Set((env[hoje] = env[hoje] || {})[e.company_id] || []);
   const lista = blocos(await agendaHoje(e, hoje), hoje);
@@ -298,6 +304,7 @@ async function ciclo() {
   const env = lerEnviados(); for (const d of Object.keys(env)) if (d < hoje) delete env[d];
   env[hoje] = env[hoje] || {};
   for (const e of minhas) {
+    if (fechadoHoje(e)) continue; // barbearia fechada hoje: sem lembrete para a equipe
     const ini = min(e.cfg.hora), agora = agoraSP();
     // Só na janela de 3 horas a partir do horário escolhido (se o servidor ficar fora do ar, não manda tarde demais).
     if (agora < ini || agora > ini + 180 || env[hoje][e.company_id]) continue;

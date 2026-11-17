@@ -52,7 +52,7 @@ sleep 5
 IP="$(curl -4 -fsS https://api.ipify.org || echo '?')"
 echo
 echo "============================================================"
-echo " Pronto! O servidor sincroniza a cada 10 minutos, 24h por dia."
+echo " Pronto! O servidor sincroniza a cada 15 minutos, no horário de funcionamento."
 echo " IP para cadastrar na AppBarber: $IP"
 echo " Ver o funcionamento:  journalctl -u gbia-sync -f"
 echo "============================================================"

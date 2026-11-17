@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-17-economia-creditos', date: '2026-11-17', title: 'Menos consultas à AppBarber (economia de créditos)', items: [
+    ['melhoria', 'Cada consulta à API da AppBarber gasta crédito. A sincronização dos números passou a rodar a cada 15 minutos e o lembrete dos clientes confere a agenda a cada 15 minutos, só no horário de funcionamento.'],
+    ['novo', 'Em Configurações › Horário de funcionamento, marque os dias em que a barbearia fecha (ex.: domingo): nesses dias não há consulta à AppBarber nem lembrete no WhatsApp.'],
+  ] },
   { id: '2026-11-17-wa-principal', date: '2026-11-17', title: 'Lembrete dos clientes pelo WhatsApp principal', items: [
     ['novo', 'No cartão Lembrete de agendamento para os clientes, escolha o número que envia: o 2º chip ou o WhatsApp principal da barbearia. No principal, o cliente reconhece o número e as respostas caem direto na recepção.'],
     ['melhoria', 'Proteções no número principal: textos sorteados entre várias versões, de 40 a 90 segundos entre envios, até 20 por hora e 150 por dia, sem links e pausa automática se 3 envios seguidos falharem. O 2º chip continua de reserva: é só trocar no cartão.'],
@@ -10,7 +14,7 @@ window.GB_UPDATES = [
     ['melhoria', 'Os lembretes no WhatsApp podem sair por dois chips: um só para a equipe (checklist) e outro só para os clientes (lembrete de agendamento). Se um número tiver problema, o outro continua funcionando.'],
   ] },
   { id: '2026-11-17-wa-clientes', date: '2026-11-17', title: 'Lembrete de agendamento para os clientes no WhatsApp', items: [
-    ['novo', 'Em Integração, o cartão Lembrete de agendamento para os clientes: o servidor confere a agenda da AppBarber a cada 5 minutos e manda um WhatsApp para o cliente antes do horário (por padrão, 1 hora antes).'],
+    ['novo', 'Em Integração, o cartão Lembrete de agendamento para os clientes: o servidor confere a agenda da AppBarber a cada 15 minutos e manda um WhatsApp para o cliente antes do horário (por padrão, 1 hora antes).'],
     ['melhoria', 'Horários seguidos do mesmo cliente viram uma mensagem só, e quem agendou em cima da hora recebe o lembrete 20 minutos antes. O dono escolhe a antecedência, o texto e uma resposta automática para quem responder ao lembrete.'],
   ] },
   { id: '2026-11-17-wa-lembretes', date: '2026-11-17', title: 'Lembretes do checklist no WhatsApp', items: [
