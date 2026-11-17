@@ -5482,7 +5482,7 @@ Content-Type: application/json</pre>
   const popArr = it => it.arr !== undefined ? !!it.arr : popGest(it) && it.type === 'check' && (it.id === 'chegada' || /chegad|pontualid|disponibilidade comercial/i.test(`${it.title || ''} ${it.desc || ''}`));
   const ARR = {
     ok: ['Disponibilidade confirmada', 'arr-ok', 'check', 'Profissional disponível para os atendimentos anunciados.', '(bônus ativo)'],
-    apos: ['Disponibilidade alterada', 'arr-apos', 'clock', 'Alteração comunicada para reorganização da agenda e dos clientes.', '(registrado e sem bônus)'],
+    apos: ['Disponibilidade alterada', 'arr-apos', 'clock', 'Alteração não comunicada para reorganização da agenda e dos clientes.', '(registrado e sem bônus)'],
     atraso: ['Compromisso comercial não atendido', 'arr-atraso', 'alert', 'Incompatibilidade não comunicada que prejudicou um atendimento confirmado ou a oferta anunciada. Situação sujeita à análise individual.', '(registrado e sem bônus)'],
   };
   // Ordem dos cartões no checklist: Horário de chegada primeiro, logo abaixo o EXTRA, depois as demais tarefas.
