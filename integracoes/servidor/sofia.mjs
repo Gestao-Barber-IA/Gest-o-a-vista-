@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "1.7";
+export const SOFIA_VERSAO = "1.8";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -95,11 +95,22 @@ export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) 
       return { codigo: Number(a.appointment_code || a.scheduling_code), comanda: Number(a.invoice_code) || null, quando: m ? `${m[3]}-${m[2]}-${m[1]} ${m[4]}:${m[5]}` : a.scheduling_start, profissional: String(a.employee_name || "").trim(), servico: String(a.service_description || "").trim(), nome: String(a.client_name || "").trim() };
     }).sort((a, b) => String(a.quando).localeCompare(String(b.quando)));
   }
-  async function nomeDe(fone) {
+  // Cadastro do cliente pelo celular: { codigo, nome, nascimento } ou null.
+  async function clienteDe(fone) {
     const d = (await chamar("GET", `/v1/establishment/clients?cellphone=${so(fone).replace(/^55(?=\d{10,11}$)/, "")}`)).data || [];
     const lista = Array.isArray(d) ? d : (d.items || d.clients || []);
     const c = lista.find((x) => chaveFone(x.person_cellphone || x.person_phone) === chaveFone(fone)) || null;
-    return c ? String(c.person_name || "").trim() : "";
+    return c ? { codigo: Number(c.person_code) || null, nome: String(c.person_name || "").trim(), nascimento: String(c.person_birth_date || "").trim() } : null;
+  }
+  const nomeDe = async (fone) => ((await clienteDe(fone)) || {}).nome || "";
+  // Cadastro novo (nome, celular do WhatsApp e, se o cliente quiser, data de nascimento) ou só a data num cadastro que não tinha.
+  async function salvarCliente({ codigo, fone, nome, nascimento }) {
+    const cel = so(fone).replace(/^55(?=\d{10,11}$)/, "");
+    const corpo = codigo ? { establishment: Number(est), ...(nascimento ? { person_birth_date: nascimento } : {}), ...(nome ? { person_name: nome } : {}) }
+      : { establishment: Number(est), person_name: nome, person_cellphone: cel, person_dial_code: "+55", person_signup_origin: "WhatsApp (Sofia, atendente IA)", ...(nascimento ? { person_birth_date: nascimento } : {}) };
+    const r = (await chamar(codigo ? "PUT" : "POST", codigo ? `/v1/establishment/clients/${encodeURIComponent(codigo)}` : "/v1/establishment/clients", corpo)).data || {};
+    if (Number(r.error) > 0) throw new Error(r.result || "a AppBarber não aceitou o cadastro");
+    return { codigo: codigo || Number(r.person_code) || null };
   }
   async function criar({ fone, nome, servicos: lista, profissional, quando, obs }) {
     const corpo = { customer_phone: Number(so(fone).length <= 11 ? "55" + so(fone) : so(fone)), customer_name: nome, establishment_code: Number(est), start_date: quando,
@@ -115,7 +126,7 @@ export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) 
     cache.forEach((_, k) => { if (k.startsWith("disp:")) cache.delete(k); });
     return true;
   }
-  return { servicos, profissionais, horarios, agendamentosDe, nomeDe, criar, cancelarComanda };
+  return { servicos, profissionais, horarios, agendamentosDe, nomeDe, clienteDe, salvarCliente, criar, cancelarComanda };
 }
 
 // ---------- o que a Sofia pode fazer (ferramentas para o Claude) ----------
@@ -124,6 +135,8 @@ export const TOOLS = [
   { name: "ver_servicos", description: "Lista os serviços da barbearia com código, nome, duração em minutos e preço de TABELA (cobranca 'A partir de' = preço mínimo). Em alguns dias pode haver promoção: o valor de um dia específico vem em ver_horarios.", strict: true, input_schema: obj({}, []) },
   { name: "ver_horarios", description: "Horários livres de um dia para um serviço, por profissional, com o VALOR DAQUELE DIA (já com promoções/descontos do dia). Use o código do serviço de ver_servicos. Para mais de um serviço juntos (ex.: corte + barba), consulte pelo primeiro serviço e confira que há tempo seguido para os dois.", strict: true,
     input_schema: obj({ data: { type: "string", description: "Dia no formato AAAA-MM-DD" }, servico: { type: "integer", description: "Código do serviço" }, profissional: { type: ["string", "null"], description: "Nome do profissional que o cliente pediu, ou null para todos" } }, ["data", "servico", "profissional"]) },
+  { name: "salvar_cadastro", description: "Cadastra o cliente na barbearia (quando a linha [Cadastro…] diz que não tem cadastro) ou acrescenta a data de nascimento num cadastro que não tem. Use depois que o cliente informou nome e sobrenome; a data de nascimento é opcional (só se ele quiser informar).", strict: true,
+    input_schema: obj({ nome_completo: { type: ["string", "null"], description: "Nome e sobrenome (obrigatório para cadastro novo; null se o cliente já tem cadastro)" }, nascimento: { type: ["string", "null"], description: "Data de nascimento AAAA-MM-DD, ou null se o cliente não quis informar" }, celular: { type: ["string", "null"], description: "Celular com DDD, só se o WhatsApp do cliente estiver desconhecido; senão null" } }, ["nome_completo", "nascimento", "celular"]) },
   { name: "consultar_cliente", description: "Nome do cliente cadastrado na barbearia (pelo telefone do WhatsApp) e os horários que ele já tem marcados nos próximos 30 dias, com o código de cada um. Use antes de remarcar ou cancelar, e para chamar o cliente pelo nome.", strict: true, input_schema: obj({}, []) },
   { name: "agendar", description: "Marca o horário na AppBarber. SÓ use depois que o cliente confirmou com clareza (ex.: 'sim', 'pode marcar') o resumo com serviço(s), profissional, dia e hora.", strict: true,
     input_schema: obj({ servicos: { type: "array", items: { type: "integer" }, description: "Códigos dos serviços, na ordem" }, profissional: { type: "integer", description: "Código do profissional (de ver_horarios)" }, data_hora: { type: "string", description: "AAAA-MM-DD HH:MM" }, nome_cliente: { type: "string", description: "Nome completo do cliente" }, observacao: { type: ["string", "null"], description: "Recado curto para o barbeiro(a), ex.: Primeira vez na barbearia; ou null" } }, ["servicos", "profissional", "data_hora", "nome_cliente", "observacao"]) },
@@ -154,7 +167,10 @@ Regras (muito importantes):
 - Para explicar como é um serviço, use só o que está nas Informações da casa ou na observação do serviço (ver_servicos). Se não tiver, diga que o barbeiro(a) explica certinho no atendimento ou pergunte à recepção; não descreva por conta própria.
 - Preço: se as Informações da casa trouxerem preços por dia da semana (promoções), ELAS VALEM sobre o preço de tabela de ver_servicos. Quando o cliente fala de um dia, informe o valor daquele dia. Destaque a promoção 🎉 só na primeira vez que falar de preço e de novo no resumo para confirmar; nas outras mensagens, não repita. Se perguntarem o preço sem dizer o dia, informe o valor de hoje (se for dia promocional, diga que hoje está em promoção) e mencione rapidamente a diferença nos outros dias, convidando para os dias promocionais. Se a ferramenta não trouxer, diga que vai verificar com a recepção (chamar_recepcao).
 - Antes de agendar, remarcar ou cancelar, mande um resumo (serviço, profissional, dia da semana, data e hora) e espere o cliente confirmar. Só então use a ferramenta. Nunca marque sem confirmação.
-- Para agendar você precisa do nome do cliente: use consultar_cliente; se não tiver cadastro, pergunte o nome completo.
+- Na primeira mensagem de cada conversa vem a linha [Cadastro: …] dizendo se o cliente já é cadastrado (pelo WhatsApp dele).
+  • Cadastrado: chame pelo primeiro nome e não peça dados de novo.
+  • Sem cadastro (cliente novo): dê boas-vindas e, antes de marcar, faça o cadastro, uma pergunta por vez: 1) nome e sobrenome; 2) data de nascimento, explicando que é para ele receber promoções exclusivas no aniversário 🎉 (se não quiser informar, tudo bem, siga sem). O celular é o próprio WhatsApp: não pergunte, a não ser que a linha diga que é desconhecido. Depois use salvar_cadastro.
+  • Cadastrado sem data de nascimento: depois de resolver o que ele pediu, pergunte uma vez a data de nascimento, para as promoções de aniversário, e salve com salvar_cadastro.
 - Use a observação do agendamento para o que ajuda o barbeiro(a): se for a primeira vez do cliente na barbearia, escreva "Primeira vez na barbearia"; inclua também pedidos importantes do cliente (ex.: "quer manter o comprimento em cima").
 - Quando o cliente quiser um serviço e NÃO disser com quem, antes de oferecer horários pergunte se ele tem preferência de barbeiro(a) (ex.: "Você tem preferência de barbeiro(a)? 😊"). Se ele já disse o nome, não pergunte. Se ele não tiver preferência, ofereça quem tem horário mais perto do que ele pediu.
 - Remarcar ou cancelar: só horários do próprio cliente (consultar_cliente). Confirme qual horário antes.
@@ -188,7 +204,7 @@ function precosDoDia(p) {
 
 // Executa uma ferramenta pedida pelo Claude. `simular` = não grava nada na AppBarber (teste no terminal).
 export async function executar(nomeTool, input, ctx) {
-  const { ab, fone, conv, simular } = ctx;
+  const { ab, conv, simular } = ctx, fone = ctx.fone || (conv && conv.fone) || "";
   const servicosPorCodigo = async (cods) => { const todos = await ab.servicos(); return cods.map((c) => todos.find((s) => Number(s.codigo) === Number(c))).filter(Boolean); };
   // Confere o horário na AppBarber antes de marcar (mais seguro que confiar no que foi dito na conversa).
   const confere = async (servs, profissional, dataHora) => {
@@ -214,9 +230,29 @@ export async function executar(nomeTool, input, ctx) {
       const d = new Date(input.data + "T12:00:00Z");
       return { dia: `${DIAS[d.getUTCDay()]}, ${input.data.split("-").reverse().join("/")}`, profissionais: lista.map((p) => ({ codigo: p.codigo, nome: p.nome, ...precosDoDia(p) })) };
     }
+    case "salvar_cadastro": {
+      let cel = fone;
+      if (!cel && input.celular) { cel = normFone(input.celular); if (chaveFone(cel).length < 10) return { erro: "celular inválido; peça com DDD" }; conv.fone = cel; }
+      if (!cel) return { erro: "preciso do celular com DDD do cliente" };
+      let nasc = input.nascimento ? String(input.nascimento).trim() : "";
+      const m = nasc.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); if (m) nasc = `${m[3]}-${m[2]}-${m[1]}`;
+      if (nasc && (!/^\d{4}-\d{2}-\d{2}$/.test(nasc) || isNaN(new Date(nasc + "T12:00:00Z")) || nasc > hojeSP() || nasc < "1910-01-01")) return { erro: "data de nascimento inválida; confirme dia, mês e ano" };
+      const cad = conv.cadastro || null;
+      if (cad && cad.codigo) {
+        if (!nasc) return { ok: true, nota: "o cliente já tem cadastro; nada para mudar" };
+        if (!simular) await ab.salvarCliente({ codigo: cad.codigo, fone: cel, nascimento: nasc });
+        cad.nascimento = nasc; ctx.registro("acrescentou a data de nascimento no cadastro");
+        return { ok: true, nota: "data de nascimento salva no cadastro" };
+      }
+      const nome = String(input.nome_completo || "").replace(/\s+/g, " ").trim();
+      if (nome.split(" ").length < 2) return { erro: "preciso do nome e sobrenome do cliente" };
+      const r = simular ? { codigo: null } : await ab.salvarCliente({ fone: cel, nome, nascimento: nasc });
+      conv.cadastro = { codigo: r.codigo, nome, nascimento: nasc }; conv.nome = nome; ctx.registro(`cadastrou ${nome.split(" ")[0]}${nasc ? " com aniversário" : ""}`);
+      return { ok: true, nota: simular ? "cadastro simulado (teste)" : "cliente cadastrado na barbearia" };
+    }
     case "consultar_cliente": {
       if (!fone) return { aviso: "telefone do cliente desconhecido: peça o número de celular com DDD" };
-      const [nome, ag] = await Promise.all([ab.nomeDe(fone).catch(() => ""), ab.agendamentosDe(fone)]);
+      const [nome, ag] = await Promise.all([conv.cadastro ? conv.cadastro.nome : ab.nomeDe(fone).catch(() => ""), ab.agendamentosDe(fone)]);
       conv.agenda = ag; if (nome) conv.nome = nome;
       return { nome: nome || (ag[0] && ag[0].nome) || null, cadastrado: !!nome, horarios_marcados: ag.map((a) => ({ codigo: a.codigo, quando: a.quando, servico: a.servico, profissional: a.profissional })) };
     }
@@ -274,6 +310,17 @@ export async function executar(nomeTool, input, ctx) {
     }
   }
   return { erro: "ferramenta desconhecida" };
+}
+
+// No começo de cada conversa: o cliente tem cadastro? (1 consulta à AppBarber, pelo celular do WhatsApp)
+export async function verificarCadastro(ab, fone, conv) {
+  if (!fone) return "[Cadastro: WhatsApp do cliente desconhecido; se for agendar, peça o celular com DDD]";
+  try {
+    const c = await ab.clienteDe(fone);
+    if (!c) { conv.cadastro = null; return "[Cadastro: cliente SEM cadastro na barbearia (cliente novo)]"; }
+    conv.cadastro = c; if (c.nome) conv.nome = c.nome;
+    return `[Cadastro: cliente cadastrado como ${c.nome || "(sem nome)"}; data de nascimento ${c.nascimento ? "cadastrada" : "NÃO cadastrada"}]`;
+  } catch { return "[Cadastro: não consegui verificar agora]"; }
 }
 
 // Primeira linha de cada mensagem do cliente: dia, hora e WhatsApp (fica no histórico, que nunca é reescrito).
@@ -527,7 +574,8 @@ export function criarSofia({ dir, log, api, sock }) {
         const novas = c.fila.splice(0);
         if (c.recepcao || (pausas.get(jid) || 0) > Date.now()) return;
         const antes = c.contexto.splice(0).sort((a, b) => a.ts - b.ts).map((x) => x.linha);
-        c.mensagens.push({ role: "user", content: agoraTexto(c.fone) + "\n" + (antes.length
+        const cadLinha = c.verificado ? "" : (c.verificado = true, (await verificarCadastro(ab, c.fone, c)) + "\n");
+        c.mensagens.push({ role: "user", content: agoraTexto(c.fone) + "\n" + cadLinha + (antes.length
           ? `[Para contexto: mensagens desta conversa enquanto você não estava atendendo]\n${antes.join("\n")}\n\n[Mensagem nova do cliente]\n${novas.join("\n")}`
           : novas.join("\n")) });
         if (!c.contada) { c.contada = true; zera(); stats.conversas++; }

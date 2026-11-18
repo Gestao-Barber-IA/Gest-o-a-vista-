@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "3.1";
+const VERSAO = "3.2";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -574,7 +574,9 @@ if (process.argv.includes("--sofia")) {
   for await (const linha of rl) {
     if (/^sair$/i.test(linha.trim())) break;
     if (!linha.trim()) { process.stdout.write("Você: "); continue; }
-    conv.mensagens.push({ role: "user", content: SOFIA.agoraTexto(fone) + "\n" + linha });
+    const cad = conv.mensagens.length ? "" : (await SOFIA.verificarCadastro(ab, fone, conv)) + "\n";
+    if (cad) console.log("  " + cad.trim());
+    conv.mensagens.push({ role: "user", content: SOFIA.agoraTexto(fone) + "\n" + cad + linha });
     const r = await SOFIA.rodada({ client, modelo, sistema, conv, ctx }).catch((err) => ({ texto: "[erro: " + err.message + "]", gasto: 0 }));
     total += r.gasto; console.log(`${s.nome || "Sofia"}: ${r.texto}\n  (custo até agora ≈ US$ ${total.toFixed(3)})\n`); process.stdout.write("Você: ");
   }
