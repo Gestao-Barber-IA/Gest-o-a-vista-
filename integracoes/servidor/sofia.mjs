@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "1.6";
+export const SOFIA_VERSAO = "1.7";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -126,7 +126,7 @@ export const TOOLS = [
     input_schema: obj({ data: { type: "string", description: "Dia no formato AAAA-MM-DD" }, servico: { type: "integer", description: "Código do serviço" }, profissional: { type: ["string", "null"], description: "Nome do profissional que o cliente pediu, ou null para todos" } }, ["data", "servico", "profissional"]) },
   { name: "consultar_cliente", description: "Nome do cliente cadastrado na barbearia (pelo telefone do WhatsApp) e os horários que ele já tem marcados nos próximos 30 dias, com o código de cada um. Use antes de remarcar ou cancelar, e para chamar o cliente pelo nome.", strict: true, input_schema: obj({}, []) },
   { name: "agendar", description: "Marca o horário na AppBarber. SÓ use depois que o cliente confirmou com clareza (ex.: 'sim', 'pode marcar') o resumo com serviço(s), profissional, dia e hora.", strict: true,
-    input_schema: obj({ servicos: { type: "array", items: { type: "integer" }, description: "Códigos dos serviços, na ordem" }, profissional: { type: "integer", description: "Código do profissional (de ver_horarios)" }, data_hora: { type: "string", description: "AAAA-MM-DD HH:MM" }, nome_cliente: { type: "string", description: "Nome completo do cliente" } }, ["servicos", "profissional", "data_hora", "nome_cliente"]) },
+    input_schema: obj({ servicos: { type: "array", items: { type: "integer" }, description: "Códigos dos serviços, na ordem" }, profissional: { type: "integer", description: "Código do profissional (de ver_horarios)" }, data_hora: { type: "string", description: "AAAA-MM-DD HH:MM" }, nome_cliente: { type: "string", description: "Nome completo do cliente" }, observacao: { type: ["string", "null"], description: "Recado curto para o barbeiro(a), ex.: Primeira vez na barbearia; ou null" } }, ["servicos", "profissional", "data_hora", "nome_cliente", "observacao"]) },
   { name: "remarcar", description: "Troca um horário já marcado por outro: marca o novo e depois cancela o antigo. SÓ use depois que o cliente confirmou o novo horário.", strict: true,
     input_schema: obj({ codigo_agendamento: { type: "integer", description: "Código do horário atual (de consultar_cliente)" }, servicos: { type: "array", items: { type: "integer" } }, profissional: { type: "integer" }, data_hora: { type: "string", description: "AAAA-MM-DD HH:MM" } }, ["codigo_agendamento", "servicos", "profissional", "data_hora"]) },
   { name: "cancelar", description: "Cancela um horário marcado do cliente. SÓ use depois que o cliente confirmou que quer cancelar aquele horário.", strict: true,
@@ -146,12 +146,16 @@ Jeito de falar:
 - Mensagens curtas, como no WhatsApp: 1 a 3 frases. Pode usar emoji com moderação (1 ou 2 por mensagem) 😊
 - Chame o cliente pelo primeiro nome quando souber. Não se apresente como robô nem fale de "sistema", "ferramenta" ou "IA", a não ser que perguntem; se perguntarem, diga com naturalidade que é a assistente virtual da ${barbearia}.
 - Sem listas longas nem markdown (nada de **negrito** ou #). Ao oferecer horários, sugira 2 ou 3 opções próximas do que o cliente pediu.
+- UMA pergunta por mensagem. Para agendar, siga esta ordem e pule o que o cliente já disse: 1) qual serviço; 2) preferência de barbeiro(a); 3) dia e período (manhã, tarde ou noite); 4) ofereça 2 ou 3 horários; 5) resumo para confirmar. Se o cliente responder só parte, siga com o que já sabe e pergunte só o que falta, sem repetir a pergunta inteira.
+- Ao falar de horário, diga sempre com quem: ex. "17h com o Igor ou 17h20 com o Izaquias". Nunca solte um horário sem o barbeiro(a).
 
 Regras (muito importantes):
 - Nunca invente preço, serviço, profissional ou horário: tudo vem das ferramentas.
-- Preço: se as Informações da casa trouxerem preços por dia da semana (promoções), ELAS VALEM sobre o preço de tabela de ver_servicos. Quando o cliente fala de um dia, informe o valor daquele dia; se for promocional, destaque com alegria 🎉. Se perguntarem o preço sem dizer o dia, informe o valor de hoje (se for dia promocional, diga que hoje está em promoção) e mencione rapidamente a diferença nos outros dias, convidando para os dias promocionais. Se a ferramenta não trouxer, diga que vai verificar com a recepção (chamar_recepcao).
+- Para explicar como é um serviço, use só o que está nas Informações da casa ou na observação do serviço (ver_servicos). Se não tiver, diga que o barbeiro(a) explica certinho no atendimento ou pergunte à recepção; não descreva por conta própria.
+- Preço: se as Informações da casa trouxerem preços por dia da semana (promoções), ELAS VALEM sobre o preço de tabela de ver_servicos. Quando o cliente fala de um dia, informe o valor daquele dia. Destaque a promoção 🎉 só na primeira vez que falar de preço e de novo no resumo para confirmar; nas outras mensagens, não repita. Se perguntarem o preço sem dizer o dia, informe o valor de hoje (se for dia promocional, diga que hoje está em promoção) e mencione rapidamente a diferença nos outros dias, convidando para os dias promocionais. Se a ferramenta não trouxer, diga que vai verificar com a recepção (chamar_recepcao).
 - Antes de agendar, remarcar ou cancelar, mande um resumo (serviço, profissional, dia da semana, data e hora) e espere o cliente confirmar. Só então use a ferramenta. Nunca marque sem confirmação.
 - Para agendar você precisa do nome do cliente: use consultar_cliente; se não tiver cadastro, pergunte o nome completo.
+- Use a observação do agendamento para o que ajuda o barbeiro(a): se for a primeira vez do cliente na barbearia, escreva "Primeira vez na barbearia"; inclua também pedidos importantes do cliente (ex.: "quer manter o comprimento em cima").
 - Quando o cliente quiser um serviço e NÃO disser com quem, antes de oferecer horários pergunte se ele tem preferência de barbeiro(a) (ex.: "Você tem preferência de barbeiro(a)? 😊"). Se ele já disse o nome, não pergunte. Se ele não tiver preferência, ofereça quem tem horário mais perto do que ele pediu.
 - Remarcar ou cancelar: só horários do próprio cliente (consultar_cliente). Confirme qual horário antes.
 - Depois de marcar, confirme de forma calorosa com dia, hora e profissional.
@@ -222,7 +226,8 @@ export async function executar(nomeTool, input, ctx) {
       if (!servs.length) return { erro: "serviço não encontrado; use ver_servicos" };
       const prob = await confere(servs, input.profissional, input.data_hora); if (prob) return { erro: prob };
       if (simular) { ctx.stats.agendados++; return { ok: true, simulado: true }; }
-      const r = await ab.criar({ fone, nome: input.nome_cliente, servicos: servs, profissional: input.profissional, quando: input.data_hora });
+      const obs = [String(input.observacao || "").trim().slice(0, 300), "Agendado pela Sofia (atendente IA) no WhatsApp"].filter(Boolean).join(" · ");
+      const r = await ab.criar({ fone, nome: input.nome_cliente, servicos: servs, profissional: input.profissional, quando: input.data_hora, obs });
       ctx.stats.agendados++; ctx.registro(`agendou ${servs.map((s) => s.nome).join(" + ")} em ${input.data_hora}`);
       return { ok: true, codigos: r.codigos };
     }
@@ -282,6 +287,8 @@ export async function rodada({ client, modelo, sistema, conv, ctx, maxPassos = 8
     const params = {
       model: modelo, max_tokens: 16000,
       output_config: { effort: "medium" },
+      // Cache da conversa: o que ela já leu fica guardado e sai bem mais barato na próxima mensagem.
+      cache_control: { type: "ephemeral" },
       // O system não muda durante a conversa (a data e a hora vão na mensagem do cliente): o histórico só cresce,
       // como o raciocínio guardado da IA exige.
       system: [{ type: "text", text: sistema, cache_control: { type: "ephemeral" } }],
