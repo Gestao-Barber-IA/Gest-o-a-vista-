@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "1.3";
+export const SOFIA_VERSAO = "1.4";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -81,7 +81,10 @@ export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) 
   const profissionais = (servico) => memo("prof:" + servico, 6 * 3600000, async () => ((await chamar("GET", `/v1/professionals?service_code=${encodeURIComponent(servico)}`)).data || [])
     .map((p) => ({ codigo: p.employee_code, nome: String(p.employee_nickname || p.employee_name || "").trim() })));
   const horarios = (data, servico) => memo(`disp:${data}:${servico}`, 90000, async () => ((await chamar("GET", `/v1/availability?start_date=${data}&service_code=${encodeURIComponent(servico)}`)).data || [])
-    .map((p) => ({ codigo: p.employee_code, nome: String(p.employee_nickname || p.employee_name || "").trim(), horarios: (p.available || p.avaliable || []).map((h) => String(h.scheduling_time || "").slice(0, 5)).filter(Boolean) })));
+    .map((p) => { const lista = (p.available || p.avaliable || []).filter((h) => h.scheduling_time);
+      // Valor de cada horário (a AppBarber já aplica as promoções do dia, ex.: desconto de segunda a quarta).
+      const precos = {}; for (const h of lista) precos[String(h.scheduling_time).slice(0, 5)] = [h.scheduling_value, h.scheduling_discount];
+      return { codigo: p.employee_code, nome: String(p.employee_nickname || p.employee_name || "").trim(), horarios: Object.keys(precos), precos }; }));
   // Agendamentos futuros deste telefone (de hoje até 30 dias).
   async function agendamentosDe(fone) {
     const hoje = hojeSP(), k = chaveFone(fone);
@@ -118,8 +121,8 @@ export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) 
 // ---------- o que a Sofia pode fazer (ferramentas para o Claude) ----------
 const obj = (props, req) => ({ type: "object", properties: props, required: req, additionalProperties: false });
 export const TOOLS = [
-  { name: "ver_servicos", description: "Lista os serviços da barbearia com código, nome, duração em minutos e preço (cobranca 'A partir de' = preço mínimo). Use sempre antes de falar de preço ou de marcar.", strict: true, input_schema: obj({}, []) },
-  { name: "ver_horarios", description: "Horários livres de um dia para um serviço, por profissional. Use o código do serviço de ver_servicos. Para mais de um serviço juntos (ex.: corte + barba), consulte pelo primeiro serviço e confira que há tempo seguido para os dois.", strict: true,
+  { name: "ver_servicos", description: "Lista os serviços da barbearia com código, nome, duração em minutos e preço de TABELA (cobranca 'A partir de' = preço mínimo). Em alguns dias pode haver promoção: o valor de um dia específico vem em ver_horarios.", strict: true, input_schema: obj({}, []) },
+  { name: "ver_horarios", description: "Horários livres de um dia para um serviço, por profissional, com o VALOR DAQUELE DIA (já com promoções/descontos do dia). Use o código do serviço de ver_servicos. Para mais de um serviço juntos (ex.: corte + barba), consulte pelo primeiro serviço e confira que há tempo seguido para os dois.", strict: true,
     input_schema: obj({ data: { type: "string", description: "Dia no formato AAAA-MM-DD" }, servico: { type: "integer", description: "Código do serviço" }, profissional: { type: ["string", "null"], description: "Nome do profissional que o cliente pediu, ou null para todos" } }, ["data", "servico", "profissional"]) },
   { name: "consultar_cliente", description: "Nome do cliente cadastrado na barbearia (pelo telefone do WhatsApp) e os horários que ele já tem marcados nos próximos 30 dias, com o código de cada um. Use antes de remarcar ou cancelar, e para chamar o cliente pelo nome.", strict: true, input_schema: obj({}, []) },
   { name: "agendar", description: "Marca o horário na AppBarber. SÓ use depois que o cliente confirmou com clareza (ex.: 'sim', 'pode marcar') o resumo com serviço(s), profissional, dia e hora.", strict: true,
@@ -143,7 +146,8 @@ Jeito de falar:
 - Sem listas longas nem markdown (nada de **negrito** ou #). Ao oferecer horários, sugira 2 ou 3 opções próximas do que o cliente pediu.
 
 Regras (muito importantes):
-- Nunca invente preço, serviço, profissional ou horário: tudo vem das ferramentas. Se a ferramenta não trouxer, diga que vai verificar com a recepção (chamar_recepcao).
+- Nunca invente preço, serviço, profissional ou horário: tudo vem das ferramentas.
+- Preço: quando o cliente fala de um dia, informe o valor daquele dia que vem em ver_horarios (valor_no_dia), que já tem as promoções do dia; se for menor que o de tabela, destaque o desconto com alegria 🎉. Se perguntarem o preço sem dia, dê o de tabela e, se as Informações da casa falarem de promoção, mencione. Se a ferramenta não trouxer, diga que vai verificar com a recepção (chamar_recepcao).
 - Antes de agendar, remarcar ou cancelar, mande um resumo (serviço, profissional, dia da semana, data e hora) e espere o cliente confirmar. Só então use a ferramenta. Nunca marque sem confirmação.
 - Para agendar você precisa do nome do cliente: use consultar_cliente; se não tiver cadastro, pergunte o nome completo.
 - Se o cliente não tiver preferência de profissional, ofereça quem tem horário mais perto do que ele pediu.
@@ -160,6 +164,18 @@ ${notas ? `\nInformações da ${casa} (passadas pelo dono, use quando ajudar):\n
 
 // ---------- a conversa ----------
 const custo = (modelo, u) => { const p = PRECO[modelo] || PRECO[MODELO_PADRAO]; return ((u.input_tokens || 0) * p[0] + (u.output_tokens || 0) * p[1] + (u.cache_read_input_tokens || 0) * p[2] + (u.cache_creation_input_tokens || 0) * p[3]) / 1e6; };
+
+const reais = (v) => (v === null || v === undefined || v === "" || isNaN(Number(v)) ? null : "R$ " + Number(v).toFixed(2).replace(".", ","));
+// Horários livres com o valor do dia, agrupados por preço (ex.: { "R$ 40,00": ["09:00", …] }).
+function precosDoDia(p) {
+  const grupos = {};
+  for (const h of p.horarios.slice(0, 40)) {
+    const [v, desc] = (p.precos || {})[h] || [], k = (reais(v) || "valor de tabela") + (Number(desc) > 0 ? ` (a agenda informa desconto de ${reais(desc)})` : "");
+    (grupos[k] = grupos[k] || []).push(h);
+  }
+  const ks = Object.keys(grupos);
+  return ks.length === 1 ? { valor_no_dia: ks[0], livres: grupos[ks[0]] } : { livres_por_valor: grupos };
+}
 
 // Executa uma ferramenta pedida pelo Claude. `simular` = não grava nada na AppBarber (teste no terminal).
 export async function executar(nomeTool, input, ctx) {
@@ -187,7 +203,7 @@ export async function executar(nomeTool, input, ctx) {
       if (input.data === hojeSP()) lista = lista.map((p) => ({ ...p, horarios: p.horarios.filter((h) => mins(h) >= agoraSP() + 15) }));
       if (input.profissional) { const q = String(input.profissional).toLowerCase().trim(), f = lista.filter((p) => p.nome.toLowerCase().includes(q) || q.includes(p.nome.toLowerCase().split(" ")[0])); if (f.length) lista = f; else return { aviso: `não encontrei "${input.profissional}" para esse serviço nesse dia`, profissionais: lista.map((p) => p.nome) }; }
       const d = new Date(input.data + "T12:00:00Z");
-      return { dia: `${DIAS[d.getUTCDay()]}, ${input.data.split("-").reverse().join("/")}`, profissionais: lista.map((p) => ({ codigo: p.codigo, nome: p.nome, livres: p.horarios.slice(0, 40) })) };
+      return { dia: `${DIAS[d.getUTCDay()]}, ${input.data.split("-").reverse().join("/")}`, profissionais: lista.map((p) => ({ codigo: p.codigo, nome: p.nome, ...precosDoDia(p) })) };
     }
     case "consultar_cliente": {
       if (!fone) return { aviso: "telefone do cliente desconhecido: peça o número de celular com DDD" };
