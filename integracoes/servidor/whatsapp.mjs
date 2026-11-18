@@ -557,8 +557,9 @@ if (process.argv.includes("--sofia")) {
   if (!SOFIA) process.exit(1);
   if (!process.env.ANTHROPIC_API_KEY) { console.log("Falta a chave da Anthropic. Rode: gbia-sofia-chave"); process.exit(1); }
   const { empresas = [] } = await api("GET", null, "?acao=lembretes");
-  const e = empresas.find((x) => x.sofia && x.appbarber) || empresas.find((x) => x.appbarber);
+  const e = empresas.find((x) => x.sofia && x.appbarber) || empresas.find((x) => x.sofia_teste && x.appbarber) || empresas.find((x) => x.appbarber);
   if (!e) { console.log("Nenhuma barbearia com a AppBarber ligada."); process.exit(1); }
+  e.sofia = e.sofia || e.sofia_teste; // o teste usa o nome, o modelo e as informações do app mesmo com a Sofia desligada
   const Anthropic = await SOFIA.carregarSDK(DIR, log), client = new Anthropic();
   const s = e.sofia || {}, modelo = s.modelo || SOFIA.MODELO_PADRAO;
   const ab = SOFIA.ferramentasAppBarber({ cfg: e.appbarber, creditos: (n, z) => api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: n, ...(z ? { sem_saldo: true } : {}) }).catch(() => {}) });

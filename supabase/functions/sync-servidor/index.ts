@@ -18,6 +18,10 @@ function igual(a: string, b: string) {
   return d === 0;
 }
 
+// Configuração da Sofia (atendente IA) que vai para o servidor.
+const sofiaCfg = (i: any) => ({ nome: String(i.ia_name || "Sofia").slice(0, 40), modelo: i.ia_model || "claude-sonnet-5-5", janelas: i.ia_hours || null, pausa: Number(i.ia_pause) || 60,
+  notas: String(i.ia_notes || "").slice(0, 3000), avisar: String(i.ia_report_phone || "").replace(/\D/g, "").slice(0, 15) });
+
 Deno.serve(async (req) => {
   const token = Deno.env.get("SYNC_TOKEN") || "";
   const enviado = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
@@ -52,7 +56,9 @@ Deno.serve(async (req) => {
         // Parabéns aos aniversariantes do dia (lista de aniversariantes da AppBarber, 1 crédito por dia).
         aniversario: i.bd_on && i.est_code && i.api_key ? { texto: i.bd_text || "" } : null,
         // Sofia, a atendente IA: dias e horários em que ela responde o WhatsApp dos clientes.
-        sofia: i.ia_on && i.est_code && i.api_key ? { nome: String(i.ia_name || "Sofia").slice(0, 40), modelo: i.ia_model || "claude-sonnet-5-5", janelas: i.ia_hours || null, pausa: Number(i.ia_pause) || 60, notas: String(i.ia_notes || "").slice(0, 3000), avisar: String(i.ia_report_phone || "").replace(/\D/g, "").slice(0, 15) } : null,
+        sofia: i.ia_on && i.est_code && i.api_key ? sofiaCfg(i) : null,
+        // Mesma configuração, mesmo com a Sofia desligada: só para a conversa de teste no terminal (gbia-sofia-teste).
+        sofia_teste: i.est_code && i.api_key ? sofiaCfg(i) : null,
         appbarber: i.est_code && i.api_key ? { codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
         // Reconquista de clientes sumidos (lista de clientes da AppBarber, 1 crédito por página).
         reconquista: i.wb_on && i.est_code && i.api_key ? { porDia: Math.max(1, Math.min(40, Number(i.wb_daily) || 15)), minDias: Math.max(30, Number(i.wb_min_days) || 90), maxDias: Math.max(60, Number(i.wb_max_days) || 365), texto: i.wb_text || "", codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
