@@ -4374,7 +4374,7 @@ Content-Type: application/json</pre>
         <label class="field"><span>WhatsApp que recebe o aviso do relatório semanal (opcional)</span><input class="input" type="tel" name="rphone" maxlength="20" placeholder="Ex.: 55 19 99999-9999" value="${esc(it.ia_report_phone || '')}">
           <small class="muted">Todo domingo à noite chega um resumo da semana, com as sugestões para aprovar aqui.</small></label>
         <fieldset class="cl-num"><legend class="muted">Modelo de IA</legend>${IA_MODELOS.map(([v, t, d]) => `<label class="check"><input type="radio" name="model" value="${v}" ${mod === v ? 'checked' : ''}><span><b>${t}</b><small>${d}</small></span></label>`).join('')}</fieldset>
-        <label class="field"><span>Informações para a ${esc(nome)} (opcional)</span><textarea class="input" name="notes" rows="5" maxlength="3000" placeholder="Ex.: Endereço: Rua ..., nº ... Estacionamento na rua. Aceitamos Pix e cartão. Crianças até 10 anos: corte infantil.">${esc(it.ia_notes || '')}</textarea>
+        <label class="field"><span>Informações para a ${esc(nome)} (opcional)</span><textarea class="input" name="notes" rows="5" maxlength="8000" placeholder="Ex.: Endereço: Rua ..., nº ... Estacionamento na rua. Aceitamos Pix e cartão. Crianças até 10 anos: corte infantil.">${esc(it.ia_notes || '')}</textarea>
           <small class="muted">Endereço, formas de pagamento, estacionamento, regras da casa… Ela usa quando o cliente perguntar. Serviços, preços e horários ela já pega na AppBarber.</small></label>
         <p class="form-msg" data-msg></p>
         <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
@@ -7753,7 +7753,7 @@ Content-Type: application/json</pre>
       const ok = el.dataset.v === 'ok';
       const novo = { ...rep, sugestoes: rep.sugestoes.map((x, k) => (k === i ? { ...x, estado: ok ? 'ok' : 'no' } : x)) };
       const row = { ia_report: novo };
-      if (ok) { const notas = String(cur.ia_notes || '').trim(); row.ia_notes = (notas ? notas + '\n' : '') + '- ' + sg.regra; if (row.ia_notes.length > 3000) return toast('As informações da atendente estão cheias (3000 letras): apague algo antes de aprovar.', 5000, 'alert'); }
+      if (ok) { const notas = String(cur.ia_notes || '').trim(); row.ia_notes = (notas ? notas + '\n' : '') + '- ' + sg.regra; if (row.ia_notes.length > 8000) return toast('As informações da atendente estão cheias (8000 letras): apague algo antes de aprovar.', 5000, 'alert'); }
       if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast(ok ? 'Regra aprovada.' : 'Sugestão ignorada.'); return render(); }
       ui.iaBusy = true; render();
       Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(ok ? 'Regra aprovada: ela já segue a partir da próxima conversa.' : 'Sugestão ignorada.'); })
@@ -8796,7 +8796,7 @@ Content-Type: application/json</pre>
       const model = (f.querySelector('input[name="model"]:checked') || {}).value || 'claude-sonnet-5-5';
       const rphone = (el.rphone.value || '').replace(/\D/g, '');
       if (rphone && (rphone.length < 10 || rphone.length > 13)) return setMsg(f, 'Confira o WhatsApp do relatório (DDD + número, ex.: 55 19 99999-9999).');
-      const row = { ia_on: !!el.on.checked, ia_name: name, ia_model: model, ia_hours: hours, ia_pause: pause, ia_notes: (el.notes.value || '').trim().slice(0, 3000), ia_report_phone: rphone };
+      const row = { ia_on: !!el.on.checked, ia_name: name, ia_model: model, ia_hours: hours, ia_pause: pause, ia_notes: (el.notes.value || '').trim().slice(0, 8000), ia_report_phone: rphone };
       const cur = (Cloud.enabled ? ui.integ : state.integ) || {};
       if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Atendente IA salva.'); return render(); }
       setMsg(f, 'Salvando…', true);

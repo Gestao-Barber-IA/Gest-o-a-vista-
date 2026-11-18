@@ -20,7 +20,7 @@ function igual(a: string, b: string) {
 
 // Configuração da Sofia (atendente IA) que vai para o servidor.
 const sofiaCfg = (i: any) => ({ nome: String(i.ia_name || "Sofia").slice(0, 40), modelo: i.ia_model || "claude-sonnet-5-5", janelas: i.ia_hours || null, pausa: Number(i.ia_pause) || 60,
-  notas: String(i.ia_notes || "").slice(0, 3000), avisar: String(i.ia_report_phone || "").replace(/\D/g, "").slice(0, 15) });
+  notas: String(i.ia_notes || "").slice(0, 8000), avisar: String(i.ia_report_phone || "").replace(/\D/g, "").slice(0, 15) });
 
 Deno.serve(async (req) => {
   const token = Deno.env.get("SYNC_TOKEN") || "";
