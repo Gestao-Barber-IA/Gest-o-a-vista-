@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "1.4";
+export const SOFIA_VERSAO = "1.6";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -131,11 +131,13 @@ export const TOOLS = [
     input_schema: obj({ codigo_agendamento: { type: "integer", description: "Código do horário atual (de consultar_cliente)" }, servicos: { type: "array", items: { type: "integer" } }, profissional: { type: "integer" }, data_hora: { type: "string", description: "AAAA-MM-DD HH:MM" } }, ["codigo_agendamento", "servicos", "profissional", "data_hora"]) },
   { name: "cancelar", description: "Cancela um horário marcado do cliente. SÓ use depois que o cliente confirmou que quer cancelar aquele horário.", strict: true,
     input_schema: obj({ codigo_agendamento: { type: "integer", description: "Código do horário (de consultar_cliente)" } }, ["codigo_agendamento"]) },
+  { name: "enviar_arte", description: "Envia ao cliente, no WhatsApp, uma das artes (imagens) da barbearia listadas nas instruções, como a tabela de planos. Use quando a situação da arte acontecer (ex.: cliente perguntou de planos). Depois de enviar, termine sua resposta com a pergunta indicada no resultado.", strict: true,
+    input_schema: obj({ arte: { type: "string", description: "Nome exato da arte, como aparece na lista de artes" } }, ["arte"]) },
   { name: "chamar_recepcao", description: "Passa a conversa para a recepção (uma pessoa). Use para reclamação, cliente irritado, pedido de desconto, pagamento, assunto pessoal ou delicado, pedido que as outras ferramentas não resolvem, erro da AppBarber, ou quando o cliente pedir para falar com alguém. Depois disso a Sofia não responde mais esta conversa.", strict: true,
     input_schema: obj({ motivo: { type: "string", description: "Resumo curto do que o cliente precisa" } }, ["motivo"]) },
 ];
 
-export function promptSistema({ nome, barbearia, notas, brand }) {
+export function promptSistema({ nome, barbearia, notas, brand, artes = [] }) {
   const casa = brand === "salao" ? "salão" : "barbearia";
   return `Você é ${nome}, atendente da ${barbearia} (${casa}) no WhatsApp. Você conversa com clientes para tirar dúvidas e marcar, remarcar ou cancelar horários direto no sistema de agenda (AppBarber), usando as ferramentas.
 
@@ -147,10 +149,10 @@ Jeito de falar:
 
 Regras (muito importantes):
 - Nunca invente preço, serviço, profissional ou horário: tudo vem das ferramentas.
-- Preço: quando o cliente fala de um dia, informe o valor daquele dia que vem em ver_horarios (valor_no_dia), que já tem as promoções do dia; se for menor que o de tabela, destaque o desconto com alegria 🎉. Se perguntarem o preço sem dia, dê o de tabela e, se as Informações da casa falarem de promoção, mencione. Se a ferramenta não trouxer, diga que vai verificar com a recepção (chamar_recepcao).
+- Preço: se as Informações da casa trouxerem preços por dia da semana (promoções), ELAS VALEM sobre o preço de tabela de ver_servicos. Quando o cliente fala de um dia, informe o valor daquele dia; se for promocional, destaque com alegria 🎉. Se perguntarem o preço sem dizer o dia, informe o valor de hoje (se for dia promocional, diga que hoje está em promoção) e mencione rapidamente a diferença nos outros dias, convidando para os dias promocionais. Se a ferramenta não trouxer, diga que vai verificar com a recepção (chamar_recepcao).
 - Antes de agendar, remarcar ou cancelar, mande um resumo (serviço, profissional, dia da semana, data e hora) e espere o cliente confirmar. Só então use a ferramenta. Nunca marque sem confirmação.
 - Para agendar você precisa do nome do cliente: use consultar_cliente; se não tiver cadastro, pergunte o nome completo.
-- Se o cliente não tiver preferência de profissional, ofereça quem tem horário mais perto do que ele pediu.
+- Quando o cliente quiser um serviço e NÃO disser com quem, antes de oferecer horários pergunte se ele tem preferência de barbeiro(a) (ex.: "Você tem preferência de barbeiro(a)? 😊"). Se ele já disse o nome, não pergunte. Se ele não tiver preferência, ofereça quem tem horário mais perto do que ele pediu.
 - Remarcar ou cancelar: só horários do próprio cliente (consultar_cliente). Confirme qual horário antes.
 - Depois de marcar, confirme de forma calorosa com dia, hora e profissional.
 - Áudio, foto ou figurinha: você não consegue ouvir/ver; peça com carinho para o cliente escrever.
@@ -159,12 +161,15 @@ Regras (muito importantes):
 - Não fale de outros clientes nem mostre códigos internos.
 - Cada mensagem do cliente começa com [Agora: …], com o dia e a hora atuais e o WhatsApp do cliente. Use para saber "hoje", "amanhã" e que horários já passaram; não comente essa linha com o cliente.
 - Às vezes a mensagem do cliente vem junto com o que foi conversado sem você (com a recepção ou mensagens automáticas da barbearia, como lembretes). Leia com atenção e continue de onde pararam: respeite o que a recepção combinou, não repita o que ela já disse e não se reapresente.
-${notas ? `\nInformações da ${casa} (passadas pelo dono, use quando ajudar):\n${notas}\n` : ""}`;
+${notas ? `\nInformações da ${casa} (passadas pelo dono, use quando ajudar):\n${notas}\n` : ""}${artes.length ? `\nArtes que você pode enviar com enviar_arte (envie a arte em vez de digitar a tabela inteira; depois explique só o que o cliente perguntar):\n${artes.map((a) => `- "${a.nome}": enviar quando ${a.quando || "o assunto da arte aparecer"}`).join("\n")}\n` : ""}`;
 }
 
 // ---------- a conversa ----------
 const custo = (modelo, u) => { const p = PRECO[modelo] || PRECO[MODELO_PADRAO]; return ((u.input_tokens || 0) * p[0] + (u.output_tokens || 0) * p[1] + (u.cache_read_input_tokens || 0) * p[2] + (u.cache_creation_input_tokens || 0) * p[3]) / 1e6; };
 
+const primeiroNome = (n) => { const w = String(n || "").trim().split(/\s+/)[0] || ""; return w ? w[0].toUpperCase() + w.slice(1).toLowerCase() : ""; };
+// Tira o ", " sobrando quando o nome do cliente não é conhecido (ex.: "…plano, ? 😊" → "…plano? 😊").
+const limpaNome = (t) => String(t).replace(/,\s*(?=[?!.])/g, "").replace(/\s{2,}/g, " ").replace(/\s+([?!.,])/g, "$1").trim();
 const reais = (v) => (v === null || v === undefined || v === "" || isNaN(Number(v)) ? null : "R$ " + Number(v).toFixed(2).replace(".", ","));
 // Horários livres com o valor do dia, agrupados por preço (ex.: { "R$ 40,00": ["09:00", …] }).
 function precosDoDia(p) {
@@ -246,6 +251,17 @@ export async function executar(nomeTool, input, ctx) {
       await ab.cancelarComanda(a.comanda, fone);
       conv.agenda = null; ctx.stats.cancelados++; ctx.registro(`cancelou ${a.quando}`);
       return { ok: true, ...(juntos.length ? { tambem_cancelados: juntos.map((x) => `${x.servico} ${x.quando}`) } : {}) };
+    }
+    case "enviar_arte": {
+      const lista = ctx.artes || [], q = String(input.arte || "").toLowerCase().trim();
+      const a = lista.find((x) => x.nome.toLowerCase() === q) || lista.find((x) => x.nome.toLowerCase().includes(q) || q.includes(x.nome.toLowerCase()));
+      if (!a) return { erro: `arte não encontrada; as disponíveis são: ${lista.map((x) => x.nome).join(", ") || "nenhuma"}` };
+      if (conv.artesEnviadas && conv.artesEnviadas.includes(a.nome)) return { aviso: "essa arte já foi enviada nesta conversa; não envie de novo, só responda as dúvidas" };
+      if (simular) ctx.registro(`enviaria a arte "${a.nome}"`); else await ctx.enviarArte(a);
+      (conv.artesEnviadas = conv.artesEnviadas || []).push(a.nome);
+      if (a.retorno) conv.retornoPendente = a;
+      const pergunta = (a.pergunta || "").replace(/\{cliente\}/g, primeiroNome(conv.nome || conv.pushName)).trim();
+      return { ok: true, nota: pergunta ? `A arte foi enviada. Termine sua resposta com esta pergunta, com estas palavras: "${limpaNome(pergunta)}"` : "A arte foi enviada. Termine com uma pergunta curta para continuar a conversa." };
     }
     case "chamar_recepcao": {
       conv.recepcao = true; ctx.stats.recepcao++; ctx.pendencia(`precisa da recepção: ${String(input.motivo || "").slice(0, 160)}`);
@@ -390,7 +406,7 @@ export function criarSofia({ dir, log, api, sock }) {
   async function configurar(e) {
     if (!e || !e.sofia || !e.appbarber) { cfg = null; return; }
     const novo = { company_id: e.company_id, barbearia: e.nome, brand: e.brand, nome: e.sofia.nome || "Sofia", modelo: MODELOS.includes(e.sofia.modelo) ? e.sofia.modelo : MODELO_PADRAO,
-      janelas: e.sofia.janelas || JANELAS_PADRAO, avisar: so(e.sofia.avisar || ""), pausaMin: Math.max(15, Math.min(1440, Number(e.sofia.pausa) || 60)), notas: e.sofia.notas || "", ab: e.appbarber };
+      janelas: e.sofia.janelas || JANELAS_PADRAO, artes: Array.isArray(e.sofia.artes) ? e.sofia.artes.filter((a) => a && a.url && a.nome) : [], avisar: so(e.sofia.avisar || ""), pausaMin: Math.max(15, Math.min(1440, Number(e.sofia.pausa) || 60)), notas: e.sofia.notas || "", ab: e.appbarber };
     cfg = novo;
     if (abKey !== e.appbarber.appbarber_api_key + e.appbarber.codigo_estabelecimento) {
       abKey = e.appbarber.appbarber_api_key + e.appbarber.codigo_estabelecimento;
@@ -456,6 +472,32 @@ export function criarSofia({ dir, log, api, sock }) {
     const id = r && r.key && r.key.id;
     marcarMinha(id); if (id) { daSofia.add(id); if (daSofia.size > 2000) daSofia.delete(daSofia.values().next().value); }
   }
+  async function enviarArte(jid, a) {
+    const s = sock(); if (!s) throw new Error("WhatsApp desconectado");
+    await s.presenceSubscribe(jid).catch(() => {});
+    await s.sendPresenceUpdate("composing", jid).catch(() => {});
+    await espera(2000 + Math.random() * 1500);
+    const r = await s.sendMessage(jid, { image: { url: a.url } });
+    const id = r && r.key && r.key.id;
+    marcarMinha(id); if (id) daSofia.add(id);
+    log(`Sofia: enviou a arte "${a.nome}".`);
+  }
+  // Retorno de 15 minutos (ex.: depois da arte dos planos): só se o cliente não respondeu, ninguém da recepção entrou
+  // e ainda é um horário razoável (7h às 22h30).
+  async function retornos() {
+    if (!ligada()) return;
+    for (const [jid, c] of conversas) {
+      const rt = c.retorno; if (!rt) continue;
+      if ((c.ultimaCliente || 0) > rt.em || c.humanoEm > rt.em || c.recepcao || c.ocupado || (pausas.get(jid) || 0) > Date.now()) { c.retorno = null; continue; }
+      if (Date.now() - rt.em < 15 * 60000) continue;
+      c.retorno = null;
+      if (agoraSP() < 7 * 60 || agoraSP() > 22 * 60 + 30) continue;
+      const t = limpaNome(String(rt.arte.retorno).replace(/\{cliente\}/g, primeiroNome(c.nome || c.pushName)));
+      try { await enviar(jid, t); c.ultimaSofia = Date.now(); anotar(c, `Você (${cfg.nome}) mandou, porque o cliente não respondeu em 15 minutos`, t); }
+      catch (e) { log("Sofia: retorno não enviado: " + e.message); }
+    }
+  }
+  setInterval(() => retornos().catch(() => {}), 60000).unref();
   // Conversa deste contato (cria se não houver ou se estiver parada há mais de 6 horas).
   function obter(jid, msg) {
     let c = conversas.get(jid);
@@ -482,15 +524,18 @@ export function criarSofia({ dir, log, api, sock }) {
           ? `[Para contexto: mensagens desta conversa enquanto você não estava atendendo]\n${antes.join("\n")}\n\n[Mensagem nova do cliente]\n${novas.join("\n")}`
           : novas.join("\n")) });
         if (!c.contada) { c.contada = true; zera(); stats.conversas++; }
-        const ctx = { ab, fone: c.fone, stats, simular: false, registro: (t) => log(`Sofia: ${t}.`), pendencia: (t) => { c.motivo = t; pendencias.push(`${c.nome ? c.nome.split(" ")[0] + " " : ""}(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); } };
+        if (!c.artes) c.artes = cfg.artes; // congeladas junto com as instruções
+        const ctx = { ab, fone: c.fone, stats, simular: false, artes: c.artes, enviarArte: (a) => enviarArte(jid, a), registro: (t) => log(`Sofia: ${t}.`), pendencia: (t) => { c.motivo = t; pendencias.push(`${c.nome ? c.nome.split(" ")[0] + " " : ""}(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); } };
         const antesStats = { agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados };
         // Instruções congeladas no começo da conversa (mudanças no app valem para as próximas conversas).
-        const sistema = c.sistema || (c.sistema = promptSistema({ nome: cfg.nome, barbearia: cfg.barbearia, notas: cfg.notas, brand: cfg.brand }));
+        const sistema = c.sistema || (c.sistema = promptSistema({ nome: cfg.nome, barbearia: cfg.barbearia, notas: cfg.notas, brand: cfg.brand, artes: c.artes }));
         const r = await rodada({ client, modelo: cfg.modelo, sistema, conv: c, ctx });
         stats.gasto += r.gasto; c.gasto = (c.gasto || 0) + r.gasto; c.registrada = false;
         c.feitos = c.feitos || {}; for (const [k, v] of Object.entries({ agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados })) c.feitos[k] = (c.feitos[k] || 0) + Math.max(0, v - antesStats[k]);
         if ((pausas.get(jid) || 0) > Date.now()) return; // a recepção entrou enquanto a IA pensava
         if (r.texto) { await enviar(jid, r.texto); c.ultimaSofia = Date.now(); }
+        // Arte com retorno: se o cliente não responder em 15 minutos, ela pergunta de novo (uma vez).
+        if (c.retornoPendente) { c.retorno = { em: Date.now(), arte: c.retornoPendente }; c.retornoPendente = null; }
         if (c.recepcao) { try { await sock().chatModify({ markRead: false, lastMessages: [c.ultimaMsg].filter(Boolean) }, jid); } catch { /* não deu para marcar como não lida */ } await status(); }
         c.ultima = Date.now();
       }
@@ -525,7 +570,8 @@ export function criarSofia({ dir, log, api, sock }) {
         continue;
       }
       if (m.type !== "notify" || !conteudo) continue;
-      const c = obter(jid, msg); c.ultima = Date.now(); c.ultimaMsg = msg;
+      const c = obter(jid, msg); c.ultima = Date.now(); c.ultimaMsg = msg; c.ultimaCliente = Date.now();
+      if (msg.pushName && !c.pushName) c.pushName = msg.pushName;
       // Sem atender agora (desligada, recepção na conversa ou fora do horário): guarda para contexto.
       // Conversa nova só começa dentro do horário; a que a Sofia está atendendo continua até ficar 20 min parada.
       const continua = c.ultimaSofia && Date.now() - c.ultimaSofia < 20 * 60000 && c.humanoEm < c.ultimaSofia;

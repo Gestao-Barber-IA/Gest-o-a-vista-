@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "2.8";
+const VERSAO = "3.0";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -557,15 +557,17 @@ if (process.argv.includes("--sofia")) {
   if (!SOFIA) process.exit(1);
   if (!process.env.ANTHROPIC_API_KEY) { console.log("Falta a chave da Anthropic. Rode: gbia-sofia-chave"); process.exit(1); }
   const { empresas = [] } = await api("GET", null, "?acao=lembretes");
-  const e = empresas.find((x) => x.sofia && x.appbarber) || empresas.find((x) => x.appbarber);
+  const e = empresas.find((x) => x.sofia && x.appbarber) || empresas.find((x) => x.sofia_teste && x.appbarber) || empresas.find((x) => x.appbarber);
   if (!e) { console.log("Nenhuma barbearia com a AppBarber ligada."); process.exit(1); }
+  e.sofia = e.sofia || e.sofia_teste; // o teste usa o nome, o modelo e as informações do app mesmo com a Sofia desligada
   const Anthropic = await SOFIA.carregarSDK(DIR, log), client = new Anthropic();
   const s = e.sofia || {}, modelo = s.modelo || SOFIA.MODELO_PADRAO;
   const ab = SOFIA.ferramentasAppBarber({ cfg: e.appbarber, creditos: (n, z) => api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: n, ...(z ? { sem_saldo: true } : {}) }).catch(() => {}) });
-  const sistema = SOFIA.promptSistema({ nome: s.nome || "Sofia", barbearia: e.nome, notas: s.notas || "", brand: e.brand });
+  const artes = Array.isArray(s.artes) ? s.artes.filter((a) => a && a.url && a.nome) : [];
+  const sistema = SOFIA.promptSistema({ nome: s.nome || "Sofia", barbearia: e.nome, notas: s.notas || "", brand: e.brand, artes });
   const conv = { mensagens: [] }, stats = { agendados: 0, remarcados: 0, cancelados: 0, recepcao: 0 };
   const fone = arg("--fone") ? SOFIA.normFone(arg("--fone")) : "";
-  const ctx = { ab, fone, stats, simular: true, registro: (t) => console.log("  [" + t + "]"), pendencia: (t) => console.log("  [recepção: " + t + "]") };
+  const ctx = { ab, fone, stats, simular: true, artes, registro: (t) => console.log("  [" + t + "]"), pendencia: (t) => console.log("  [recepção: " + t + "]") };
   console.log(`Teste da ${s.nome || "Sofia"} (${modelo}) — ${e.nome}. Nada é marcado de verdade. Escreva como cliente; "sair" para terminar.\n`);
   const rl = (await import("node:readline")).createInterface({ input: process.stdin });
   let total = 0; process.stdout.write("Você: ");

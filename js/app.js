@@ -4364,6 +4364,7 @@ Content-Type: application/json</pre>
       ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}
       <div class="as-status">${!on ? '<span class="chip">Desligada</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.ia_status_at ? 'Atualizado ' + when(it.ia_status_at) : ''}</small><p class="muted as-msg">${esc(st.replace(/^(ok|erro): /, ''))}</p>` : '<span class="chip">Aguardando o servidor</span>'}</div>
       ${iaReport(it, nome)}
+      ${iaArtes(it, nome)}
       <form class="form" data-form="iaCfg" novalidate>
         <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''} ${noAb ? 'disabled' : ''}><span><b>Atendente IA ligada</b><small>Fora dos horários abaixo ela não responde: quem atende é a recepção.</small></span></label>
         <div class="grid-2">
@@ -4374,11 +4375,36 @@ Content-Type: application/json</pre>
         <label class="field"><span>WhatsApp que recebe o aviso do relatório semanal (opcional)</span><input class="input" type="tel" name="rphone" maxlength="20" placeholder="Ex.: 55 19 99999-9999" value="${esc(it.ia_report_phone || '')}">
           <small class="muted">Todo domingo à noite chega um resumo da semana, com as sugestões para aprovar aqui.</small></label>
         <fieldset class="cl-num"><legend class="muted">Modelo de IA</legend>${IA_MODELOS.map(([v, t, d]) => `<label class="check"><input type="radio" name="model" value="${v}" ${mod === v ? 'checked' : ''}><span><b>${t}</b><small>${d}</small></span></label>`).join('')}</fieldset>
-        <label class="field"><span>Informações para a ${esc(nome)} (opcional)</span><textarea class="input" name="notes" rows="5" maxlength="3000" placeholder="Ex.: Endereço: Rua ..., nº ... Estacionamento na rua. Aceitamos Pix e cartão. Crianças até 10 anos: corte infantil.">${esc(it.ia_notes || '')}</textarea>
+        <label class="field"><span>Informações para a ${esc(nome)} (opcional)</span><textarea class="input" name="notes" rows="5" maxlength="8000" placeholder="Ex.: Endereço: Rua ..., nº ... Estacionamento na rua. Aceitamos Pix e cartão. Crianças até 10 anos: corte infantil.">${esc(it.ia_notes || '')}</textarea>
           <small class="muted">Endereço, formas de pagamento, estacionamento, regras da casa… Ela usa quando o cliente perguntar. Serviços, preços e horários ela já pega na AppBarber.</small></label>
         <p class="form-msg" data-msg></p>
         <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
       </form></section>`;
+  }
+  // Artes (imagens) que a atendente IA envia no WhatsApp, ex.: tabela de planos. Cada uma: quando enviar,
+  // a pergunta que ela faz logo depois e a mensagem de retorno se o cliente não responder em 15 minutos.
+  const IA_ART_NOVA = { nome: 'Planos mensais', quando: 'o cliente perguntar sobre planos mensais, assinatura ou clube', pergunta: 'Qual plano você acha mais interessante para você?', retorno: 'Ficou alguma dúvida para que eu possa te ajudar a escolher o melhor plano, {cliente}? 😊' };
+  function iaArtes(it, nome) {
+    const arts = Array.isArray(it.ia_arts) ? it.ia_arts : [];
+    const f = (i, k, l, v, ph, area) => `<label class="field"><span>${l}</span>${area ? `<textarea class="input" rows="2" maxlength="300" data-change="iaArtField" data-i="${i}" data-k="${k}" placeholder="${esc(ph)}">${esc(v || '')}</textarea>` : `<input class="input" maxlength="${k === 'nome' ? 60 : 200}" data-change="iaArtField" data-i="${i}" data-k="${k}" value="${esc(v || '')}" placeholder="${esc(ph)}">`}</label>`;
+    return `<div class="ia-rep ia-arts"><h3 class="ia-rep-t">${icon('upload')} Artes que a ${esc(nome)} pode enviar</h3>
+      <p class="muted">Ex.: a arte dos planos mensais. Ela envia a imagem quando o assunto aparecer, faz a pergunta escolhida e, se o cliente não responder em 15 minutos, manda a mensagem de retorno (uma vez só). Use {cliente} para o primeiro nome do cliente.</p>
+      ${arts.map((a, i) => `<div class="ia-art"><a href="${esc(a.url)}" target="_blank" rel="noopener"><img src="${esc(a.url)}" alt="${esc(a.nome)}" loading="lazy"></a><div class="ia-art-f">
+        ${f(i, 'nome', 'Nome da arte', a.nome, 'Ex.: Planos mensais')}
+        ${f(i, 'quando', 'Enviar quando…', a.quando, 'Ex.: o cliente perguntar sobre planos')}
+        ${f(i, 'pergunta', 'Pergunta logo depois da arte', a.pergunta, 'Ex.: Qual plano você acha mais interessante para você?', 1)}
+        ${f(i, 'retorno', 'Se não responder em 15 minutos', a.retorno, 'Deixe vazio para não mandar retorno', 1)}
+        <button type="button" class="btn btn-sm" data-action="iaArtDel" data-i="${i}" ${ui.iaBusy ? 'disabled' : ''}>${icon('trash')} Tirar esta arte</button></div></div>`).join('')}
+      ${arts.length < 6 ? `<label class="btn btn-sm" style="cursor:pointer;justify-self:start">${icon('upload')} ${arts.length ? 'Adicionar outra arte' : 'Adicionar arte (ex.: planos mensais)'}<input type="file" accept="image/*" hidden data-change="iaArtAdd" ${ui.iaBusy ? 'disabled' : ''}></label>` : ''}
+    </div>`;
+  }
+  function iaArtsSave(arts, msg) {
+    const cur = (Cloud.enabled ? ui.integ : state.integ) || {}, row = { ia_arts: arts };
+    if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); if (msg) toast(msg); return render(); }
+    ui.iaBusy = true;
+    return Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; if (msg) toast(msg); })
+      .catch(e => { const m = Cloud.message(e); toast(/ia_arts|column|schema cache/i.test(m) ? 'As artes da atendente ainda estão sendo ativadas no servidor.' : m, 5000, 'alert'); })
+      .finally(() => { ui.iaBusy = false; render(); });
   }
   // Relatório semanal da atendente IA: números, motivos e sugestões de regras que o dono aprova.
   function iaReport(it, nome) {
@@ -7733,6 +7759,14 @@ Content-Type: application/json</pre>
       else toast(`${nm}: ${ARR[v][0].toLowerCase()}.`);
       render();
     },
+    // Atendente IA: tirar uma arte.
+    iaArtDel(el) {
+      const cur = (Cloud.enabled ? ui.integ : state.integ) || {}, arts = [...(cur.ia_arts || [])], i = Number(el.dataset.i);
+      if (!arts[i] || ui.iaBusy) return;
+      if (ui.confirm !== 'iaArt' + i) { ui.confirm = 'iaArt' + i; toast('Toque de novo em "Tirar esta arte" para confirmar.'); return; }
+      ui.confirm = null; const [a] = arts.splice(i, 1); if (Cloud.enabled && a.url) Cloud.removePhoto(a.url);
+      iaArtsSave(arts, 'Arte retirada.');
+    },
     // Atendente IA: mais um horário no dia (até 4) ou tirar um.
     iaWinAdd(el) {
       const box = el.closest('.ia-range'); if (!box) return;
@@ -7753,7 +7787,7 @@ Content-Type: application/json</pre>
       const ok = el.dataset.v === 'ok';
       const novo = { ...rep, sugestoes: rep.sugestoes.map((x, k) => (k === i ? { ...x, estado: ok ? 'ok' : 'no' } : x)) };
       const row = { ia_report: novo };
-      if (ok) { const notas = String(cur.ia_notes || '').trim(); row.ia_notes = (notas ? notas + '\n' : '') + '- ' + sg.regra; if (row.ia_notes.length > 3000) return toast('As informações da atendente estão cheias (3000 letras): apague algo antes de aprovar.', 5000, 'alert'); }
+      if (ok) { const notas = String(cur.ia_notes || '').trim(); row.ia_notes = (notas ? notas + '\n' : '') + '- ' + sg.regra; if (row.ia_notes.length > 8000) return toast('As informações da atendente estão cheias (8000 letras): apague algo antes de aprovar.', 5000, 'alert'); }
       if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast(ok ? 'Regra aprovada.' : 'Sugestão ignorada.'); return render(); }
       ui.iaBusy = true; render();
       Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(ok ? 'Regra aprovada: ela já segue a partir da próxima conversa.' : 'Sugestão ignorada.'); })
@@ -8796,7 +8830,7 @@ Content-Type: application/json</pre>
       const model = (f.querySelector('input[name="model"]:checked') || {}).value || 'claude-sonnet-5-5';
       const rphone = (el.rphone.value || '').replace(/\D/g, '');
       if (rphone && (rphone.length < 10 || rphone.length > 13)) return setMsg(f, 'Confira o WhatsApp do relatório (DDD + número, ex.: 55 19 99999-9999).');
-      const row = { ia_on: !!el.on.checked, ia_name: name, ia_model: model, ia_hours: hours, ia_pause: pause, ia_notes: (el.notes.value || '').trim().slice(0, 3000), ia_report_phone: rphone };
+      const row = { ia_on: !!el.on.checked, ia_name: name, ia_model: model, ia_hours: hours, ia_pause: pause, ia_notes: (el.notes.value || '').trim().slice(0, 8000), ia_report_phone: rphone };
       const cur = (Cloud.enabled ? ui.integ : state.integ) || {};
       if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Atendente IA salva.'); return render(); }
       setMsg(f, 'Salvando…', true);
@@ -9083,6 +9117,27 @@ Content-Type: application/json</pre>
       } catch (e) {
         toast(/bucket|not found|policy|mime|row-level/i.test(String(e && e.message)) ? 'O armazenamento de músicas ainda não foi ativado no servidor.' : (e && e.message) || 'Não foi possível enviar a música.');
       }
+    },
+    // Atendente IA: nova arte (imagem grande o bastante para ler no celular) e edição dos campos.
+    async iaArtAdd(el) {
+      if (!isGestor(currentUser()) || !el.files[0] || ui.iaBusy) return;
+      const cur = (Cloud.enabled ? ui.integ : state.integ) || {}, arts = [...(cur.ia_arts || [])];
+      try {
+        ui.iaBusy = true; toast('Enviando a arte…');
+        const url = await storeImage(await readImage(el.files[0], 1600, 0.88), 'sofia-arte');
+        if (Cloud.enabled && /^data:/.test(url)) throw new Error('Não consegui guardar a imagem. Tente de novo.');
+        ui.iaBusy = false;
+        arts.push({ ...(arts.length ? { nome: '', quando: '', pergunta: '', retorno: '' } : IA_ART_NOVA), url });
+        await iaArtsSave(arts, 'Arte adicionada. Confira o nome e as mensagens.');
+      } catch (e) { ui.iaBusy = false; toast(e.message); render(); }
+    },
+    iaArtField(el) {
+      const cur = (Cloud.enabled ? ui.integ : state.integ) || {}, arts = [...(cur.ia_arts || [])], i = Number(el.dataset.i), k = el.dataset.k;
+      if (!arts[i] || !['nome', 'quando', 'pergunta', 'retorno'].includes(k)) return;
+      const v = String(el.value || '').trim().slice(0, k === 'nome' ? 60 : 300);
+      if (k === 'nome' && !v) { toast('A arte precisa de um nome.'); el.value = arts[i].nome || ''; return; }
+      if (arts[i][k] === v) return;
+      arts[i] = { ...arts[i], [k]: v }; iaArtsSave(arts, 'Salvo.');
     },
     async prizeImg(el) {
       if (!isGestor(currentUser()) || !el.files[0]) return;
