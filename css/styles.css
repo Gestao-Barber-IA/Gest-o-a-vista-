@@ -3065,3 +3065,7 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .ia-mot li, .ia-sug { display: grid; gap: 4px; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,.03); overflow-wrap: anywhere; }
 .ia-sug-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .ia-sug.ia-no { opacity: .55; } .ia-sug .chip { justify-self: start; }
+.ia-art { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; padding: 10px; border-radius: 10px; background: rgba(255,255,255,.03); }
+.ia-art img { width: 100%; border-radius: 8px; display: block; }
+.ia-art-f { display: grid; gap: 8px; min-width: 0; } .ia-art-f .btn { justify-self: start; }
+@media (max-width: 520px) { .ia-art { grid-template-columns: 1fr; } .ia-art img { max-height: 260px; object-fit: contain; } }
