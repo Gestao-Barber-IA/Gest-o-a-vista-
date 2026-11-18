@@ -4068,7 +4068,7 @@ ${rows.length ? '' : emptyBarbers()}
     const ex = JSON.stringify([
       { data: iso(new Date()), barbeiro: state.barbers[0]?.name || 'Nome do barbeiro', faturamento: 420.5, servicos: 9, clientes: 8, checklist_pop: 1, horas_disponiveis: 8, horas_ocupadas: 6.5, planos_mensais: 1, clientes_retorno: 5, venda_produtos: 2 },
     ], null, 2);
-    return `${apiTutorial()}${autoSyncCard()}${abCard()}${waRemindCard()}${clRemindCard()}${fbCard()}${bdCard()}${wbCard()}
+    return `${apiTutorial()}${autoSyncCard()}${abCard()}${waRemindCard()}${clRemindCard()}${iaCard()}${fbCard()}${bdCard()}${wbCard()}
       <section class="section card" id="api-ref">
         <h2 class="section-title">Como funciona ${tip('api')}</h2>
         <p class="section-note">Outro sistema (agenda, caixa, ERP) envia os resultados de cada barbeiro por dia. Os números entram no ranking na hora, junto com os lançados à mão.</p>
@@ -4335,6 +4335,65 @@ Content-Type: application/json</pre>
         <p class="form-msg" data-msg></p>
         <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
       </form></section>`;
+  }
+  // Sofia, a atendente IA: responde o WhatsApp dos clientes nos dias e horários escolhidos e marca, remarca e cancela na AppBarber.
+  const IA_DIAS = [[1, 'Segunda'], [2, 'Terça'], [3, 'Quarta'], [4, 'Quinta'], [5, 'Sexta'], [6, 'Sábado'], [0, 'Domingo']];
+  // Padrão: segunda o dia todo (folga da recepção); nos outros dias, cedo (7h–9h), no almoço da recepção e à noite (20h–22h).
+  const IA_PADRAO = { 0: [['07:00', '09:00'], ['20:00', '22:00']], 1: [['00:00', '23:59']], 2: [['07:00', '09:00'], ['12:00', '14:00'], ['20:00', '22:00']], 3: [['07:00', '09:00'], ['12:00', '14:00'], ['20:00', '22:00']],
+    4: [['07:00', '09:00'], ['13:00', '15:20'], ['20:00', '22:00']], 5: [['07:00', '09:00'], ['13:00', '15:20'], ['20:00', '22:00']], 6: [['07:00', '09:00'], ['13:00', '15:20'], ['20:00', '22:00']] };
+  const iaWin = (rot, a = '', b = '') => `<span class="wb-range ia-win"><input class="input" type="time" data-w="a" value="${esc(a)}" aria-label="${rot}: das"> às <input class="input" type="time" data-w="b" value="${esc(b)}" aria-label="${rot}: até"><button type="button" class="btn btn-sm ia-del" data-action="iaWinDel" aria-label="Tirar este horário">${icon('x')}</button></span>`;
+  const IA_MODELOS = [['claude-sonnet-5-5', 'Intermediário (recomendado)', 'Entende bem pedidos vagos, remarca e cancela com segurança. Cerca de R$ 110 a 190 por mês.'],
+    ['claude-opus-5-5', 'Mais capaz', 'O que melhor entende casos difíceis e clientes irritados. Cerca de R$ 220 a 380 por mês.'],
+    ['claude-haiku-5-5', 'Mais barato', 'Bom para pedidos simples; erra mais em remarcações e pedidos confusos. Cerca de R$ 10 a 30 por mês.']];
+  function iaCard() {
+    if (!isGestor(currentUser())) return '';
+    const it = Cloud.enabled ? ui.integ : (state.integ || {});
+    if (!it || it.erro) return '';
+    const st = String(it.ia_status || ''), on = !!it.ia_on, bad = /^erro/.test(st), noAb = !it.est_code;
+    const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const hrs = it.ia_hours || IA_PADRAO, nome = it.ia_name || 'Sofia', mod = it.ia_model || 'claude-sonnet-5-5';
+    const dia = ([d, rot]) => { const ws = hrs[d] || [], todo = ws.some(w => w[0] === '00:00' && w[1] === '23:59'), lista = todo || !ws.length ? [['12:00', '14:00']] : ws;
+      return `<div class="ia-day"><label class="check ia-on"><input type="checkbox" name="d${d}" ${ws.length ? 'checked' : ''}><span><b>${rot}</b></span></label>
+        <label class="check ia-all"><input type="checkbox" name="t${d}" ${todo ? 'checked' : ''}><span>Dia todo</span></label>
+        <div class="ia-range" data-day="${d}">${lista.map(([a, b]) => iaWin(rot, a, b)).join('')}<button type="button" class="link-btn ia-add" data-action="iaWinAdd" data-rot="${rot}">${icon('plus')} Outro horário</button></div></div>`; };
+    return `<section class="section card as-card">
+      <h2 class="section-title">${icon('chat')} Atendente IA no WhatsApp (${esc(nome)})</h2>
+      <p class="section-note">Nos dias e horários escolhidos abaixo (ex.: folga e almoço da recepção), a <b>${esc(nome)}</b> responde quem mandar mensagem no WhatsApp da barbearia, tira dúvidas de serviços e preços e <b>marca, remarca e cancela horários direto na AppBarber</b>. Ela é simpática, usa emoji e só faz mudanças na agenda depois que o cliente confirma. Preço, profissional e horário vêm sempre da AppBarber, nunca são inventados.</p>
+      <p class="section-note">Se alguém da recepção responder uma conversa pelo celular, ela sai daquela conversa pelo tempo escolhido abaixo (padrão: 1 hora). Quando volta, ela já leu o que a recepção e o cliente conversaram e continua de onde pararam, sem repetir nem contradizer o que foi combinado. Reclamação, desconto, pagamento ou dúvida que ela não sabe resolver: avisa o cliente que a equipe já vai responder, deixa a conversa como <b>não lida</b> e o recado aparece aqui. Uma conversa já começada continua até ficar 20 minutos parada, mesmo depois do horário.</p>
+      <p class="section-note">${icon('alert')} Atende pelo número dos clientes, que hoje é ${it.cl_numero === 'principal' ? 'o <b>WhatsApp principal</b> ✅' : 'o <b>2º chip</b>: para os clientes falarem com ela, troque para o <b>WhatsApp principal</b> no lembrete de agendamento'}. A chave da IA (Anthropic) fica guardada só no servidor: no servidor, rode <code>gbia-sofia-chave</code>. Cada conversa gasta de 3 a 6 créditos da AppBarber.</p>
+      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}
+      <div class="as-status">${!on ? '<span class="chip">Desligada</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.ia_status_at ? 'Atualizado ' + when(it.ia_status_at) : ''}</small><p class="muted as-msg">${esc(st.replace(/^(ok|erro): /, ''))}</p>` : '<span class="chip">Aguardando o servidor</span>'}</div>
+      ${iaReport(it, nome)}
+      <form class="form" data-form="iaCfg" novalidate>
+        <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''} ${noAb ? 'disabled' : ''}><span><b>Atendente IA ligada</b><small>Fora dos horários abaixo ela não responde: quem atende é a recepção.</small></span></label>
+        <div class="grid-2">
+          <label class="field"><span>Nome da atendente</span><input class="input" name="name" maxlength="40" value="${esc(nome)}"></label>
+          <label class="field"><span>Quando a recepção responde, ela sai da conversa por (minutos)</span><input class="input num" type="number" name="pause" min="15" max="1440" step="15" value="${esc(String(it.ia_pause || 60))}"></label>
+        </div>
+        <fieldset class="cl-num"><legend class="muted">Dias e horários em que ela atende</legend>${IA_DIAS.map(dia).join('')}</fieldset>
+        <label class="field"><span>WhatsApp que recebe o aviso do relatório semanal (opcional)</span><input class="input" type="tel" name="rphone" maxlength="20" placeholder="Ex.: 55 19 99999-9999" value="${esc(it.ia_report_phone || '')}">
+          <small class="muted">Todo domingo à noite chega um resumo da semana, com as sugestões para aprovar aqui.</small></label>
+        <fieldset class="cl-num"><legend class="muted">Modelo de IA</legend>${IA_MODELOS.map(([v, t, d]) => `<label class="check"><input type="radio" name="model" value="${v}" ${mod === v ? 'checked' : ''}><span><b>${t}</b><small>${d}</small></span></label>`).join('')}</fieldset>
+        <label class="field"><span>Informações para a ${esc(nome)} (opcional)</span><textarea class="input" name="notes" rows="5" maxlength="3000" placeholder="Ex.: Endereço: Rua ..., nº ... Estacionamento na rua. Aceitamos Pix e cartão. Crianças até 10 anos: corte infantil.">${esc(it.ia_notes || '')}</textarea>
+          <small class="muted">Endereço, formas de pagamento, estacionamento, regras da casa… Ela usa quando o cliente perguntar. Serviços, preços e horários ela já pega na AppBarber.</small></label>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
+      </form></section>`;
+  }
+  // Relatório semanal da atendente IA: números, motivos e sugestões de regras que o dono aprova.
+  function iaReport(it, nome) {
+    const r = it.ia_report;
+    const dm = d => String(d || '').split('-').reverse().slice(0, 2).join('/');
+    if (!r || !r.numeros) return `<div class="ia-rep"><h3 class="ia-rep-t">${icon('chart')} Relatório semanal</h3><p class="muted">O primeiro relatório chega no domingo à noite, depois da primeira semana da ${esc(nome)} atendendo. Ele mostra onde ela travou e sugere regras novas para você aprovar.</p></div>`;
+    const n = r.numeros, [de, ate] = String(r.semana || '').split(' a ');
+    const sug = (r.sugestoes || []).map((x, i) => `<li class="ia-sug ${x.estado ? 'ia-' + x.estado : ''}"><b>${esc(x.regra)}</b><small class="muted">${esc(x.porque || '')}</small>
+      ${x.estado === 'ok' ? `<span class="chip chip-ok">Aprovada: já está nas informações da ${esc(nome)}</span>` : x.estado === 'no' ? '<span class="chip">Ignorada</span>' : `<span class="ia-sug-btns"><button class="btn btn-primary btn-sm" data-action="iaSug" data-i="${i}" data-v="ok" ${ui.iaBusy ? 'disabled' : ''}>${icon('check')} Aprovar</button><button class="btn btn-sm" data-action="iaSug" data-i="${i}" data-v="no" ${ui.iaBusy ? 'disabled' : ''}>Ignorar</button></span>`}</li>`).join('');
+    return `<div class="ia-rep"><h3 class="ia-rep-t">${icon('chart')} Relatório da semana · ${dm(de)} a ${dm(ate)}</h3>
+      <div class="ia-nums">${[[n.conversas, 'conversas'], [n.agendamentos, 'agendamentos'], [n.remarcacoes, 'remarcações'], [n.cancelamentos, 'cancelamentos'], [n.recepcao + (n.recepcao_assumiu || 0), 'com a recepção'], [n.sem_resultado, 'sem marcar']].map(([v, l]) => `<span><b>${Number(v) || 0}</b><small>${l}</small></span>`).join('')}</div>
+      <p>${esc(r.resumo || '')}</p>
+      ${(r.motivos || []).length ? `<p class="muted ia-sub">Onde ela travou</p><ul class="ia-mot">${r.motivos.map(m => `<li><b>${esc(m.motivo)}</b> <span class="muted">(${Number(m.quantas) || 0})</span>${m.exemplo ? `<small class="muted">Ex.: ${esc(m.exemplo)}</small>` : ''}</li>`).join('')}</ul>` : ''}
+      ${sug ? `<p class="muted ia-sub">Sugestões de regras: aprovando, entram nas informações da ${esc(nome)} na hora</p><ul class="ia-sugs">${sug}</ul>` : ''}
+      <small class="muted">Custo da IA na semana ≈ US$ ${String((Number(n.custo_usd) || 0).toFixed(2)).replace('.', ',')}.</small></div>`;
   }
   // Parabéns aos clientes aniversariantes do dia (lista de aniversariantes da AppBarber).
   const BD_TEXT = '🎉💈 Feliz Aniversário {cliente}! 💈🎉\nHoje é um dia especial, e nós, da {barbearia}, queremos desejar a você um novo ciclo repleto de saúde, felicidade, sucesso e muitas conquistas! 🙏🏻🎂\nQue Deus abençoe sua vida, ilumine seus caminhos e que não faltem motivos para sorrir e comemorar! 🥳✨\n\nCaso você venha realizar um serviço de corte ou barba hoje, daremos um serviço extra de cortesia pra você! Gostaria de saber as opções de serviços extras?';
@@ -7674,6 +7733,32 @@ Content-Type: application/json</pre>
       else toast(`${nm}: ${ARR[v][0].toLowerCase()}.`);
       render();
     },
+    // Atendente IA: mais um horário no dia (até 4) ou tirar um.
+    iaWinAdd(el) {
+      const box = el.closest('.ia-range'); if (!box) return;
+      if (box.querySelectorAll('.ia-win').length >= 4) return toast('Até 4 horários por dia.');
+      el.insertAdjacentHTML('beforebegin', iaWin(el.dataset.rot || '', '', ''));
+      const novo = el.previousElementSibling.querySelector('input'); if (novo) novo.focus();
+    },
+    iaWinDel(el) {
+      const w = el.closest('.ia-win'), box = el.closest('.ia-range'); if (!w || !box) return;
+      if (box.querySelectorAll('.ia-win').length <= 1) { w.querySelectorAll('input').forEach(i => { i.value = ''; }); return; }
+      w.remove();
+    },
+    // Relatório da atendente IA: aprovar (entra nas informações dela) ou ignorar uma sugestão.
+    iaSug(el) {
+      const cur = (Cloud.enabled ? ui.integ : state.integ) || {}, rep = cur.ia_report;
+      const i = Number(el.dataset.i), sg = rep && rep.sugestoes && rep.sugestoes[i];
+      if (!sg || sg.estado || ui.iaBusy) return;
+      const ok = el.dataset.v === 'ok';
+      const novo = { ...rep, sugestoes: rep.sugestoes.map((x, k) => (k === i ? { ...x, estado: ok ? 'ok' : 'no' } : x)) };
+      const row = { ia_report: novo };
+      if (ok) { const notas = String(cur.ia_notes || '').trim(); row.ia_notes = (notas ? notas + '\n' : '') + '- ' + sg.regra; if (row.ia_notes.length > 3000) return toast('As informações da atendente estão cheias (3000 letras): apague algo antes de aprovar.', 5000, 'alert'); }
+      if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast(ok ? 'Regra aprovada.' : 'Sugestão ignorada.'); return render(); }
+      ui.iaBusy = true; render();
+      Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(ok ? 'Regra aprovada: ela já segue a partir da próxima conversa.' : 'Sugestão ignorada.'); })
+        .catch(e => toast(Cloud.message(e), 5000, 'alert')).finally(() => { ui.iaBusy = false; render(); });
+    },
     // Folga do dia (dono, gestor ou líder): marca o dia como folga do profissional.
     popFolga(el) {
       const bid = ui.popBarber, it = popCfg().items.find(popArr);
@@ -8689,6 +8774,34 @@ Content-Type: application/json</pre>
         const res = importEntries(state, Array.isArray(data) ? data : [data]); save();
         setMsg(f, `${res.ok} lançamento(s) importado(s).${res.errors.length ? ' Problemas: ' + res.errors.join(' ') : ''}`, res.errors.length === 0);
       } catch (e) { setMsg(f, e.message); }
+    },
+    iaCfg(f) {
+      const el = f.elements, hours = {};
+      for (const [d, rot] of IA_DIAS) {
+        if (!el['d' + d].checked) { hours[d] = []; continue; }
+        if (el['t' + d].checked) { hours[d] = [['00:00', '23:59']]; continue; }
+        const ws = [];
+        for (const w of f.querySelectorAll(`.ia-range[data-day="${d}"] .ia-win`)) {
+          const a = w.querySelector('[data-w="a"]').value, b = w.querySelector('[data-w="b"]').value;
+          if (!a && !b) continue;
+          if (!/^\d{2}:\d{2}$/.test(a) || !/^\d{2}:\d{2}$/.test(b) || b <= a) return setMsg(f, `${rot}: confira os horários (o fim precisa ser depois do início).`);
+          ws.push([a, b]);
+        }
+        if (!ws.length) return setMsg(f, `${rot}: coloque pelo menos um horário ou desmarque o dia.`);
+        hours[d] = ws.sort((x, y) => x[0].localeCompare(y[0]));
+      }
+      const pause = Math.round(Number(el.pause.value) || 0);
+      if (pause < 15 || pause > 1440) return setMsg(f, 'Tempo fora da conversa: de 15 a 1440 minutos.');
+      const name = (el.name.value || '').trim().slice(0, 40) || 'Sofia';
+      const model = (f.querySelector('input[name="model"]:checked') || {}).value || 'claude-sonnet-5-5';
+      const rphone = (el.rphone.value || '').replace(/\D/g, '');
+      if (rphone && (rphone.length < 10 || rphone.length > 13)) return setMsg(f, 'Confira o WhatsApp do relatório (DDD + número, ex.: 55 19 99999-9999).');
+      const row = { ia_on: !!el.on.checked, ia_name: name, ia_model: model, ia_hours: hours, ia_pause: pause, ia_notes: (el.notes.value || '').trim().slice(0, 3000), ia_report_phone: rphone };
+      const cur = (Cloud.enabled ? ui.integ : state.integ) || {};
+      if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Atendente IA salva.'); return render(); }
+      setMsg(f, 'Salvando…', true);
+      Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(row.ia_on ? `${name} ligada.` : `${name} desligada.`); render(); })
+        .catch(e => { const m = Cloud.message(e); setMsg(f, /ia_|column|schema cache/i.test(m) ? 'A atendente IA ainda está sendo ativada no servidor.' : m); });
     },
     bdRemind(f) {
       const row = { bd_on: !!f.elements.on.checked, bd_text: (f.elements.text.value || '').trim().slice(0, 1500) };
