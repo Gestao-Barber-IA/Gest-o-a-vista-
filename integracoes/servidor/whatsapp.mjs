@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "2.6";
+const VERSAO = "2.7";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -564,7 +564,7 @@ if (process.argv.includes("--sofia")) {
   const ab = SOFIA.ferramentasAppBarber({ cfg: e.appbarber, creditos: (n, z) => api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: n, ...(z ? { sem_saldo: true } : {}) }).catch(() => {}) });
   const sistema = SOFIA.promptSistema({ nome: s.nome || "Sofia", barbearia: e.nome, notas: s.notas || "", brand: e.brand });
   const conv = { mensagens: [] }, stats = { agendados: 0, remarcados: 0, cancelados: 0, recepcao: 0 };
-  const fone = so(arg("--fone") || "");
+  const fone = arg("--fone") ? SOFIA.normFone(arg("--fone")) : "";
   const ctx = { ab, fone, stats, simular: true, registro: (t) => console.log("  [" + t + "]"), pendencia: (t) => console.log("  [recepção: " + t + "]") };
   console.log(`Teste da ${s.nome || "Sofia"} (${modelo}) — ${e.nome}. Nada é marcado de verdade. Escreva como cliente; "sair" para terminar.\n`);
   const rl = (await import("node:readline")).createInterface({ input: process.stdin });
@@ -572,7 +572,7 @@ if (process.argv.includes("--sofia")) {
   for await (const linha of rl) {
     if (/^sair$/i.test(linha.trim())) break;
     if (!linha.trim()) { process.stdout.write("Você: "); continue; }
-    conv.mensagens.push({ role: "user", content: linha });
+    conv.mensagens.push({ role: "user", content: SOFIA.agoraTexto(fone) + "\n" + linha });
     const r = await SOFIA.rodada({ client, modelo, sistema, conv, ctx }).catch((err) => ({ texto: "[erro: " + err.message + "]", gasto: 0 }));
     total += r.gasto; console.log(`${s.nome || "Sofia"}: ${r.texto}\n  (custo até agora ≈ US$ ${total.toFixed(3)})\n`); process.stdout.write("Você: ");
   }
