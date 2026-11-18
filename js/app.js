@@ -4338,7 +4338,10 @@ Content-Type: application/json</pre>
   }
   // Sofia, a atendente IA: responde o WhatsApp dos clientes nos dias e horários escolhidos e marca, remarca e cancela na AppBarber.
   const IA_DIAS = [[1, 'Segunda'], [2, 'Terça'], [3, 'Quarta'], [4, 'Quinta'], [5, 'Sexta'], [6, 'Sábado'], [0, 'Domingo']];
-  const IA_PADRAO = { 0: [], 1: [['00:00', '23:59']], 2: [['12:00', '14:00']], 3: [['12:00', '14:00']], 4: [['13:00', '15:20']], 5: [['13:00', '15:20']], 6: [['13:00', '15:20']] };
+  // Padrão: segunda o dia todo (folga da recepção); nos outros dias, cedo (7h–9h), no almoço da recepção e à noite (20h–22h).
+  const IA_PADRAO = { 0: [['07:00', '09:00'], ['20:00', '22:00']], 1: [['00:00', '23:59']], 2: [['07:00', '09:00'], ['12:00', '14:00'], ['20:00', '22:00']], 3: [['07:00', '09:00'], ['12:00', '14:00'], ['20:00', '22:00']],
+    4: [['07:00', '09:00'], ['13:00', '15:20'], ['20:00', '22:00']], 5: [['07:00', '09:00'], ['13:00', '15:20'], ['20:00', '22:00']], 6: [['07:00', '09:00'], ['13:00', '15:20'], ['20:00', '22:00']] };
+  const iaWin = (rot, a = '', b = '') => `<span class="wb-range ia-win"><input class="input" type="time" data-w="a" value="${esc(a)}" aria-label="${rot}: das"> às <input class="input" type="time" data-w="b" value="${esc(b)}" aria-label="${rot}: até"><button type="button" class="btn btn-sm ia-del" data-action="iaWinDel" aria-label="Tirar este horário">${icon('x')}</button></span>`;
   const IA_MODELOS = [['claude-sonnet-5-5', 'Intermediário (recomendado)', 'Entende bem pedidos vagos, remarca e cancela com segurança. Cerca de R$ 110 a 190 por mês.'],
     ['claude-opus-5-5', 'Mais capaz', 'O que melhor entende casos difíceis e clientes irritados. Cerca de R$ 220 a 380 por mês.'],
     ['claude-haiku-5-5', 'Mais barato', 'Bom para pedidos simples; erra mais em remarcações e pedidos confusos. Cerca de R$ 10 a 30 por mês.']];
@@ -4349,10 +4352,10 @@ Content-Type: application/json</pre>
     const st = String(it.ia_status || ''), on = !!it.ia_on, bad = /^erro/.test(st), noAb = !it.est_code;
     const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const hrs = it.ia_hours || IA_PADRAO, nome = it.ia_name || 'Sofia', mod = it.ia_model || 'claude-sonnet-5-5';
-    const dia = ([d, rot]) => { const w = (hrs[d] || [])[0], todo = w && w[0] === '00:00' && w[1] === '23:59';
-      return `<div class="ia-day"><label class="check ia-on"><input type="checkbox" name="d${d}" ${w ? 'checked' : ''}><span><b>${rot}</b></span></label>
+    const dia = ([d, rot]) => { const ws = hrs[d] || [], todo = ws.some(w => w[0] === '00:00' && w[1] === '23:59'), lista = todo || !ws.length ? [['12:00', '14:00']] : ws;
+      return `<div class="ia-day"><label class="check ia-on"><input type="checkbox" name="d${d}" ${ws.length ? 'checked' : ''}><span><b>${rot}</b></span></label>
         <label class="check ia-all"><input type="checkbox" name="t${d}" ${todo ? 'checked' : ''}><span>Dia todo</span></label>
-        <span class="wb-range ia-range"><input class="input" type="time" name="a${d}" value="${esc(w && !todo ? w[0] : '12:00')}" aria-label="${rot}: das"> às <input class="input" type="time" name="b${d}" value="${esc(w && !todo ? w[1] : '14:00')}" aria-label="${rot}: até"></span></div>`; };
+        <div class="ia-range" data-day="${d}">${lista.map(([a, b]) => iaWin(rot, a, b)).join('')}<button type="button" class="link-btn ia-add" data-action="iaWinAdd" data-rot="${rot}">${icon('plus')} Outro horário</button></div></div>`; };
     return `<section class="section card as-card">
       <h2 class="section-title">${icon('chat')} Atendente IA no WhatsApp (${esc(nome)})</h2>
       <p class="section-note">Nos dias e horários escolhidos abaixo (ex.: folga e almoço da recepção), a <b>${esc(nome)}</b> responde quem mandar mensagem no WhatsApp da barbearia, tira dúvidas de serviços e preços e <b>marca, remarca e cancela horários direto na AppBarber</b>. Ela é simpática, usa emoji e só faz mudanças na agenda depois que o cliente confirma. Preço, profissional e horário vêm sempre da AppBarber, nunca são inventados.</p>
@@ -7730,6 +7733,18 @@ Content-Type: application/json</pre>
       else toast(`${nm}: ${ARR[v][0].toLowerCase()}.`);
       render();
     },
+    // Atendente IA: mais um horário no dia (até 4) ou tirar um.
+    iaWinAdd(el) {
+      const box = el.closest('.ia-range'); if (!box) return;
+      if (box.querySelectorAll('.ia-win').length >= 4) return toast('Até 4 horários por dia.');
+      el.insertAdjacentHTML('beforebegin', iaWin(el.dataset.rot || '', '', ''));
+      const novo = el.previousElementSibling.querySelector('input'); if (novo) novo.focus();
+    },
+    iaWinDel(el) {
+      const w = el.closest('.ia-win'), box = el.closest('.ia-range'); if (!w || !box) return;
+      if (box.querySelectorAll('.ia-win').length <= 1) { w.querySelectorAll('input').forEach(i => { i.value = ''; }); return; }
+      w.remove();
+    },
     // Relatório da atendente IA: aprovar (entra nas informações dela) ou ignorar uma sugestão.
     iaSug(el) {
       const cur = (Cloud.enabled ? ui.integ : state.integ) || {}, rep = cur.ia_report;
@@ -8765,9 +8780,15 @@ Content-Type: application/json</pre>
       for (const [d, rot] of IA_DIAS) {
         if (!el['d' + d].checked) { hours[d] = []; continue; }
         if (el['t' + d].checked) { hours[d] = [['00:00', '23:59']]; continue; }
-        const a = el['a' + d].value, b = el['b' + d].value;
-        if (!/^\d{2}:\d{2}$/.test(a) || !/^\d{2}:\d{2}$/.test(b) || b <= a) return setMsg(f, `${rot}: confira o horário (o fim precisa ser depois do início).`);
-        hours[d] = [[a, b]];
+        const ws = [];
+        for (const w of f.querySelectorAll(`.ia-range[data-day="${d}"] .ia-win`)) {
+          const a = w.querySelector('[data-w="a"]').value, b = w.querySelector('[data-w="b"]').value;
+          if (!a && !b) continue;
+          if (!/^\d{2}:\d{2}$/.test(a) || !/^\d{2}:\d{2}$/.test(b) || b <= a) return setMsg(f, `${rot}: confira os horários (o fim precisa ser depois do início).`);
+          ws.push([a, b]);
+        }
+        if (!ws.length) return setMsg(f, `${rot}: coloque pelo menos um horário ou desmarque o dia.`);
+        hours[d] = ws.sort((x, y) => x[0].localeCompare(y[0]));
       }
       const pause = Math.round(Number(el.pause.value) || 0);
       if (pause < 15 || pause > 1440) return setMsg(f, 'Tempo fora da conversa: de 15 a 1440 minutos.');

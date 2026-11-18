@@ -34,8 +34,10 @@ const hojeSP = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_P
 const mins = (t) => { const [h, m] = String(t || "0:0").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
 const somaDias = (iso, n) => { const d = new Date(iso + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 
-// Janelas padrão: segunda o dia todo; terça e quarta 12h–14h; quinta a sábado 13h–15h20 (almoço da recepção).
-export const JANELAS_PADRAO = { 0: [], 1: [["00:00", "23:59"]], 2: [["12:00", "14:00"]], 3: [["12:00", "14:00"]], 4: [["13:00", "15:20"]], 5: [["13:00", "15:20"]], 6: [["13:00", "15:20"]] };
+// Janelas padrão: segunda o dia todo (folga da recepção); nos outros dias 7h–9h, almoço da recepção
+// (terça e quarta 12h–14h; quinta a sábado 13h–15h20) e 20h–22h; domingo 7h–9h e 20h–22h.
+const CEDO = ["07:00", "09:00"], NOITE = ["20:00", "22:00"];
+export const JANELAS_PADRAO = { 0: [CEDO, NOITE], 1: [["00:00", "23:59"]], 2: [CEDO, ["12:00", "14:00"], NOITE], 3: [CEDO, ["12:00", "14:00"], NOITE], 4: [CEDO, ["13:00", "15:20"], NOITE], 5: [CEDO, ["13:00", "15:20"], NOITE], 6: [CEDO, ["13:00", "15:20"], NOITE] };
 export function dentroDaJanela(janelas, dia = diaSemanaSP(), agora = agoraSP()) {
   const lista = (janelas && janelas[dia]) || [];
   return lista.some(([a, b]) => agora >= mins(a) && agora <= mins(b));

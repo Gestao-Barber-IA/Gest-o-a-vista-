@@ -3046,7 +3046,10 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .pop-today .folga { color: #a3a8b0; }
 .arr-folga { background: #3a3f47; color: #e8eaed; }
 /* Integração › Atendente IA: dias e horários */
-.ia-day { display: grid; grid-template-columns: 110px auto minmax(0, 1fr); align-items: center; gap: 8px 12px; padding: 6px 0; border-bottom: 1px solid var(--line, rgba(255,255,255,.08)); min-width: 0; }
+.ia-day { display: grid; grid-template-columns: 110px auto minmax(0, 1fr); align-items: start; gap: 8px 12px; padding: 8px 0; border-bottom: 1px solid var(--line, rgba(255,255,255,.08)); min-width: 0; }
+.ia-range { display: grid; gap: 6px; min-width: 0; justify-items: start; }
+.ia-win { width: 100%; } .ia-win .ia-del { flex: 0 0 auto; padding: 8px; }
+.ia-add { font-size: .9rem; display: inline-flex; align-items: center; gap: 4px; }
 .ia-day .check { margin: 0; }
 .ia-day:not(:has(.ia-on input:checked)) .ia-all, .ia-day:not(:has(.ia-on input:checked)) .ia-range, .ia-day:has(.ia-all input:checked) .ia-range { opacity: .35; pointer-events: none; }
 @media (max-width: 520px) { .ia-day { grid-template-columns: 1fr auto; } .ia-day .ia-range { grid-column: 1 / -1; } }

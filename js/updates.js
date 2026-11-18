@@ -3,7 +3,7 @@
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
   { id: '2026-11-18-sofia', date: '2026-11-18', title: 'Atendente IA no WhatsApp (Sofia)', items: [
-    ['novo', 'Em Integração, o cartão Atendente IA no WhatsApp: nos dias e horários escolhidos (ex.: folga e almoço da recepção), a Sofia responde os clientes no WhatsApp da barbearia, tira dúvidas de serviços e preços e marca, remarca e cancela horários direto na AppBarber, sempre depois que o cliente confirma.'],
+    ['novo', 'Em Integração, o cartão Atendente IA no WhatsApp: nos dias e horários escolhidos (ex.: folga e almoço da recepção, cedo e à noite; vários horários por dia), a Sofia responde os clientes no WhatsApp da barbearia, tira dúvidas de serviços e preços e marca, remarca e cancela horários direto na AppBarber, sempre depois que o cliente confirma.'],
     ['melhoria', 'Se a recepção responder pelo celular, ela sai da conversa por 1 hora (dá para mudar) e, quando volta, já leu o que a recepção e o cliente conversaram, continuando de onde pararam. Reclamação, desconto ou dúvida que ela não resolve fica como não lida para a recepção, com o recado no cartão. Dá para escolher o nome, os horários, o modelo de IA e passar informações da casa (endereço, pagamento…).'],
     ['novo', 'Relatório semanal da atendente: todo domingo à noite, os números da semana, onde ela travou e sugestões de regras novas. Aprovando uma sugestão, ela entra nas informações da atendente na hora. Dá para receber o aviso do relatório no WhatsApp.'],
   ] },
