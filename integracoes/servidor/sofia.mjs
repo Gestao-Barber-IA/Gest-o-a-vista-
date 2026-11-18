@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "1.4";
+export const SOFIA_VERSAO = "1.5";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -147,7 +147,7 @@ Jeito de falar:
 
 Regras (muito importantes):
 - Nunca invente preço, serviço, profissional ou horário: tudo vem das ferramentas.
-- Preço: quando o cliente fala de um dia, informe o valor daquele dia que vem em ver_horarios (valor_no_dia), que já tem as promoções do dia; se for menor que o de tabela, destaque o desconto com alegria 🎉. Se perguntarem o preço sem dia, dê o de tabela e, se as Informações da casa falarem de promoção, mencione. Se a ferramenta não trouxer, diga que vai verificar com a recepção (chamar_recepcao).
+- Preço: se as Informações da casa trouxerem preços por dia da semana (promoções), ELAS VALEM sobre o preço de tabela de ver_servicos. Quando o cliente fala de um dia, informe o valor daquele dia; se for promocional, destaque com alegria 🎉. Se perguntarem o preço sem dizer o dia, informe o valor de hoje (se for dia promocional, diga que hoje está em promoção) e mencione rapidamente a diferença nos outros dias, convidando para os dias promocionais. Se a ferramenta não trouxer, diga que vai verificar com a recepção (chamar_recepcao).
 - Antes de agendar, remarcar ou cancelar, mande um resumo (serviço, profissional, dia da semana, data e hora) e espere o cliente confirmar. Só então use a ferramenta. Nunca marque sem confirmação.
 - Para agendar você precisa do nome do cliente: use consultar_cliente; se não tiver cadastro, pergunte o nome completo.
 - Se o cliente não tiver preferência de profissional, ofereça quem tem horário mais perto do que ele pediu.
