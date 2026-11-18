@@ -3,12 +3,13 @@
 // responde quem mandar mensagem no WhatsApp da barbearia e marca, remarca ou cancela horários direto na AppBarber.
 //  • Usa o Claude (Anthropic) com ferramentas que consultam a AppBarber: nunca inventa preço nem horário.
 //  • Só marca, remarca ou cancela depois que o cliente confirma os detalhes.
-//  • Se alguém da recepção responder a conversa pelo celular, a Sofia para naquela conversa por algumas horas.
+//  • Se alguém da recepção responder a conversa pelo celular, a Sofia para naquela conversa (1 hora, por padrão).
+//    Ela guarda o que a recepção e o cliente escreveram nesse meio-tempo e, quando volta, continua de onde pararam.
 //  • Reclamação, assunto delicado ou dúvida que ela não sabe: chama a recepção e deixa a conversa como não lida.
 // Chave da Anthropic: ANTHROPIC_API_KEY em /etc/gbia-sync.env (no servidor: gbia-sofia-chave). Nunca vai para o app.
 // As conversas ficam só na memória do servidor e são esquecidas depois de algumas horas.
 
-export const SOFIA_VERSAO = "1.0";
+export const SOFIA_VERSAO = "1.1";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -143,6 +144,7 @@ Regras (muito importantes):
 - Reclamação, cliente irritado, desconto, pagamento, assunto delicado, algo fora de agenda/serviços/preços, ou se o cliente pedir uma pessoa: use chamar_recepcao e avise que a equipe já vai responder.
 - Se uma ferramenta der erro, não tente adivinhar: peça desculpas e use chamar_recepcao.
 - Não fale de outros clientes nem mostre códigos internos.
+- Às vezes a mensagem do cliente vem junto com o que foi conversado sem você (com a recepção ou mensagens automáticas da barbearia, como lembretes). Leia com atenção e continue de onde pararam: respeite o que a recepção combinou, não repita o que ela já disse e não se reapresente.
 ${notas ? `\nInformações da ${casa} (passadas pelo dono, use quando ajudar):\n${notas}\n` : ""}`;
 }
 
@@ -276,9 +278,10 @@ export async function carregarSDK(dir, log = () => {}) {
 // ---------- a Sofia ligada ao WhatsApp ----------
 export function criarSofia({ dir, log, api, sock }) {
   let Anthropic = null, client = null, cfg = null, ab = null, abKey = "";
-  const conversas = new Map(); // jid → { mensagens, ultima, nome, agenda, recepcao, fone, fila, ocupado }
+  const conversas = new Map(); // jid → { mensagens, ultima, ultimaSofia, humanoEm, contexto, nome, agenda, recepcao, fone, fila, ocupado }
   const pausas = new Map();    // jid → até quando a Sofia fica quieta (a recepção respondeu pelo celular)
-  const minhas = new Set();    // ids das mensagens que este programa mandou (lembretes e respostas da Sofia)
+  const minhas = new Set();    // ids das mensagens que este programa mandou (lembretes, feedback, parabéns…)
+  const daSofia = new Set();   // ids das respostas da própria Sofia
   const pendencias = [];       // recados para a recepção (vão para o app)
   let stats = { dia: "", conversas: 0, agendados: 0, remarcados: 0, cancelados: 0, recepcao: 0, gasto: 0 }, statusEm = 0;
 
@@ -303,7 +306,7 @@ export function criarSofia({ dir, log, api, sock }) {
   async function configurar(e) {
     if (!e || !e.sofia || !e.appbarber) { cfg = null; return; }
     const novo = { company_id: e.company_id, barbearia: e.nome, brand: e.brand, nome: e.sofia.nome || "Sofia", modelo: MODELOS.includes(e.sofia.modelo) ? e.sofia.modelo : MODELO_PADRAO,
-      janelas: e.sofia.janelas || JANELAS_PADRAO, pausaHoras: Math.max(1, Math.min(24, Number(e.sofia.pausa) || 3)), notas: e.sofia.notas || "", ab: e.appbarber };
+      janelas: e.sofia.janelas || JANELAS_PADRAO, pausaMin: Math.max(15, Math.min(1440, Number(e.sofia.pausa) || 60)), notas: e.sofia.notas || "", ab: e.appbarber };
     cfg = novo;
     if (abKey !== e.appbarber.appbarber_api_key + e.appbarber.codigo_estabelecimento) {
       abKey = e.appbarber.appbarber_api_key + e.appbarber.codigo_estabelecimento;
@@ -331,8 +334,21 @@ export function criarSofia({ dir, log, api, sock }) {
     await espera(Math.min(9000, 1500 + t.length * 35) + Math.random() * 1500); // "digitando…" proporcional ao tamanho
     await s.sendPresenceUpdate("paused", jid).catch(() => {});
     const r = await s.sendMessage(jid, { text: t });
-    marcarMinha(r && r.key && r.key.id);
+    const id = r && r.key && r.key.id;
+    marcarMinha(id); if (id) { daSofia.add(id); if (daSofia.size > 2000) daSofia.delete(daSofia.values().next().value); }
   }
+  // Conversa deste contato (cria se não houver ou se estiver parada há mais de 6 horas).
+  function obter(jid, msg) {
+    let c = conversas.get(jid);
+    if (!c || Date.now() - c.ultima > 6 * 3600000) {
+      c = { mensagens: [], ultima: Date.now(), ultimaSofia: 0, humanoEm: 0, contexto: [], contada: false, nome: "", agenda: null, recepcao: false, fone: "", fila: [], ocupado: false };
+      conversas.set(jid, c);
+    }
+    if (!c.fone && msg && !msg.key.fromMe) c.fone = foneDe(msg);
+    return c;
+  }
+  // O que foi conversado sem a Sofia (cliente com a recepção, lembretes automáticos): ela lê quando voltar.
+  function anotar(c, quem, t) { if (!t) return; c.contexto.push({ ts: Date.now(), linha: `${quem}: ${t.slice(0, 600)}` }); if (c.contexto.length > 40) c.contexto.splice(0, c.contexto.length - 40); }
 
   async function processar(jid) {
     const c = conversas.get(jid);
@@ -342,13 +358,17 @@ export function criarSofia({ dir, log, api, sock }) {
       while (c.fila.length) {
         const novas = c.fila.splice(0);
         if (c.recepcao || (pausas.get(jid) || 0) > Date.now()) return;
-        c.mensagens.push({ role: "user", content: novas.join("\n") });
+        const antes = c.contexto.splice(0).sort((a, b) => a.ts - b.ts).map((x) => x.linha);
+        c.mensagens.push({ role: "user", content: antes.length
+          ? `[Para contexto: mensagens desta conversa enquanto você não estava atendendo]\n${antes.join("\n")}\n\n[Mensagem nova do cliente]\n${novas.join("\n")}`
+          : novas.join("\n") });
+        if (!c.contada) { c.contada = true; zera(); stats.conversas++; }
         const ctx = { ab, fone: c.fone, stats, simular: false, registro: (t) => log(`Sofia: ${t}.`), pendencia: (t) => { pendencias.push(`${c.nome ? c.nome.split(" ")[0] + " " : ""}(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); } };
         const sistema = promptSistema({ nome: cfg.nome, barbearia: cfg.barbearia, notas: cfg.notas, brand: cfg.brand });
         const r = await rodada({ client, modelo: cfg.modelo, sistema, conv: c, ctx });
         stats.gasto += r.gasto;
         if ((pausas.get(jid) || 0) > Date.now()) return; // a recepção entrou enquanto a IA pensava
-        if (r.texto) await enviar(jid, r.texto);
+        if (r.texto) { await enviar(jid, r.texto); c.ultimaSofia = Date.now(); }
         if (c.recepcao) { try { await sock().chatModify({ markRead: false, lastMessages: [c.ultimaMsg].filter(Boolean) }, jid); } catch { /* não deu para marcar como não lida */ } await status(); }
         c.ultima = Date.now();
       }
@@ -367,26 +387,28 @@ export function criarSofia({ dir, log, api, sock }) {
       if (!jid || !/@(s\.whatsapp\.net|lid)$/.test(jid)) continue; // ignora grupos, status e canais
       const ts = Number(msg.messageTimestamp && msg.messageTimestamp.low !== undefined ? msg.messageTimestamp.low : msg.messageTimestamp) || 0;
       if (ts && Date.now() / 1000 - ts > 600) continue; // mensagens antigas (reconexão, histórico) não contam
+      const t = texto(msg), md = midia(msg), conteudo = t || (md ? `[mandou um(a) ${md}]` : "");
       if (msg.key.fromMe) {
-        // Mensagem do próprio número: se não foi este programa, foi a recepção pelo celular → a Sofia sai da conversa.
+        // Mensagem do próprio número. Respostas da Sofia já estão na conversa; lembretes automáticos viram contexto;
+        // qualquer outra foi a recepção pelo celular → a Sofia sai da conversa por um tempo e guarda o que foi dito.
         const id = msg.key.id;
-        setTimeout(() => { if (!minhas.has(id)) { pausas.set(jid, Date.now() + cfg.pausaHoras * 3600000); const c = conversas.get(jid); if (c) c.fila.length = 0; } }, 2500);
+        setTimeout(() => {
+          if (daSofia.has(id) || !conteudo) return;
+          const c = obter(jid, msg); c.ultima = Date.now();
+          if (minhas.has(id)) { anotar(c, "Mensagem automática da barbearia", conteudo); return; }
+          pausas.set(jid, Date.now() + cfg.pausaMin * 60000); c.humanoEm = Date.now();
+          for (const f of c.fila.splice(0)) anotar(c, "Cliente", f); // o que estava esperando, a recepção já está respondendo
+          anotar(c, "Recepção", conteudo);
+        }, 2500);
         continue;
       }
-      if (m.type !== "notify" || !ligada()) continue;
-      if ((pausas.get(jid) || 0) > Date.now()) continue;
-      let c = conversas.get(jid);
-      // Começa conversa nova só dentro do horário; uma conversa já começada continua até ficar 20 min parada.
-      const ativa = c && !c.recepcao && Date.now() - c.ultima < 20 * 60000;
-      if (!dentroDaJanela(cfg.janelas) && !ativa) continue;
-      if (c && c.recepcao) continue;
-      if (!c || Date.now() - c.ultima > 6 * 3600000) {
-        c = { mensagens: [], ultima: Date.now(), nome: "", agenda: null, recepcao: false, fone: foneDe(msg), fila: [], ocupado: false };
-        conversas.set(jid, c); zera(); stats.conversas++;
-      }
-      const t = texto(msg), md = midia(msg);
-      if (!t && !md) continue;
-      c.fila.push(t || `[o cliente mandou um(a) ${md}]`); c.ultima = Date.now(); c.ultimaMsg = msg;
+      if (m.type !== "notify" || !conteudo) continue;
+      const c = obter(jid, msg); c.ultima = Date.now(); c.ultimaMsg = msg;
+      // Sem atender agora (desligada, recepção na conversa ou fora do horário): guarda para contexto.
+      // Conversa nova só começa dentro do horário; a que a Sofia está atendendo continua até ficar 20 min parada.
+      const continua = c.ultimaSofia && Date.now() - c.ultimaSofia < 20 * 60000 && c.humanoEm < c.ultimaSofia;
+      if (!ligada() || c.recepcao || (pausas.get(jid) || 0) > Date.now() || (!dentroDaJanela(cfg.janelas) && !continua)) { anotar(c, "Cliente", conteudo); continue; }
+      c.fila.push(t || `[o cliente mandou um(a) ${md}]`);
       // Espera o cliente terminar de escrever (várias mensagens seguidas viram uma só).
       clearTimeout(c.timer); c.timer = setTimeout(() => processar(jid).catch(() => {}), 7000);
     }

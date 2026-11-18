@@ -4,7 +4,7 @@ alter table public.integrations add column if not exists ia_on boolean not null 
 alter table public.integrations add column if not exists ia_name text not null default 'Sofia';
 alter table public.integrations add column if not exists ia_model text not null default 'claude-sonnet-5-5';
 alter table public.integrations add column if not exists ia_hours jsonb;
-alter table public.integrations add column if not exists ia_pause integer not null default 3;
+alter table public.integrations add column if not exists ia_pause integer not null default 60; -- minutos sem responder depois que a recepção entra na conversa
 alter table public.integrations add column if not exists ia_notes text not null default '';
 alter table public.integrations add column if not exists ia_status text;
 alter table public.integrations add column if not exists ia_status_at timestamptz;

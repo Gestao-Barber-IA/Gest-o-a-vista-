@@ -4356,7 +4356,7 @@ Content-Type: application/json</pre>
     return `<section class="section card as-card">
       <h2 class="section-title">${icon('chat')} Atendente IA no WhatsApp (${esc(nome)})</h2>
       <p class="section-note">Nos dias e horários escolhidos abaixo (ex.: folga e almoço da recepção), a <b>${esc(nome)}</b> responde quem mandar mensagem no WhatsApp da barbearia, tira dúvidas de serviços e preços e <b>marca, remarca e cancela horários direto na AppBarber</b>. Ela é simpática, usa emoji e só faz mudanças na agenda depois que o cliente confirma. Preço, profissional e horário vêm sempre da AppBarber, nunca são inventados.</p>
-      <p class="section-note">Se alguém da recepção responder uma conversa pelo celular, ela sai daquela conversa. Reclamação, desconto, pagamento ou dúvida que ela não sabe resolver: avisa o cliente que a equipe já vai responder, deixa a conversa como <b>não lida</b> e o recado aparece aqui. Uma conversa já começada continua até ficar 20 minutos parada, mesmo depois do horário.</p>
+      <p class="section-note">Se alguém da recepção responder uma conversa pelo celular, ela sai daquela conversa pelo tempo escolhido abaixo (padrão: 1 hora). Quando volta, ela já leu o que a recepção e o cliente conversaram e continua de onde pararam, sem repetir nem contradizer o que foi combinado. Reclamação, desconto, pagamento ou dúvida que ela não sabe resolver: avisa o cliente que a equipe já vai responder, deixa a conversa como <b>não lida</b> e o recado aparece aqui. Uma conversa já começada continua até ficar 20 minutos parada, mesmo depois do horário.</p>
       <p class="section-note">${icon('alert')} Atende pelo número dos clientes, que hoje é ${it.cl_numero === 'principal' ? 'o <b>WhatsApp principal</b> ✅' : 'o <b>2º chip</b>: para os clientes falarem com ela, troque para o <b>WhatsApp principal</b> no lembrete de agendamento'}. A chave da IA (Anthropic) fica guardada só no servidor: no servidor, rode <code>gbia-sofia-chave</code>. Cada conversa gasta de 3 a 6 créditos da AppBarber.</p>
       ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}
       <div class="as-status">${!on ? '<span class="chip">Desligada</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.ia_status_at ? 'Atualizado ' + when(it.ia_status_at) : ''}</small><p class="muted as-msg">${esc(st.replace(/^(ok|erro): /, ''))}</p>` : '<span class="chip">Aguardando o servidor</span>'}</div>
@@ -4364,7 +4364,7 @@ Content-Type: application/json</pre>
         <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''} ${noAb ? 'disabled' : ''}><span><b>Atendente IA ligada</b><small>Fora dos horários abaixo ela não responde: quem atende é a recepção.</small></span></label>
         <div class="grid-2">
           <label class="field"><span>Nome da atendente</span><input class="input" name="name" maxlength="40" value="${esc(nome)}"></label>
-          <label class="field"><span>Sai da conversa quando a recepção responde, por (horas)</span><input class="input num" type="number" name="pause" min="1" max="24" step="1" value="${esc(String(it.ia_pause || 3))}"></label>
+          <label class="field"><span>Quando a recepção responde, ela sai da conversa por (minutos)</span><input class="input num" type="number" name="pause" min="15" max="1440" step="15" value="${esc(String(it.ia_pause || 60))}"></label>
         </div>
         <fieldset class="cl-num"><legend class="muted">Dias e horários em que ela atende</legend>${IA_DIAS.map(dia).join('')}</fieldset>
         <fieldset class="cl-num"><legend class="muted">Modelo de IA</legend>${IA_MODELOS.map(([v, t, d]) => `<label class="check"><input type="radio" name="model" value="${v}" ${mod === v ? 'checked' : ''}><span><b>${t}</b><small>${d}</small></span></label>`).join('')}</fieldset>
@@ -8738,7 +8738,7 @@ Content-Type: application/json</pre>
         hours[d] = [[a, b]];
       }
       const pause = Math.round(Number(el.pause.value) || 0);
-      if (pause < 1 || pause > 24) return setMsg(f, 'Horas para sair da conversa: de 1 a 24.');
+      if (pause < 15 || pause > 1440) return setMsg(f, 'Tempo fora da conversa: de 15 a 1440 minutos.');
       const name = (el.name.value || '').trim().slice(0, 40) || 'Sofia';
       const model = (f.querySelector('input[name="model"]:checked') || {}).value || 'claude-sonnet-5-5';
       const row = { ia_on: !!el.on.checked, ia_name: name, ia_model: model, ia_hours: hours, ia_pause: pause, ia_notes: (el.notes.value || '').trim().slice(0, 3000) };
