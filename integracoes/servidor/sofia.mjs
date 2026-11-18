@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "1.2";
+export const SOFIA_VERSAO = "1.3";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -27,7 +27,9 @@ const DIAS = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quint
 const so = (t) => String(t || "").replace(/\D/g, "");
 const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 // Telefone para comparar: DDD + 8 últimos dígitos (ignora o 55 e o 9 extra).
-export const chaveFone = (f) => { let d = so(f); if (d.length > 11 && d.startsWith("55")) d = d.slice(2); if (d.length === 11) d = d.slice(0, 2) + d.slice(3); return d.slice(-10); };
+export const chaveFone = (f) => { let d = so(f); if (d.length > 11 && d.startsWith("55")) d = d.slice(2); d = d.replace(/^0+/, ""); if (d.length === 11) d = d.slice(0, 2) + d.slice(3); return d.slice(-10); };
+// Celular com DDI 55 (aceita "55 019 9…", "(19) 9…", "019…").
+export const normFone = (t) => { let d = so(t); if (d.startsWith("55") && d.length >= 12) d = d.slice(2); d = d.replace(/^0+/, ""); return d.length >= 10 && d.length <= 11 ? "55" + d : so(t); };
 const agoraSP = () => { const p = new Intl.DateTimeFormat("en-GB", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date()); const [h, m] = p.split(":").map(Number); return h * 60 + m; };
 const diaSemanaSP = () => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", weekday: "short" }).format(new Date()));
 const hojeSP = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
@@ -151,6 +153,7 @@ Regras (muito importantes):
 - Reclamação, cliente irritado, desconto, pagamento, assunto delicado, algo fora de agenda/serviços/preços, ou se o cliente pedir uma pessoa: use chamar_recepcao e avise que a equipe já vai responder.
 - Se uma ferramenta der erro, não tente adivinhar: peça desculpas e use chamar_recepcao.
 - Não fale de outros clientes nem mostre códigos internos.
+- Cada mensagem do cliente começa com [Agora: …], com o dia e a hora atuais e o WhatsApp do cliente. Use para saber "hoje", "amanhã" e que horários já passaram; não comente essa linha com o cliente.
 - Às vezes a mensagem do cliente vem junto com o que foi conversado sem você (com a recepção ou mensagens automáticas da barbearia, como lembretes). Leia com atenção e continue de onde pararam: respeite o que a recepção combinou, não repita o que ela já disse e não se reapresente.
 ${notas ? `\nInformações da ${casa} (passadas pelo dono, use quando ajudar):\n${notas}\n` : ""}`;
 }
@@ -236,6 +239,9 @@ export async function executar(nomeTool, input, ctx) {
   return { erro: "ferramenta desconhecida" };
 }
 
+// Primeira linha de cada mensagem do cliente: dia, hora e WhatsApp (fica no histórico, que nunca é reescrito).
+export const agoraTexto = (fone) => `[Agora: ${DIAS[diaSemanaSP()]}, ${hojeSP().split("-").reverse().join("/")}, ${String(Math.floor(agoraSP() / 60)).padStart(2, "0")}:${String(agoraSP() % 60).padStart(2, "0")} (horário de Brasília) · WhatsApp do cliente: ${fone ? "+" + fone : "desconhecido"}]`;
+
 // Uma rodada: manda a conversa ao Claude, executa as ferramentas e devolve o texto para o cliente.
 export async function rodada({ client, modelo, sistema, conv, ctx, maxPassos = 8 }) {
   const fallback = modelo !== "claude-haiku-5-5"; // o Haiku não tem plano B no servidor
@@ -244,11 +250,13 @@ export async function rodada({ client, modelo, sistema, conv, ctx, maxPassos = 8
     const params = {
       model: modelo, max_tokens: 16000,
       output_config: { effort: "medium" },
-      system: [{ type: "text", text: sistema, cache_control: { type: "ephemeral" } },
-        { type: "text", text: `Agora: ${DIAS[diaSemanaSP()]}, ${hojeSP().split("-").reverse().join("/")}, ${String(Math.floor(agoraSP() / 60)).padStart(2, "0")}:${String(agoraSP() % 60).padStart(2, "0")} (horário de Brasília). Telefone do WhatsApp do cliente: ${ctx.fone ? "+" + ctx.fone : "desconhecido"}.` }],
+      // O system não muda durante a conversa (a data e a hora vão na mensagem do cliente): o histórico só cresce,
+      // como o raciocínio guardado da IA exige.
+      system: [{ type: "text", text: sistema, cache_control: { type: "ephemeral" } }],
       tools: TOOLS, tool_choice: { type: "auto" },
       messages: conv.mensagens,
-      ...(fallback ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" } : {}),
+      // Rede de segurança: se algum dia o começo da conversa não bater, a API descarta o raciocínio antigo em vez de dar erro.
+      ...(fallback ? { betas: ["server-side-fallback-2026-07-01", "thinking-binding-controls-2026-08-01"], fallbacks: "default", thinking: { type: "adaptive", block_binding: { prefix_mismatch_behavior: "drop_block" } } } : {}),
     };
     const r = fallback ? await client.beta.messages.create(params) : await client.messages.create(params);
     gasto += custo(modelo, r.usage || {});
@@ -454,13 +462,14 @@ export function criarSofia({ dir, log, api, sock }) {
         const novas = c.fila.splice(0);
         if (c.recepcao || (pausas.get(jid) || 0) > Date.now()) return;
         const antes = c.contexto.splice(0).sort((a, b) => a.ts - b.ts).map((x) => x.linha);
-        c.mensagens.push({ role: "user", content: antes.length
+        c.mensagens.push({ role: "user", content: agoraTexto(c.fone) + "\n" + (antes.length
           ? `[Para contexto: mensagens desta conversa enquanto você não estava atendendo]\n${antes.join("\n")}\n\n[Mensagem nova do cliente]\n${novas.join("\n")}`
-          : novas.join("\n") });
+          : novas.join("\n")) });
         if (!c.contada) { c.contada = true; zera(); stats.conversas++; }
         const ctx = { ab, fone: c.fone, stats, simular: false, registro: (t) => log(`Sofia: ${t}.`), pendencia: (t) => { c.motivo = t; pendencias.push(`${c.nome ? c.nome.split(" ")[0] + " " : ""}(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); } };
         const antesStats = { agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados };
-        const sistema = promptSistema({ nome: cfg.nome, barbearia: cfg.barbearia, notas: cfg.notas, brand: cfg.brand });
+        // Instruções congeladas no começo da conversa (mudanças no app valem para as próximas conversas).
+        const sistema = c.sistema || (c.sistema = promptSistema({ nome: cfg.nome, barbearia: cfg.barbearia, notas: cfg.notas, brand: cfg.brand }));
         const r = await rodada({ client, modelo: cfg.modelo, sistema, conv: c, ctx });
         stats.gasto += r.gasto; c.gasto = (c.gasto || 0) + r.gasto; c.registrada = false;
         c.feitos = c.feitos || {}; for (const [k, v] of Object.entries({ agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados })) c.feitos[k] = (c.feitos[k] || 0) + Math.max(0, v - antesStats[k]);
