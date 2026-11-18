@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "2.0";
+export const SOFIA_VERSAO = "2.1";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -471,7 +471,7 @@ export function criarSofia({ dir, log, api, sock }) {
     const partes = [`${quando} · ${ativa ? "atendendo agora" : "fora do horário dela (a recepção atende)"}`,
       `hoje: ${stats.conversas} conversa(s), ${stats.agendados} agendamento(s), ${stats.remarcados} remarcação(ões), ${stats.cancelados} cancelamento(s), ${stats.recepcao} passada(s) para a recepção`,
       `custo da IA hoje ≈ US$ ${stats.gasto.toFixed(2).replace(".", ",")}`];
-    const esperando = [...conversas.values()].filter((c) => c.noturna && c.fila.length).length;
+    const esperando = [...conversas.values()].filter((c) => c.noturna && c.pendTipo === "noite" && c.fila.length).length;
     if (esperando) partes.push(`${esperando} conversa(s) da noite esperando para ela responder às 7h`);
     if (pendencias.length) partes.push("para a recepção: " + pendencias.slice(-5).join(" | "));
     const st = extra ? extra : "ok: " + partes.join(" · ") + ".";
@@ -574,13 +574,23 @@ export function criarSofia({ dir, log, api, sock }) {
   }
   // Às 7h (ou no próximo horário dela), responde em ordem quem escreveu com a barbearia fechada.
   let respondendoFila = false;
+  // Mensagens "recentes" sem resposta há mais de 30 minutos ficam para a recepção (viram só contexto).
+  function limparPendentes() {
+    for (const [j, c] of conversas) {
+      if (!c.noturna && !c.ocupado && Date.now() - c.ultima > 6 * 3600000) { conversas.delete(j); continue; } // memória: esquece conversas paradas
+      if (c.noturna && c.pendTipo === "recente" && !c.ocupado && Date.now() - (c.ultimaCliente || c.noturna) > PEND_MIN * 60000) {
+        for (const f of c.fila.splice(0)) anotar(c, "Cliente", f); c.noturna = 0; c.pendTipo = null;
+      }
+    }
+  }
   async function filaDaNoite() {
+    limparPendentes();
     if (!ligada() || respondendoFila || noSilencio() || !dentroDaJanela(cfg.janelas)) return;
     const fila = [...conversas.entries()].filter(([, c]) => c.noturna && c.fila.length).sort((a, b) => a[1].noturna - b[1].noturna);
     if (!fila.length) return;
     respondendoFila = true;
     try {
-      log(`Sofia: respondendo ${fila.length} conversa(s) que chegaram com a barbearia fechada.`);
+      log(`Sofia: respondendo ${fila.length} conversa(s) que estavam esperando resposta.`);
       for (const [i, [jid, c]] of fila.entries()) {
         if (Date.now() - c.noturna > 36 * 3600000) { for (const f of c.fila.splice(0)) anotar(c, "Cliente", f); c.noturna = 0; continue; } // muito antiga: fica para a recepção
         await processar(jid).catch(() => {});
@@ -614,8 +624,10 @@ export function criarSofia({ dir, log, api, sock }) {
         if (c.noturna) {
           const ontem = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date(c.noturna)) !== hojeSP();
           const hora = new Date(c.noturna).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
-          novas.unshift(`[O cliente escreveu ${ontem ? "ontem" : "hoje"} a partir das ${hora}, com a barbearia fechada, e só agora você está respondendo. Cumprimente de acordo com a hora atual (ex.: "Bom dia!"), diga com simpatia que viu a mensagem dele e responda tudo o que ele pediu.]`);
-          c.noturna = 0;
+          novas.unshift(c.pendTipo === "recente"
+            ? `[O cliente escreveu a partir das ${hora} e ainda não tinha sido respondido. Peça desculpas pela demora de forma leve e simpática e responda tudo o que ele pediu nessas mensagens.]`
+            : `[O cliente escreveu ${ontem ? "ontem" : "hoje"} a partir das ${hora}, com a barbearia fechada, e só agora você está respondendo. Cumprimente de acordo com a hora atual (ex.: "Bom dia!"), diga com simpatia que viu a mensagem dele e responda tudo o que ele pediu.]`);
+          c.noturna = 0; c.pendTipo = null;
         }
         const antes = c.contexto.splice(0).sort((a, b) => a.ts - b.ts).map((x) => x.linha);
         const cadLinha = c.verificado ? "" : (c.verificado = true, (await verificarCadastro(ab, c.fone, c)) + "\n");
@@ -646,8 +658,10 @@ export function criarSofia({ dir, log, api, sock }) {
   }
 
   // Chamado a cada messages.upsert do WhatsApp dos clientes.
+  // Guarda as mensagens mesmo com a Sofia desligada ou fora do horário dela: ao ligar (ou quando começa o horário),
+  // ela responde quem escreveu nos últimos 30 minutos e ainda está sem resposta.
+  const PEND_MIN = 30;
   async function aoReceber(m) {
-    if (!cfg) return;
     for (const msg of m.messages || []) {
       const jid = msg.key && msg.key.remoteJid;
       if (!jid || !/@(s\.whatsapp\.net|lid)$/.test(jid)) continue; // ignora grupos, status e canais
@@ -662,9 +676,9 @@ export function criarSofia({ dir, log, api, sock }) {
           if (daSofia.has(id) || !conteudo) return;
           const c = obter(jid, msg); c.ultima = Date.now();
           if (minhas.has(id)) { anotar(c, "Mensagem automática da barbearia", conteudo); return; }
-          pausas.set(jid, Date.now() + cfg.pausaMin * 60000); c.humanoEm = Date.now();
+          pausas.set(jid, Date.now() + (cfg ? cfg.pausaMin : 60) * 60000); c.humanoEm = Date.now();
           for (const f of c.fila.splice(0)) anotar(c, "Cliente", f); // o que estava esperando, a recepção já está respondendo
-          c.noturna = 0;
+          c.noturna = 0; c.pendTipo = null;
           anotar(c, "Recepção", conteudo);
         }, 2500);
         continue;
@@ -676,13 +690,17 @@ export function criarSofia({ dir, log, api, sock }) {
       // Conversa nova só começa dentro do horário; a que a Sofia está atendendo continua até ficar 20 min parada.
       const continua = c.ultimaSofia && Date.now() - c.ultimaSofia < 20 * 60000 && c.humanoEm < c.ultimaSofia;
       const msgCli = t || `[o cliente mandou um(a) ${md}]`;
-      if (!ligada() || c.recepcao || (pausas.get(jid) || 0) > Date.now()) { anotar(c, "Cliente", conteudo); continue; }
+      if (c.recepcao || (pausas.get(jid) || 0) > Date.now()) { anotar(c, "Cliente", conteudo); continue; }
+      // Desligada: guarda; se ela for ligada em até 30 minutos (e ninguém tiver respondido), ela responde.
+      if (!ligada()) { c.fila.push(msgCli); if (!c.noturna) { c.noturna = Date.now(); c.pendTipo = "recente"; } clearTimeout(c.timer); continue; }
       // Noite (22h–7h): ninguém responde; a mensagem fica para a Sofia responder às 7h.
       // Fora do horário dela com a barbearia fechada (ex.: domingo à tarde): fica para o próximo horário dela.
       // Uma conversa em andamento pode seguir até 22h30.
       const guardar = noSilencio(agoraSP(), continua ? 30 : 0) || (!dentroDaJanela(cfg.janelas) && !continua && barbeariaFechada(cfg.horario));
-      if (guardar) { c.fila.push(msgCli); if (!c.noturna) c.noturna = Date.now(); clearTimeout(c.timer); continue; }
-      if (!dentroDaJanela(cfg.janelas) && !continua) { anotar(c, "Cliente", conteudo); continue; }
+      if (guardar) { c.fila.push(msgCli); if (!c.noturna) c.noturna = Date.now(); c.pendTipo = "noite"; clearTimeout(c.timer); continue; }
+      // Fora do horário dela com a barbearia aberta: é da recepção; se ninguém responder, quando começar o horário
+      // dela (em até 30 minutos da última mensagem) ela responde.
+      if (!dentroDaJanela(cfg.janelas) && !continua) { c.fila.push(msgCli); if (!c.noturna) { c.noturna = Date.now(); c.pendTipo = "recente"; } clearTimeout(c.timer); continue; }
       c.fila.push(msgCli);
       // Espera o cliente terminar de escrever (várias mensagens seguidas viram uma só).
       clearTimeout(c.timer); c.timer = setTimeout(() => processar(jid).catch(() => {}), 7000);
