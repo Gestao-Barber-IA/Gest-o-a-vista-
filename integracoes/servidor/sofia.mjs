@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "1.6";
+export const SOFIA_VERSAO = "2.0";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -40,6 +40,14 @@ const somaDias = (iso, n) => { const d = new Date(iso + "T12:00:00Z"); d.setUTCD
 // (terça e quarta 12h–14h; quinta a sábado 13h–15h20) e 20h–22h; domingo 7h–9h e 20h–22h.
 const CEDO = ["07:00", "09:00"], NOITE = ["20:00", "22:00"];
 export const JANELAS_PADRAO = { 0: [CEDO, NOITE], 1: [["00:00", "23:59"]], 2: [CEDO, ["12:00", "14:00"], NOITE], 3: [CEDO, ["12:00", "14:00"], NOITE], 4: [CEDO, ["13:00", "15:20"], NOITE], 5: [CEDO, ["13:00", "15:20"], NOITE], 6: [CEDO, ["13:00", "15:20"], NOITE] };
+// Silêncio da noite: das 22h às 7h a Sofia não manda mensagem (as que chegarem ficam para as 7h).
+export const SILENCIO = { de: 22 * 60, ate: 7 * 60 };
+export const noSilencio = (agora = agoraSP(), folga = 0) => agora >= SILENCIO.de + folga || agora < SILENCIO.ate;
+// Barbearia fechada agora (antes de abrir, depois de fechar ou dia fechado): ninguém da recepção está atendendo.
+export function barbeariaFechada(h, dia = diaSemanaSP(), agora = agoraSP()) {
+  if (!h || !h.abertura || !h.fechamento) return noSilencio(agora);
+  return (h.fechados || []).map(Number).includes(dia) || agora < mins(h.abertura) || agora >= mins(h.fechamento);
+}
 export function dentroDaJanela(janelas, dia = diaSemanaSP(), agora = agoraSP()) {
   const lista = (janelas && janelas[dia]) || [];
   return lista.some(([a, b]) => agora >= mins(a) && agora <= mins(b));
@@ -95,11 +103,22 @@ export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) 
       return { codigo: Number(a.appointment_code || a.scheduling_code), comanda: Number(a.invoice_code) || null, quando: m ? `${m[3]}-${m[2]}-${m[1]} ${m[4]}:${m[5]}` : a.scheduling_start, profissional: String(a.employee_name || "").trim(), servico: String(a.service_description || "").trim(), nome: String(a.client_name || "").trim() };
     }).sort((a, b) => String(a.quando).localeCompare(String(b.quando)));
   }
-  async function nomeDe(fone) {
+  // Cadastro do cliente pelo celular: { codigo, nome, nascimento } ou null.
+  async function clienteDe(fone) {
     const d = (await chamar("GET", `/v1/establishment/clients?cellphone=${so(fone).replace(/^55(?=\d{10,11}$)/, "")}`)).data || [];
     const lista = Array.isArray(d) ? d : (d.items || d.clients || []);
     const c = lista.find((x) => chaveFone(x.person_cellphone || x.person_phone) === chaveFone(fone)) || null;
-    return c ? String(c.person_name || "").trim() : "";
+    return c ? { codigo: Number(c.person_code) || null, nome: String(c.person_name || "").trim(), nascimento: String(c.person_birth_date || "").trim() } : null;
+  }
+  const nomeDe = async (fone) => ((await clienteDe(fone)) || {}).nome || "";
+  // Cadastro novo (nome, celular do WhatsApp e, se o cliente quiser, data de nascimento) ou só a data num cadastro que não tinha.
+  async function salvarCliente({ codigo, fone, nome, nascimento }) {
+    const cel = so(fone).replace(/^55(?=\d{10,11}$)/, "");
+    const corpo = codigo ? { establishment: Number(est), ...(nascimento ? { person_birth_date: nascimento } : {}), ...(nome ? { person_name: nome } : {}) }
+      : { establishment: Number(est), person_name: nome, person_cellphone: cel, person_dial_code: "+55", person_signup_origin: "WhatsApp (Sofia, atendente IA)", ...(nascimento ? { person_birth_date: nascimento } : {}) };
+    const r = (await chamar(codigo ? "PUT" : "POST", codigo ? `/v1/establishment/clients/${encodeURIComponent(codigo)}` : "/v1/establishment/clients", corpo)).data || {};
+    if (Number(r.error) > 0) throw new Error(r.result || "a AppBarber não aceitou o cadastro");
+    return { codigo: codigo || Number(r.person_code) || null };
   }
   async function criar({ fone, nome, servicos: lista, profissional, quando, obs }) {
     const corpo = { customer_phone: Number(so(fone).length <= 11 ? "55" + so(fone) : so(fone)), customer_name: nome, establishment_code: Number(est), start_date: quando,
@@ -115,7 +134,7 @@ export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) 
     cache.forEach((_, k) => { if (k.startsWith("disp:")) cache.delete(k); });
     return true;
   }
-  return { servicos, profissionais, horarios, agendamentosDe, nomeDe, criar, cancelarComanda };
+  return { servicos, profissionais, horarios, agendamentosDe, nomeDe, clienteDe, salvarCliente, criar, cancelarComanda };
 }
 
 // ---------- o que a Sofia pode fazer (ferramentas para o Claude) ----------
@@ -124,9 +143,11 @@ export const TOOLS = [
   { name: "ver_servicos", description: "Lista os serviços da barbearia com código, nome, duração em minutos e preço de TABELA (cobranca 'A partir de' = preço mínimo). Em alguns dias pode haver promoção: o valor de um dia específico vem em ver_horarios.", strict: true, input_schema: obj({}, []) },
   { name: "ver_horarios", description: "Horários livres de um dia para um serviço, por profissional, com o VALOR DAQUELE DIA (já com promoções/descontos do dia). Use o código do serviço de ver_servicos. Para mais de um serviço juntos (ex.: corte + barba), consulte pelo primeiro serviço e confira que há tempo seguido para os dois.", strict: true,
     input_schema: obj({ data: { type: "string", description: "Dia no formato AAAA-MM-DD" }, servico: { type: "integer", description: "Código do serviço" }, profissional: { type: ["string", "null"], description: "Nome do profissional que o cliente pediu, ou null para todos" } }, ["data", "servico", "profissional"]) },
+  { name: "salvar_cadastro", description: "Cadastra o cliente na barbearia (quando a linha [Cadastro…] diz que não tem cadastro) ou acrescenta a data de nascimento num cadastro que não tem. Use depois que o cliente informou nome e sobrenome; a data de nascimento é opcional (só se ele quiser informar).", strict: true,
+    input_schema: obj({ nome_completo: { type: ["string", "null"], description: "Nome e sobrenome (obrigatório para cadastro novo; null se o cliente já tem cadastro)" }, nascimento: { type: ["string", "null"], description: "Data de nascimento AAAA-MM-DD, ou null se o cliente não quis informar" }, celular: { type: ["string", "null"], description: "Celular com DDD, só se o WhatsApp do cliente estiver desconhecido; senão null" } }, ["nome_completo", "nascimento", "celular"]) },
   { name: "consultar_cliente", description: "Nome do cliente cadastrado na barbearia (pelo telefone do WhatsApp) e os horários que ele já tem marcados nos próximos 30 dias, com o código de cada um. Use antes de remarcar ou cancelar, e para chamar o cliente pelo nome.", strict: true, input_schema: obj({}, []) },
   { name: "agendar", description: "Marca o horário na AppBarber. SÓ use depois que o cliente confirmou com clareza (ex.: 'sim', 'pode marcar') o resumo com serviço(s), profissional, dia e hora.", strict: true,
-    input_schema: obj({ servicos: { type: "array", items: { type: "integer" }, description: "Códigos dos serviços, na ordem" }, profissional: { type: "integer", description: "Código do profissional (de ver_horarios)" }, data_hora: { type: "string", description: "AAAA-MM-DD HH:MM" }, nome_cliente: { type: "string", description: "Nome completo do cliente" } }, ["servicos", "profissional", "data_hora", "nome_cliente"]) },
+    input_schema: obj({ servicos: { type: "array", items: { type: "integer" }, description: "Códigos dos serviços, na ordem" }, profissional: { type: "integer", description: "Código do profissional (de ver_horarios)" }, data_hora: { type: "string", description: "AAAA-MM-DD HH:MM" }, nome_cliente: { type: "string", description: "Nome completo do cliente" }, observacao: { type: ["string", "null"], description: "Recado curto para o barbeiro(a), ex.: Primeira vez na barbearia; ou null" } }, ["servicos", "profissional", "data_hora", "nome_cliente", "observacao"]) },
   { name: "remarcar", description: "Troca um horário já marcado por outro: marca o novo e depois cancela o antigo. SÓ use depois que o cliente confirmou o novo horário.", strict: true,
     input_schema: obj({ codigo_agendamento: { type: "integer", description: "Código do horário atual (de consultar_cliente)" }, servicos: { type: "array", items: { type: "integer" } }, profissional: { type: "integer" }, data_hora: { type: "string", description: "AAAA-MM-DD HH:MM" } }, ["codigo_agendamento", "servicos", "profissional", "data_hora"]) },
   { name: "cancelar", description: "Cancela um horário marcado do cliente. SÓ use depois que o cliente confirmou que quer cancelar aquele horário.", strict: true,
@@ -137,8 +158,18 @@ export const TOOLS = [
     input_schema: obj({ motivo: { type: "string", description: "Resumo curto do que o cliente precisa" } }, ["motivo"]) },
 ];
 
-export function promptSistema({ nome, barbearia, notas, brand, artes = [] }) {
-  const casa = brand === "salao" ? "salão" : "barbearia";
+// "de segunda a sábado, das 09:00 às 20:00 (fechado: domingo)", a partir de Configurações › Ocupação do app.
+export function textoHorario(h) {
+  if (!h || !h.abertura || !h.fechamento) return "";
+  const nomes = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"], fech = (h.fechados || []).map(Number);
+  const abertos = [1, 2, 3, 4, 5, 6, 0].filter((d) => !fech.includes(d));
+  const seguidos = abertos.length > 1 && abertos.every((d, i) => i === 0 || d === (abertos[i - 1] + 1) % 7);
+  const dias = abertos.length === 7 ? "todos os dias" : seguidos ? `de ${nomes[abertos[0]]} a ${nomes[abertos.at(-1)]}` : abertos.map((d) => nomes[d]).join(", ");
+  return `${dias}, das ${h.abertura} às ${h.fechamento}${fech.length ? ` (fechado: ${fech.map((d) => nomes[d]).join(", ")})` : ""}`;
+}
+
+export function promptSistema({ nome, barbearia, notas, brand, artes = [], horario = null }) {
+  const casa = brand === "salao" ? "salão" : "barbearia", hor = textoHorario(horario);
   return `Você é ${nome}, atendente da ${barbearia} (${casa}) no WhatsApp. Você conversa com clientes para tirar dúvidas e marcar, remarcar ou cancelar horários direto no sistema de agenda (AppBarber), usando as ferramentas.
 
 Jeito de falar:
@@ -146,12 +177,19 @@ Jeito de falar:
 - Mensagens curtas, como no WhatsApp: 1 a 3 frases. Pode usar emoji com moderação (1 ou 2 por mensagem) 😊
 - Chame o cliente pelo primeiro nome quando souber. Não se apresente como robô nem fale de "sistema", "ferramenta" ou "IA", a não ser que perguntem; se perguntarem, diga com naturalidade que é a assistente virtual da ${barbearia}.
 - Sem listas longas nem markdown (nada de **negrito** ou #). Ao oferecer horários, sugira 2 ou 3 opções próximas do que o cliente pediu.
+- UMA pergunta por mensagem. Para agendar, siga esta ordem e pule o que o cliente já disse: 1) qual serviço; 2) preferência de barbeiro(a); 3) dia e período (manhã, tarde ou noite); 4) ofereça 2 ou 3 horários; 5) resumo para confirmar. Se o cliente responder só parte, siga com o que já sabe e pergunte só o que falta, sem repetir a pergunta inteira.
+- Ao falar de horário, diga sempre com quem: ex. "17h com o Igor ou 17h20 com o Izaquias". Nunca solte um horário sem o barbeiro(a).
 
 Regras (muito importantes):
 - Nunca invente preço, serviço, profissional ou horário: tudo vem das ferramentas.
-- Preço: se as Informações da casa trouxerem preços por dia da semana (promoções), ELAS VALEM sobre o preço de tabela de ver_servicos. Quando o cliente fala de um dia, informe o valor daquele dia; se for promocional, destaque com alegria 🎉. Se perguntarem o preço sem dizer o dia, informe o valor de hoje (se for dia promocional, diga que hoje está em promoção) e mencione rapidamente a diferença nos outros dias, convidando para os dias promocionais. Se a ferramenta não trouxer, diga que vai verificar com a recepção (chamar_recepcao).
+- Para explicar como é um serviço, use só o que está nas Informações da casa ou na observação do serviço (ver_servicos). Se não tiver, diga que o barbeiro(a) explica certinho no atendimento ou pergunte à recepção; não descreva por conta própria.
+- Preço: se as Informações da casa trouxerem preços por dia da semana (promoções), ELAS VALEM sobre o preço de tabela de ver_servicos. Quando o cliente fala de um dia, informe o valor daquele dia. Destaque a promoção 🎉 só na primeira vez que falar de preço e de novo no resumo para confirmar; nas outras mensagens, não repita. Se perguntarem o preço sem dizer o dia, informe o valor de hoje (se for dia promocional, diga que hoje está em promoção) e mencione rapidamente a diferença nos outros dias, convidando para os dias promocionais. Se a ferramenta não trouxer, diga que vai verificar com a recepção (chamar_recepcao).
 - Antes de agendar, remarcar ou cancelar, mande um resumo (serviço, profissional, dia da semana, data e hora) e espere o cliente confirmar. Só então use a ferramenta. Nunca marque sem confirmação.
-- Para agendar você precisa do nome do cliente: use consultar_cliente; se não tiver cadastro, pergunte o nome completo.
+- Na primeira mensagem de cada conversa vem a linha [Cadastro: …] dizendo se o cliente já é cadastrado (pelo WhatsApp dele).
+  • Cadastrado: chame pelo primeiro nome e não peça dados de novo.
+  • Sem cadastro (cliente novo): dê boas-vindas e, antes de marcar, faça o cadastro, uma pergunta por vez: 1) nome e sobrenome; 2) data de nascimento, explicando que é para ele receber promoções exclusivas no aniversário 🎉 (se não quiser informar, tudo bem, siga sem). O celular é o próprio WhatsApp: não pergunte, a não ser que a linha diga que é desconhecido. Depois use salvar_cadastro.
+  • Cadastrado sem data de nascimento: depois de resolver o que ele pediu, pergunte uma vez a data de nascimento, para as promoções de aniversário, e salve com salvar_cadastro.
+- Use a observação do agendamento para o que ajuda o barbeiro(a): se for a primeira vez do cliente na barbearia, escreva "Primeira vez na barbearia"; inclua também pedidos importantes do cliente (ex.: "quer manter o comprimento em cima").
 - Quando o cliente quiser um serviço e NÃO disser com quem, antes de oferecer horários pergunte se ele tem preferência de barbeiro(a) (ex.: "Você tem preferência de barbeiro(a)? 😊"). Se ele já disse o nome, não pergunte. Se ele não tiver preferência, ofereça quem tem horário mais perto do que ele pediu.
 - Remarcar ou cancelar: só horários do próprio cliente (consultar_cliente). Confirme qual horário antes.
 - Depois de marcar, confirme de forma calorosa com dia, hora e profissional.
@@ -160,7 +198,8 @@ Regras (muito importantes):
 - Se uma ferramenta der erro, não tente adivinhar: peça desculpas e use chamar_recepcao.
 - Não fale de outros clientes nem mostre códigos internos.
 - Cada mensagem do cliente começa com [Agora: …], com o dia e a hora atuais e o WhatsApp do cliente. Use para saber "hoje", "amanhã" e que horários já passaram; não comente essa linha com o cliente.
-- Às vezes a mensagem do cliente vem junto com o que foi conversado sem você (com a recepção ou mensagens automáticas da barbearia, como lembretes). Leia com atenção e continue de onde pararam: respeite o que a recepção combinou, não repita o que ela já disse e não se reapresente.
+${hor ? `- Horário de funcionamento da ${casa}: ${hor}. Você responde o WhatsApp também fora desse horário (ex.: cedo e à noite), mas só existem atendimentos dentro dele. Mensagens que chegam de madrugada você responde a partir das 7h. Se o cliente pedir um horário antes da abertura ou depois do fechamento, ou num dia fechado, explique com simpatia o horário de atendimento e ofereça os primeiros horários livres depois da abertura (ou no próximo dia aberto). Se ele quiser "agora" com a ${casa} fechada, diga a que horas abrimos.
+` : ""}- Às vezes a mensagem do cliente vem junto com o que foi conversado sem você (com a recepção ou mensagens automáticas da barbearia, como lembretes). Leia com atenção e continue de onde pararam: respeite o que a recepção combinou, não repita o que ela já disse e não se reapresente.
 ${notas ? `\nInformações da ${casa} (passadas pelo dono, use quando ajudar):\n${notas}\n` : ""}${artes.length ? `\nArtes que você pode enviar com enviar_arte (envie a arte em vez de digitar a tabela inteira; depois explique só o que o cliente perguntar):\n${artes.map((a) => `- "${a.nome}": enviar quando ${a.quando || "o assunto da arte aparecer"}`).join("\n")}\n` : ""}`;
 }
 
@@ -184,7 +223,7 @@ function precosDoDia(p) {
 
 // Executa uma ferramenta pedida pelo Claude. `simular` = não grava nada na AppBarber (teste no terminal).
 export async function executar(nomeTool, input, ctx) {
-  const { ab, fone, conv, simular } = ctx;
+  const { ab, conv, simular } = ctx, fone = ctx.fone || (conv && conv.fone) || "";
   const servicosPorCodigo = async (cods) => { const todos = await ab.servicos(); return cods.map((c) => todos.find((s) => Number(s.codigo) === Number(c))).filter(Boolean); };
   // Confere o horário na AppBarber antes de marcar (mais seguro que confiar no que foi dito na conversa).
   const confere = async (servs, profissional, dataHora) => {
@@ -210,9 +249,29 @@ export async function executar(nomeTool, input, ctx) {
       const d = new Date(input.data + "T12:00:00Z");
       return { dia: `${DIAS[d.getUTCDay()]}, ${input.data.split("-").reverse().join("/")}`, profissionais: lista.map((p) => ({ codigo: p.codigo, nome: p.nome, ...precosDoDia(p) })) };
     }
+    case "salvar_cadastro": {
+      let cel = fone;
+      if (!cel && input.celular) { cel = normFone(input.celular); if (chaveFone(cel).length < 10) return { erro: "celular inválido; peça com DDD" }; conv.fone = cel; }
+      if (!cel) return { erro: "preciso do celular com DDD do cliente" };
+      let nasc = input.nascimento ? String(input.nascimento).trim() : "";
+      const m = nasc.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); if (m) nasc = `${m[3]}-${m[2]}-${m[1]}`;
+      if (nasc && (!/^\d{4}-\d{2}-\d{2}$/.test(nasc) || isNaN(new Date(nasc + "T12:00:00Z")) || nasc > hojeSP() || nasc < "1910-01-01")) return { erro: "data de nascimento inválida; confirme dia, mês e ano" };
+      const cad = conv.cadastro || null;
+      if (cad && cad.codigo) {
+        if (!nasc) return { ok: true, nota: "o cliente já tem cadastro; nada para mudar" };
+        if (!simular) await ab.salvarCliente({ codigo: cad.codigo, fone: cel, nascimento: nasc });
+        cad.nascimento = nasc; ctx.registro("acrescentou a data de nascimento no cadastro");
+        return { ok: true, nota: "data de nascimento salva no cadastro" };
+      }
+      const nome = String(input.nome_completo || "").replace(/\s+/g, " ").trim();
+      if (nome.split(" ").length < 2) return { erro: "preciso do nome e sobrenome do cliente" };
+      const r = simular ? { codigo: null } : await ab.salvarCliente({ fone: cel, nome, nascimento: nasc });
+      conv.cadastro = { codigo: r.codigo, nome, nascimento: nasc }; conv.nome = nome; ctx.registro(`cadastrou ${nome.split(" ")[0]}${nasc ? " com aniversário" : ""}`);
+      return { ok: true, nota: simular ? "cadastro simulado (teste)" : "cliente cadastrado na barbearia" };
+    }
     case "consultar_cliente": {
       if (!fone) return { aviso: "telefone do cliente desconhecido: peça o número de celular com DDD" };
-      const [nome, ag] = await Promise.all([ab.nomeDe(fone).catch(() => ""), ab.agendamentosDe(fone)]);
+      const [nome, ag] = await Promise.all([conv.cadastro ? conv.cadastro.nome : ab.nomeDe(fone).catch(() => ""), ab.agendamentosDe(fone)]);
       conv.agenda = ag; if (nome) conv.nome = nome;
       return { nome: nome || (ag[0] && ag[0].nome) || null, cadastrado: !!nome, horarios_marcados: ag.map((a) => ({ codigo: a.codigo, quando: a.quando, servico: a.servico, profissional: a.profissional })) };
     }
@@ -222,7 +281,8 @@ export async function executar(nomeTool, input, ctx) {
       if (!servs.length) return { erro: "serviço não encontrado; use ver_servicos" };
       const prob = await confere(servs, input.profissional, input.data_hora); if (prob) return { erro: prob };
       if (simular) { ctx.stats.agendados++; return { ok: true, simulado: true }; }
-      const r = await ab.criar({ fone, nome: input.nome_cliente, servicos: servs, profissional: input.profissional, quando: input.data_hora });
+      const obs = [String(input.observacao || "").trim().slice(0, 300), "Agendado pela Sofia (atendente IA) no WhatsApp"].filter(Boolean).join(" · ");
+      const r = await ab.criar({ fone, nome: input.nome_cliente, servicos: servs, profissional: input.profissional, quando: input.data_hora, obs });
       ctx.stats.agendados++; ctx.registro(`agendou ${servs.map((s) => s.nome).join(" + ")} em ${input.data_hora}`);
       return { ok: true, codigos: r.codigos };
     }
@@ -271,6 +331,17 @@ export async function executar(nomeTool, input, ctx) {
   return { erro: "ferramenta desconhecida" };
 }
 
+// No começo de cada conversa: o cliente tem cadastro? (1 consulta à AppBarber, pelo celular do WhatsApp)
+export async function verificarCadastro(ab, fone, conv) {
+  if (!fone) return "[Cadastro: WhatsApp do cliente desconhecido; se for agendar, peça o celular com DDD]";
+  try {
+    const c = await ab.clienteDe(fone);
+    if (!c) { conv.cadastro = null; return "[Cadastro: cliente SEM cadastro na barbearia (cliente novo)]"; }
+    conv.cadastro = c; if (c.nome) conv.nome = c.nome;
+    return `[Cadastro: cliente cadastrado como ${c.nome || "(sem nome)"}; data de nascimento ${c.nascimento ? "cadastrada" : "NÃO cadastrada"}]`;
+  } catch { return "[Cadastro: não consegui verificar agora]"; }
+}
+
 // Primeira linha de cada mensagem do cliente: dia, hora e WhatsApp (fica no histórico, que nunca é reescrito).
 export const agoraTexto = (fone) => `[Agora: ${DIAS[diaSemanaSP()]}, ${hojeSP().split("-").reverse().join("/")}, ${String(Math.floor(agoraSP() / 60)).padStart(2, "0")}:${String(agoraSP() % 60).padStart(2, "0")} (horário de Brasília) · WhatsApp do cliente: ${fone ? "+" + fone : "desconhecido"}]`;
 
@@ -282,6 +353,8 @@ export async function rodada({ client, modelo, sistema, conv, ctx, maxPassos = 8
     const params = {
       model: modelo, max_tokens: 16000,
       output_config: { effort: "medium" },
+      // Cache da conversa: o que ela já leu fica guardado e sai bem mais barato na próxima mensagem.
+      cache_control: { type: "ephemeral" },
       // O system não muda durante a conversa (a data e a hora vão na mensagem do cliente): o histórico só cresce,
       // como o raciocínio guardado da IA exige.
       system: [{ type: "text", text: sistema, cache_control: { type: "ephemeral" } }],
@@ -398,6 +471,8 @@ export function criarSofia({ dir, log, api, sock }) {
     const partes = [`${quando} · ${ativa ? "atendendo agora" : "fora do horário dela (a recepção atende)"}`,
       `hoje: ${stats.conversas} conversa(s), ${stats.agendados} agendamento(s), ${stats.remarcados} remarcação(ões), ${stats.cancelados} cancelamento(s), ${stats.recepcao} passada(s) para a recepção`,
       `custo da IA hoje ≈ US$ ${stats.gasto.toFixed(2).replace(".", ",")}`];
+    const esperando = [...conversas.values()].filter((c) => c.noturna && c.fila.length).length;
+    if (esperando) partes.push(`${esperando} conversa(s) da noite esperando para ela responder às 7h`);
     if (pendencias.length) partes.push("para a recepção: " + pendencias.slice(-5).join(" | "));
     const st = extra ? extra : "ok: " + partes.join(" · ") + ".";
     await api("POST", { company_id: cfg.company_id, acao: "ia_status", status: st }).catch(() => {});
@@ -406,7 +481,7 @@ export function criarSofia({ dir, log, api, sock }) {
   async function configurar(e) {
     if (!e || !e.sofia || !e.appbarber) { cfg = null; return; }
     const novo = { company_id: e.company_id, barbearia: e.nome, brand: e.brand, nome: e.sofia.nome || "Sofia", modelo: MODELOS.includes(e.sofia.modelo) ? e.sofia.modelo : MODELO_PADRAO,
-      janelas: e.sofia.janelas || JANELAS_PADRAO, artes: Array.isArray(e.sofia.artes) ? e.sofia.artes.filter((a) => a && a.url && a.nome) : [], avisar: so(e.sofia.avisar || ""), pausaMin: Math.max(15, Math.min(1440, Number(e.sofia.pausa) || 60)), notas: e.sofia.notas || "", ab: e.appbarber };
+      janelas: e.sofia.janelas || JANELAS_PADRAO, horario: e.horario || null, artes: Array.isArray(e.sofia.artes) ? e.sofia.artes.filter((a) => a && a.url && a.nome) : [], avisar: so(e.sofia.avisar || ""), pausaMin: Math.max(15, Math.min(1440, Number(e.sofia.pausa) || 60)), notas: e.sofia.notas || "", ab: e.appbarber };
     cfg = novo;
     if (abKey !== e.appbarber.appbarber_api_key + e.appbarber.codigo_estabelecimento) {
       abKey = e.appbarber.appbarber_api_key + e.appbarber.codigo_estabelecimento;
@@ -420,7 +495,7 @@ export function criarSofia({ dir, log, api, sock }) {
     // Conversa parada há 1 hora entra no registro do relatório semanal; parada há 6 horas é esquecida.
     for (const [j, c] of conversas) {
       if (!c.ocupado && c.contada && !c.registrada && Date.now() - c.ultima > 3600000) registrar(c);
-      if (Date.now() - c.ultima > 6 * 3600000 && !c.ocupado) conversas.delete(j);
+      if (Date.now() - c.ultima > 6 * 3600000 && !c.ocupado && !c.noturna) conversas.delete(j);
     }
     await relatorioDaSemana().catch((err) => log("Sofia: relatório semanal: " + err.message));
     for (const [j, t] of pausas) if (t < Date.now()) pausas.delete(j);
@@ -497,11 +572,27 @@ export function criarSofia({ dir, log, api, sock }) {
       catch (e) { log("Sofia: retorno não enviado: " + e.message); }
     }
   }
-  setInterval(() => retornos().catch(() => {}), 60000).unref();
+  // Às 7h (ou no próximo horário dela), responde em ordem quem escreveu com a barbearia fechada.
+  let respondendoFila = false;
+  async function filaDaNoite() {
+    if (!ligada() || respondendoFila || noSilencio() || !dentroDaJanela(cfg.janelas)) return;
+    const fila = [...conversas.entries()].filter(([, c]) => c.noturna && c.fila.length).sort((a, b) => a[1].noturna - b[1].noturna);
+    if (!fila.length) return;
+    respondendoFila = true;
+    try {
+      log(`Sofia: respondendo ${fila.length} conversa(s) que chegaram com a barbearia fechada.`);
+      for (const [i, [jid, c]] of fila.entries()) {
+        if (Date.now() - c.noturna > 36 * 3600000) { for (const f of c.fila.splice(0)) anotar(c, "Cliente", f); c.noturna = 0; continue; } // muito antiga: fica para a recepção
+        await processar(jid).catch(() => {});
+        if (i < fila.length - 1) await espera(20000 + Math.random() * 20000); // uma de cada vez, com intervalo
+      }
+    } finally { respondendoFila = false; }
+  }
+  setInterval(() => { retornos().catch(() => {}); filaDaNoite().catch(() => {}); }, 60000).unref();
   // Conversa deste contato (cria se não houver ou se estiver parada há mais de 6 horas).
   function obter(jid, msg) {
     let c = conversas.get(jid);
-    if (!c || Date.now() - c.ultima > 6 * 3600000) {
+    if (!c || (Date.now() - c.ultima > 6 * 3600000 && !c.noturna)) {
       c = { mensagens: [], inicio: Date.now(), ultima: Date.now(), ultimaSofia: 0, humanoEm: 0, contexto: [], contada: false, nome: "", agenda: null, recepcao: false, fone: "", fila: [], ocupado: false };
       conversas.set(jid, c);
     }
@@ -519,8 +610,16 @@ export function criarSofia({ dir, log, api, sock }) {
       while (c.fila.length) {
         const novas = c.fila.splice(0);
         if (c.recepcao || (pausas.get(jid) || 0) > Date.now()) return;
+        // Mensagens que chegaram com a barbearia fechada (ex.: de madrugada): ela responde agora, avisando que viu.
+        if (c.noturna) {
+          const ontem = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date(c.noturna)) !== hojeSP();
+          const hora = new Date(c.noturna).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+          novas.unshift(`[O cliente escreveu ${ontem ? "ontem" : "hoje"} a partir das ${hora}, com a barbearia fechada, e só agora você está respondendo. Cumprimente de acordo com a hora atual (ex.: "Bom dia!"), diga com simpatia que viu a mensagem dele e responda tudo o que ele pediu.]`);
+          c.noturna = 0;
+        }
         const antes = c.contexto.splice(0).sort((a, b) => a.ts - b.ts).map((x) => x.linha);
-        c.mensagens.push({ role: "user", content: agoraTexto(c.fone) + "\n" + (antes.length
+        const cadLinha = c.verificado ? "" : (c.verificado = true, (await verificarCadastro(ab, c.fone, c)) + "\n");
+        c.mensagens.push({ role: "user", content: agoraTexto(c.fone) + "\n" + cadLinha + (antes.length
           ? `[Para contexto: mensagens desta conversa enquanto você não estava atendendo]\n${antes.join("\n")}\n\n[Mensagem nova do cliente]\n${novas.join("\n")}`
           : novas.join("\n")) });
         if (!c.contada) { c.contada = true; zera(); stats.conversas++; }
@@ -528,7 +627,7 @@ export function criarSofia({ dir, log, api, sock }) {
         const ctx = { ab, fone: c.fone, stats, simular: false, artes: c.artes, enviarArte: (a) => enviarArte(jid, a), registro: (t) => log(`Sofia: ${t}.`), pendencia: (t) => { c.motivo = t; pendencias.push(`${c.nome ? c.nome.split(" ")[0] + " " : ""}(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); } };
         const antesStats = { agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados };
         // Instruções congeladas no começo da conversa (mudanças no app valem para as próximas conversas).
-        const sistema = c.sistema || (c.sistema = promptSistema({ nome: cfg.nome, barbearia: cfg.barbearia, notas: cfg.notas, brand: cfg.brand, artes: c.artes }));
+        const sistema = c.sistema || (c.sistema = promptSistema({ nome: cfg.nome, barbearia: cfg.barbearia, notas: cfg.notas, brand: cfg.brand, artes: c.artes, horario: cfg.horario }));
         const r = await rodada({ client, modelo: cfg.modelo, sistema, conv: c, ctx });
         stats.gasto += r.gasto; c.gasto = (c.gasto || 0) + r.gasto; c.registrada = false;
         c.feitos = c.feitos || {}; for (const [k, v] of Object.entries({ agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados })) c.feitos[k] = (c.feitos[k] || 0) + Math.max(0, v - antesStats[k]);
@@ -565,6 +664,7 @@ export function criarSofia({ dir, log, api, sock }) {
           if (minhas.has(id)) { anotar(c, "Mensagem automática da barbearia", conteudo); return; }
           pausas.set(jid, Date.now() + cfg.pausaMin * 60000); c.humanoEm = Date.now();
           for (const f of c.fila.splice(0)) anotar(c, "Cliente", f); // o que estava esperando, a recepção já está respondendo
+          c.noturna = 0;
           anotar(c, "Recepção", conteudo);
         }, 2500);
         continue;
@@ -575,8 +675,15 @@ export function criarSofia({ dir, log, api, sock }) {
       // Sem atender agora (desligada, recepção na conversa ou fora do horário): guarda para contexto.
       // Conversa nova só começa dentro do horário; a que a Sofia está atendendo continua até ficar 20 min parada.
       const continua = c.ultimaSofia && Date.now() - c.ultimaSofia < 20 * 60000 && c.humanoEm < c.ultimaSofia;
-      if (!ligada() || c.recepcao || (pausas.get(jid) || 0) > Date.now() || (!dentroDaJanela(cfg.janelas) && !continua)) { anotar(c, "Cliente", conteudo); continue; }
-      c.fila.push(t || `[o cliente mandou um(a) ${md}]`);
+      const msgCli = t || `[o cliente mandou um(a) ${md}]`;
+      if (!ligada() || c.recepcao || (pausas.get(jid) || 0) > Date.now()) { anotar(c, "Cliente", conteudo); continue; }
+      // Noite (22h–7h): ninguém responde; a mensagem fica para a Sofia responder às 7h.
+      // Fora do horário dela com a barbearia fechada (ex.: domingo à tarde): fica para o próximo horário dela.
+      // Uma conversa em andamento pode seguir até 22h30.
+      const guardar = noSilencio(agoraSP(), continua ? 30 : 0) || (!dentroDaJanela(cfg.janelas) && !continua && barbeariaFechada(cfg.horario));
+      if (guardar) { c.fila.push(msgCli); if (!c.noturna) c.noturna = Date.now(); clearTimeout(c.timer); continue; }
+      if (!dentroDaJanela(cfg.janelas) && !continua) { anotar(c, "Cliente", conteudo); continue; }
+      c.fila.push(msgCli);
       // Espera o cliente terminar de escrever (várias mensagens seguidas viram uma só).
       clearTimeout(c.timer); c.timer = setTimeout(() => processar(jid).catch(() => {}), 7000);
     }

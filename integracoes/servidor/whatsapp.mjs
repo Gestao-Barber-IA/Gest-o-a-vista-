@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "3.0";
+const VERSAO = "3.4";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -564,7 +564,7 @@ if (process.argv.includes("--sofia")) {
   const s = e.sofia || {}, modelo = s.modelo || SOFIA.MODELO_PADRAO;
   const ab = SOFIA.ferramentasAppBarber({ cfg: e.appbarber, creditos: (n, z) => api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: n, ...(z ? { sem_saldo: true } : {}) }).catch(() => {}) });
   const artes = Array.isArray(s.artes) ? s.artes.filter((a) => a && a.url && a.nome) : [];
-  const sistema = SOFIA.promptSistema({ nome: s.nome || "Sofia", barbearia: e.nome, notas: s.notas || "", brand: e.brand, artes });
+  const sistema = SOFIA.promptSistema({ nome: s.nome || "Sofia", barbearia: e.nome, notas: s.notas || "", brand: e.brand, artes, horario: e.horario });
   const conv = { mensagens: [] }, stats = { agendados: 0, remarcados: 0, cancelados: 0, recepcao: 0 };
   const fone = arg("--fone") ? SOFIA.normFone(arg("--fone")) : "";
   const ctx = { ab, fone, stats, simular: true, artes, registro: (t) => console.log("  [" + t + "]"), pendencia: (t) => console.log("  [recepção: " + t + "]") };
@@ -574,7 +574,9 @@ if (process.argv.includes("--sofia")) {
   for await (const linha of rl) {
     if (/^sair$/i.test(linha.trim())) break;
     if (!linha.trim()) { process.stdout.write("Você: "); continue; }
-    conv.mensagens.push({ role: "user", content: SOFIA.agoraTexto(fone) + "\n" + linha });
+    const cad = conv.mensagens.length ? "" : (await SOFIA.verificarCadastro(ab, fone, conv)) + "\n";
+    if (cad) console.log("  " + cad.trim());
+    conv.mensagens.push({ role: "user", content: SOFIA.agoraTexto(fone) + "\n" + cad + linha });
     const r = await SOFIA.rodada({ client, modelo, sistema, conv, ctx }).catch((err) => ({ texto: "[erro: " + err.message + "]", gasto: 0 }));
     total += r.gasto; console.log(`${s.nome || "Sofia"}: ${r.texto}\n  (custo até agora ≈ US$ ${total.toFixed(3)})\n`); process.stdout.write("Você: ");
   }
