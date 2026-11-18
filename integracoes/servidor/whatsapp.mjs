@@ -9,15 +9,16 @@
 //   node whatsapp.mjs --codigo 5511999998888  liga pelo código de 8 letras (Conectar com número de telefone)
 //   node whatsapp.mjs --teste 5511999998888   envia uma mensagem de teste para esse número
 //   + --clientes (ou WA_PAPEL=clientes): usa o segundo número, só para o lembrete de agendamento dos clientes
+//   node whatsapp.mjs --clientes --sofia     conversa com a Sofia (atendente IA) no terminal, sem marcar nada de verdade
 //   node whatsapp.mjs                        serviço (systemd gbia-whatsapp)
-// Variáveis (em /etc/gbia-sync.env): SYNC_TOKEN (obrigatória), SYNC_URL, SITE_URL.
+// Variáveis (em /etc/gbia-sync.env): SYNC_TOKEN (obrigatória), SYNC_URL, SITE_URL, ANTHROPIC_API_KEY (Sofia, atendente IA).
 import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync, renameSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "2.5";
+const VERSAO = "2.6";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -42,6 +43,15 @@ const so = (t) => String(t || "").replace(/\D/g, "");
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, Browsers } = await import("baileys");
 const pino = (await import("pino")).default;
 
+// Sofia, a atendente IA (sofia.mjs, ao lado deste arquivo). Se ainda não estiver no servidor, baixa do site.
+async function carregarSofiaMod() {
+  const f = join(DIR, "sofia.mjs");
+  if (!existsSync(f)) { try { const r = await fetch(`${SITE}/integracoes/servidor/sofia.mjs`, { cache: "no-store" }); if (r.ok) writeFileSync(f, await r.text()); } catch { /* sem internet: tenta depois */ } }
+  try { return await import("./sofia.mjs"); } catch (e) { console.log("Sofia indisponível: " + e.message); return null; }
+}
+const SOFIA = CLI ? await carregarSofiaMod() : null;
+let sofia = null;
+
 // ---------- conexão ----------
 let sock = null, aberto = false, saiu = false, geracao = 0;
 async function conectar({ qr = false, codigo = "" } = {}) {
@@ -51,7 +61,10 @@ async function conectar({ qr = false, codigo = "" } = {}) {
   const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: undefined }));
   sock = makeWASocket({ auth: state, version, logger: pino({ level: "silent" }), browser: Browsers.ubuntu("Gestão Barber IA"), markOnlineOnConnect: false, syncFullHistory: false });
   sock.ev.on("creds.update", saveCreds);
-  sock.ev.on("messages.upsert", (m) => responder(m).catch(() => {}));
+  // Guarda os ids do que este programa manda: assim a Sofia sabe quando foi a recepção que respondeu pelo celular.
+  const envia = sock.sendMessage.bind(sock);
+  sock.sendMessage = async (...a) => { const r = await envia(...a); if (sofia) sofia.marcarMinha(r && r.key && r.key.id); return r; };
+  sock.ev.on("messages.upsert", (m) => { responder(m).catch(() => {}); if (sofia) sofia.aoReceber(m).catch(() => {}); });
   let pediuCodigo = false;
   return new Promise((ok) => {
     sock.ev.on("connection.update", async (u) => {
@@ -428,6 +441,7 @@ let respostas = [], respondidos = {};
 async function responder(m) {
   if (m.type === "notify") for (const msg of m.messages || []) await sairDaLista(msg).catch(() => {});
   if (m.type !== "notify" || !respostas.length || NUMERO === "principal") return; // no principal, quem responde é a recepção
+  if (sofia && sofia.ativaAgora()) return; // no horário da Sofia, quem responde é ela
   const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
   if (respondidos.dia !== hoje) respondidos = { dia: hoje };
   for (const msg of m.messages || []) {
@@ -449,6 +463,9 @@ async function atualizar() {
     if (!v || v === VERSAO || novo.length < 1000) return;
     const eu = fileURLToPath(import.meta.url), tmp = eu.replace(/\.mjs$/, ".novo.mjs");
     writeFileSync(tmp, novo); if (spawnSync(process.execPath, ["--check", tmp]).status !== 0) return;
+    // A Sofia (sofia.mjs) atualiza junto.
+    const rs = await fetch(`${SITE}/integracoes/servidor/sofia.mjs`, { cache: "no-store" });
+    if (rs.ok) { const ns = await rs.text(), ts = join(DIR, "sofia.novo.mjs"); writeFileSync(ts, ns); if (ns.length > 1000 && spawnSync(process.execPath, ["--check", ts]).status === 0) renameSync(ts, join(DIR, "sofia.mjs")); else rmSync(ts, { force: true }); }
     renameSync(tmp, eu); log(`Atualizado para a versão ${v}. Reiniciando…`); process.exit(0);
   } catch { /* sem internet: tenta depois */ }
 }
@@ -469,9 +486,11 @@ async function ciclo() {
   await atualizar();
   const { empresas = [], hoje } = await api("GET", null, "?acao=lembretes");
   // Cada número cuida só das empresas com o seu tipo de lembrete ligado.
-  const minhas = empresas.filter((e) => (CLI ? !!(e.clientes || e.feedback || e.reconquista || e.aniversario) : e.cfg.ligado !== false));
+  const minhas = empresas.filter((e) => (CLI ? !!(e.clientes || e.feedback || e.reconquista || e.aniversario || e.sofia) : e.cfg.ligado !== false));
   empresasConhecidas = minhas.map((e) => e.company_id);
   if (CLI) await escolherNumero(minhas);
+  // Sofia: atende o número dos clientes da primeira barbearia com a atendente IA ligada.
+  if (CLI && SOFIA) { if (!sofia) sofia = SOFIA.criarSofia({ dir: DIR, log, api, sock: () => sock }); await sofia.configurar(minhas.find((e) => e.sofia)).catch((err) => log("Sofia: " + err.message)); }
   if (!aberto) { if (Date.now() - avisouOff > 3600000) { avisouOff = Date.now(); await status(`desconectado: conecte o número no servidor (${CMD}).`); } return; }
   if (avisarConectado) { avisarConectado = false; await status(CLI ? `ok: ${NUMERO === "principal" ? "WhatsApp principal" : "2º chip"} conectado, aguardando os horários.` : "conectado: aguardando o horário dos lembretes."); }
   if (CLI) {
@@ -518,6 +537,32 @@ if (process.argv.includes("--agenda")) {
   for (const e of empresas.filter((x) => x.clientes)) {
     try { const l = await agendaHoje(e, hoje); console.log(`${e.nome}: ${l.length} agendamento(s) com status Agendado hoje; ${blocos(l, hoje).length} lembrete(s) a enviar no dia.`); }
     catch (err) { console.log(`${e.nome}: ERRO ${err.message}`); }
+  }
+  process.exit(0);
+}
+// Conversa com a Sofia no terminal: usa a AppBarber de verdade para serviços e horários, mas não marca nem cancela nada.
+if (process.argv.includes("--sofia")) {
+  if (!SOFIA) process.exit(1);
+  if (!process.env.ANTHROPIC_API_KEY) { console.log("Falta a chave da Anthropic. Rode: gbia-sofia-chave"); process.exit(1); }
+  const { empresas = [] } = await api("GET", null, "?acao=lembretes");
+  const e = empresas.find((x) => x.sofia && x.appbarber) || empresas.find((x) => x.appbarber);
+  if (!e) { console.log("Nenhuma barbearia com a AppBarber ligada."); process.exit(1); }
+  const Anthropic = await SOFIA.carregarSDK(DIR, log), client = new Anthropic();
+  const s = e.sofia || {}, modelo = s.modelo || SOFIA.MODELO_PADRAO;
+  const ab = SOFIA.ferramentasAppBarber({ cfg: e.appbarber, creditos: (n, z) => api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: n, ...(z ? { sem_saldo: true } : {}) }).catch(() => {}) });
+  const sistema = SOFIA.promptSistema({ nome: s.nome || "Sofia", barbearia: e.nome, notas: s.notas || "", brand: e.brand });
+  const conv = { mensagens: [] }, stats = { agendados: 0, remarcados: 0, cancelados: 0, recepcao: 0 };
+  const fone = so(arg("--fone") || "");
+  const ctx = { ab, fone, stats, simular: true, registro: (t) => console.log("  [" + t + "]"), pendencia: (t) => console.log("  [recepção: " + t + "]") };
+  console.log(`Teste da ${s.nome || "Sofia"} (${modelo}) — ${e.nome}. Nada é marcado de verdade. Escreva como cliente; "sair" para terminar.\n`);
+  const rl = (await import("node:readline")).createInterface({ input: process.stdin });
+  let total = 0; process.stdout.write("Você: ");
+  for await (const linha of rl) {
+    if (/^sair$/i.test(linha.trim())) break;
+    if (!linha.trim()) { process.stdout.write("Você: "); continue; }
+    conv.mensagens.push({ role: "user", content: linha });
+    const r = await SOFIA.rodada({ client, modelo, sistema, conv, ctx }).catch((err) => ({ texto: "[erro: " + err.message + "]", gasto: 0 }));
+    total += r.gasto; console.log(`${s.nome || "Sofia"}: ${r.texto}\n  (custo até agora ≈ US$ ${total.toFixed(3)})\n`); process.stdout.write("Você: ");
   }
   process.exit(0);
 }

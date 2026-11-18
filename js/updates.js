@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-18-sofia', date: '2026-11-18', title: 'Atendente IA no WhatsApp (Sofia)', items: [
+    ['novo', 'Em Integração, o cartão Atendente IA no WhatsApp: nos dias e horários escolhidos (ex.: folga e almoço da recepção), a Sofia responde os clientes no WhatsApp da barbearia, tira dúvidas de serviços e preços e marca, remarca e cancela horários direto na AppBarber, sempre depois que o cliente confirma.'],
+    ['melhoria', 'Se a recepção responder pelo celular, ela sai da conversa. Reclamação, desconto ou dúvida que ela não resolve fica como não lida para a recepção, com o recado no cartão. Dá para escolher o nome, os horários, o modelo de IA e passar informações da casa (endereço, pagamento…).'],
+  ] },
   { id: '2026-11-18-aniversario', date: '2026-11-18', title: 'Parabéns aos aniversariantes no WhatsApp', items: [
     ['novo', 'Em Integração, o cartão Parabéns aos aniversariantes: todo dia, a partir das 9h, os clientes que fazem aniversário recebem a mensagem de parabéns com o convite para um serviço extra de cortesia. Quem responder fala com a recepção.'],
     ['melhoria', 'Usa a lista de aniversariantes da AppBarber (1 crédito por dia), sai pelo número dos clientes com o ritmo de sempre, 1 vez por ano por cliente. Quem faz aniversário num dia fechado (ex.: domingo) recebe o parabéns antecipado no último dia aberto (ex.: sábado), com a oferta para vir nesse dia.'],

@@ -20,12 +20,13 @@ fi
 echo "==> Baixando o programa e o motor do WhatsApp (Baileys)"
 mkdir -p "$DIR"
 curl -fsSL "$SITE/integracoes/servidor/whatsapp.mjs" -o "$DIR/whatsapp.mjs"
+curl -fsSL "$SITE/integracoes/servidor/sofia.mjs" -o "$DIR/sofia.mjs"
 cat > "$DIR/package.json" <<'PKG'
 { "name": "gbia-whatsapp", "private": true, "type": "module",
-  "dependencies": { "baileys": "7.0.0-rc14", "pino": "9.6.0", "qrcode-terminal": "0.12.0" } }
+  "dependencies": { "baileys": "7.0.0-rc14", "pino": "9.6.0", "qrcode-terminal": "0.12.0", "@anthropic-ai/sdk": "1.4.0" } }
 PKG
 (cd "$DIR" && npm install --omit=dev --no-audit --no-fund --loglevel=error)
-node --check "$DIR/whatsapp.mjs"
+node --check "$DIR/whatsapp.mjs" && node --check "$DIR/sofia.mjs"
 chown -R gbia:gbia "$DIR" && chmod 700 "$DIR"
 
 echo "==> Criando os serviços (ligam sozinhos e reiniciam se caírem)"
@@ -79,6 +80,24 @@ cat > /usr/local/bin/gbia-whatsapp-agenda <<CMD
 sudo -u gbia env \$(cat /etc/gbia-sync.env | xargs) TZ=America/Sao_Paulo WA_PAPEL=clientes node $DIR/whatsapp.mjs --agenda
 CMD
 chmod 755 /usr/local/bin/gbia-whatsapp-agenda
+# Sofia (atendente IA): guardar a chave da Anthropic sem aparecer na tela nem no histórico, e conversar com ela no terminal.
+cat > /usr/local/bin/gbia-sofia-chave <<'CMD'
+#!/usr/bin/env bash
+set -e
+read -rsp "Cole a chave da Anthropic (sk-ant-...) e aperte Enter: " K; echo
+case "$K" in sk-ant-*) ;; *) echo "Isso não parece uma chave da Anthropic (começa com sk-ant-)."; exit 1;; esac
+grep -v '^ANTHROPIC_API_KEY=' /etc/gbia-sync.env > /etc/gbia-sync.env.novo || true
+echo "ANTHROPIC_API_KEY=$K" >> /etc/gbia-sync.env.novo
+chmod 600 /etc/gbia-sync.env.novo && mv /etc/gbia-sync.env.novo /etc/gbia-sync.env
+systemctl restart gbia-whatsapp-clientes
+echo "Chave guardada. A Sofia já pode atender (ligue no app: Integração › Atendente IA)."
+CMD
+chmod 700 /usr/local/bin/gbia-sofia-chave
+cat > /usr/local/bin/gbia-sofia-teste <<CMD
+#!/usr/bin/env bash
+sudo -u gbia env \$(cat /etc/gbia-sync.env | xargs) TZ=America/Sao_Paulo WA_PAPEL=clientes node $DIR/whatsapp.mjs --sofia --fone "\${1:-}"
+CMD
+chmod 755 /usr/local/bin/gbia-sofia-teste
 systemctl daemon-reload
 systemctl enable gbia-whatsapp gbia-whatsapp-clientes >/dev/null
 systemctl restart gbia-whatsapp gbia-whatsapp-clientes
@@ -94,5 +113,7 @@ echo "  • WhatsApp principal (clientes, opcional): gbia-whatsapp-conectar-prin
 echo "                            gbia-whatsapp-teste-principal 55DDDNUMERO"
 echo " (aparece um QR code: no celular do chip, WhatsApp ›"
 echo "  Aparelhos conectados › Conectar um aparelho)"
+echo "  • Sofia (atendente IA): gbia-sofia-chave  (guarda a chave da Anthropic)"
+echo "                            gbia-sofia-teste 55DDDNUMERO  (conversa de teste no terminal)"
 echo " Ver o funcionamento:  journalctl -u gbia-whatsapp-clientes -f"
 echo "============================================================"
