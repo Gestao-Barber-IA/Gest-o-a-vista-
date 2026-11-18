@@ -7460,7 +7460,9 @@ Content-Type: application/json</pre>
     const text = a.text || (termsCfg() && termsCfg().ver === a.ver ? termsCfg().text : '');
     const when = new Date(a.at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     const u = state.users.find(x => x.id === a.userId) || {};
-    return `<div class="btn-row ct-tools"><button class="btn" data-action="ctOpen" data-id="">${icon('left')} Voltar</button><button class="btn btn-primary" data-action="ctPrint">${icon('download')} Imprimir / salvar PDF</button></div>
+    const del = own && isGestor(currentUser()), conf = ui.confirm === 'ctDel:' + a.id;
+    return `<div class="btn-row ct-tools"><button class="btn" data-action="ctOpen" data-id="">${icon('left')} Voltar</button><button class="btn btn-primary" data-action="ctPrint">${icon('download')} Imprimir / salvar PDF</button>${del ? `<button class="btn ${conf ? 'btn-danger' : ''}" data-action="ctDel" data-id="${esc(a.id)}">${icon('trash')} ${conf ? 'Confirmar: excluir este contrato' : 'Excluir contrato'}</button>` : ''}</div>
+      ${del && conf ? `<p class="card ct-warn">${icon('alert')} Excluindo, este documento some de vez. Se for da versão atual dos termos, ${esc(String(a.name || 'a pessoa').split(' ')[0])} vai precisar ler e assinar de novo na próxima vez que abrir o sistema (é o jeito de corrigir um contrato preenchido errado).</p>` : ''}
       <article class="card ct-doc">
         <header class="ct-dhead"><h2>${esc(a.title || 'Termos e regras da ' + (a.company || state.company.name || 'barbearia'))}</h2>
           <p>${esc(a.company || state.company.name || '')}${(a.companyCnpj || state.company.cnpj) ? ' · CNPJ ' + esc(a.companyCnpj || state.company.cnpj) : ''}</p></header>
@@ -8273,7 +8275,18 @@ Content-Type: application/json</pre>
     defaultGoals() { state.goals = { ...(state.goals || {}), team: { ...GB.DEFAULT_GOALS } }; save(); toast('Metas padrão restauradas.'); render(); },
 
     bonusRoleta(el) { const f = el.form; ui.bonusDraft = { ...(ui.bonusDraft || {}), ...bonusDraftOf(f), tipo: 'dinheiro', valor: Number(el.dataset.v), motivo: 'Roleta – venda de 3 produtos', roleta: true }; render(); },
-    ctOpen(el) { ui.ctView = el.dataset.id || null; render(); window.scrollTo(0, 0); },
+    ctOpen(el) { ui.ctView = el.dataset.id || null; ui.confirm = null; render(); window.scrollTo(0, 0); },
+    // Excluir um contrato (dono/gestor), ex.: profissional preencheu errado. Com 2 toques; quem for da versão atual assina de novo.
+    ctDel(el) {
+      if (!isGestor(currentUser())) return;
+      const id = el.dataset.id, a = termsAll().find(x => x.id === id); if (!a) return;
+      if (ui.confirm !== 'ctDel:' + id) { ui.confirm = 'ctDel:' + id; return render(); }
+      ui.confirm = null; ui.ctView = null;
+      state.termAccepts = termsAll().filter(x => x.id !== id); save();
+      const cur = termsCfg(), nm = String(a.name || 'A pessoa').split(' ')[0];
+      const quem = state.users.find(x => x.id === a.userId);
+      toast(cur && a.ver === cur.ver && quem && termsNeeded(quem) ? `Contrato excluído. ${nm} vai assinar de novo na próxima vez que abrir o sistema.` : 'Contrato excluído.', 5000); render(); window.scrollTo(0, 0);
+    },
     ctPrint() { document.body.classList.add('printing-ct'); setTimeout(() => { window.print(); document.body.classList.remove('printing-ct'); }, 60); },
     termPreview(el) { ui.termPreview = el.dataset.v === '1'; ui.termDraft = null; render(); window.scrollTo(0, 0); },
     termClear() { const cv = $('#tm-sig'); if (!cv) return; const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); if (ui.termDraft) ui.termDraft.drawn = false; },

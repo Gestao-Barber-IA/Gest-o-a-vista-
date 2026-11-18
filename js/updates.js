@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-18-contrato-excluir', date: '2026-11-18', title: 'Contratos: excluir um contrato preenchido errado', items: [
+    ['novo', 'Em Contratos, ao abrir um documento, o dono ou gestor pode tocar em Excluir contrato (com confirmação). Se for da versão atual dos termos, o profissional lê e assina de novo na próxima vez que abrir o sistema.'],
+  ] },
   { id: '2026-11-18-sofia', date: '2026-11-18', title: 'Atendente IA no WhatsApp (Sofia)', items: [
     ['novo', 'Em Integração, o cartão Atendente IA no WhatsApp: nos dias e horários escolhidos (ex.: folga e almoço da recepção, cedo e à noite; vários horários por dia), a Sofia responde os clientes no WhatsApp da barbearia, tira dúvidas de serviços e preços e marca, remarca e cancela horários direto na AppBarber, sempre depois que o cliente confirma.'],
     ['melhoria', 'Se a recepção responder pelo celular, ela sai da conversa por 1 hora (dá para mudar) e, quando volta, já leu o que a recepção e o cliente conversaram, continuando de onde pararam. Reclamação, desconto ou dúvida que ela não resolve fica como não lida para a recepção, com o recado no cartão. Dá para escolher o nome, os horários, o modelo de IA e passar informações da casa (endereço, pagamento…).'],
