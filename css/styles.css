@@ -3050,3 +3050,15 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .ia-day .check { margin: 0; }
 .ia-day:not(:has(.ia-on input:checked)) .ia-all, .ia-day:not(:has(.ia-on input:checked)) .ia-range, .ia-day:has(.ia-all input:checked) .ia-range { opacity: .35; pointer-events: none; }
 @media (max-width: 520px) { .ia-day { grid-template-columns: 1fr auto; } .ia-day .ia-range { grid-column: 1 / -1; } }
+/* Atendente IA: relatório semanal */
+.ia-rep { margin: 4px 0 14px; padding: 14px; border: 1px solid var(--line, rgba(255,255,255,.12)); border-radius: 12px; display: grid; gap: 10px; min-width: 0; }
+.ia-rep p { margin: 0; line-height: 1.45; }
+.ia-rep-t { margin: 0; font-size: 1rem; display: flex; align-items: center; gap: 8px; }
+.ia-nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; }
+.ia-nums span { display: grid; padding: 8px 10px; border-radius: 10px; background: rgba(214, 180, 106, .08); }
+.ia-nums b { font-size: 1.3rem; } .ia-nums small { opacity: .75; }
+.ia-sub { margin-top: 4px !important; font-weight: 600; }
+.ia-mot, .ia-sugs { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.ia-mot li, .ia-sug { display: grid; gap: 4px; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,.03); overflow-wrap: anywhere; }
+.ia-sug-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.ia-sug.ia-no { opacity: .55; } .ia-sug .chip { justify-self: start; }

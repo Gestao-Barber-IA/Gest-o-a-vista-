@@ -6,6 +6,9 @@ alter table public.integrations add column if not exists ia_model text not null 
 alter table public.integrations add column if not exists ia_hours jsonb;
 alter table public.integrations add column if not exists ia_pause integer not null default 60; -- minutos sem responder depois que a recepção entra na conversa
 alter table public.integrations add column if not exists ia_notes text not null default '';
+alter table public.integrations add column if not exists ia_report jsonb;          -- relatório semanal (domingo à noite) com as sugestões
+alter table public.integrations add column if not exists ia_report_at timestamptz;
+alter table public.integrations add column if not exists ia_report_phone text not null default ''; -- WhatsApp que recebe o aviso do relatório
 alter table public.integrations add column if not exists ia_status text;
 alter table public.integrations add column if not exists ia_status_at timestamptz;
 notify pgrst, 'reload schema';

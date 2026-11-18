@@ -10,6 +10,7 @@
 //   node whatsapp.mjs --teste 5511999998888   envia uma mensagem de teste para esse número
 //   + --clientes (ou WA_PAPEL=clientes): usa o segundo número, só para o lembrete de agendamento dos clientes
 //   node whatsapp.mjs --clientes --sofia     conversa com a Sofia (atendente IA) no terminal, sem marcar nada de verdade
+//   node whatsapp.mjs --clientes --sofia-relatorio   gera agora o relatório semanal da Sofia
 //   node whatsapp.mjs                        serviço (systemd gbia-whatsapp)
 // Variáveis (em /etc/gbia-sync.env): SYNC_TOKEN (obrigatória), SYNC_URL, SITE_URL, ANTHROPIC_API_KEY (Sofia, atendente IA).
 import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync, renameSync } from "node:fs";
@@ -538,6 +539,17 @@ if (process.argv.includes("--agenda")) {
     try { const l = await agendaHoje(e, hoje); console.log(`${e.nome}: ${l.length} agendamento(s) com status Agendado hoje; ${blocos(l, hoje).length} lembrete(s) a enviar no dia.`); }
     catch (err) { console.log(`${e.nome}: ERRO ${err.message}`); }
   }
+  process.exit(0);
+}
+// Relatório semanal da Sofia agora (sem esperar o domingo): gera, manda para o app e mostra aqui.
+if (process.argv.includes("--sofia-relatorio")) {
+  if (!SOFIA || !process.env.ANTHROPIC_API_KEY) { console.log("Falta a Sofia ou a chave da Anthropic (gbia-sofia-chave)."); process.exit(1); }
+  const { empresas = [] } = await api("GET", null, "?acao=lembretes");
+  const e = empresas.find((x) => x.sofia); if (!e) { console.log("A atendente IA não está ligada no app."); process.exit(1); }
+  const Anthropic = await SOFIA.carregarSDK(DIR, log), client = new Anthropic();
+  const rel = await SOFIA.gerarRelatorio({ client, modelo: e.sofia.modelo || SOFIA.MODELO_PADRAO, registros: SOFIA.lerRegistros(DIR), notas: e.sofia.notas || "", nome: e.sofia.nome || "Sofia", barbearia: e.nome });
+  await api("POST", { company_id: e.company_id, acao: "ia_report", relatorio: rel });
+  console.log(JSON.stringify(rel, null, 2)); console.log("\nRelatório enviado para o app (Integração › Atendente IA).");
   process.exit(0);
 }
 // Conversa com a Sofia no terminal: usa a AppBarber de verdade para serviços e horários, mas não marca nem cancela nada.

@@ -3,6 +3,7 @@
 // GET  → lista as barbearias com sincronização automática ligada e assinatura em dia.
 // GET ?acao=lembretes → dados do dia para os lembretes no WhatsApp.
 // POST { company_id, acao: 'wa_status' | 'cl_status' | 'fb_status' | 'wb_status' | 'bd_status' | 'ia_status', status } → grava o estado dos lembretes (equipe | clientes).
+// POST { company_id, acao: 'ia_report', relatorio } → grava o relatório semanal da Sofia.
 // POST { company_id, creditos, sem_saldo } (com qualquer ação, ou acao: 'ab_uso') → soma as consultas gastas na AppBarber.
 // POST → { company_id, ok, mensagem } grava o resultado da última sincronização.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
@@ -29,7 +30,7 @@ Deno.serve(async (req) => {
   if (req.method === "GET" && url.searchParams.get("acao") === "lembretes") {
     const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
     const { data: ints, error } = await db.from("integrations")
-      .select("company_id, est_code, api_key, branch_code, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, bd_on, bd_text, ia_on, ia_name, ia_model, ia_hours, ia_pause, ia_notes").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,bd_on.eq.true,ia_on.eq.true");
+      .select("company_id, est_code, api_key, branch_code, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, bd_on, bd_text, ia_on, ia_name, ia_model, ia_hours, ia_pause, ia_notes, ia_report_phone").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,bd_on.eq.true,ia_on.eq.true");
     if (error) return json({ erro: error.message }, 500);
     const empresas = [];
     for (const i of ints || []) {
@@ -51,7 +52,7 @@ Deno.serve(async (req) => {
         // Parabéns aos aniversariantes do dia (lista de aniversariantes da AppBarber, 1 crédito por dia).
         aniversario: i.bd_on && i.est_code && i.api_key ? { texto: i.bd_text || "" } : null,
         // Sofia, a atendente IA: dias e horários em que ela responde o WhatsApp dos clientes.
-        sofia: i.ia_on && i.est_code && i.api_key ? { nome: String(i.ia_name || "Sofia").slice(0, 40), modelo: i.ia_model || "claude-sonnet-5-5", janelas: i.ia_hours || null, pausa: Number(i.ia_pause) || 60, notas: String(i.ia_notes || "").slice(0, 3000) } : null,
+        sofia: i.ia_on && i.est_code && i.api_key ? { nome: String(i.ia_name || "Sofia").slice(0, 40), modelo: i.ia_model || "claude-sonnet-5-5", janelas: i.ia_hours || null, pausa: Number(i.ia_pause) || 60, notas: String(i.ia_notes || "").slice(0, 3000), avisar: String(i.ia_report_phone || "").replace(/\D/g, "").slice(0, 15) } : null,
         appbarber: i.est_code && i.api_key ? { codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
         // Reconquista de clientes sumidos (lista de clientes da AppBarber, 1 crédito por página).
         reconquista: i.wb_on && i.est_code && i.api_key ? { porDia: Math.max(1, Math.min(40, Number(i.wb_daily) || 15)), minDias: Math.max(30, Number(i.wb_min_days) || 90), maxDias: Math.max(60, Number(i.wb_max_days) || 365), texto: i.wb_text || "", codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
@@ -110,6 +111,13 @@ Deno.serve(async (req) => {
     const usoN = Math.max(0, Math.min(5000, Number(b.creditos) || 0)), zero = b.sem_saldo === true;
     if (usoN || zero) await db.rpc("ab_add_uso", { p_company: b.company_id, p_n: usoN, p_zero: zero });
     if (b.acao === "ab_uso") return json({ ok: true });
+    // Relatório semanal da Sofia (atendente IA): números, motivos e sugestões para o dono aprovar no app.
+    if (b.acao === "ia_report") {
+      const rel = b.relatorio && typeof b.relatorio === "object" ? b.relatorio : null;
+      if (!rel || JSON.stringify(rel).length > 30000) return json({ erro: "Relatório inválido." }, 400);
+      const { error } = await db.from("integrations").update({ ia_report: rel, ia_report_at: new Date().toISOString() }).eq("company_id", b.company_id);
+      return error ? json({ erro: error.message }, 500) : json({ ok: true });
+    }
     if (["wa_status", "cl_status", "fb_status", "wb_status", "bd_status", "ia_status"].includes(b.acao)) {
       const k = String(b.acao).slice(0, 2);
       const { error } = await db.from("integrations").update({ [k + "_status"]: String(b.status || "").slice(0, 500), [k + "_status_at"]: new Date().toISOString() }).eq("company_id", b.company_id);

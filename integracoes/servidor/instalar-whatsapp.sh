@@ -98,6 +98,11 @@ cat > /usr/local/bin/gbia-sofia-teste <<CMD
 sudo -u gbia env \$(cat /etc/gbia-sync.env | xargs) TZ=America/Sao_Paulo WA_PAPEL=clientes node $DIR/whatsapp.mjs --sofia --fone "\${1:-}"
 CMD
 chmod 755 /usr/local/bin/gbia-sofia-teste
+cat > /usr/local/bin/gbia-sofia-relatorio <<CMD
+#!/usr/bin/env bash
+sudo -u gbia env \$(cat /etc/gbia-sync.env | xargs) TZ=America/Sao_Paulo WA_PAPEL=clientes node $DIR/whatsapp.mjs --sofia-relatorio
+CMD
+chmod 755 /usr/local/bin/gbia-sofia-relatorio
 systemctl daemon-reload
 systemctl enable gbia-whatsapp gbia-whatsapp-clientes >/dev/null
 systemctl restart gbia-whatsapp gbia-whatsapp-clientes

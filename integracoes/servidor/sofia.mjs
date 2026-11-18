@@ -8,8 +8,13 @@
 //  • Reclamação, assunto delicado ou dúvida que ela não sabe: chama a recepção e deixa a conversa como não lida.
 // Chave da Anthropic: ANTHROPIC_API_KEY em /etc/gbia-sync.env (no servidor: gbia-sofia-chave). Nunca vai para o app.
 // As conversas ficam só na memória do servidor e são esquecidas depois de algumas horas.
+// Relatório semanal (domingo à noite): o servidor guarda por 30 dias um registro curto das conversas (telefone só com os
+// 4 últimos dígitos); a IA lê as que deram problema e sugere regras novas, que o dono aprova no app.
 
-export const SOFIA_VERSAO = "1.1";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+export const SOFIA_VERSAO = "1.2";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -265,6 +270,59 @@ export async function rodada({ client, modelo, sistema, conv, ctx, maxPassos = 8
   return { texto: "Deixa eu chamar alguém da equipe pra te ajudar melhor, só um instante 😊", gasto };
 }
 
+// ---------- relatório semanal ----------
+const RELATORIO_SCHEMA = { type: "object", additionalProperties: false, required: ["resumo", "motivos", "sugestoes"], properties: {
+  resumo: { type: "string", description: "2 a 4 frases sobre como foi a semana da atendente, para o dono da barbearia" },
+  motivos: { type: "array", description: "Principais motivos de a atendente travar, chamar a recepção ou perder o cliente (até 5)", items: { type: "object", additionalProperties: false, required: ["motivo", "quantas", "exemplo"],
+    properties: { motivo: { type: "string" }, quantas: { type: "integer" }, exemplo: { type: "string", description: "Trecho curto e sem dados pessoais" } } } },
+  sugestoes: { type: "array", description: "Até 5 regras novas para a atendente, prontas para colar nas instruções", items: { type: "object", additionalProperties: false, required: ["regra", "porque"],
+    properties: { regra: { type: "string", description: "Uma frase, no imperativo, ex.: Quando pedirem corte infantil, ofereça só o Igor." }, porque: { type: "string" } } } } } };
+
+// Texto curto da conversa para o relatório (sem telefones).
+export function transcricao(mensagens, max = 3500) {
+  const linhas = [];
+  for (const m of mensagens) {
+    if (typeof m.content === "string") { linhas.push((m.role === "user" ? "Cliente: " : "Atendente: ") + m.content); continue; }
+    for (const b of m.content || []) {
+      if (b.type === "text" && b.text) linhas.push("Atendente: " + b.text);
+      else if (b.type === "tool_use") linhas.push(`(consultou ${b.name}${b.input && Object.keys(b.input).length ? " " + JSON.stringify(b.input) : ""})`);
+      else if (b.type === "tool_result" && /"erro"/.test(String(b.content))) linhas.push("(resultado: " + String(b.content).slice(0, 200) + ")");
+    }
+  }
+  const t = linhas.join("\n").replace(/\+?\d[\d\s-]{8,}\d/g, "[telefone]");
+  return t.length > max ? t.slice(0, max / 2) + "\n[…]\n" + t.slice(-max / 2) : t;
+}
+
+// Gera o relatório da semana a partir do registro das conversas (lista de { em, fone4, resultado, motivo, feitos, semVaga, custo, texto }).
+export async function gerarRelatorio({ client, modelo, registros, notas = "", nome = "Sofia", barbearia = "", ate = hojeSP() }) {
+  const de = somaDias(ate, -6), sem = registros.filter((r) => r.em.slice(0, 10) >= de && r.em.slice(0, 10) <= ate);
+  const soma = (k) => sem.reduce((a, r) => a + ((r.feitos || {})[k] || 0), 0);
+  const numeros = { conversas: sem.length, agendamentos: soma("agendou"), remarcacoes: soma("remarcou"), cancelamentos: soma("cancelou"),
+    recepcao: sem.filter((r) => r.resultado === "recepcao").length, recepcao_assumiu: sem.filter((r) => r.resultado === "recepcao_assumiu").length,
+    sem_resultado: sem.filter((r) => r.resultado === "sem_resultado").length, sem_vaga: sem.reduce((a, r) => a + (r.semVaga || 0), 0),
+    custo_usd: Math.round(sem.reduce((a, r) => a + (r.custo || 0), 0) * 100) / 100 };
+  const base = { semana: `${de} a ${ate}`, gerado_em: new Date().toISOString(), numeros };
+  const problemas = sem.filter((r) => r.resultado !== "resolvida" || r.semVaga);
+  if (!problemas.length) return { ...base, resumo: sem.length ? `Semana tranquila: ${sem.length} conversa(s), todas resolvidas pela ${nome}.` : `A ${nome} não teve conversas nesta semana.`, motivos: [], sugestoes: [], custo_relatorio: 0 };
+  let corpo = "", n = 0;
+  for (const r of problemas) { const bloco = `\n### Conversa ${++n} (${r.resultado}${r.motivo ? ": " + r.motivo : ""})\n${r.texto}\n`; if (corpo.length + bloco.length > 60000) break; corpo += bloco; }
+  const r = await client.messages.create({
+    model: modelo, max_tokens: 16000, output_config: { effort: "medium", format: { type: "json_schema", schema: RELATORIO_SCHEMA } },
+    system: `Você ajuda o dono da ${barbearia} a melhorar a ${nome}, a atendente de IA que responde o WhatsApp dos clientes e marca horários. Analise as conversas da semana que não terminaram bem e escreva em português do Brasil, simples e direto, para o dono (que não é técnico).
+- Motivos: agrupe o que se repete; diga quantas conversas tiveram cada motivo e um exemplo curto, sem nomes nem telefones.
+- Sugestões: regras práticas que a ${nome} pode seguir (uma frase cada), só quando a conversa mostra uma necessidade real. Não repita o que já está nas instruções atuais. Não sugira inventar preço, horário ou desconto. Se o problema é de configuração da agenda (ex.: falta de horários), diga isso no resumo em vez de criar regra. Se não houver boa sugestão, devolva a lista vazia.
+Resultados possíveis: recepcao (a atendente chamou a recepção), recepcao_assumiu (a recepção entrou na conversa), sem_resultado (o cliente sumiu sem marcar), resolvida (com horário sem vaga no meio do caminho).`,
+    messages: [{ role: "user", content: `Instruções atuais da ${nome} (Informações da casa):\n${notas || "(vazio)"}\n\nNúmeros da semana: ${JSON.stringify(numeros)}\n\nConversas para analisar:${corpo}` }],
+  });
+  if (r.stop_reason === "refusal") throw new Error("a IA recusou gerar o relatório");
+  const txt = r.content.filter((b) => b.type === "text").map((b) => b.text).join("");
+  const j = JSON.parse(txt);
+  return { ...base, resumo: j.resumo, motivos: (j.motivos || []).slice(0, 5), sugestoes: (j.sugestoes || []).slice(0, 5).map((x) => ({ ...x, estado: null })), custo_relatorio: Math.round(custo(modelo, r.usage || {}) * 1000) / 1000 };
+}
+export const lerRegistros = (dir) => { try { return JSON.parse(readFileSync(join(dir, "sofia-registro.json"), "utf8")); } catch { return []; } };
+// "2026-11-22 14:05" no horário de Brasília.
+const carimbo = (ts) => new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(ts));
+
 // Carrega o SDK da Anthropic; se faltar, instala na pasta do programa (uma vez).
 export async function carregarSDK(dir, log = () => {}) {
   const tenta = async () => (await import("@anthropic-ai/sdk")).default;
@@ -306,7 +364,7 @@ export function criarSofia({ dir, log, api, sock }) {
   async function configurar(e) {
     if (!e || !e.sofia || !e.appbarber) { cfg = null; return; }
     const novo = { company_id: e.company_id, barbearia: e.nome, brand: e.brand, nome: e.sofia.nome || "Sofia", modelo: MODELOS.includes(e.sofia.modelo) ? e.sofia.modelo : MODELO_PADRAO,
-      janelas: e.sofia.janelas || JANELAS_PADRAO, pausaMin: Math.max(15, Math.min(1440, Number(e.sofia.pausa) || 60)), notas: e.sofia.notas || "", ab: e.appbarber };
+      janelas: e.sofia.janelas || JANELAS_PADRAO, avisar: so(e.sofia.avisar || ""), pausaMin: Math.max(15, Math.min(1440, Number(e.sofia.pausa) || 60)), notas: e.sofia.notas || "", ab: e.appbarber };
     cfg = novo;
     if (abKey !== e.appbarber.appbarber_api_key + e.appbarber.codigo_estabelecimento) {
       abKey = e.appbarber.appbarber_api_key + e.appbarber.codigo_estabelecimento;
@@ -317,12 +375,47 @@ export function criarSofia({ dir, log, api, sock }) {
       try { Anthropic = Anthropic || await carregarSDK(dir, log); client = new Anthropic({ maxRetries: 3, timeout: 90000 }); log(`Sofia ${SOFIA_VERSAO} pronta (${cfg.modelo}).`); }
       catch (err) { log("Sofia: não consegui carregar o SDK da Anthropic: " + err.message); if (Date.now() - statusEm > 3600000) await status("erro: não consegui instalar o SDK da Anthropic no servidor. Rode o instalador do WhatsApp de novo."); return; }
     }
-    // Esquece conversas paradas há mais de 6 horas.
-    for (const [j, c] of conversas) if (Date.now() - c.ultima > 6 * 3600000 && !c.ocupado) conversas.delete(j);
+    // Conversa parada há 1 hora entra no registro do relatório semanal; parada há 6 horas é esquecida.
+    for (const [j, c] of conversas) {
+      if (!c.ocupado && c.contada && !c.registrada && Date.now() - c.ultima > 3600000) registrar(c);
+      if (Date.now() - c.ultima > 6 * 3600000 && !c.ocupado) conversas.delete(j);
+    }
+    await relatorioDaSemana().catch((err) => log("Sofia: relatório semanal: " + err.message));
     for (const [j, t] of pausas) if (t < Date.now()) pausas.delete(j);
     if (Date.now() - statusEm > 30 * 60000) await status();
   }
   const ligada = () => !!(cfg && client);
+
+  // ---- registro das conversas (30 dias) e relatório de domingo à noite ----
+  const REG = join(dir, "sofia-registro.json"), REL = join(dir, "sofia-relatorio.json");
+  const lerJ = (f, pad) => { try { return JSON.parse(readFileSync(f, "utf8")); } catch { return pad; } };
+  function registrar(c) {
+    c.registrada = true; c.regId = c.regId || `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const feitos = c.feitos || {}, fez = Object.values(feitos).some((v) => v > 0);
+    const texto = transcricao(c.mensagens), semVaga = (texto.match(/não está mais livre/g) || []).length;
+    const resultado = c.recepcao ? "recepcao" : c.humanoEm ? "recepcao_assumiu" : fez ? "resolvida" : "sem_resultado";
+    const lim = new Date(Date.now() - 30 * 86400000).toISOString();
+    const lista = lerJ(REG, []).filter((r) => r.em >= lim && r.id !== c.regId);
+    lista.push({ id: c.regId, em: carimbo(c.inicio || c.ultima), fone4: c.fone ? c.fone.slice(-4) : "", resultado, motivo: c.motivo || "", feitos, semVaga, custo: Math.round((c.gasto || 0) * 10000) / 10000, texto: resultado === "resolvida" && !semVaga ? "" : texto });
+    try { writeFileSync(REG, JSON.stringify(lista)); } catch (e) { log("Sofia: não gravei o registro: " + e.message); }
+  }
+  async function relatorioDaSemana(forcar = false) {
+    const hoje = hojeSP(), est = lerJ(REL, {});
+    if (!forcar && (diaSemanaSP() !== 0 || agoraSP() < 20 * 60 || est.ultimo === hoje)) return null;
+    for (const c of conversas.values()) if (c.contada && !c.ocupado) registrar(c); // inclui as conversas de hoje
+    est.ultimo = hoje; writeFileSync(REL, JSON.stringify(est));
+    const rel = await gerarRelatorio({ client, modelo: cfg.modelo, registros: lerJ(REG, []), notas: cfg.notas, nome: cfg.nome, barbearia: cfg.barbearia, ate: hoje });
+    await api("POST", { company_id: cfg.company_id, acao: "ia_report", relatorio: rel });
+    log(`Sofia: relatório da semana gerado (${rel.sugestoes.length} sugestão(ões)).`);
+    if (cfg.avisar && sock()) {
+      const n = rel.numeros, sug = rel.sugestoes.length;
+      const msg = `📊 Relatório semanal da ${cfg.nome} (${rel.semana.split(" a ").map((d) => d.split("-").reverse().slice(0, 2).join("/")).join(" a ")})\n\n${n.conversas} conversa(s) · ${n.agendamentos} agendamento(s) · ${n.remarcacoes} remarcação(ões) · ${n.cancelamentos} cancelamento(s) · ${n.recepcao} passada(s) para a recepção\n\n${rel.resumo}\n\n${sug ? `💡 ${sug} sugestão(ões) para aprovar no app: Integração › Atendente IA.` : "Nenhuma sugestão nova esta semana."}`;
+      const d = so(cfg.avisar), cand = d.length <= 11 ? "55" + d : d;
+      try { const [w] = await sock().onWhatsApp(cand); if (!w || !w.exists) throw new Error("número sem WhatsApp"); const r = await sock().sendMessage(w.jid, { text: msg }); marcarMinha(r && r.key && r.key.id); }
+      catch (e) { log("Sofia: não avisei o relatório no WhatsApp: " + e.message); }
+    }
+    return rel;
+  }
 
   // Mensagens enviadas por este programa (lembretes, respostas): não contam como "a recepção respondeu".
   function marcarMinha(id) { if (id) { minhas.add(id); if (minhas.size > 2000) minhas.delete(minhas.values().next().value); } }
@@ -341,7 +434,7 @@ export function criarSofia({ dir, log, api, sock }) {
   function obter(jid, msg) {
     let c = conversas.get(jid);
     if (!c || Date.now() - c.ultima > 6 * 3600000) {
-      c = { mensagens: [], ultima: Date.now(), ultimaSofia: 0, humanoEm: 0, contexto: [], contada: false, nome: "", agenda: null, recepcao: false, fone: "", fila: [], ocupado: false };
+      c = { mensagens: [], inicio: Date.now(), ultima: Date.now(), ultimaSofia: 0, humanoEm: 0, contexto: [], contada: false, nome: "", agenda: null, recepcao: false, fone: "", fila: [], ocupado: false };
       conversas.set(jid, c);
     }
     if (!c.fone && msg && !msg.key.fromMe) c.fone = foneDe(msg);
@@ -363,10 +456,12 @@ export function criarSofia({ dir, log, api, sock }) {
           ? `[Para contexto: mensagens desta conversa enquanto você não estava atendendo]\n${antes.join("\n")}\n\n[Mensagem nova do cliente]\n${novas.join("\n")}`
           : novas.join("\n") });
         if (!c.contada) { c.contada = true; zera(); stats.conversas++; }
-        const ctx = { ab, fone: c.fone, stats, simular: false, registro: (t) => log(`Sofia: ${t}.`), pendencia: (t) => { pendencias.push(`${c.nome ? c.nome.split(" ")[0] + " " : ""}(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); } };
+        const ctx = { ab, fone: c.fone, stats, simular: false, registro: (t) => log(`Sofia: ${t}.`), pendencia: (t) => { c.motivo = t; pendencias.push(`${c.nome ? c.nome.split(" ")[0] + " " : ""}(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); } };
+        const antesStats = { agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados };
         const sistema = promptSistema({ nome: cfg.nome, barbearia: cfg.barbearia, notas: cfg.notas, brand: cfg.brand });
         const r = await rodada({ client, modelo: cfg.modelo, sistema, conv: c, ctx });
-        stats.gasto += r.gasto;
+        stats.gasto += r.gasto; c.gasto = (c.gasto || 0) + r.gasto; c.registrada = false;
+        c.feitos = c.feitos || {}; for (const [k, v] of Object.entries({ agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados })) c.feitos[k] = (c.feitos[k] || 0) + Math.max(0, v - antesStats[k]);
         if ((pausas.get(jid) || 0) > Date.now()) return; // a recepção entrou enquanto a IA pensava
         if (r.texto) { await enviar(jid, r.texto); c.ultimaSofia = Date.now(); }
         if (c.recepcao) { try { await sock().chatModify({ markRead: false, lastMessages: [c.ultimaMsg].filter(Boolean) }, jid); } catch { /* não deu para marcar como não lida */ } await status(); }
@@ -374,7 +469,7 @@ export function criarSofia({ dir, log, api, sock }) {
       }
     } catch (err) {
       log("Sofia: erro na conversa: " + err.message);
-      c.recepcao = true; stats.recepcao++; pendencias.push(`(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) a Sofia teve um erro e parou nesta conversa`);
+      c.recepcao = true; c.motivo = "erro: " + String(err.message).slice(0, 120); stats.recepcao++; pendencias.push(`(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) a Sofia teve um erro e parou nesta conversa`);
       await status(`erro: ${new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })} · ${String(err.message).slice(0, 200)}. A conversa ficou para a recepção.`);
     } finally { c.ocupado = false; }
   }
@@ -414,5 +509,5 @@ export function criarSofia({ dir, log, api, sock }) {
     }
   }
 
-  return { configurar, aoReceber, marcarMinha, ligada, ativaAgora: () => !!(cfg && client && dentroDaJanela(cfg.janelas)), status };
+  return { configurar, aoReceber, marcarMinha, ligada, relatorioDaSemana, ativaAgora: () => !!(cfg && client && dentroDaJanela(cfg.janelas)), status };
 }
