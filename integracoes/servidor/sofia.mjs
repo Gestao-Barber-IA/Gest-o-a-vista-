@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "2.1";
+export const SOFIA_VERSAO = "2.2";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -122,7 +122,8 @@ export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) 
   }
   async function criar({ fone, nome, servicos: lista, profissional, quando, obs }) {
     const corpo = { customer_phone: Number(so(fone).length <= 11 ? "55" + so(fone) : so(fone)), customer_name: nome, establishment_code: Number(est), start_date: quando,
-      professionals: [{ professional_code: Number(profissional) }], services: lista.map((s) => ({ service_code: Number(s.codigo), item_type: s.tipo === 2 ? 2 : 1, duration: Number(s.minutos) || 30 })), observation: obs || "Agendado pela Sofia (atendente IA) no WhatsApp" };
+      // Um profissional por serviço, na mesma ordem (a AppBarber cria um agendamento por serviço).
+      professionals: lista.map(() => ({ professional_code: Number(profissional) })), services: lista.map((s) => ({ service_code: Number(s.codigo), item_type: s.tipo === 2 ? 2 : 1, duration: Number(s.minutos) || 30 })), observation: obs || "Agendado pela Sofia (atendente IA) no WhatsApp" };
     const r = (await chamar("POST", "/v1/appointments", corpo)).data || {};
     if (Number(r.error) > 0) throw new Error(r.result || "a AppBarber não aceitou o agendamento");
     cache.forEach((_, k) => { if (k.startsWith("disp:")) cache.delete(k); });
@@ -377,6 +378,8 @@ export async function rodada({ client, modelo, sistema, conv, ctx, maxPassos = 8
       let out, erro = false;
       try { out = await executar(u.name, u.input || {}, { ...ctx, conv }); }
       catch (e) { out = { erro: e.message }; erro = true; }
+      // Falha ao gravar na AppBarber: fica no log do servidor e no recado para a recepção (no card).
+      if (out && out.erro && /^(agendar|remarcar|cancelar|salvar_cadastro)$/.test(u.name) && ctx.falha) ctx.falha(`${u.name} não deu certo: ${String(out.erro).slice(0, 200)}`);
       resultados.push({ type: "tool_result", tool_use_id: u.id, content: JSON.stringify(out), ...(erro ? { is_error: true } : {}) });
     }
     conv.mensagens.push({ role: "user", content: resultados });
@@ -636,7 +639,8 @@ export function criarSofia({ dir, log, api, sock }) {
           : novas.join("\n")) });
         if (!c.contada) { c.contada = true; zera(); stats.conversas++; }
         if (!c.artes) c.artes = cfg.artes; // congeladas junto com as instruções
-        const ctx = { ab, fone: c.fone, stats, simular: false, artes: c.artes, enviarArte: (a) => enviarArte(jid, a), registro: (t) => log(`Sofia: ${t}.`), pendencia: (t) => { c.motivo = t; pendencias.push(`${c.nome ? c.nome.split(" ")[0] + " " : ""}(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); } };
+        const ctx = { ab, fone: c.fone, stats, simular: false, artes: c.artes, enviarArte: (a) => enviarArte(jid, a), registro: (t) => log(`Sofia: ${t}.`),
+          falha: (t) => { log(`Sofia: (…${String(c.fone).slice(-4)}) ${t}`); pendencias.push(`(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); status().catch(() => {}); }, pendencia: (t) => { c.motivo = t; pendencias.push(`${c.nome ? c.nome.split(" ")[0] + " " : ""}(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); } };
         const antesStats = { agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados };
         // Instruções congeladas no começo da conversa (mudanças no app valem para as próximas conversas).
         const sistema = c.sistema || (c.sistema = promptSistema({ nome: cfg.nome, barbearia: cfg.barbearia, notas: cfg.notas, brand: cfg.brand, artes: c.artes, horario: cfg.horario }));
