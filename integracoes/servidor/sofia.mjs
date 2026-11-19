@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "2.2";
+export const SOFIA_VERSAO = "2.3";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -103,6 +103,20 @@ export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) 
       return { codigo: Number(a.appointment_code || a.scheduling_code), comanda: Number(a.invoice_code) || null, quando: m ? `${m[3]}-${m[2]}-${m[1]} ${m[4]}:${m[5]}` : a.scheduling_start, profissional: String(a.employee_name || "").trim(), servico: String(a.service_description || "").trim(), nome: String(a.client_name || "").trim() };
     }).sort((a, b) => String(a.quando).localeCompare(String(b.quando)));
   }
+  // Último atendimento realizado deste telefone (procura nos últimos 3 meses, de 31 em 31 dias; 1 crédito por busca).
+  async function ultimoDe(fone) {
+    const k = chaveFone(fone); let fim = hojeSP();
+    for (let i = 0; i < 3; i++) {
+      const ini = somaDias(fim, -30), q = new URLSearchParams({ start_date: ini, end_date: fim, status_type: "2" }); if (filial) q.set("branch_code", filial);
+      const lista = ((await chamar("GET", "/v1/appointments/history?" + q)).data || []).filter((a) => chaveFone(a.client_phone) === k).map((a) => {
+        const m = String(a.scheduling_start || "").match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+        return { quando: m ? `${m[3]}-${m[2]}-${m[1]}` : "", profissional: String(a.employee_name || "").trim(), servico: String(a.service_description || "").trim() };
+      }).filter((a) => a.quando && a.profissional).sort((a, b) => b.quando.localeCompare(a.quando));
+      if (lista.length) return lista[0];
+      fim = somaDias(ini, -1);
+    }
+    return null;
+  }
   // Cadastro do cliente pelo celular: { codigo, nome, nascimento } ou null.
   async function clienteDe(fone) {
     const d = (await chamar("GET", `/v1/establishment/clients?cellphone=${so(fone).replace(/^55(?=\d{10,11}$)/, "")}`)).data || [];
@@ -135,7 +149,7 @@ export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) 
     cache.forEach((_, k) => { if (k.startsWith("disp:")) cache.delete(k); });
     return true;
   }
-  return { servicos, profissionais, horarios, agendamentosDe, nomeDe, clienteDe, salvarCliente, criar, cancelarComanda };
+  return { servicos, profissionais, horarios, agendamentosDe, ultimoDe, nomeDe, clienteDe, salvarCliente, criar, cancelarComanda };
 }
 
 // ---------- o que a Sofia pode fazer (ferramentas para o Claude) ----------
@@ -146,6 +160,7 @@ export const TOOLS = [
     input_schema: obj({ data: { type: "string", description: "Dia no formato AAAA-MM-DD" }, servico: { type: "integer", description: "Código do serviço" }, profissional: { type: ["string", "null"], description: "Nome do profissional que o cliente pediu, ou null para todos" } }, ["data", "servico", "profissional"]) },
   { name: "salvar_cadastro", description: "Cadastra o cliente na barbearia (quando a linha [Cadastro…] diz que não tem cadastro) ou acrescenta a data de nascimento num cadastro que não tem. Use depois que o cliente informou nome e sobrenome; a data de nascimento é opcional (só se ele quiser informar).", strict: true,
     input_schema: obj({ nome_completo: { type: ["string", "null"], description: "Nome e sobrenome (obrigatório para cadastro novo; null se o cliente já tem cadastro)" }, nascimento: { type: ["string", "null"], description: "Data de nascimento AAAA-MM-DD, ou null se o cliente não quis informar" }, celular: { type: ["string", "null"], description: "Celular com DDD, só se o WhatsApp do cliente estiver desconhecido; senão null" } }, ["nome_completo", "nascimento", "celular"]) },
+  { name: "ultimo_atendimento", description: "Último atendimento realizado do cliente nos últimos 3 meses (dia, barbeiro e serviço), pelo WhatsApp dele. Use quando um cliente cadastrado quer agendar e não disse com quem: assim você oferece o mesmo barbeiro(a) da última vez.", strict: true, input_schema: obj({}, []) },
   { name: "consultar_cliente", description: "Nome do cliente cadastrado na barbearia (pelo telefone do WhatsApp) e os horários que ele já tem marcados nos próximos 30 dias, com o código de cada um. Use antes de remarcar ou cancelar, e para chamar o cliente pelo nome.", strict: true, input_schema: obj({}, []) },
   { name: "agendar", description: "Marca o horário na AppBarber. SÓ use depois que o cliente confirmou com clareza (ex.: 'sim', 'pode marcar') o resumo com serviço(s), profissional, dia e hora.", strict: true,
     input_schema: obj({ servicos: { type: "array", items: { type: "integer" }, description: "Códigos dos serviços, na ordem" }, profissional: { type: "integer", description: "Código do profissional (de ver_horarios)" }, data_hora: { type: "string", description: "AAAA-MM-DD HH:MM" }, nome_cliente: { type: "string", description: "Nome completo do cliente" }, observacao: { type: ["string", "null"], description: "Recado curto para o barbeiro(a), ex.: Primeira vez na barbearia; ou null" } }, ["servicos", "profissional", "data_hora", "nome_cliente", "observacao"]) },
@@ -175,10 +190,11 @@ export function promptSistema({ nome, barbearia, notas, brand, artes = [], horar
 
 Jeito de falar:
 - Simpática, carismática e acolhedora, como a melhor recepcionista da casa. Português do Brasil, natural e leve.
-- Mensagens curtas, como no WhatsApp: 1 a 3 frases. Pode usar emoji com moderação (1 ou 2 por mensagem) 😊
+- Mensagens curtas, como no WhatsApp: 1 a 3 frases. Pode usar emoji com moderação (1 ou 2 por mensagem) 😊 Não liste todos os barbeiros nem todos os horários: escolha os 2 ou 3 mais próximos do que o cliente pediu.
+- Nunca fale das suas limitações ("não consigo ver", "não tenho acesso", "por aqui não aparece"). Se precisar de uma informação, simplesmente pergunte ao cliente com naturalidade (ex.: "Lembra com qual barbeiro ele cortou da última vez? 😊").
 - Chame o cliente pelo primeiro nome quando souber. Não se apresente como robô nem fale de "sistema", "ferramenta" ou "IA", a não ser que perguntem; se perguntarem, diga com naturalidade que é a assistente virtual da ${barbearia}.
 - Sem listas longas nem markdown (nada de **negrito** ou #). Ao oferecer horários, sugira 2 ou 3 opções próximas do que o cliente pediu.
-- UMA pergunta por mensagem. Para agendar, siga esta ordem e pule o que o cliente já disse: 1) qual serviço; 2) preferência de barbeiro(a); 3) dia e período (manhã, tarde ou noite); 4) ofereça 2 ou 3 horários; 5) resumo para confirmar. Se o cliente responder só parte, siga com o que já sabe e pergunte só o que falta, sem repetir a pergunta inteira.
+- UMA pergunta por mensagem (nunca "você tem preferência de barbeiro E qual horário?"). Para agendar, siga esta ordem e pule o que o cliente já disse: 1) qual serviço; 2) preferência de barbeiro(a); 3) dia e período (manhã, tarde ou noite); 4) ofereça 2 ou 3 horários; 5) resumo para confirmar. Se o cliente responder só parte, siga com o que já sabe e pergunte só o que falta, sem repetir a pergunta inteira.
 - Ao falar de horário, diga sempre com quem: ex. "17h com o Igor ou 17h20 com o Izaquias". Nunca solte um horário sem o barbeiro(a).
 
 Regras (muito importantes):
@@ -190,8 +206,9 @@ Regras (muito importantes):
   • Cadastrado: chame pelo primeiro nome e não peça dados de novo.
   • Sem cadastro (cliente novo): dê boas-vindas e, antes de marcar, faça o cadastro, uma pergunta por vez: 1) nome e sobrenome; 2) data de nascimento, explicando que é para ele receber promoções exclusivas no aniversário 🎉 (se não quiser informar, tudo bem, siga sem). O celular é o próprio WhatsApp: não pergunte, a não ser que a linha diga que é desconhecido. Depois use salvar_cadastro.
   • Cadastrado sem data de nascimento: depois de resolver o que ele pediu, pergunte uma vez a data de nascimento, para as promoções de aniversário, e salve com salvar_cadastro.
+- Agendamento para outra pessoa (ex.: filho, irmão): marque no nome do cliente que está falando (o titular do WhatsApp/cadastro) e escreva na observação para quem é, com idade se souber (ex.: "Corte do Brian, 3 anos (filho)").
 - Use a observação do agendamento para o que ajuda o barbeiro(a): se for a primeira vez do cliente na barbearia, escreva "Primeira vez na barbearia"; inclua também pedidos importantes do cliente (ex.: "quer manter o comprimento em cima").
-- Quando o cliente quiser um serviço e NÃO disser com quem, antes de oferecer horários pergunte se ele tem preferência de barbeiro(a) (ex.: "Você tem preferência de barbeiro(a)? 😊"). Se ele já disse o nome, não pergunte. Se ele não tiver preferência, ofereça quem tem horário mais perto do que ele pediu.
+- Quando o cliente quiser um serviço e NÃO disser com quem: se ele é cadastrado, use ultimo_atendimento; se houver, ofereça o mesmo barbeiro(a) (ex.: "Quer marcar com o Well de novo, como da última vez? 😊"). Se não houver, ou se for cliente novo, pergunte se tem preferência de barbeiro(a) (ex.: "Você tem preferência de barbeiro(a)? 😊"). Se ele já disse o nome, não pergunte. Se ele não tiver preferência, ofereça quem tem horário mais perto do que ele pediu.
 - Remarcar ou cancelar: só horários do próprio cliente (consultar_cliente). Confirme qual horário antes.
 - Depois de marcar, confirme de forma calorosa com dia, hora e profissional.
 - Áudio, foto ou figurinha: você não consegue ouvir/ver; peça com carinho para o cliente escrever.
@@ -269,6 +286,12 @@ export async function executar(nomeTool, input, ctx) {
       const r = simular ? { codigo: null } : await ab.salvarCliente({ fone: cel, nome, nascimento: nasc });
       conv.cadastro = { codigo: r.codigo, nome, nascimento: nasc }; conv.nome = nome; ctx.registro(`cadastrou ${nome.split(" ")[0]}${nasc ? " com aniversário" : ""}`);
       return { ok: true, nota: simular ? "cadastro simulado (teste)" : "cliente cadastrado na barbearia" };
+    }
+    case "ultimo_atendimento": {
+      if (!fone) return { aviso: "telefone do cliente desconhecido" };
+      if (conv.ultimo === undefined) conv.ultimo = await ab.ultimoDe(fone);
+      const u = conv.ultimo;
+      return u ? { ultimo: { dia: u.quando.split("-").reverse().join("/"), barbeiro: u.profissional, servico: u.servico } } : { ultimo: null, nota: "sem atendimento nos últimos 3 meses: pergunte a preferência de barbeiro(a)" };
     }
     case "consultar_cliente": {
       if (!fone) return { aviso: "telefone do cliente desconhecido: peça o número de celular com DDD" };
