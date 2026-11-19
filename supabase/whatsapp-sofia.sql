@@ -12,4 +12,5 @@ alter table public.integrations add column if not exists ia_report_phone text no
 alter table public.integrations add column if not exists ia_status text;
 alter table public.integrations add column if not exists ia_status_at timestamptz;
 alter table public.integrations add column if not exists ia_arts jsonb not null default '[]'::jsonb; -- artes que a Sofia envia (ex.: tabela de planos)
+alter table public.integrations add column if not exists ia_alert_phone text not null default ''; -- WhatsApp da equipe para avisos urgentes da Sofia
 notify pgrst, 'reload schema';
