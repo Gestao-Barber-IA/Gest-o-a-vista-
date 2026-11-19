@@ -20,7 +20,7 @@ function igual(a: string, b: string) {
 
 // Configuração da Sofia (atendente IA) que vai para o servidor.
 const sofiaCfg = (i: any) => ({ nome: String(i.ia_name || "Sofia").slice(0, 40), modelo: i.ia_model || "claude-sonnet-5-5", janelas: i.ia_hours || null, pausa: Number(i.ia_pause) || 60,
-  notas: String(i.ia_notes || "").slice(0, 8000), avisar: String(i.ia_report_phone || "").replace(/\D/g, "").slice(0, 15), alerta: String(i.ia_alert_phone || "").replace(/\D/g, "").slice(0, 15),
+  notas: String(i.ia_notes || "").slice(0, 8000), avisar: String(i.ia_report_phone || "").replace(/\D/g, "").slice(0, 15), alerta: String(i.ia_alert_phone || "").replace(/\D/g, "").slice(0, 15), nomes: i.names || {},
   // Artes (imagens) que a Sofia pode enviar, com a pergunta depois e o retorno de 15 minutos.
   artes: (Array.isArray(i.ia_arts) ? i.ia_arts : []).filter((a: any) => a && a.url && a.nome).slice(0, 6)
     .map((a: any) => ({ nome: String(a.nome).slice(0, 60), url: String(a.url), quando: String(a.quando || "").slice(0, 200), pergunta: String(a.pergunta || "").slice(0, 300), retorno: String(a.retorno || "").slice(0, 300) })) });
@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
   if (req.method === "GET" && url.searchParams.get("acao") === "lembretes") {
     const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
     const { data: ints, error } = await db.from("integrations")
-      .select("company_id, est_code, api_key, branch_code, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, bd_on, bd_text, ia_on, ia_name, ia_model, ia_hours, ia_pause, ia_notes, ia_report_phone, ia_alert_phone, ia_arts").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,bd_on.eq.true,ia_on.eq.true");
+      .select("company_id, est_code, api_key, branch_code, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, bd_on, bd_text, ia_on, ia_name, ia_model, ia_hours, ia_pause, ia_notes, ia_report_phone, ia_alert_phone, ia_arts, names").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,bd_on.eq.true,ia_on.eq.true");
     if (error) return json({ erro: error.message }, 500);
     const empresas = [];
     for (const i of ints || []) {
