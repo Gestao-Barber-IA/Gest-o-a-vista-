@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "2.5";
+export const SOFIA_VERSAO = "2.6";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -134,14 +134,29 @@ export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) 
     if (Number(r.error) > 0) throw new Error(r.result || "a AppBarber não aceitou o cadastro");
     return { codigo: codigo || Number(r.person_code) || null };
   }
+  // Um serviço por vez, em sequência (ex.: Navalhado 17h, Detox 17h40), com o mesmo profissional. Mandar os serviços
+  // juntos faz a AppBarber tentar todos no mesmo horário e dar "Choque de Horário". Se um falhar, desfaz os anteriores.
   async function criar({ fone, nome, servicos: lista, profissional, quando, obs }) {
-    const corpo = { customer_phone: Number(so(fone).length <= 11 ? "55" + so(fone) : so(fone)), customer_name: nome, establishment_code: Number(est), start_date: quando,
-      // Um profissional por serviço, na mesma ordem (a AppBarber cria um agendamento por serviço).
-      professionals: lista.map(() => ({ professional_code: Number(profissional) })), services: lista.map((s) => ({ service_code: Number(s.codigo), item_type: s.tipo === 2 ? 2 : 1, duration: Number(s.minutos) || 30 })), observation: obs || "Agendado pela Sofia (atendente IA) no WhatsApp" };
-    const r = (await chamar("POST", "/v1/appointments", corpo)).data || {};
-    if (Number(r.error) > 0) throw new Error(r.result || "a AppBarber não aceitou o agendamento");
-    cache.forEach((_, k) => { if (k.startsWith("disp:")) cache.delete(k); });
-    return { codigos: r.appointment_codes || [r.appointment_code].filter(Boolean), comanda: r.invoice_code || null };
+    const [dia, hora] = String(quando).split(" "), feitos = [];
+    let ini = mins(hora);
+    try {
+      for (const s of lista) {
+        const hhmm = `${String(Math.floor(ini / 60)).padStart(2, "0")}:${String(ini % 60).padStart(2, "0")}`;
+        const corpo = { customer_phone: Number(so(fone).length <= 11 ? "55" + so(fone) : so(fone)), customer_name: nome, establishment_code: Number(est), start_date: `${dia} ${hhmm}`,
+          professionals: [{ professional_code: Number(profissional) }], services: [{ service_code: Number(s.codigo), item_type: s.tipo === 2 ? 2 : 1, duration: Number(s.minutos) || 30 }], observation: obs || "Agendado pela Sofia (atendente IA) no WhatsApp" };
+        let r;
+        try { r = (await chamar("POST", "/v1/appointments", corpo)).data || {}; }
+        catch (e) { throw new Error(/choque|jornada|conflito|indispon/i.test(e.message) ? `CHOQUE: ${s.nome} às ${hhmm} não cabe (choque com outro agendamento ou fim do expediente do profissional)` : e.message); }
+        if (Number(r.error) > 0) throw new Error(/choque|jornada|conflito|indispon/i.test(String(r.result)) ? `CHOQUE: ${s.nome} às ${hhmm} não cabe (choque com outro agendamento ou fim do expediente do profissional)` : (r.result || "a AppBarber não aceitou o agendamento"));
+        feitos.push({ codigos: r.appointment_codes || [r.appointment_code].filter(Boolean), comanda: r.invoice_code || null });
+        ini += Number(s.minutos) || 30;
+      }
+    } catch (e) {
+      // Desfaz o que já tinha sido marcado, para não deixar meio agendamento.
+      for (const f of feitos) if (f.comanda) await cancelarComanda(f.comanda, fone).catch(() => {});
+      throw e;
+    } finally { cache.forEach((_, k) => { if (k.startsWith("disp:")) cache.delete(k); }); }
+    return { codigos: feitos.flatMap((f) => f.codigos), comanda: (feitos[0] || {}).comanda || null, comandas: feitos.map((f) => f.comanda).filter(Boolean) };
   }
   async function cancelarComanda(comanda, fone) {
     const r = (await chamar("DELETE", `/v1/invoice/${encodeURIComponent(comanda)}`, { customer_phone: so(fone).replace(/^55(?=\d{10,11}$)/, ""), establishment_code: Number(est), reason: "Cancelado pelo cliente no WhatsApp (Sofia, atendente IA)" })).data || {};
@@ -217,7 +232,7 @@ Regras (muito importantes):
 - Depois de marcar, confirme de forma calorosa com dia, hora e profissional.
 - Áudio, foto ou figurinha: você não consegue ouvir/ver; peça com carinho para o cliente escrever.
 - Reclamação, cliente irritado, desconto, pagamento, assunto delicado, algo fora de agenda/serviços/preços, ou se o cliente pedir uma pessoa: use chamar_recepcao e avise que a equipe já vai responder.
-- Se uma ferramenta der erro, não tente adivinhar: peça desculpas e use chamar_recepcao.
+- Se uma ferramenta der erro, não tente adivinhar: peça desculpas e use chamar_recepcao. Exceção: se o erro for de horário (não cabe, choque, não está livre), explique com naturalidade e ofereça outros horários ou outro profissional, sem chamar a recepção.
 - Não fale de outros clientes nem mostre códigos internos.
 - Cada mensagem do cliente começa com [Agora: …], com o dia e a hora atuais e o WhatsApp do cliente. Use para saber "hoje", "amanhã" e que horários já passaram; não comente essa linha com o cliente.
 ${hor ? `- Horário de funcionamento da ${casa}: ${hor}. Você responde o WhatsApp também fora desse horário (ex.: cedo e à noite), mas só existem atendimentos dentro dele. Mensagens que chegam de madrugada você responde a partir das 7h. Se o cliente pedir um horário antes da abertura ou depois do fechamento, ou num dia fechado, explique com simpatia o horário de atendimento e ofereça os primeiros horários livres depois da abertura (ou no próximo dia aberto). Se ele quiser "agora" com a ${casa} fechada, diga a que horas abrimos.
@@ -313,7 +328,9 @@ export async function executar(nomeTool, input, ctx) {
       const nomeProf = emCima ? (((await ab.horarios(diaA, servs[0].codigo)).find((x) => Number(x.codigo) === Number(input.profissional))) || {}).completo || "" : "";
       if (simular) { ctx.stats.agendados++; if (emCima) ctx.registro(`avisaria ${nomeProf} do novo cliente às ${horaA}`); return { ok: true, simulado: true }; }
       const obs = [String(input.observacao || "").trim().slice(0, 300), "Agendado pela Sofia (atendente IA) no WhatsApp"].filter(Boolean).join(" · ");
-      const r = await ab.criar({ fone, nome: input.nome_cliente, servicos: servs, profissional: input.profissional, quando: input.data_hora, obs });
+      let r;
+      try { r = await ab.criar({ fone, nome: input.nome_cliente, servicos: servs, profissional: input.profissional, quando: input.data_hora, obs }); }
+      catch (e) { if (/^CHOQUE:/.test(e.message)) return { erro: e.message.replace(/^CHOQUE: /, "") + ". Não chame a recepção: ofereça outro horário com tempo seguido para todos os serviços, ou outro profissional." }; throw e; }
       ctx.stats.agendados++; ctx.registro(`agendou ${servs.map((s) => s.nome).join(" + ")} em ${input.data_hora}`);
       if (emCima && ctx.avisarProfissional) await ctx.avisarProfissional(nomeProf, `✂️ Novo cliente hoje às ${horaA.replace(":", "h")}: ${input.nome_cliente} (${servs.map((s) => s.nome).join(" + ")})${input.observacao ? ` · ${String(input.observacao).slice(0, 150)}` : ""}`);
       return { ok: true, codigos: r.codigos };
@@ -418,7 +435,7 @@ export async function rodada({ client, modelo, sistema, conv, ctx, maxPassos = 8
       try { out = await executar(u.name, u.input || {}, { ...ctx, conv }); }
       catch (e) { out = { erro: e.message }; erro = true; }
       // Falha ao gravar na AppBarber: fica no log do servidor e no recado para a recepção (no card).
-      if (out && out.erro && /^(agendar|remarcar|cancelar|salvar_cadastro)$/.test(u.name) && ctx.falha) ctx.falha(`${u.name} não deu certo: ${String(out.erro).slice(0, 200)}`);
+      if (out && out.erro && /^(agendar|remarcar|cancelar|salvar_cadastro)$/.test(u.name) && !/não cabe|não está mais livre|já passou|não atende esse serviço|CHOQUE/.test(String(out.erro)) && ctx.falha) ctx.falha(`${u.name} não deu certo: ${String(out.erro).slice(0, 200)}`);
       resultados.push({ type: "tool_result", tool_use_id: u.id, content: JSON.stringify(out), ...(erro ? { is_error: true } : {}) });
     }
     conv.mensagens.push({ role: "user", content: resultados });
