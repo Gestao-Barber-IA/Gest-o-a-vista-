@@ -606,6 +606,8 @@ export function criarSofia({ dir, log, api, sock }) {
     if (!alvo) return null;
     let b = eq.find((x) => normN(x.name) === alvo);
     if (!b) { const pn = alvo.split(" ")[0], achados = eq.filter((x) => normN(x.name).split(" ")[0] === pn); if (achados.length === 1) b = achados[0]; }
+    // Ex.: "Izaquias Macedo" na AppBarber e "Izaque Macedo" no Gestão: o sobrenome resolve quando só um bate.
+    if (!b && alvo.includes(" ")) { const sn = alvo.split(" ").at(-1), achados = eq.filter((x) => normN(x.name).split(" ").at(-1) === sn); if (achados.length === 1) b = achados[0]; }
     return b && b.phone ? { nome: b.name, fone: so(b.phone) } : (b ? { nome: b.name, fone: "" } : null);
   }
   async function avisarProfissional(c, nomeAB, t) {
