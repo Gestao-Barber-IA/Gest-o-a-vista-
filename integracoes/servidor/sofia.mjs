@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "2.6";
+export const SOFIA_VERSAO = "2.7";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -40,6 +40,13 @@ const somaDias = (iso, n) => { const d = new Date(iso + "T12:00:00Z"); d.setUTCD
 // (terça e quarta 12h–14h; quinta a sábado 13h–15h20) e 20h–22h; domingo 7h–9h e 20h–22h.
 const CEDO = ["07:00", "09:00"], NOITE = ["20:00", "22:00"];
 export const JANELAS_PADRAO = { 0: [CEDO, NOITE], 1: [["00:00", "23:59"]], 2: [CEDO, ["12:00", "14:00"], NOITE], 3: [CEDO, ["12:00", "14:00"], NOITE], 4: [CEDO, ["13:00", "15:20"], NOITE], 5: [CEDO, ["13:00", "15:20"], NOITE], 6: [CEDO, ["13:00", "15:20"], NOITE] };
+// Resposta curta de confirmação/agradecimento (ex.: 👍, "ok", "obrigado", "confirmado"), que não pede resposta.
+export function soConfirmacao(t) {
+  const s = String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[!.,;:~\s]+/g, " ").trim();
+  if (!s) return false;
+  if (/^[\p{Extended_Pictographic}\p{Emoji_Modifier}\u200d\ufe0f\s]+$/u.test(s)) return true; // só emoji (👍 🙏 😊)
+  return /^(ok+|okay|oks|blz|beleza|obrigad[oa]s?( (viu|mesmo|demais))?|obg|brigad[oa]|valeu|vlw|show|top|perfeito|combinado|confirmad[oa]|certo|ta bom|ta otimo|fechado|joia|jo?ia|ciente|entendi|tudo certo|pode deixar|beleza obrigad[oa]|ok obrigad[oa]|ok valeu|estarei ai|to indo|ja estou indo|ate (mais|logo|ja))( [\p{Extended_Pictographic}\ufe0f]+)*$/u.test(s);
+}
 // Silêncio da noite: das 22h às 7h a Sofia não manda mensagem (as que chegarem ficam para as 7h).
 export const SILENCIO = { de: 22 * 60, ate: 7 * 60 };
 export const noSilencio = (agora = agoraSP(), folga = 0) => agora >= SILENCIO.de + folga || agora < SILENCIO.ate;
@@ -782,6 +789,8 @@ export function criarSofia({ dir, log, api, sock }) {
       // Conversa nova só começa dentro do horário; a que a Sofia está atendendo continua até ficar 20 min parada.
       const continua = c.ultimaSofia && Date.now() - c.ultimaSofia < 20 * 60000 && c.humanoEm < c.ultimaSofia;
       const msgCli = t || `[o cliente mandou um(a) ${md}]`;
+      // "👍", "ok", "obrigado" ou figurinha em resposta a um lembrete/mensagem automática: não é conversa, ninguém responde.
+      if (!continua && !c.fila.length && ((t && soConfirmacao(t)) || (!t && /figurinha/.test(md)))) { anotar(c, "Cliente", conteudo); continue; }
       if (c.recepcao || (pausas.get(jid) || 0) > Date.now()) { anotar(c, "Cliente", conteudo); continue; }
       // Desligada: guarda; se ela for ligada em até 30 minutos (e ninguém tiver respondido), ela responde.
       if (!ligada()) { c.fila.push(msgCli); if (!c.noturna) { c.noturna = Date.now(); c.pendTipo = "recente"; } clearTimeout(c.timer); continue; }
