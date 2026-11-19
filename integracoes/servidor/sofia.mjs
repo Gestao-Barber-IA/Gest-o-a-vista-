@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "2.7";
+export const SOFIA_VERSAO = "2.8";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -125,17 +125,29 @@ export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) 
     return null;
   }
   // Cadastro do cliente pelo celular: { codigo, nome, nascimento } ou null.
+  const cliOut = (c) => ({ codigo: Number(c.person_code) || null, nome: String(c.person_name || "").trim(), nascimento: String(c.person_birth_date || "").trim(), celular: so(c.person_cellphone || c.person_phone) });
+  const listaCli = (d) => (Array.isArray(d) ? d : (d && (d.items || d.clients)) || []);
+  // Procura pelo celular; se não achar, tenta sem o 9 (cadastros antigos com 8 dígitos).
   async function clienteDe(fone) {
-    const d = (await chamar("GET", `/v1/establishment/clients?cellphone=${so(fone).replace(/^55(?=\d{10,11}$)/, "")}`)).data || [];
-    const lista = Array.isArray(d) ? d : (d.items || d.clients || []);
-    const c = lista.find((x) => chaveFone(x.person_cellphone || x.person_phone) === chaveFone(fone)) || null;
-    return c ? { codigo: Number(c.person_code) || null, nome: String(c.person_name || "").trim(), nascimento: String(c.person_birth_date || "").trim() } : null;
+    const cel = so(fone).replace(/^55(?=\d{10,11}$)/, ""), tentativas = [cel];
+    if (cel.length === 11 && cel[2] === "9") tentativas.push(cel.slice(0, 2) + cel.slice(3));
+    for (const t of tentativas) {
+      const c = listaCli((await chamar("GET", `/v1/establishment/clients?cellphone=${t}`)).data).find((x) => chaveFone(x.person_cellphone || x.person_phone) === chaveFone(fone));
+      if (c) return cliOut(c);
+    }
+    return null;
+  }
+  // Busca de cadastro por outro celular ou pelo nome (cliente diz que já tem cadastro).
+  async function buscarClientes({ celular, nome }) {
+    if (celular) { const c = await clienteDe(celular); return c ? [c] : []; }
+    if (!nome) return [];
+    return listaCli((await chamar("GET", `/v1/establishment/clients?name=${encodeURIComponent(nome)}`)).data).slice(0, 5).map(cliOut);
   }
   const nomeDe = async (fone) => ((await clienteDe(fone)) || {}).nome || "";
   // Cadastro novo (nome, celular do WhatsApp e, se o cliente quiser, data de nascimento) ou só a data num cadastro que não tinha.
   async function salvarCliente({ codigo, fone, nome, nascimento }) {
     const cel = so(fone).replace(/^55(?=\d{10,11}$)/, "");
-    const corpo = codigo ? { establishment: Number(est), ...(nascimento ? { person_birth_date: nascimento } : {}), ...(nome ? { person_name: nome } : {}) }
+    const corpo = codigo ? { establishment: Number(est), ...(nascimento ? { person_birth_date: nascimento } : {}), ...(nome ? { person_name: nome } : {}), ...(arguments[0].novoCelular ? { person_cellphone: cel } : {}) }
       : { establishment: Number(est), person_name: nome, person_cellphone: cel, person_dial_code: "+55", person_signup_origin: "WhatsApp (Sofia, atendente IA)", ...(nascimento ? { person_birth_date: nascimento } : {}) };
     const r = (await chamar(codigo ? "PUT" : "POST", codigo ? `/v1/establishment/clients/${encodeURIComponent(codigo)}` : "/v1/establishment/clients", corpo)).data || {};
     if (Number(r.error) > 0) throw new Error(r.result || "a AppBarber não aceitou o cadastro");
@@ -171,7 +183,7 @@ export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) 
     cache.forEach((_, k) => { if (k.startsWith("disp:")) cache.delete(k); });
     return true;
   }
-  return { servicos, profissionais, horarios, agendamentosDe, ultimoDe, nomeDe, clienteDe, salvarCliente, criar, cancelarComanda };
+  return { servicos, profissionais, horarios, agendamentosDe, ultimoDe, buscarClientes, nomeDe, clienteDe, salvarCliente, criar, cancelarComanda };
 }
 
 // ---------- o que a Sofia pode fazer (ferramentas para o Claude) ----------
@@ -183,6 +195,10 @@ export const TOOLS = [
   { name: "salvar_cadastro", description: "Cadastra o cliente na barbearia (quando a linha [Cadastro…] diz que não tem cadastro) ou acrescenta a data de nascimento num cadastro que não tem. Use depois que o cliente informou nome e sobrenome; a data de nascimento é opcional (só se ele quiser informar).", strict: true,
     input_schema: obj({ nome_completo: { type: ["string", "null"], description: "Nome e sobrenome (obrigatório para cadastro novo; null se o cliente já tem cadastro)" }, nascimento: { type: ["string", "null"], description: "Data de nascimento AAAA-MM-DD, ou null se o cliente não quis informar" }, celular: { type: ["string", "null"], description: "Celular com DDD, só se o WhatsApp do cliente estiver desconhecido; senão null" } }, ["nome_completo", "nascimento", "celular"]) },
   { name: "ultimo_atendimento", description: "Último atendimento realizado do cliente nos últimos 3 meses (dia, barbeiro e serviço), pelo WhatsApp dele. Use quando um cliente cadastrado quer agendar e não disse com quem: assim você oferece o mesmo barbeiro(a) da última vez.", strict: true, input_schema: obj({}, []) },
+  { name: "buscar_cadastro", description: "Procura o cadastro de um cliente que diz que JÁ TEM cadastro mas não foi encontrado pelo WhatsApp: pelo celular que ele usou no cadastro (com DDD) ou pelo nome completo. Devolve as opções com o final do telefone, para o cliente confirmar qual é o dele.", strict: true,
+    input_schema: obj({ celular: { type: ["string", "null"], description: "Celular informado pelo cliente, com DDD, ou null" }, nome: { type: ["string", "null"], description: "Nome completo, ou null" } }, ["celular", "nome"]) },
+  { name: "vincular_cadastro", description: "Usa o cadastro encontrado em buscar_cadastro, depois que o cliente confirmou que é o dele (pelo final do telefone). Se o cliente permitir, atualiza o celular do cadastro para este WhatsApp (assim ele é reconhecido nas próximas vezes).", strict: true,
+    input_schema: obj({ opcao: { type: "integer", description: "Número da opção de buscar_cadastro (1, 2…)" }, atualizar_celular: { type: "boolean", description: "true se o cliente permitiu trocar o celular do cadastro para este WhatsApp" } }, ["opcao", "atualizar_celular"]) },
   { name: "consultar_cliente", description: "Nome do cliente cadastrado na barbearia (pelo telefone do WhatsApp) e os horários que ele já tem marcados nos próximos 30 dias, com o código de cada um. Use antes de remarcar ou cancelar, e para chamar o cliente pelo nome.", strict: true, input_schema: obj({}, []) },
   { name: "agendar", description: "Marca o horário na AppBarber. SÓ use depois que o cliente confirmou com clareza (ex.: 'sim', 'pode marcar') o resumo com serviço(s), profissional, dia e hora.", strict: true,
     input_schema: obj({ servicos: { type: "array", items: { type: "integer" }, description: "Códigos dos serviços, na ordem" }, profissional: { type: "integer", description: "Código do profissional (de ver_horarios)" }, data_hora: { type: "string", description: "AAAA-MM-DD HH:MM" }, nome_cliente: { type: "string", description: "Nome completo do cliente" }, observacao: { type: ["string", "null"], description: "Recado curto para o barbeiro(a), ex.: Primeira vez na barbearia; ou null" } }, ["servicos", "profissional", "data_hora", "nome_cliente", "observacao"]) },
@@ -228,6 +244,8 @@ Regras (muito importantes):
 - Antes de agendar, remarcar ou cancelar, mande um resumo (serviço, profissional, dia da semana, data e hora) e espere o cliente confirmar. Só então use a ferramenta. Nunca marque sem confirmação.
 - Na primeira mensagem de cada conversa vem a linha [Cadastro: …] dizendo se o cliente já é cadastrado (pelo WhatsApp dele).
   • Cadastrado: chame pelo primeiro nome e não peça dados de novo.
+  • Não comece a conversa pedindo nome ou dados: cumprimente e pergunte como pode ajudar. Os dados só são pedidos quando for agendar.
+  • Se a linha disser que não tem cadastro, mas o cliente disser que JÁ TEM ("já tenho", "já sou cliente", "já cortei aí"), nunca faça cadastro novo antes de procurar: pergunte o celular que ele usou no cadastro (ou o nome completo) e use buscar_cadastro. Achando, confirme pelo final do telefone, pergunte se pode atualizar o cadastro para este WhatsApp e use vincular_cadastro. Só se não achar mesmo, faça o cadastro novo.
   • Sem cadastro (cliente novo): dê boas-vindas e, antes de marcar, faça o cadastro, uma pergunta por vez: 1) nome e sobrenome; 2) data de nascimento, explicando que é para ele receber promoções exclusivas no aniversário 🎉 (se não quiser informar, tudo bem, siga sem). O celular é o próprio WhatsApp: não pergunte, a não ser que a linha diga que é desconhecido. Depois use salvar_cadastro.
   • Cadastrado sem data de nascimento: depois de resolver o que ele pediu, pergunte uma vez a data de nascimento, para as promoções de aniversário, e salve com salvar_cadastro.
 - Agendamento para outra pessoa (ex.: filho, irmão): marque no nome do cliente que está falando (o titular do WhatsApp/cadastro) e escreva na observação para quem é, com idade se souber (ex.: "Corte do Brian, 3 anos (filho)").
@@ -292,6 +310,19 @@ export async function executar(nomeTool, input, ctx) {
       if (input.profissional) { const q = String(input.profissional).toLowerCase().trim(), f = lista.filter((p) => p.nome.toLowerCase().includes(q) || q.includes(p.nome.toLowerCase().split(" ")[0])); if (f.length) lista = f; else return { aviso: `não encontrei "${input.profissional}" para esse serviço nesse dia`, profissionais: lista.map((p) => p.nome) }; }
       const d = new Date(input.data + "T12:00:00Z");
       return { dia: `${DIAS[d.getUTCDay()]}, ${input.data.split("-").reverse().join("/")}`, profissionais: lista.map((p) => ({ codigo: p.codigo, nome: p.nome, ...precosDoDia(p) })) };
+    }
+    case "buscar_cadastro": {
+      const lista = await ab.buscarClientes({ celular: input.celular ? normFone(input.celular) : null, nome: input.nome ? String(input.nome).trim() : null });
+      conv.candidatos = lista;
+      if (!lista.length) return { encontrados: 0, nota: "não encontrado: confira o número/nome com o cliente; se mesmo assim não achar, faça o cadastro novo" };
+      return { encontrados: lista.length, opcoes: lista.map((c, i) => ({ opcao: i + 1, nome: c.nome, telefone_final: c.celular ? c.celular.slice(-4) : "sem celular" })), nota: "confirme com o cliente pelo final do telefone (não mostre o número inteiro)" };
+    }
+    case "vincular_cadastro": {
+      const c = (conv.candidatos || [])[Number(input.opcao) - 1];
+      if (!c) return { erro: "opção inválida; use buscar_cadastro" };
+      if (input.atualizar_celular && fone && c.codigo && !simular) await ab.salvarCliente({ codigo: c.codigo, fone, novoCelular: true });
+      conv.cadastro = c; conv.nome = c.nome; ctx.registro(`usou o cadastro de ${c.nome.split(" ")[0]}${input.atualizar_celular ? " e atualizou o celular" : ""}`);
+      return { ok: true, nome: c.nome, aniversario_cadastrado: !!c.nascimento, celular_atualizado: !!input.atualizar_celular };
     }
     case "salvar_cadastro": {
       let cel = fone;
