@@ -4372,6 +4372,8 @@ Content-Type: application/json</pre>
           <label class="field"><span>Quando a recepção responde, ela sai da conversa por (minutos)</span><input class="input num" type="number" name="pause" min="15" max="1440" step="15" value="${esc(String(it.ia_pause || 60))}"></label>
         </div>
         <fieldset class="cl-num"><legend class="muted">Dias e horários em que ela atende</legend>${IA_DIAS.map(dia).join('')}</fieldset>
+        <label class="field"><span>WhatsApp para avisos urgentes da equipe (opcional)</span><input class="input" type="tel" name="aphone" maxlength="20" placeholder="Ex.: 55 19 99999-9999" value="${esc(it.ia_alert_phone || '')}">
+          <small class="muted">Quando a ${esc(nome)} passa uma conversa para a recepção, ou um cliente avisa que vai atrasar, chega um aviso neste WhatsApp na hora (ex.: o celular da recepcionista ou do gerente).</small></label>
         <label class="field"><span>WhatsApp que recebe o aviso do relatório semanal (opcional)</span><input class="input" type="tel" name="rphone" maxlength="20" placeholder="Ex.: 55 19 99999-9999" value="${esc(it.ia_report_phone || '')}">
           <small class="muted">Todo domingo à noite chega um resumo da semana, com as sugestões para aprovar aqui.</small></label>
         <fieldset class="cl-num"><legend class="muted">Modelo de IA</legend>${IA_MODELOS.map(([v, t, d]) => `<label class="check"><input type="radio" name="model" value="${v}" ${mod === v ? 'checked' : ''}><span><b>${t}</b><small>${d}</small></span></label>`).join('')}</fieldset>
@@ -8843,7 +8845,9 @@ Content-Type: application/json</pre>
       const model = (f.querySelector('input[name="model"]:checked') || {}).value || 'claude-sonnet-5-5';
       const rphone = (el.rphone.value || '').replace(/\D/g, '');
       if (rphone && (rphone.length < 10 || rphone.length > 13)) return setMsg(f, 'Confira o WhatsApp do relatório (DDD + número, ex.: 55 19 99999-9999).');
-      const row = { ia_on: !!el.on.checked, ia_name: name, ia_model: model, ia_hours: hours, ia_pause: pause, ia_notes: (el.notes.value || '').trim().slice(0, 8000), ia_report_phone: rphone };
+      const aphone = (el.aphone.value || '').replace(/\D/g, '');
+      if (aphone && (aphone.length < 10 || aphone.length > 13)) return setMsg(f, 'Confira o WhatsApp dos avisos urgentes (DDD + número, ex.: 55 19 99999-9999).');
+      const row = { ia_on: !!el.on.checked, ia_name: name, ia_model: model, ia_hours: hours, ia_pause: pause, ia_notes: (el.notes.value || '').trim().slice(0, 8000), ia_report_phone: rphone, ia_alert_phone: aphone };
       const cur = (Cloud.enabled ? ui.integ : state.integ) || {};
       if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Atendente IA salva.'); return render(); }
       setMsg(f, 'Salvando…', true);
