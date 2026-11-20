@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "4.3";
+const VERSAO = "4.4";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -57,6 +57,9 @@ let sofia = null;
 let sock = null, aberto = false, saiu = false, geracao = 0;
 async function conectar({ qr = false, codigo = "" } = {}) {
   const minha = ++geracao; // ao trocar de número, as conexões antigas param de reagir
+  // Fecha a conexão anterior (se ainda estiver aberta ou conectando): duas conexões ao mesmo tempo
+  // recebem a mesma mensagem duas vezes, e a Sofia respondia em dobro.
+  if (sock) { const velho = sock; try { velho.end(undefined); } catch { /* já fechado */ } }
   mkdirSync(AUTH, { recursive: true });
   const { state, saveCreds } = await useMultiFileAuthState(AUTH);
   const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: undefined }));
@@ -65,7 +68,7 @@ async function conectar({ qr = false, codigo = "" } = {}) {
   // Guarda os ids do que este programa manda: assim a Sofia sabe quando foi a recepção que respondeu pelo celular.
   const envia = sock.sendMessage.bind(sock);
   sock.sendMessage = async (...a) => { const r = await envia(...a); if (sofia) sofia.marcarMinha(r && r.key && r.key.id); return r; };
-  sock.ev.on("messages.upsert", (m) => { responder(m).catch(() => {}); if (sofia) sofia.aoReceber(m).catch(() => {}); });
+  sock.ev.on("messages.upsert", (m) => { if (minha !== geracao) return; responder(m).catch(() => {}); if (sofia) sofia.aoReceber(m).catch(() => {}); });
   let pediuCodigo = false;
   return new Promise((ok) => {
     sock.ev.on("connection.update", async (u) => {
