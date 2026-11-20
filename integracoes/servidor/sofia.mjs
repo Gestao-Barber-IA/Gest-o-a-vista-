@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "3.5";
+export const SOFIA_VERSAO = "3.6";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -46,6 +46,15 @@ export function soConfirmacao(t) {
   if (!s) return false;
   if (/^[\p{Extended_Pictographic}\p{Emoji_Modifier}\u200d\ufe0f\s]+$/u.test(s)) return true; // só emoji (👍 🙏 😊)
   return /^(ok+|okay|oks|blz|beleza|obrigad[oa]s?( (viu|mesmo|demais))?|obg|brigad[oa]|valeu|vlw|show|top|perfeito|combinado|confirmad[oa]|certo|ta bom|ta otimo|fechado|joia|jo?ia|ciente|entendi|tudo certo|pode deixar|beleza obrigad[oa]|ok obrigad[oa]|ok valeu|estarei ai|to indo|ja estou indo|ate (mais|logo|ja))( [\p{Extended_Pictographic}\ufe0f]+)*$/u.test(s);
+}
+// Várias mensagens que, juntas, são só cumprimento + confirmação (ex.: "Boa tarde" e "Confirmado"; "oi, ok obrigado").
+const SAUDACAO = /^(oi+|ola+|opa|salve|e ai|bom dia|boa tarde|boa noite|tudo bem|tudo bom|td bem|blz|boa)( [\p{Extended_Pictographic}\ufe0f]+)*$/u;
+export function soCumprimentoEConfirmacao(lista) {
+  const partes = lista.join("\n").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").split(/[\n,.!;?]+/).map((x) => x.replace(/\s+/g, " ").trim()).filter(Boolean);
+  if (!partes.length) return false;
+  let conf = false;
+  for (const p of partes) { if (soConfirmacao(p)) conf = true; else if (!SAUDACAO.test(p)) return false; }
+  return conf;
 }
 // Silêncio da noite: das 22h às 7h a Sofia não manda mensagem (as que chegarem ficam para as 7h).
 export const SILENCIO = { de: 22 * 60, ate: 7 * 60 };
@@ -871,6 +880,9 @@ export function criarSofia({ dir, log, api, sock, baixarMidia = null, transcreve
             return tx ? `[áudio do cliente, transcrito] ${tx}` : "[o cliente mandou um(a) áudio]";
           } catch (e) { log("Sofia: áudio não transcrito: " + e.message); return "[o cliente mandou um(a) áudio]"; }
         }));
+        // Resposta a lembrete do tipo "Boa tarde" + "Confirmado": não é conversa, ninguém responde.
+        const emConversa = c.ultimaSofia && Date.now() - c.ultimaSofia < 20 * 60000;
+        if (!emConversa && soCumprimentoEConfirmacao(novas)) { for (const f of novas) anotar(c, "Cliente", f); c.noturna = 0; c.pendTipo = null; continue; }
         if (c.recepcao || (pausas.get(jid) || 0) > Date.now()) return;
         // Mensagens que chegaram com a barbearia fechada (ex.: de madrugada): ela responde agora, avisando que viu.
         if (c.noturna) {
