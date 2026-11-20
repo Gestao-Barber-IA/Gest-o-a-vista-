@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "3.4";
+export const SOFIA_VERSAO = "3.5";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -233,6 +233,7 @@ export function promptSistema({ nome, barbearia, notas, brand, artes = [], horar
 Jeito de falar:
 - Simpática, carismática e acolhedora, como a melhor recepcionista da casa. Português do Brasil, natural e leve.
 - Mensagens curtas, como no WhatsApp: 1 a 3 frases. Pode usar emoji com moderação (1 ou 2 por mensagem) 😊 Não liste todos os barbeiros nem todos os horários: escolha os 2 ou 3 mais próximos do que o cliente pediu.
+- Se o cliente falar de algo que não está no histórico desta conversa (ex.: "deu certo?", "e aí, marcou?"), não diga que não sabe do que se trata: use consultar_cliente e responda com base nos horários dele (ex.: se não houver horário marcado, peça desculpas e retome o agendamento).
 - Nunca fale das suas limitações ("não consigo ver", "não tenho acesso", "por aqui não aparece"). Se precisar de uma informação, simplesmente pergunte ao cliente com naturalidade (ex.: "Lembra com qual barbeiro ele cortou da última vez? 😊").
 - Chame o cliente pelo primeiro nome quando souber. Não se apresente como robô nem fale de "sistema", "ferramenta" ou "IA", a não ser que perguntem; se perguntarem, diga com naturalidade que é a assistente virtual da ${barbearia}.
 - Sem listas longas nem markdown (nada de **negrito** ou #). Ao oferecer horários, sugira 2 ou 3 opções próximas do que o cliente pediu.
@@ -597,6 +598,19 @@ export async function transcreverAudio(buf, { key = process.env.OPENAI_API_KEY, 
 export function criarSofia({ dir, log, api, sock, baixarMidia = null, transcrever = transcreverAudio, abReq = null }) {
   let Anthropic = null, client = null, cfg = null, ab = null, abKey = "";
   const conversas = new Map(); // jid → { mensagens, ultima, ultimaSofia, humanoEm, contexto, nome, agenda, recepcao, fone, fila, ocupado }
+  // As conversas sobrevivem a reinícios (atualização, instalador): ficam num arquivo do servidor por até 6 horas.
+  const CONV = join(dir, "sofia-conversas.json");
+  const CAMPOS = ["mensagens", "inicio", "ultima", "ultimaSofia", "humanoEm", "contexto", "contada", "nome", "recepcao", "fone", "cadastro", "verificado", "sistema", "artes", "feitos", "gasto", "motivo", "pushName", "esperaAte", "registrada", "regId"];
+  try {
+    for (const [j, x] of Object.entries(JSON.parse(readFileSync(CONV, "utf8")))) if (Date.now() - (x.ultima || 0) < 6 * 3600000) conversas.set(j, { agenda: null, fila: [], ocupado: false, ...x });
+  } catch { /* primeira vez ou arquivo vazio */ }
+  let salvarEm = 0;
+  function salvarConversas(forcar = false) {
+    if (!forcar && Date.now() - salvarEm < 5000) return; salvarEm = Date.now();
+    const out = {};
+    for (const [j, c] of conversas) if (Date.now() - c.ultima < 6 * 3600000) { const x = {}; for (const k of CAMPOS) if (c[k] !== undefined) x[k] = c[k]; out[j] = x; }
+    try { writeFileSync(CONV, JSON.stringify(out), { mode: 0o600 }); } catch (e) { log("Sofia: conversas não gravadas: " + e.message); }
+  }
   const pausas = new Map();    // jid → até quando a Sofia fica quieta (a recepção respondeu pelo celular)
   const minhas = new Set();    // ids das mensagens que este programa mandou (lembretes, feedback, parabéns…)
   const daSofia = new Set();   // ids das respostas da própria Sofia
@@ -825,7 +839,7 @@ export function criarSofia({ dir, log, api, sock, baixarMidia = null, transcreve
     }
     gravarEspera(l);
   }
-  setInterval(() => { retornos().catch(() => {}); filaDaNoite().catch(() => {}); verificarEspera().catch(() => {}); }, 60000).unref();
+  setInterval(() => { retornos().catch(() => {}); filaDaNoite().catch(() => {}); verificarEspera().catch(() => {}); salvarConversas(true); }, 60000).unref();
   // Conversa deste contato (cria se não houver ou se estiver parada há mais de 6 horas).
   function obter(jid, msg) {
     let c = conversas.get(jid);
@@ -896,7 +910,10 @@ export function criarSofia({ dir, log, api, sock, baixarMidia = null, transcreve
       log("Sofia: erro na conversa: " + err.message);
       c.recepcao = true; c.motivo = "erro: " + String(err.message).slice(0, 120); stats.recepcao++; pendencias.push(`(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) a Sofia teve um erro e parou nesta conversa`);
       await status(`erro: ${new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })} · ${String(err.message).slice(0, 200)}. A conversa ficou para a recepção.`);
-    } finally { c.ocupado = false; }
+      // O cliente não pode ficar sem resposta: avisa que a equipe continua e chama a equipe.
+      try { await enviar(jid, "Desculpa, tive um probleminha aqui agora 😕 Já chamei a nossa equipe, que vai continuar com você por aqui em instantes."); } catch { /* sem conexão */ }
+      alertaEquipe(c, `⚠️ A ${cfg ? cfg.nome : "Sofia"} teve um erro e parou nesta conversa: responda o cliente. (${String(err.message).slice(0, 120)})`).catch(() => {});
+    } finally { c.ocupado = false; salvarConversas(); }
   }
 
   // Chamado a cada messages.upsert do WhatsApp dos clientes.
