@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "3.2";
+export const SOFIA_VERSAO = "3.3";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -237,6 +237,8 @@ Jeito de falar:
 - Chame o cliente pelo primeiro nome quando souber. Não se apresente como robô nem fale de "sistema", "ferramenta" ou "IA", a não ser que perguntem; se perguntarem, diga com naturalidade que é a assistente virtual da ${barbearia}.
 - Sem listas longas nem markdown (nada de **negrito** ou #). Ao oferecer horários, sugira 2 ou 3 opções próximas do que o cliente pediu.
 - UMA pergunta por mensagem (nunca "você tem preferência de barbeiro E qual horário?", nem "qual dia E qual serviço?"). Mande UMA mensagem por vez de resposta: não mande duas respostas seguidas para o mesmo pedido. Para agendar, siga esta ordem e pule o que o cliente já disse: 1) qual serviço; 2) preferência de barbeiro(a); 3) dia e período (manhã, tarde ou noite); 4) ofereça 2 ou 3 horários; 5) resumo para confirmar. Se o cliente responder só parte, siga com o que já sabe e pergunte só o que falta, sem repetir a pergunta inteira.
+- Antes de consultar ver_horarios, não diga que tem horário ("tem sim"): diga que vai verificar.
+- Barbeiro sem horário livre no dia pedido: diga que a agenda dele está completa nesse dia (ex.: "A agenda do Lucas está completa hoje, todos os horários já foram reservados 😊"); nunca diga que ele não está disponível, não está na agenda ou não trabalha. Ofereça, nessa ordem: o próximo dia com horário dele (proximo_dia_com_horario), outro barbeiro no mesmo dia, ou a lista de espera.
 - Ao falar de horário, diga sempre com quem: ex. "17h com o Igor ou 17h20 com o Izaquias". Nunca solte um horário sem o barbeiro(a).
 
 Regras (muito importantes):
@@ -311,7 +313,23 @@ export async function executar(nomeTool, input, ctx) {
       if (input.data < hojeSP()) return { erro: "essa data já passou" };
       let lista = await ab.horarios(input.data, input.servico);
       if (input.data === hojeSP()) lista = lista.map((p) => ({ ...p, horarios: p.horarios.filter((h) => mins(h) >= agoraSP() + 15) }));
-      if (input.profissional) { const q = String(input.profissional).toLowerCase().trim(), f = lista.filter((p) => p.nome.toLowerCase().includes(q) || q.includes(p.nome.toLowerCase().split(" ")[0])); if (f.length) lista = f; else return { aviso: `não encontrei "${input.profissional}" para esse serviço nesse dia`, profissionais: lista.map((p) => p.nome) }; }
+      const bate = (nome) => { const q = String(input.profissional).toLowerCase().trim(), n = String(nome || "").toLowerCase(); return n.includes(q) || q.includes(n.split(" ")[0]); };
+      if (input.profissional) {
+        const f = lista.filter((p) => bate(p.nome) && p.horarios.length);
+        if (f.length) lista = f;
+        else {
+          // Ele faz esse serviço? Então está com a agenda completa nesse dia: procura o próximo dia com horário dele (até 6 dias).
+          const faz = (await ab.profissionais(input.servico).catch(() => [])).some((p) => bate(p.nome)) || lista.some((p) => bate(p.nome));
+          if (!faz) return { aviso: `${input.profissional} não faz esse serviço (ou não foi encontrado)`, outros_com_horario: lista.filter((p) => p.horarios.length).map((p) => p.nome) };
+          let proximo = null;
+          for (let i = 1; i <= 6 && !proximo; i++) {
+            const dd = new Date(input.data + "T12:00:00Z"); dd.setUTCDate(dd.getUTCDate() + i); const iso = dd.toISOString().slice(0, 10);
+            const p = (await ab.horarios(iso, input.servico).catch(() => [])).find((x) => bate(x.nome) && x.horarios.length);
+            if (p) proximo = { dia: `${DIAS[dd.getUTCDay()]}, ${iso.split("-").reverse().join("/")}`, data: iso, primeiros: p.horarios.slice(0, 4) };
+          }
+          return { agenda_completa: true, profissional: input.profissional, nota: `A agenda de ${input.profissional} está completa nesse dia (todos os horários já foram reservados). Diga isso com essas palavras, de forma profissional; nunca diga que ele não está disponível, não está na agenda ou não trabalha.`, proximo_dia_com_horario: proximo, outros_com_horario_nesse_dia: lista.filter((p) => p.horarios.length).map((p) => p.nome) };
+        }
+      }
       const d = new Date(input.data + "T12:00:00Z");
       return { dia: `${DIAS[d.getUTCDay()]}, ${input.data.split("-").reverse().join("/")}`, profissionais: lista.map((p) => ({ codigo: p.codigo, nome: p.nome, ...precosDoDia(p) })) };
     }
