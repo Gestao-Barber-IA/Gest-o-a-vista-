@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "4.2";
+const VERSAO = "4.3";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -308,7 +308,7 @@ const TEXTOS_WB = [
   "{Saudacao}, {cliente}! Tudo bem? 😊\nAqui é da {barbearia}. Sentimos sua falta por aqui! Faz um tempinho que você não aparece…\nPosso te enviar um presente de retorno? 🎁",
   "{Saudacao}, {cliente}! Como você está? 😊\nAqui é da {barbearia}. Faz um tempo que a gente não te vê por aqui e sentimos sua falta!\nTenho um presente de retorno separado pra você. Posso te enviar? 🎁",
   "{Saudacao}, {cliente}! Tudo certo por aí? 😊\nPassando pra dizer que a {barbearia} sentiu sua falta!\nPreparamos um presente especial para o seu retorno. Quer que eu te mande? 🎁"];
-const WB_CLI = join(DIR, "reconquista-clientes.json"), WB_ENV = join(DIR, "reconquista-enviados.json"), WB_SAIR = join(DIR, "reconquista-sair.json");
+const WB_CLI = join(DIR, "reconquista-clientes.json"), WB_ENV = join(DIR, "reconquista-enviados.json"), WB_SAIR = join(DIR, "reconquista-sair.json"), WB_REC = join(DIR, "reconquista-recentes.json");
 const chaveFone = (f) => { let d = so(f); if (d.length > 11 && d.startsWith("55")) d = d.slice(2); if (d.length === 11) d = d.slice(0, 2) + d.slice(3); return d.slice(-10); }; // DDD + 8 dígitos
 const lerJ = (f, pad) => { try { return JSON.parse(readFileSync(f, "utf8")); } catch { return pad; } };
 // A AppBarber manda a data como "10/03/2026" (dia/mês/ano) — a documentação dizia "2026-03-10". Aceita os dois.
@@ -331,6 +331,10 @@ async function baixarClientes(e, hoje) {
     for (const x of d) { const f = so(x.person_cellphone || x.person_phone); if (f.length >= 10 && x.last_scheduling) lista.push([f, primeiro(x.person_name), isoData(x.last_scheduling)]); }
     await espera(2500);
   }
+  // O mesmo telefone pode ter mais de um cadastro (ex.: um antigo e um novo): vale a data mais recente.
+  const porFone = new Map();
+  for (const x of lista) { const k = chaveFone(x[0]), y = porFone.get(k); if (!y || x[2] > y[2]) porFone.set(k, x); }
+  lista.length = 0; lista.push(...porFone.values());
   const env = lerJ(WB_ENV, {});
   // Quem recebeu a mensagem e marcou horário depois dela: "voltou".
   for (const [f, , last] of lista) { const k = chaveFone(f); if (env[k] && !env[k].voltou && last >= env[k].em) env[k].voltou = last; }
@@ -340,6 +344,22 @@ async function baixarClientes(e, hoje) {
 }
 let wbUltimo = 0;
 const wbStatusEm = {};
+// Telefones com atendimento realizado nos últimos N dias ou horário marcado nos próximos 30 (agenda da AppBarber).
+// Baixado 1 vez por dia (1 crédito a cada 31 dias de agenda): é a trava que garante que quem veio há pouco não recebe.
+async function recentes(e, hoje, dias) {
+  const cache = lerJ(WB_REC, null);
+  if (cache && cache.dia === hoje && cache.dias === dias) return new Set(cache.fones);
+  const fones = new Set(), c = e.appbarber || e.reconquista;
+  const pega = async (ini, fim, st) => {
+    const q = new URLSearchParams({ start_date: ini, end_date: fim, status_type: st }); if (c.codigo_filial) q.set("branch_code", String(c.codigo_filial));
+    for (const a of await abGet(e, "/v1/appointments/history?" + q)) { const f = so(a.client_phone); if (f.length >= 10) fones.add(chaveFone(f)); }
+  };
+  const mais = (iso, n) => { const d = new Date(iso + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  for (let fim = hoje, falta = dias; falta > 0; falta -= 31) { const ini = mais(fim, -Math.min(30, falta - 1)); await pega(ini, fim, "2"); fim = mais(ini, -1); }
+  await pega(hoje, mais(hoje, 30), "1");
+  writeFileSync(WB_REC, JSON.stringify({ dia: hoje, dias, fones: [...fones] }), { mode: 0o600 });
+  return fones;
+}
 async function reconquista(e, hoje) {
   const c = e.reconquista, agora = agoraSP();
   if (fechadoHoje(e) || agora < 10 * 60 || agora > 18 * 60) return;
@@ -347,17 +367,19 @@ async function reconquista(e, hoje) {
   if (!base || diasDesde(base.em, hoje) >= 30) { await baixarClientes(e, hoje); base = lerJ(WB_CLI, { lista: [] }); }
   for (const x of base.lista) x[2] = isoData(x[2]); // lista baixada antes da correção da data
   const env = lerJ(WB_ENV, {}), sair = new Set(lerJ(WB_SAIR, []));
+  let rec; try { rec = await recentes(e, hoje, c.minDias); } catch (err) { log(`${e.nome}: reconquista — não consegui conferir a agenda (${err.message}); envio pausado.`); return; }
   const hojeEnv = Object.values(env).filter((x) => x.em === hoje).length;
   const fila = base.lista.filter(([f, , last]) => { const k = chaveFone(f), d = diasDesde(last, hoje);
-    return d >= c.minDias && d <= c.maxDias && !sair.has(k) && !(env[k] && diasDesde(env[k].em, hoje) < 180); })
+    return d >= c.minDias && d <= c.maxDias && !sair.has(k) && !rec.has(k) && !(env[k] && diasDesde(env[k].em, hoje) < 180); })
     .sort((a, b) => (a[2] < b[2] ? 1 : a[2] > b[2] ? -1 : 0)); // quem sumiu há menos tempo primeiro
   const intervalo = (8 * 60 / c.porDia) * 60000; // espalha as N mensagens entre 10h e 18h
   if (hojeEnv < c.porDia && fila.length && Date.now() - wbUltimo >= intervalo && pausadoDia !== hoje) {
     for (const [f, nome] of fila.slice(0, 5)) {
       // Confere na hora: se o cliente já marcou horário, não manda.
       const atual = await abGet(e, `/v1/establishment/clients?cellphone=${so(f).replace(/^55(?=\d{10,11}$)/, "")}`).catch(() => null);
-      const last = atual && atual[0] && atual[0].last_scheduling ? isoData(atual[0].last_scheduling) : null;
       const k = chaveFone(f);
+      // Todos os cadastros com esse telefone: vale o atendimento mais recente.
+      const last = (atual || []).filter((x) => chaveFone(x.person_cellphone || x.person_phone) === k && x.last_scheduling).map((x) => isoData(x.last_scheduling)).sort().pop() || null;
       if (last && diasDesde(last, hoje) < c.minDias) { env[k] = { em: hoje, pulado: true }; writeFileSync(WB_ENV, JSON.stringify(env)); continue; }
       const h = Math.floor(agora / 60), sd = h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
       const versoes = (c.texto ? c.texto.split(/\n\s*-{3,}\s*\n/) : TEXTOS_WB).map((t) => t.trim()).filter(Boolean);
