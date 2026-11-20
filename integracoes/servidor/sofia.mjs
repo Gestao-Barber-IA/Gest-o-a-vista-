@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "2.9";
+export const SOFIA_VERSAO = "3.0";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -601,7 +601,11 @@ export function criarSofia({ dir, log, api, sock }) {
   const ligada = () => !!(cfg && client);
 
   // ---- registro das conversas (30 dias) e relatório de domingo à noite ----
-  const REG = join(dir, "sofia-registro.json"), REL = join(dir, "sofia-relatorio.json");
+  const REG = join(dir, "sofia-registro.json"), REL = join(dir, "sofia-relatorio.json"), APRES = join(dir, "sofia-apresentados.json");
+  // Clientes a quem a Sofia já se apresentou (só o telefone resumido, para sempre).
+  let apresentados = null;
+  const jaApresentou = (fone) => { if (!apresentados) apresentados = new Set(lerJ(APRES, [])); return !!fone && apresentados.has(chaveFone(fone)); };
+  const marcarApresentou = (fone) => { if (!fone || jaApresentou(fone)) return; apresentados.add(chaveFone(fone)); try { writeFileSync(APRES, JSON.stringify([...apresentados])); } catch { /* tenta de novo na próxima */ } };
   const lerJ = (f, pad) => { try { return JSON.parse(readFileSync(f, "utf8")); } catch { return pad; } };
   function registrar(c) {
     c.registrada = true; c.regId = c.regId || `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -758,7 +762,9 @@ export function criarSofia({ dir, log, api, sock }) {
           c.noturna = 0; c.pendTipo = null;
         }
         const antes = c.contexto.splice(0).sort((a, b) => a.ts - b.ts).map((x) => x.linha);
-        const cadLinha = c.verificado ? "" : (c.verificado = true, (await verificarCadastro(ab, c.fone, c)) + "\n");
+        const cadLinha = c.verificado ? "" : (c.verificado = true, (await verificarCadastro(ab, c.fone, c)) + "\n" + (jaApresentou(c.fone)
+          ? "[Apresentação: você já se apresentou a este cliente em outra conversa; não se apresente de novo]\n"
+          : `[Apresentação: é a primeira vez que você fala com este cliente; na sua resposta, apresente-se em uma frase curta e simpática (ex.: "Eu sou a ${cfg.nome}, da ${cfg.barbearia} 😊")]\n`));
         c.mensagens.push({ role: "user", content: agoraTexto(c.fone) + "\n" + cadLinha + (antes.length
           ? `[Para contexto: mensagens desta conversa enquanto você não estava atendendo]\n${antes.join("\n")}\n\n[Mensagem nova do cliente]\n${novas.join("\n")}`
           : novas.join("\n")) });
@@ -774,7 +780,7 @@ export function criarSofia({ dir, log, api, sock }) {
         stats.gasto += r.gasto; c.gasto = (c.gasto || 0) + r.gasto; c.registrada = false;
         c.feitos = c.feitos || {}; for (const [k, v] of Object.entries({ agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados })) c.feitos[k] = (c.feitos[k] || 0) + Math.max(0, v - antesStats[k]);
         if ((pausas.get(jid) || 0) > Date.now()) return; // a recepção entrou enquanto a IA pensava
-        if (r.texto) { await enviar(jid, r.texto); c.ultimaSofia = Date.now(); }
+        if (r.texto) { await enviar(jid, r.texto); c.ultimaSofia = Date.now(); marcarApresentou(c.fone); }
         // Arte com retorno: se o cliente não responder em 15 minutos, ela pergunta de novo (uma vez).
         if (c.retornoPendente) { c.retorno = { em: Date.now(), arte: c.retornoPendente }; c.retornoPendente = null; }
         if (c.recepcao) { try { await sock().chatModify({ markRead: false, lastMessages: [c.ultimaMsg].filter(Boolean) }, jid); } catch { /* não deu para marcar como não lida */ } await status(); }
