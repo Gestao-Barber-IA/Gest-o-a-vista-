@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "3.0";
+export const SOFIA_VERSAO = "3.1";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -255,7 +255,8 @@ Regras (muito importantes):
 - Nunca diga que o cliente tem ou não tem horário marcado sem antes usar consultar_cliente nesta conversa. Se o cliente falar do horário dele, de chegada, de atraso ou de "vou mais tarde", use consultar_cliente antes de responder.
 - Atraso: se o cliente avisar que vai atrasar para um horário de hoje, confirme o horário dele (consultar_cliente), tranquilize-o e use avisar_equipe na hora com nome, quanto vai atrasar e o horário, passando o barbeiro(a) em profissional (ele recebe o aviso no WhatsApp dele). Se o atraso for grande ou ele quiser outro horário, ofereça remarcar.
 - Depois de marcar, confirme de forma calorosa com dia, hora e profissional.
-- Áudio, foto ou figurinha: você não consegue ouvir/ver; peça com carinho para o cliente escrever.
+- Áudio: chega para você já transcrito, marcado como [áudio do cliente, transcrito]; responda normalmente, como se ele tivesse escrito (não comente que era áudio). Se vier só "[o cliente mandou um(a) áudio]" sem texto, ou se a transcrição não fizer sentido, peça com carinho para ele escrever ou mandar de novo.
+- Foto ou figurinha: você não consegue ver; peça com carinho para o cliente escrever.
 - Reclamação, cliente irritado, desconto, pagamento, assunto delicado, algo fora de agenda/serviços/preços, ou se o cliente pedir uma pessoa: use chamar_recepcao e avise que a equipe já vai responder.
 - Se uma ferramenta der erro, não tente adivinhar: peça desculpas e use chamar_recepcao. Exceção: se o erro for de horário (não cabe, choque, não está livre), explique com naturalidade e ofereça outros horários ou outro profissional, sem chamar a recepção.
 - Não fale de outros clientes nem mostre códigos internos.
@@ -546,7 +547,20 @@ export async function carregarSDK(dir, log = () => {}) {
 }
 
 // ---------- a Sofia ligada ao WhatsApp ----------
-export function criarSofia({ dir, log, api, sock }) {
+// Transcrição de áudio (OpenAI, gpt-4o-mini-transcribe). Chave: OPENAI_API_KEY em /etc/gbia-sync.env (gbia-sofia-chave-audio).
+const PRECO_AUDIO_MIN = 0.003; // US$ por minuto
+export async function transcreverAudio(buf, { key = process.env.OPENAI_API_KEY, base = process.env.OPENAI_BASE_URL || "https://api.openai.com" } = {}) {
+  if (!key) return null;
+  const fd = new FormData();
+  fd.append("file", new Blob([buf], { type: "audio/ogg" }), "audio.ogg");
+  fd.append("model", "gpt-4o-mini-transcribe"); fd.append("language", "pt");
+  const r = await fetch(base.replace(/\/$/, "") + "/v1/audio/transcriptions", { method: "POST", headers: { Authorization: "Bearer " + key }, body: fd, signal: AbortSignal.timeout(60000) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(`transcrição: HTTP ${r.status}${j.error && j.error.message ? " " + String(j.error.message).slice(0, 120) : ""}`);
+  return String(j.text || "").trim();
+}
+
+export function criarSofia({ dir, log, api, sock, baixarMidia = null, transcrever = transcreverAudio }) {
   let Anthropic = null, client = null, cfg = null, ab = null, abKey = "";
   const conversas = new Map(); // jid → { mensagens, ultima, ultimaSofia, humanoEm, contexto, nome, agenda, recepcao, fone, fila, ocupado }
   const pausas = new Map();    // jid → até quando a Sofia fica quieta (a recepção respondeu pelo celular)
@@ -742,7 +756,7 @@ export function criarSofia({ dir, log, api, sock }) {
     return c;
   }
   // O que foi conversado sem a Sofia (cliente com a recepção, lembretes automáticos): ela lê quando voltar.
-  function anotar(c, quem, t) { if (!t) return; c.contexto.push({ ts: Date.now(), linha: `${quem}: ${t.slice(0, 600)}` }); if (c.contexto.length > 40) c.contexto.splice(0, c.contexto.length - 40); }
+  function anotar(c, quem, t) { if (t && typeof t === "object") t = "[mandou um áudio]"; if (!t) return; c.contexto.push({ ts: Date.now(), linha: `${quem}: ${t.slice(0, 600)}` }); if (c.contexto.length > 40) c.contexto.splice(0, c.contexto.length - 40); }
 
   async function processar(jid) {
     const c = conversas.get(jid);
@@ -750,7 +764,18 @@ export function criarSofia({ dir, log, api, sock }) {
     c.ocupado = true;
     try {
       while (c.fila.length) {
-        const novas = c.fila.splice(0);
+        // Áudios da fila viram texto aqui (só os que a Sofia vai responder; os que ficam com a recepção não gastam).
+        const novas = await Promise.all(c.fila.splice(0).map(async (f) => {
+          if (typeof f === "string") return f;
+          const seg = Number((f.audio.message.audioMessage || {}).seconds) || 0;
+          if (!process.env.OPENAI_API_KEY || !baixarMidia) return "[o cliente mandou um(a) áudio]";
+          if (seg > 300) return "[o cliente mandou um áudio longo (mais de 5 min), que não foi transcrito: peça um resumo por escrito]";
+          try {
+            const tx = await transcrever(await baixarMidia(f.audio));
+            stats.gasto += (Math.max(seg, 1) / 60) * PRECO_AUDIO_MIN; c.gasto = (c.gasto || 0) + (Math.max(seg, 1) / 60) * PRECO_AUDIO_MIN;
+            return tx ? `[áudio do cliente, transcrito] ${tx}` : "[o cliente mandou um(a) áudio]";
+          } catch (e) { log("Sofia: áudio não transcrito: " + e.message); return "[o cliente mandou um(a) áudio]"; }
+        }));
         if (c.recepcao || (pausas.get(jid) || 0) > Date.now()) return;
         // Mensagens que chegaram com a barbearia fechada (ex.: de madrugada): ela responde agora, avisando que viu.
         if (c.noturna) {
@@ -828,7 +853,7 @@ export function criarSofia({ dir, log, api, sock }) {
       // Sem atender agora (desligada, recepção na conversa ou fora do horário): guarda para contexto.
       // Conversa nova só começa dentro do horário; a que a Sofia está atendendo continua até ficar 20 min parada.
       const continua = c.ultimaSofia && Date.now() - c.ultimaSofia < 20 * 60000 && c.humanoEm < c.ultimaSofia;
-      const msgCli = t || `[o cliente mandou um(a) ${md}]`;
+      const msgCli = t || (md === "áudio" ? { audio: msg } : `[o cliente mandou um(a) ${md}]`);
       // "👍", "ok", "obrigado" ou figurinha em resposta a um lembrete/mensagem automática: não é conversa, ninguém responde.
       if (!continua && !c.fila.length && ((t && soConfirmacao(t)) || (!t && /figurinha/.test(md)))) { anotar(c, "Cliente", conteudo); continue; }
       if (c.recepcao || (pausas.get(jid) || 0) > Date.now()) { anotar(c, "Cliente", conteudo); continue; }

@@ -93,6 +93,19 @@ systemctl restart gbia-whatsapp-clientes
 echo "Chave guardada. A Sofia já pode atender (ligue no app: Integração › Atendente IA)."
 CMD
 chmod 700 /usr/local/bin/gbia-sofia-chave
+# Áudio: chave da OpenAI para a Sofia entender mensagens de voz (transcrição).
+cat > /usr/local/bin/gbia-sofia-chave-audio <<'CMD'
+#!/usr/bin/env bash
+set -e
+read -rsp "Cole a chave da OpenAI (sk-...) e aperte Enter: " K; echo
+case "$K" in sk-*) ;; *) echo "Isso não parece uma chave da OpenAI (começa com sk-)."; exit 1;; esac
+grep -v '^OPENAI_API_KEY=' /etc/gbia-sync.env > /etc/gbia-sync.env.novo || true
+echo "OPENAI_API_KEY=$K" >> /etc/gbia-sync.env.novo
+chmod 600 /etc/gbia-sync.env.novo && mv /etc/gbia-sync.env.novo /etc/gbia-sync.env
+systemctl restart gbia-whatsapp-clientes
+echo "Chave guardada. A Sofia já entende áudio."
+CMD
+chmod 700 /usr/local/bin/gbia-sofia-chave-audio
 cat > /usr/local/bin/gbia-sofia-teste <<CMD
 #!/usr/bin/env bash
 sudo -u gbia env \$(cat /etc/gbia-sync.env | xargs) TZ=America/Sao_Paulo WA_PAPEL=clientes node $DIR/whatsapp.mjs --sofia --fone "\${1:-}"
@@ -120,5 +133,6 @@ echo " (aparece um QR code: no celular do chip, WhatsApp ›"
 echo "  Aparelhos conectados › Conectar um aparelho)"
 echo "  • Sofia (atendente IA): gbia-sofia-chave  (guarda a chave da Anthropic)"
 echo "                            gbia-sofia-teste 55DDDNUMERO  (conversa de teste no terminal)"
+echo "                            gbia-sofia-chave-audio  (chave da OpenAI para ela entender áudio)"
 echo " Ver o funcionamento:  journalctl -u gbia-whatsapp-clientes -f"
 echo "============================================================"
