@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "4.5";
+const VERSAO = "4.6";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -41,7 +41,7 @@ const log = (m) => console.log(`[${new Date().toLocaleString("pt-BR", { timeZone
 const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 const so = (t) => String(t || "").replace(/\D/g, "");
 
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, Browsers } = await import("baileys");
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, Browsers, downloadMediaMessage } = await import("baileys");
 const pino = (await import("pino")).default;
 
 // Sofia, a atendente IA (sofia.mjs, ao lado deste arquivo). Se ainda não estiver no servidor, baixa do site.
@@ -516,7 +516,8 @@ async function ciclo() {
   empresasConhecidas = minhas.map((e) => e.company_id);
   if (CLI) await escolherNumero(minhas);
   // Sofia: atende o número dos clientes da primeira barbearia com a atendente IA ligada.
-  if (CLI && SOFIA) { if (!sofia) sofia = SOFIA.criarSofia({ dir: DIR, log, api, sock: () => sock }); await sofia.configurar(minhas.find((e) => e.sofia)).catch((err) => log("Sofia: " + err.message)); }
+  if (CLI && SOFIA) { if (!sofia) sofia = SOFIA.criarSofia({ dir: DIR, log, api, sock: () => sock,
+    baixarMidia: (msg) => downloadMediaMessage(msg, "buffer", {}, { logger: pino({ level: "silent" }), reuploadRequest: sock.updateMediaMessage }) }); await sofia.configurar(minhas.find((e) => e.sofia)).catch((err) => log("Sofia: " + err.message)); }
   if (!aberto) { if (Date.now() - avisouOff > 3600000) { avisouOff = Date.now(); await status(`desconectado: conecte o número no servidor (${CMD}).`); } return; }
   if (avisarConectado) { avisarConectado = false; await status(CLI ? `ok: ${NUMERO === "principal" ? "WhatsApp principal" : "2º chip"} conectado, aguardando os horários.` : "conectado: aguardando o horário dos lembretes."); }
   if (CLI) {
