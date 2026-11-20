@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "3.1";
+export const SOFIA_VERSAO = "3.2";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -210,6 +210,8 @@ export const TOOLS = [
     input_schema: obj({ arte: { type: "string", description: "Nome exato da arte, como aparece na lista de artes" } }, ["arte"]) },
   { name: "avisar_equipe", description: "Manda um recado para a equipe (WhatsApp de avisos) SEM sair da conversa. Use para avisos que a equipe precisa saber na hora, principalmente atraso de cliente com horário hoje (ex.: 'Francis vai atrasar uns 15 min por causa da chuva (horário 15h com o Well)').", strict: true,
     input_schema: obj({ recado: { type: "string", description: "Recado curto e completo: quem, o quê e o horário" }, profissional: { type: ["string", "null"], description: "Nome do barbeiro(a) do horário (de consultar_cliente) para avisá-lo também, ex. no atraso; ou null" } }, ["recado", "profissional"]) },
+  { name: "lista_de_espera", description: "Coloca o cliente na lista de espera para um dia e uma faixa de horário (ou tira dela). Use quando ele quer um dia/horário específico que está cheio e NÃO pode em outro dia ou horário, depois de oferecer e ele aceitar. Se abrir uma vaga nessa faixa, ele recebe uma mensagem no WhatsApp perguntando se quer agendar.", strict: true,
+    input_schema: obj({ acao: { type: "string", enum: ["entrar", "sair"] }, data: { type: "string", description: "AAAA-MM-DD" }, servicos: { type: "array", items: { type: "integer" }, description: "Códigos dos serviços (de ver_servicos)" }, profissional: { type: ["string", "null"], description: "Nome do barbeiro(a) se o cliente só quer com ele, ou null para qualquer um" }, de: { type: "string", description: "Início da faixa de horário que serve, HH:MM" }, ate: { type: "string", description: "Fim da faixa de horário que serve, HH:MM" } }, ["acao", "data", "servicos", "profissional", "de", "ate"]) },
   { name: "chamar_recepcao", description: "Passa a conversa para a recepção (uma pessoa). Use para reclamação, cliente irritado, pedido de desconto, pagamento, assunto pessoal ou delicado, pedido que as outras ferramentas não resolvem, erro da AppBarber, ou quando o cliente pedir para falar com alguém. Depois disso a Sofia não responde mais esta conversa.", strict: true,
     input_schema: obj({ motivo: { type: "string", description: "Resumo curto do que o cliente precisa" } }, ["motivo"]) },
 ];
@@ -251,6 +253,7 @@ Regras (muito importantes):
 - Agendamento para outra pessoa (ex.: filho, irmão): marque no nome do cliente que está falando (o titular do WhatsApp/cadastro) e escreva na observação para quem é, com idade se souber (ex.: "Corte do Brian, 3 anos (filho)").
 - Use a observação do agendamento para o que ajuda o barbeiro(a): se for a primeira vez do cliente na barbearia, escreva "Primeira vez na barbearia"; inclua também pedidos importantes do cliente (ex.: "quer manter o comprimento em cima").
 - Quando o cliente quiser um serviço e NÃO disser com quem: se ele é cadastrado, use ultimo_atendimento; se houver, ofereça o mesmo barbeiro(a) (ex.: "Quer marcar com o Well de novo, como da última vez? 😊"). Se não houver, ou se for cliente novo, pergunte se tem preferência de barbeiro(a) (ex.: "Você tem preferência de barbeiro(a)? 😊"). Se ele já disse o nome, não pergunte. Se ele não tiver preferência, ofereça quem tem horário mais perto do que ele pediu.
+- Lista de espera: se o cliente quer um dia e horário específicos que estão cheios e diz que não pode em outro dia ou horário, ofereça colocar na lista de espera daquele dia/faixa (com o barbeiro dele, se ele fizer questão). Se ele aceitar, use lista_de_espera. Quando a lista avisa de uma vaga, a mensagem aparece no contexto: se o cliente quiser, confira o horário (ver_horarios) e siga o resumo normal para agendar.
 - Remarcar ou cancelar: só horários do próprio cliente (consultar_cliente). Confirme qual horário antes.
 - Nunca diga que o cliente tem ou não tem horário marcado sem antes usar consultar_cliente nesta conversa. Se o cliente falar do horário dele, de chegada, de atraso ou de "vou mais tarde", use consultar_cliente antes de responder.
 - Atraso: se o cliente avisar que vai atrasar para um horário de hoje, confirme o horário dele (consultar_cliente), tranquilize-o e use avisar_equipe na hora com nome, quanto vai atrasar e o horário, passando o barbeiro(a) em profissional (ele recebe o aviso no WhatsApp dele). Se o atraso for grande ou ele quiser outro horário, ofereça remarcar.
@@ -371,6 +374,7 @@ export async function executar(nomeTool, input, ctx) {
       try { r = await ab.criar({ fone, nome: input.nome_cliente, servicos: servs, profissional: input.profissional, quando: input.data_hora, obs }); }
       catch (e) { if (/^CHOQUE:/.test(e.message)) return { erro: e.message.replace(/^CHOQUE: /, "") + ". Não chame a recepção: ofereça outro horário com tempo seguido para todos os serviços, ou outro profissional." }; throw e; }
       ctx.stats.agendados++; ctx.registro(`agendou ${servs.map((s) => s.nome).join(" + ")} em ${input.data_hora}`);
+      if (ctx.listaEspera) ctx.listaEspera({ sair: true, data: diaA });
       if (emCima && ctx.avisarProfissional) await ctx.avisarProfissional(nomeProf, `✂️ Novo cliente hoje às ${horaA.replace(":", "h")}: ${input.nome_cliente} (${servs.map((s) => s.nome).join(" + ")})${input.observacao ? ` · ${String(input.observacao).slice(0, 150)}` : ""}`);
       return { ok: true, codigos: r.codigos };
     }
@@ -417,6 +421,16 @@ export async function executar(nomeTool, input, ctx) {
       ctx.pendencia(`recado: ${t}`); if (ctx.alertar && !simular) await ctx.alertar(`📣 ${t}`); else if (simular) ctx.registro(`avisaria a equipe: ${t}`);
       if (input.profissional) { if (ctx.avisarProfissional && !simular) await ctx.avisarProfissional(input.profissional, `📣 ${t}`); else if (simular) ctx.registro(`avisaria ${input.profissional}: ${t}`); }
       return { ok: true, nota: "A equipe foi avisada. Continue atendendo o cliente normalmente." };
+    }
+    case "lista_de_espera": {
+      if (!ctx.listaEspera) return { erro: "lista de espera indisponível" };
+      if (input.acao === "sair") { const n = ctx.listaEspera({ sair: true, data: input.data }); return { ok: true, removidos: n }; }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(input.data || "") || input.data < hojeSP()) return { erro: "data inválida ou que já passou" };
+      if (!/^\d{2}:\d{2}$/.test(input.de || "") || !/^\d{2}:\d{2}$/.test(input.ate || "") || input.ate < input.de) return { erro: "faixa de horário inválida (HH:MM a HH:MM)" };
+      const servs = await servicosPorCodigo(input.servicos || []); if (!servs.length) return { erro: "serviço não encontrado; use ver_servicos" };
+      if (simular) { ctx.registro(`colocaria na lista de espera: ${input.data} ${input.de}–${input.ate}`); return { ok: true, simulado: true }; }
+      ctx.listaEspera({ data: input.data, servicos: servs.map((s) => ({ codigo: s.codigo, nome: s.nome, minutos: s.minutos, tipo: s.tipo })), profissional: input.profissional || null, de: input.de, ate: input.ate });
+      return { ok: true, nota: "Cliente na lista de espera. Diga que, se abrir um horário nessa faixa, você manda mensagem na hora; quem responder primeiro fica com a vaga." };
     }
     case "chamar_recepcao": {
       conv.recepcao = true; ctx.stats.recepcao++; ctx.pendencia(`precisa da recepção: ${String(input.motivo || "").slice(0, 160)}`);
@@ -560,7 +574,7 @@ export async function transcreverAudio(buf, { key = process.env.OPENAI_API_KEY, 
   return String(j.text || "").trim();
 }
 
-export function criarSofia({ dir, log, api, sock, baixarMidia = null, transcrever = transcreverAudio }) {
+export function criarSofia({ dir, log, api, sock, baixarMidia = null, transcrever = transcreverAudio, abReq = null }) {
   let Anthropic = null, client = null, cfg = null, ab = null, abKey = "";
   const conversas = new Map(); // jid → { mensagens, ultima, ultimaSofia, humanoEm, contexto, nome, agenda, recepcao, fone, fila, ocupado }
   const pausas = new Map();    // jid → até quando a Sofia fica quieta (a recepção respondeu pelo celular)
@@ -583,6 +597,7 @@ export function criarSofia({ dir, log, api, sock, baixarMidia = null, transcreve
       `hoje: ${stats.conversas} conversa(s), ${stats.agendados} agendamento(s), ${stats.remarcados} remarcação(ões), ${stats.cancelados} cancelamento(s), ${stats.recepcao} passada(s) para a recepção`,
       `custo da IA hoje ≈ US$ ${stats.gasto.toFixed(2).replace(".", ",")}`];
     const esperando = [...conversas.values()].filter((c) => c.noturna && c.pendTipo === "noite" && c.fila.length).length;
+    try { const nEsp = JSON.parse(readFileSync(join(dir, "sofia-espera.json"), "utf8")).length; if (nEsp) partes.push(`${nEsp} cliente(s) na lista de espera`); } catch { /* sem lista */ }
     if (esperando) partes.push(`${esperando} conversa(s) da noite esperando para ela responder às 7h`);
     if (pendencias.length) partes.push("para a recepção: " + pendencias.slice(-5).join(" | "));
     const st = extra ? extra : "ok: " + partes.join(" · ") + ".";
@@ -596,7 +611,7 @@ export function criarSofia({ dir, log, api, sock, baixarMidia = null, transcreve
     cfg = novo;
     if (abKey !== e.appbarber.appbarber_api_key + e.appbarber.codigo_estabelecimento) {
       abKey = e.appbarber.appbarber_api_key + e.appbarber.codigo_estabelecimento;
-      ab = ferramentasAppBarber({ cfg: e.appbarber, creditos: (n, zero) => api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: n, ...(zero ? { sem_saldo: true } : {}) }).catch(() => {}) });
+      ab = ferramentasAppBarber({ cfg: e.appbarber, ...(abReq ? { req: abReq } : {}), creditos: (n, zero) => api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: n, ...(zero ? { sem_saldo: true } : {}) }).catch(() => {}) });
     }
     if (!process.env.ANTHROPIC_API_KEY) { if (Date.now() - statusEm > 3600000) await status("erro: falta a chave da Anthropic no servidor. No servidor, rode: gbia-sofia-chave"); return; }
     if (!client) {
@@ -744,7 +759,53 @@ export function criarSofia({ dir, log, api, sock, baixarMidia = null, transcreve
       }
     } finally { respondendoFila = false; }
   }
-  setInterval(() => { retornos().catch(() => {}); filaDaNoite().catch(() => {}); }, 60000).unref();
+  // ---- Lista de espera: guardada no servidor; a cada 30 min (8h–20h) confere se abriu vaga e avisa o cliente ----
+  const ESPERA = join(dir, "sofia-espera.json");
+  const lerEspera = () => { try { return JSON.parse(readFileSync(ESPERA, "utf8")); } catch { return []; } };
+  const gravarEspera = (l) => { try { writeFileSync(ESPERA, JSON.stringify(l), { mode: 0o600 }); } catch (e) { log("Sofia: lista de espera não gravada: " + e.message); } };
+  function listaEspera(jid, c, x) {
+    let l = lerEspera(); const k = chaveFone(c.fone || jid);
+    if (x.sair) { const antes = l.length; l = l.filter((e) => !(e.chave === k && (!x.data || e.data === x.data))); gravarEspera(l); return antes - l.length; }
+    l = l.filter((e) => !(e.chave === k && e.data === x.data));
+    l.push({ id: `${Date.now()}${Math.random().toString(36).slice(2, 6)}`, jid, fone: c.fone || "", chave: k, nome: c.nome || c.pushName || "", data: x.data, servicos: x.servicos, profissional: x.profissional, de: x.de, ate: x.ate, criado: Date.now(), avisos: [] });
+    gravarEspera(l); log(`Sofia: lista de espera (${x.data} ${x.de}–${x.ate}).`);
+    return 1;
+  }
+  let esperaEm = 0;
+  async function verificarEspera() {
+    if (!ligada() || Date.now() - esperaEm < 30 * 60000) return;
+    const agora = agoraSP(); if (agora < 8 * 60 || agora > 20 * 60) return;
+    esperaEm = Date.now();
+    const hoje = hojeSP();
+    let l = lerEspera().filter((e) => e.data > hoje || (e.data === hoje && mins(e.ate) > agora + 15)); // vencidas saem
+    const grupos = new Map(); for (const e of l) { const g = `${e.data}|${e.servicos[0].codigo}`; (grupos.get(g) || grupos.set(g, []).get(g)).push(e); }
+    for (const [g, lista] of grupos) {
+      const [data, serv] = g.split("|");
+      let prof; try { prof = await ab.horarios(data, serv); } catch (e) { log("Sofia: lista de espera, não consegui ver a agenda: " + e.message); continue; }
+      for (const e of lista.sort((a, b) => a.criado - b.criado)) { // por ordem de chegada
+        if (e.avisos.length >= 3 || (pausas.get(e.jid) || 0) > Date.now()) continue; // no máximo 3 avisos; recepção na conversa: espera
+        const ok = [];
+        for (const p of prof) {
+          if (e.profissional) { const q = String(e.profissional).toLowerCase(); if (!p.nome.toLowerCase().includes(q.split(" ")[0]) && !q.includes(p.nome.toLowerCase().split(" ")[0])) continue; }
+          for (const h of p.horarios) if (h >= e.de && h <= e.ate && (data > hoje || mins(h) > agora + 30)) ok.push({ h, p });
+        }
+        ok.sort((a, b) => a.h.localeCompare(b.h));
+        const vaga = ok.find((v) => !e.avisos.includes(`${v.h}|${v.p.codigo}`)); if (!vaga) continue;
+        const d = new Date(data + "T12:00:00Z"), dia = data === hoje ? "hoje" : `${DIAS[d.getUTCDay()]}, ${data.split("-").reverse().slice(0, 2).join("/")}`;
+        const nome = primeiroNome(e.nome);
+        const texto = `Oi${nome ? ", " + nome : ""}! 😊 Boa notícia: abriu um horário ${dia} às ${vaga.h.replace(":", "h")} com ${vaga.p.nome} para ${e.servicos.map((s) => s.nome).join(" + ")}, que você estava esperando. Quer que eu marque pra você? É por ordem de resposta, tá?`;
+        try {
+          await enviar(e.jid, texto);
+          const c = obter(e.jid, null); if (!c.fone) c.fone = e.fone; if (!c.nome && e.nome) c.nome = e.nome;
+          anotar(c, `Você (${cfg.nome}) mandou, pela lista de espera`, `${texto} [vaga: ${data} ${vaga.h}, profissional código ${vaga.p.codigo} (${vaga.p.nome}), serviços ${e.servicos.map((s) => s.codigo).join(", ")}]`);
+          c.ultimaSofia = Date.now(); c.esperaAte = Date.now() + 3600000; c.recepcao = false;
+          e.avisos.push(`${vaga.h}|${vaga.p.codigo}`); log(`Sofia: avisou vaga da lista de espera (${data} ${vaga.h}).`);
+        } catch (err) { log("Sofia: aviso da lista de espera não enviado: " + err.message); }
+      }
+    }
+    gravarEspera(l);
+  }
+  setInterval(() => { retornos().catch(() => {}); filaDaNoite().catch(() => {}); verificarEspera().catch(() => {}); }, 60000).unref();
   // Conversa deste contato (cria se não houver ou se estiver parada há mais de 6 horas).
   function obter(jid, msg) {
     let c = conversas.get(jid);
@@ -797,7 +858,7 @@ export function criarSofia({ dir, log, api, sock, baixarMidia = null, transcreve
         if (!c.artes) c.artes = cfg.artes; // congeladas junto com as instruções
         const ctx = { ab, fone: c.fone, stats, simular: false, artes: c.artes, enviarArte: (a) => enviarArte(jid, a), registro: (t) => log(`Sofia: ${t}.`),
           falha: (t) => { log(`Sofia: (…${String(c.fone).slice(-4)}) ${t}`); pendencias.push(`(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); status().catch(() => {}); },
-          alertar: (t) => alertaEquipe(c, t), avisarProfissional: (nome, t) => avisarProfissional(c, nome, t), pendencia: (t) => { c.motivo = t; pendencias.push(`${c.nome ? c.nome.split(" ")[0] + " " : ""}(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); } };
+          listaEspera: (x) => listaEspera(jid, c, x), alertar: (t) => alertaEquipe(c, t), avisarProfissional: (nome, t) => avisarProfissional(c, nome, t), pendencia: (t) => { c.motivo = t; pendencias.push(`${c.nome ? c.nome.split(" ")[0] + " " : ""}(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); } };
         const antesStats = { agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados };
         // Instruções congeladas no começo da conversa (mudanças no app valem para as próximas conversas).
         const sistema = c.sistema || (c.sistema = promptSistema({ nome: cfg.nome, barbearia: cfg.barbearia, notas: cfg.notas, brand: cfg.brand, artes: c.artes, horario: cfg.horario }));
@@ -852,7 +913,7 @@ export function criarSofia({ dir, log, api, sock, baixarMidia = null, transcreve
       if (msg.pushName && !c.pushName) c.pushName = msg.pushName;
       // Sem atender agora (desligada, recepção na conversa ou fora do horário): guarda para contexto.
       // Conversa nova só começa dentro do horário; a que a Sofia está atendendo continua até ficar 20 min parada.
-      const continua = c.ultimaSofia && Date.now() - c.ultimaSofia < 20 * 60000 && c.humanoEm < c.ultimaSofia;
+      const continua = (c.ultimaSofia && Date.now() - c.ultimaSofia < 20 * 60000 && c.humanoEm < c.ultimaSofia) || (c.esperaAte && c.esperaAte > Date.now() && c.humanoEm < c.esperaAte - 3600000);
       const msgCli = t || (md === "áudio" ? { audio: msg } : `[o cliente mandou um(a) ${md}]`);
       // "👍", "ok", "obrigado" ou figurinha em resposta a um lembrete/mensagem automática: não é conversa, ninguém responde.
       if (!continua && !c.fila.length && ((t && soConfirmacao(t)) || (!t && /figurinha/.test(md)))) { anotar(c, "Cliente", conteudo); continue; }
