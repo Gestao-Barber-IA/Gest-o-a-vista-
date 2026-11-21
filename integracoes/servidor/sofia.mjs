@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "3.6";
+export const SOFIA_VERSAO = "3.7";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -256,6 +256,8 @@ Regras (muito importantes):
 - Para explicar como é um serviço, use só o que está nas Informações da casa ou na observação do serviço (ver_servicos). Se não tiver, diga que o barbeiro(a) explica certinho no atendimento ou pergunte à recepção; não descreva por conta própria.
 - Preço: se as Informações da casa trouxerem preços por dia da semana (promoções), ELAS VALEM sobre o preço de tabela de ver_servicos. Quando o cliente fala de um dia, informe o valor daquele dia. Destaque a promoção 🎉 só na primeira vez que falar de preço e de novo no resumo para confirmar; nas outras mensagens, não repita. Se perguntarem o preço sem dizer o dia, informe o valor de hoje (se for dia promocional, diga que hoje está em promoção) e mencione rapidamente a diferença nos outros dias, convidando para os dias promocionais. Se a ferramenta não trouxer, diga que vai verificar com a recepção (chamar_recepcao).
 - Antes de agendar, remarcar ou cancelar, mande um resumo (serviço, profissional, dia da semana, data e hora) e espere o cliente confirmar. Só então use a ferramenta. Nunca marque sem confirmação.
+- Confirmação uma vez só: se a sua pergunta já tinha serviço, profissional, dia e hora (ex.: "Corte + Barba com o Izaquias hoje às 11h40, por R$ 95. Posso marcar?") e o cliente disse sim, marque direto; não peça para confirmar de novo.
+- Não repita na mensagem seguinte uma pergunta ou pedido que você acabou de fazer (ex.: pedir a data de nascimento duas vezes).
 - Na primeira mensagem de cada conversa vem a linha [Cadastro: …] dizendo se o cliente já é cadastrado (pelo WhatsApp dele).
   • Cadastrado: chame pelo primeiro nome e não peça dados de novo.
   • Não comece a conversa pedindo nome ou dados: cumprimente e pergunte como pode ajudar. Os dados só são pedidos quando for agendar.
@@ -897,7 +899,8 @@ export function criarSofia({ dir, log, api, sock, baixarMidia = null, transcreve
         const cadLinha = c.verificado ? "" : (c.verificado = true, (await verificarCadastro(ab, c.fone, c)) + "\n" + (jaApresentou(c.fone)
           ? "[Apresentação: você já se apresentou a este cliente em outra conversa; não se apresente de novo]\n"
           : `[Apresentação: é a primeira vez que você fala com este cliente; na sua resposta, apresente-se em uma frase curta e simpática (ex.: "Eu sou a ${cfg.nome}, da ${cfg.barbearia} 😊")]\n`));
-        c.mensagens.push({ role: "user", content: agoraTexto(c.fone) + "\n" + cadLinha + (antes.length
+        const naoEnviada = c.naoEnviada ? "[Sua resposta anterior NÃO foi enviada, porque o cliente mandou mais mensagens enquanto você respondia. Responda agora considerando tudo.]\n" : ""; c.naoEnviada = false;
+        c.mensagens.push({ role: "user", content: agoraTexto(c.fone) + "\n" + cadLinha + naoEnviada + (antes.length
           ? `[Para contexto: mensagens desta conversa enquanto você não estava atendendo]\n${antes.join("\n")}\n\n[Mensagem nova do cliente]\n${novas.join("\n")}`
           : novas.join("\n")) });
         if (!c.contada) { c.contada = true; zera(); stats.conversas++; }
@@ -906,12 +909,17 @@ export function criarSofia({ dir, log, api, sock, baixarMidia = null, transcreve
           falha: (t) => { log(`Sofia: (…${String(c.fone).slice(-4)}) ${t}`); pendencias.push(`(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); status().catch(() => {}); },
           listaEspera: (x) => listaEspera(jid, c, x), alertar: (t) => alertaEquipe(c, t), avisarProfissional: (nome, t) => avisarProfissional(c, nome, t), pendencia: (t) => { c.motivo = t; pendencias.push(`${c.nome ? c.nome.split(" ")[0] + " " : ""}(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); } };
         const antesStats = { agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados };
+        const artesAntes = (c.artesEnviadas || []).length;
         // Instruções congeladas no começo da conversa (mudanças no app valem para as próximas conversas).
         const sistema = c.sistema || (c.sistema = promptSistema({ nome: cfg.nome, barbearia: cfg.barbearia, notas: cfg.notas, brand: cfg.brand, artes: c.artes, horario: cfg.horario }));
         const r = await rodada({ client, modelo: cfg.modelo, sistema, conv: c, ctx });
         stats.gasto += r.gasto; c.gasto = (c.gasto || 0) + r.gasto; c.registrada = false;
         c.feitos = c.feitos || {}; for (const [k, v] of Object.entries({ agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados })) c.feitos[k] = (c.feitos[k] || 0) + Math.max(0, v - antesStats[k]);
         if ((pausas.get(jid) || 0) > Date.now()) return; // a recepção entrou enquanto a IA pensava
+        // O cliente mandou mais mensagens enquanto ela pensava e nada foi feito na agenda: não manda esta resposta
+        // (a próxima já considera tudo), para não sair duas respostas seguidas.
+        const agiu = stats.agendados + stats.remarcados + stats.cancelados > antesStats.agendou + antesStats.remarcou + antesStats.cancelou || (c.artesEnviadas || []).length > artesAntes;
+        if (r.texto && c.fila.length && !agiu && !c.recepcao) { c.naoEnviada = true; continue; }
         if (r.texto) { await enviar(jid, r.texto); c.ultimaSofia = Date.now(); marcarApresentou(c.fone); }
         // Arte com retorno: se o cliente não responder em 15 minutos, ela pergunta de novo (uma vez).
         if (c.retornoPendente) { c.retorno = { em: Date.now(), arte: c.retornoPendente }; c.retornoPendente = null; }
