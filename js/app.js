@@ -4337,10 +4337,10 @@ Content-Type: application/json</pre>
       </form></section>`;
   }
   // Retorno no tempo certo: o sistema aprende de quantos em quantos dias cada cliente volta, o dia, o horário e o profissional
-  // de costume, e um dia depois do prazo dele manda um convite com um horário livre nesse jeito.
-  const RT_TEXT = ['{Saudacao}, {cliente}! Tudo bem? 😊\nJá faz {dias} dias desde o seu último atendimento com {profissional}. Separei um horário do jeitinho que você costuma vir: *{dia} às {hora}*, com {profissional}.\nQuer que eu reserve pra você?',
-    '{Saudacao}, {cliente}! 😊 Já está chegando a hora de dar aquele trato no visual ✂️\n{profissional} tem horário *{dia} às {hora}*, do jeito que você costuma vir. Posso reservar pra você?',
-    '{Saudacao}, {cliente}! 💈 Já são {dias} dias desde a sua última visita. Que tal *{dia} às {hora}* com {profissional}, como de costume?\nSe quiser, já deixo reservado pra você!'].join('\n---\n');
+  // de costume, e alguns dias antes do prazo dele (padrão 2) manda um convite com um horário livre no dia do prazo.
+  const RT_TEXT = ['{Saudacao}, {cliente}! 😊 Sua próxima visita está chegando. Separei *{dia} às {hora}* com {profissional}, do jeito que você costuma vir.\nQuer que eu reserve pra você?',
+    '{Saudacao}, {cliente}! Tudo bem? 😊 Já está chegando a hora de dar aquele trato no visual ✂️\n{profissional} tem horário *{dia} às {hora}*, como você costuma vir. Posso reservar pra você?',
+    '{Saudacao}, {cliente}! 💈 Pensando na sua próxima visita, separei um horário com {profissional}: *{dia} às {hora}*, como de costume.\nQuer que eu deixe reservado pra você?'].join('\n---\n');
   function rtCard() {
     if (!isGestor(currentUser())) return '';
     const it = Cloud.enabled ? ui.integ : (state.integ || {});
@@ -4348,18 +4348,21 @@ Content-Type: application/json</pre>
     const st = String(it.rt_status || ''), on = !!it.rt_on, noAb = !it.est_code, bad = /^erro/.test(st);
     const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const h = new Date().getHours(), sd = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
-    const prev = (it.rt_text || RT_TEXT).split(/\n\s*-{3,}\s*\n/)[0].replace(/\{Saudacao\}/g, sd).replace(/\{cliente\}/g, 'João').replace(/\{dias\}/g, '22')
+    const prev = (it.rt_text || RT_TEXT).split(/\n\s*-{3,}\s*\n/)[0].replace(/\{Saudacao\}/g, sd).replace(/\{cliente\}/g, 'João').replace(/\{dias\}/g, '19')
       .replace(/\{profissional\}/g, 'Lucas').replace(/\{dia\}/g, 'sexta-feira (27/11)').replace(/\{hora\}/g, '14h').replace(/\{servico\}/g, 'Corte + Barba').replace(/\{barbearia\}/g, state.company.name || '');
     return `<section class="section card as-card">
       <h2 class="section-title">${icon('clock')} Retorno no tempo certo</h2>
-      <p class="section-note">O sistema lê a agenda da AppBarber e aprende, para cada cliente, <b>de quantos em quantos dias ele costuma voltar</b>, o <b>dia da semana</b>, o <b>horário</b> e o <b>profissional</b> de costume. Um dia depois do prazo dele, se ainda não marcou, ele recebe um convite com um horário livre do jeito dele (ex.: quem vem a cada 21 dias, às sextas por volta das 14h com o Lucas, recebe no 22º dia: <i>sexta às 14h com o Lucas</i>).</p>
+      <p class="section-note">O sistema lê a agenda da AppBarber e aprende, para cada cliente, <b>de quantos em quantos dias ele costuma voltar</b>, o <b>dia da semana</b>, o <b>horário</b> e o <b>profissional</b> de costume. Alguns dias antes do prazo dele, se ainda não marcou, ele recebe um convite com um horário livre <b>no dia do prazo</b>, do jeito dele (ex.: quem vem a cada 21 dias, às sextas por volta das 14h com o Lucas, recebe na quarta: <i>sexta às 14h com o Lucas</i>).</p>
       <p class="section-note">Só entra quem tem pelo menos 3 atendimentos e volta num ritmo entre 7 e 60 dias. Quem já tem horário marcado, pediu SAIR ou recebeu a reconquista há pouco não recebe; cada cliente recebe no máximo 1 convite por ciclo. ${it.ia_on ? 'Quando o cliente responde, a <b>Sofia</b> já sabe o horário sugerido e marca na hora.' : 'Quem responder fala com a recepção (com a Sofia ligada, ela responde e marca sozinha).'}</p>
       <p class="section-note">${icon('alert')} Sai pelo ${it.cl_numero === 'principal' ? '<b>WhatsApp principal</b>' : '<b>2º chip</b> (troque para o principal no lembrete de agendamento, para receber as respostas)'}, entre 10h e 19h, em dia aberto. Gasta cerca de 15 créditos da AppBarber no primeiro dia (12 meses de agenda) e depois uns 15 por dia (agenda do dia e horários livres).</p>
       ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}
       <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.rt_status_at ? 'Atualizado ' + when(it.rt_status_at) : ''}</small><p class="muted as-msg">${esc(st.replace(/^(ok|erro): /, ''))}</p>` : '<span class="chip">Aguardando o servidor</span>'}</div>
       <form class="form" data-form="rtRemind" novalidate>
         <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''} ${noAb ? 'disabled' : ''}><span><b>Retorno no tempo certo ligado</b><small>Espalhados entre 10h e 19h, nos dias em que a barbearia abre.</small></span></label>
-        <label class="field"><span>Convites por dia (no máximo)</span><input class="input num" type="number" name="daily" min="1" max="30" step="1" value="${esc(String(it.rt_daily || 10))}"></label>
+        <div class="grid-2">
+          <label class="field"><span>Convites por dia</span><input class="input num" type="number" name="daily" min="1" max="30" step="1" value="${esc(String(it.rt_daily || 10))}"></label>
+          <label class="field"><span>Dias antes do prazo</span><input class="input num" type="number" name="lead" min="-3" max="7" step="1" value="${esc(String(it.rt_lead == null ? 2 : it.rt_lead))}"><small class="muted">0 = no dia do prazo; -1 = 1 dia depois.</small></label>
+        </div>
         <label class="field"><span>Mensagem</span><textarea class="input" name="text" rows="9" maxlength="2000">${esc(it.rt_text || RT_TEXT)}</textarea>
           <small class="muted">Use {Saudacao} (Bom dia, Boa tarde…), {cliente}, {dias} (dias desde a última vez), {profissional}, {dia}, {hora}, {servico} e {barbearia}. As versões separadas por uma linha com <b>---</b> são sorteadas a cada envio. Links são retirados.</small></label>
         <details class="wa-prev"><summary>Ver como chega para o cliente</summary><p class="wa-bubble">${esc(prev).replace(/\n/g, '<br>')}</p></details>
@@ -8895,9 +8898,10 @@ Content-Type: application/json</pre>
         .catch(e => { const m = Cloud.message(e); setMsg(f, /bd_|column|schema cache/i.test(m) ? 'O parabéns automático ainda está sendo ativado no servidor.' : m); });
     },
     rtRemind(f) {
-      const daily = Math.round(Number(f.elements.daily.value) || 0);
+      const daily = Math.round(Number(f.elements.daily.value) || 0), lead = Math.round(Number(f.elements.lead.value));
       if (daily < 1 || daily > 30) return setMsg(f, 'Convites por dia: de 1 a 30.');
-      const row = { rt_on: !!f.elements.on.checked, rt_daily: daily, rt_text: (f.elements.text.value || '').trim().slice(0, 2000) };
+      if (!Number.isFinite(lead) || f.elements.lead.value === '' || lead < -3 || lead > 7) return setMsg(f, 'Dias antes do prazo: de -3 (3 dias depois) a 7.');
+      const row = { rt_on: !!f.elements.on.checked, rt_daily: daily, rt_lead: lead, rt_text: (f.elements.text.value || '').trim().slice(0, 2000) };
       if (row.rt_text === RT_TEXT) row.rt_text = '';
       const cur = (Cloud.enabled ? ui.integ : state.integ) || {};
       if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Retorno no tempo certo salvo.'); return render(); }

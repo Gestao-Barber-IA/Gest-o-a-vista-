@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "3.8";
+export const SOFIA_VERSAO = "3.9";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -1010,6 +1010,8 @@ export function criarSofia({ dir, log, api, sock, baixarMidia = null, transcreve
 // O sistema aprende, pela agenda da AppBarber, de quantos em quantos dias cada cliente volta (mediana dos últimos
 // intervalos), o dia da semana, o horário e o profissional de costume. Um dia depois do prazo dele, se ainda não marcou,
 // recebe um convite com um horário livre no dia e horário de costume, com o profissional de sempre.
+// Padrão: o convite sai 2 dias ANTES do prazo e sugere um horário no próprio dia do prazo (no dia da semana de costume),
+// para o ciclo dele não atrasar uma semana e ainda haver vaga com o profissional dele.
 const mediana = (l) => { const s = [...l].sort((a, b) => a - b), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 // Mais frequente; no empate, o mais recente (a lista vem em ordem de data).
 const moda = (l) => { const n = new Map(); for (const x of l) n.set(x, (n.get(x) || 0) + 1); let best = null, c = 0; for (let i = l.length - 1; i >= 0; i--) if (n.get(l[i]) > c) { best = l[i]; c = n.get(l[i]); } return [best, c]; };
@@ -1054,9 +1056,9 @@ export function juntarVisitas(cli, linhas) {
   return cli;
 }
 export const TEXTOS_RT = [
-  "{Saudacao}, {cliente}! Tudo bem? 😊\nJá faz {dias} dias desde o seu último atendimento com {profissional}. Separei um horário do jeitinho que você costuma vir: *{dia} às {hora}*, com {profissional}.\nQuer que eu reserve pra você?",
-  "{Saudacao}, {cliente}! 😊 Já está chegando a hora de dar aquele trato no visual ✂️\n{profissional} tem horário *{dia} às {hora}*, do jeito que você costuma vir. Posso reservar pra você?",
-  "{Saudacao}, {cliente}! 💈 Já são {dias} dias desde a sua última visita. Que tal *{dia} às {hora}* com {profissional}, como de costume?\nSe quiser, já deixo reservado pra você!"];
+  "{Saudacao}, {cliente}! 😊 Sua próxima visita está chegando. Separei *{dia} às {hora}* com {profissional}, do jeito que você costuma vir.\nQuer que eu reserve pra você?",
+  "{Saudacao}, {cliente}! Tudo bem? 😊 Já está chegando a hora de dar aquele trato no visual ✂️\n{profissional} tem horário *{dia} às {hora}*, como você costuma vir. Posso reservar pra você?",
+  "{Saudacao}, {cliente}! 💈 Pensando na sua próxima visita, separei um horário com {profissional}: *{dia} às {hora}*, como de costume.\nQuer que eu deixe reservado pra você?"];
 const horaTexto = (h) => String(h).slice(0, 5).replace(":", "h").replace(/h00$/, "h");
 export function textoRetorno(modelo, { nome, dias, profissional, data, hora, servico, barbearia }, hoje = hojeSP(), agora = agoraSP()) {
   const versoes = (modelo ? modelo.split(/\n\s*-{3,}\s*\n/) : TEXTOS_RT).map((t) => t.trim()).filter(Boolean);
@@ -1086,12 +1088,14 @@ export function criarRetorno({ dir, log = () => {}, api = async () => ({}), sock
   async function acharVaga(a, hoje, fechados) {
     const servs = await ab.servicos(), primeiro = String(a.serv || "").split(" + ")[0];
     const s = servs.find((x) => semAcento(x.nome) === semAcento(primeiro)); if (!s) return null;
-    // 1º: o dia da semana de costume (as próximas 2 vezes), perto do horário de costume.
-    const datas = []; for (let i = 0; i <= 14 && datas.length < 2; i++) { const d = somaDias(hoje, i); if (diaDaSemana(d) === a.dia && !fechados.includes(a.dia)) datas.push(d); }
+    const prazo = somaDias(a.ultima, a.media), ini = diasEntre(hoje, prazo) - 3 > 0 ? somaDias(prazo, -3) : hoje;
+    // 1º: o dia da semana de costume mais perto do dia do prazo (a partir de 3 dias antes dele; as 2 primeiras vezes).
+    const datas = []; for (let i = 0; i <= 14 && datas.length < 2; i++) { const d = somaDias(ini, i); if (diaDaSemana(d) === a.dia && !fechados.includes(a.dia)) datas.push(d); }
     for (const d of datas) { const v = await vagaEm(d, s, a, 90, hoje); if (v) return v; }
-    // 2º: outro dia nos próximos dias (até 3 tentativas), perto do horário de costume.
-    let n = 0;
-    for (let i = 1; i <= 7 && n < 3; i++) { const d = somaDias(hoje, i); if (datas.includes(d) || fechados.includes(diaDaSemana(d))) continue; n++; const v = await vagaEm(d, s, a, 60, hoje); if (v) return v; }
+    // 2º: outro dia perto do prazo (até 3 tentativas, do mais perto para o mais longe), perto do horário de costume.
+    const outros = []; for (let i = -2; i <= 4; i++) { const d = somaDias(prazo, i); if (d >= hoje && !datas.includes(d) && !fechados.includes(diaDaSemana(d))) outros.push(d); }
+    outros.sort((x, y) => Math.abs(diasEntre(prazo, x)) - Math.abs(diasEntre(prazo, y)));
+    for (const d of outros.slice(0, 3)) { const v = await vagaEm(d, s, a, 60, hoje); if (v) return v; }
     return null;
   }
 
@@ -1125,7 +1129,8 @@ export function criarRetorno({ dir, log = () => {}, api = async () => ({}), sock
     for (const [kf, cl] of Object.entries(h.cli)) {
       const a = analisarCliente(cl.v, hoje); if (!a || a.hora == null || !a.prof || !a.serv) continue;
       const atraso = a.dias - a.media, x = env[kf] || {};
-      if (atraso < 1 || atraso > 7) continue; // um dia depois do prazo de costume (até 1 semana, se não deu para mandar antes)
+      // A partir de N dias antes do prazo de costume (padrão 2; negativo = depois), até 1 semana depois do prazo.
+      if (atraso < -(Number.isFinite(c.antes) ? c.antes : 2) || atraso > 7) continue;
       if (marc.has(kf) || sair.has(kf) || (x.em && (x.ult === a.ultima || diasEntre(x.em, hoje) < 7)) || x.semVaga === hoje) continue;
       if (wb[kf] && wb[kf].em && diasEntre(wb[kf].em, hoje) < 30) continue;
       fila.push({ kf, cl, a, atraso });
