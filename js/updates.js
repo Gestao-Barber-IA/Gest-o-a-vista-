@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-21-aviso-desconectado', date: '2026-11-21', title: 'Aviso quando o WhatsApp dos clientes desconecta', items: [
+    ['novo', 'Se o WhatsApp que fala com os clientes (lembretes, Sofia, parabéns, reconquista) desconectar do servidor por 10 minutos, o número da equipe manda um aviso para o WhatsApp de avisos urgentes, com o comando para reconectar. Quando voltar, avisa que está tudo funcionando de novo.'],
+    ['correcao', 'O cartão da Atendente IA mostra erro "WhatsApp desconectado" em vez de "ok" quando o número cai, e o status dos lembretes volta para "conectado" sozinho depois de uma reconexão automática.'],
+  ] },
   { id: '2026-11-21-retorno', date: '2026-11-21', title: 'Retorno no tempo certo (convite no ritmo de cada cliente)', items: [
     ['novo', 'Em Integração, o cartão Retorno no tempo certo: o sistema aprende pela agenda de quantos em quantos dias cada cliente costuma voltar, o dia da semana, o horário e o profissional de costume. Alguns dias antes do prazo dele (padrão 2, dá para mudar), se ainda não marcou, recebe no WhatsApp um convite com um horário livre no dia do prazo, do jeito dele (ex.: na quarta, sugerindo sexta às 14h com o Lucas).'],
     ['melhoria', 'Só para quem tem pelo menos 3 atendimentos e volta num ritmo entre 7 e 60 dias. Quem já tem horário marcado ou pediu SAIR não recebe. Com a Sofia ligada, quando o cliente responde ela já sabe o horário sugerido e marca na hora. O cartão mostra quantos convites saíram e quantos voltaram.'],

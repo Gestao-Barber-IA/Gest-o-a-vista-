@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "3.9";
+export const SOFIA_VERSAO = "4.0";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -608,7 +608,7 @@ export async function transcreverAudio(buf, { key = process.env.OPENAI_API_KEY, 
   return String(j.text || "").trim();
 }
 
-export function criarSofia({ dir, log, api, sock, baixarMidia = null, transcrever = transcreverAudio, abReq = null }) {
+export function criarSofia({ dir, log, api, sock, conectado = () => true, cmdConectar = () => "gbia-whatsapp-conectar-principal", baixarMidia = null, transcrever = transcreverAudio, abReq = null }) {
   let Anthropic = null, client = null, cfg = null, ab = null, abKey = "";
   const conversas = new Map(); // jid → { mensagens, ultima, ultimaSofia, humanoEm, contexto, nome, agenda, recepcao, fone, fila, ocupado }
   // As conversas sobrevivem a reinícios (atualização, instalador): ficam num arquivo do servidor por até 6 horas.
@@ -647,7 +647,8 @@ export function criarSofia({ dir, log, api, sock, baixarMidia = null, transcreve
     try { const nEsp = JSON.parse(readFileSync(join(dir, "sofia-espera.json"), "utf8")).length; if (nEsp) partes.push(`${nEsp} cliente(s) na lista de espera`); } catch { /* sem lista */ }
     if (esperando) partes.push(`${esperando} conversa(s) da noite esperando para ela responder às 7h`);
     if (pendencias.length) partes.push("para a recepção: " + pendencias.slice(-5).join(" | "));
-    const st = extra ? extra : "ok: " + partes.join(" · ") + ".";
+    // WhatsApp desconectado do servidor: ela não recebe nem responde nada; o app mostra o erro em vez de "ok".
+    const st = extra ? extra : !conectado() ? `erro: ${quando} · o WhatsApp está desconectado do servidor: a ${cfg.nome} não recebe nem responde mensagens. No servidor, rode: ${cmdConectar()}` : "ok: " + partes.join(" · ") + ".";
     await api("POST", { company_id: cfg.company_id, acao: "ia_status", status: st }).catch(() => {});
   }
 
@@ -672,8 +673,11 @@ export function criarSofia({ dir, log, api, sock, baixarMidia = null, transcreve
     }
     await relatorioDaSemana().catch((err) => log("Sofia: relatório semanal: " + err.message));
     for (const [j, t] of pausas) if (t < Date.now()) pausas.delete(j);
+    // Conexão caiu ou voltou: atualiza o status na hora; senão, a cada 30 minutos.
+    const con = !!conectado(); if (con !== ultimaCon) { ultimaCon = con; statusEm = 0; }
     if (Date.now() - statusEm > 30 * 60000) await status();
   }
+  let ultimaCon = true;
   const ligada = () => !!(cfg && client);
 
   // ---- registro das conversas (30 dias) e relatório de domingo à noite ----

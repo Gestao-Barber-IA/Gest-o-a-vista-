@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "5.4";
+const VERSAO = "5.5";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -76,7 +76,8 @@ async function conectar({ qr = false, codigo = "" } = {}) {
       if (u.qr && qr) { const qrt = (await import("qrcode-terminal")).default; console.log("\nAbra o WhatsApp do número que vai enviar › Aparelhos conectados › Conectar um aparelho e leia o QR code:\n"); qrt.generate(u.qr, { small: true }); }
       if (u.qr && codigo && !pediuCodigo) { pediuCodigo = true; const c = await sock.requestPairingCode(so(codigo)); console.log(`\nNo WhatsApp do chip: Aparelhos conectados › Conectar um aparelho › Conectar com número de telefone e digite: ${c}\n`); }
       if (u.qr && !qr && !codigo) { aberto = false; await status(`desconectado: o número precisa ser conectado de novo (no servidor: ${CMD}).`); log(`Sem sessão: rode ${CMD} no servidor.`); }
-      if (u.connection === "open") { aberto = true; log(`WhatsApp conectado (${PAPEL}).`); ok(true); }
+      // Ao conectar (ou reconectar sozinho), o app volta a mostrar "conectado" e uma nova queda é avisada na hora.
+      if (u.connection === "open") { aberto = true; avisarConectado = true; avisouOff = 0; log(`WhatsApp conectado (${PAPEL}).`); ok(true); }
       if (u.connection === "close") {
         aberto = false;
         const code = u.lastDisconnect?.error?.output?.statusCode;
@@ -516,7 +517,7 @@ async function ciclo() {
   empresasConhecidas = minhas.map((e) => e.company_id);
   if (CLI) await escolherNumero(minhas);
   // Sofia: atende o número dos clientes da primeira barbearia com a atendente IA ligada.
-  if (CLI && SOFIA) { if (!sofia) sofia = SOFIA.criarSofia({ dir: DIR, log, api, sock: () => sock,
+  if (CLI && SOFIA) { if (!sofia) sofia = SOFIA.criarSofia({ dir: DIR, log, api, sock: () => sock, conectado: () => aberto, cmdConectar: () => CMD,
     baixarMidia: (msg) => downloadMediaMessage(msg, "buffer", {}, { logger: pino({ level: "silent" }), reuploadRequest: sock.updateMediaMessage }) }); await sofia.configurar(minhas.find((e) => e.sofia)).catch((err) => log("Sofia: " + err.message)); }
   if (!aberto) { if (Date.now() - avisouOff > 3600000) { avisouOff = Date.now(); await status(`desconectado: conecte o número no servidor (${CMD}).`); } return; }
   if (avisarConectado) { avisarConectado = false; await status(CLI ? `ok: ${NUMERO === "principal" ? "WhatsApp principal" : "2º chip"} conectado, aguardando os horários.` : "conectado: aguardando o horário dos lembretes."); }
@@ -534,6 +535,8 @@ async function ciclo() {
     }
     return;
   }
+  // O número da equipe (conectado) avisa quando o WhatsApp dos clientes cai.
+  await avisarDesconectado(empresas).catch((err) => log("Aviso de desconexão: " + err.message));
   const env = lerEnviados(); for (const d of Object.keys(env)) if (d < hoje) delete env[d];
   env[hoje] = env[hoje] || {};
   for (const e of minhas) {
@@ -552,6 +555,34 @@ async function ciclo() {
     const quando = new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
     await status(`ok: ${quando} · ${ok.length ? `lembrete enviado para ${ok.join(", ")}` : "todos já tinham feito o mínimo, ninguém precisou de lembrete"}${erros.length ? ` · não enviado: ${erros.join(", ")}` : ""}.`, [e.company_id]);
   }
+}
+
+// ---------- aviso: WhatsApp dos clientes desconectado ----------
+// Roda no programa da equipe, que usa outro número e continua conectado. Se o número dos clientes (lembretes, Sofia,
+// parabéns, reconquista) ficar desconectado por 10 minutos, manda um aviso para o WhatsApp de avisos urgentes
+// (Integração › Atendente IA) com o comando para reconectar; quando voltar, avisa que voltou.
+const AV_OFF = join(DIR, "aviso-desconectado.json");
+async function avisarDesconectado(empresas) {
+  const av = lerJ(AV_OFF, {}); let mudou = false;
+  for (const e of empresas) {
+    const w = e.wa_clientes; if (!w || !w.alerta) continue;
+    const off = /^desconectado/.test(w.status || ""), x = av[e.company_id];
+    if (off && !x) { av[e.company_id] = { desde: Date.now() }; mudou = true; continue; }
+    if (off && !x.avisado && Date.now() - x.desde >= 10 * 60000) {
+      const qual = w.numero === "principal" ? "WhatsApp principal" : "2º chip (lembretes dos clientes)";
+      const cmd = w.numero === "principal" ? "gbia-whatsapp-conectar-principal" : "gbia-whatsapp-conectar-clientes";
+      const parado = ["lembretes de agendamento", ...(w.sofia ? ["a Sofia"] : []), "parabéns", "reconquista", "retorno"].join(", ");
+      const t = `⚠️ Gestão Barber IA: o ${qual} da ${e.nome} desconectou do servidor. Estão parados: ${parado}.\n\nPara reconectar: no console da Vultr, rode\n${cmd}\ne leia o QR code no celular desse número (WhatsApp › Aparelhos conectados › Conectar um aparelho).`;
+      try { await enviar(w.alerta, t); x.avisado = Date.now(); mudou = true; log(`${e.nome}: avisei que o ${qual} desconectou.`); }
+      catch (err) { log(`${e.nome}: não consegui avisar a desconexão (${err.message}).`); }
+      continue;
+    }
+    if (!off && x) {
+      if (x.avisado) { try { await enviar(w.alerta, `✅ Gestão Barber IA: o ${w.numero === "principal" ? "WhatsApp principal" : "2º chip"} da ${e.nome} está conectado de novo. Tudo voltou a funcionar.`); } catch { /* tenta só uma vez */ } }
+      delete av[e.company_id]; mudou = true;
+    }
+  }
+  if (mudou) writeFileSync(AV_OFF, JSON.stringify(av));
 }
 
 // ---------- início ----------
