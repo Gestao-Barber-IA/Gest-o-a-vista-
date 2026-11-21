@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "3.7";
+export const SOFIA_VERSAO = "3.8";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -192,7 +192,9 @@ export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) 
     cache.forEach((_, k) => { if (k.startsWith("disp:")) cache.delete(k); });
     return true;
   }
-  return { servicos, profissionais, horarios, agendamentosDe, ultimoDe, buscarClientes, nomeDe, clienteDe, salvarCliente, criar, cancelarComanda };
+  // Linhas da agenda num período (até 31 dias; 1 crédito). status "1" = agendado, "2" = realizado.
+  async function agenda(ini, fim, st) { const q = new URLSearchParams({ start_date: ini, end_date: fim, status_type: st }); if (filial) q.set("branch_code", filial); return (await chamar("GET", "/v1/appointments/history?" + q)).data || []; }
+  return { servicos, profissionais, horarios, agendamentosDe, ultimoDe, buscarClientes, nomeDe, clienteDe, salvarCliente, criar, cancelarComanda, agenda };
 }
 
 // ---------- o que a Sofia pode fazer (ferramentas para o Claude) ----------
@@ -611,7 +613,7 @@ export function criarSofia({ dir, log, api, sock, baixarMidia = null, transcreve
   const conversas = new Map(); // jid → { mensagens, ultima, ultimaSofia, humanoEm, contexto, nome, agenda, recepcao, fone, fila, ocupado }
   // As conversas sobrevivem a reinícios (atualização, instalador): ficam num arquivo do servidor por até 6 horas.
   const CONV = join(dir, "sofia-conversas.json");
-  const CAMPOS = ["mensagens", "inicio", "ultima", "ultimaSofia", "humanoEm", "contexto", "contada", "nome", "recepcao", "fone", "cadastro", "verificado", "sistema", "artes", "feitos", "gasto", "motivo", "pushName", "esperaAte", "registrada", "regId"];
+  const CAMPOS = ["mensagens", "inicio", "ultima", "ultimaSofia", "humanoEm", "contexto", "contada", "nome", "recepcao", "fone", "cadastro", "verificado", "sistema", "artes", "feitos", "gasto", "motivo", "pushName", "esperaAte", "esperaDe", "registrada", "regId"];
   try {
     for (const [j, x] of Object.entries(JSON.parse(readFileSync(CONV, "utf8")))) if (Date.now() - (x.ultima || 0) < 6 * 3600000) conversas.set(j, { agenda: null, fila: [], ocupado: false, ...x });
   } catch { /* primeira vez ou arquivo vazio */ }
@@ -970,7 +972,7 @@ export function criarSofia({ dir, log, api, sock, baixarMidia = null, transcreve
       if (msg.pushName && !c.pushName) c.pushName = msg.pushName;
       // Sem atender agora (desligada, recepção na conversa ou fora do horário): guarda para contexto.
       // Conversa nova só começa dentro do horário; a que a Sofia está atendendo continua até ficar 20 min parada.
-      const continua = (c.ultimaSofia && Date.now() - c.ultimaSofia < 20 * 60000 && c.humanoEm < c.ultimaSofia) || (c.esperaAte && c.esperaAte > Date.now() && c.humanoEm < c.esperaAte - 3600000);
+      const continua = (c.ultimaSofia && Date.now() - c.ultimaSofia < 20 * 60000 && c.humanoEm < c.ultimaSofia) || (c.esperaAte && c.esperaAte > Date.now() && c.humanoEm < (c.esperaDe || c.esperaAte - 3600000));
       const msgCli = t || (md === "áudio" ? { audio: msg } : `[o cliente mandou um(a) ${md}]`);
       // "👍", "ok", "obrigado" ou figurinha em resposta a um lembrete/mensagem automática: não é conversa, ninguém responde.
       if (!continua && !c.fila.length && ((t && soConfirmacao(t)) || (!t && /figurinha/.test(md)))) { anotar(c, "Cliente", conteudo); continue; }
@@ -991,5 +993,179 @@ export function criarSofia({ dir, log, api, sock, baixarMidia = null, transcreve
     }
   }
 
-  return { configurar, aoReceber, marcarMinha, ligada, relatorioDaSemana, ativaAgora: () => !!(cfg && client && dentroDaJanela(cfg.janelas)), status };
+  // Convite do "retorno no tempo certo" enviado: a Sofia fica sabendo do horário sugerido e, se a Sofia estiver ligada,
+  // responde o cliente nas próximas 3 horas (se a recepção entrar na conversa, ela sai como sempre).
+  function retornoEnviado(jid, id, { fone = "", nome = "", texto = "", detalhe = "" } = {}) {
+    if (id) daSofia.add(id);
+    const c = obter(jid, null); if (!c.fone && fone) c.fone = fone; if (!c.pushName && nome) c.pushName = nome;
+    anotar(c, "Mensagem automática da barbearia (convite de retorno: o cliente costuma voltar nesse prazo)", `${texto} ${detalhe}`.trim());
+    c.ultima = Date.now();
+    if (ligada()) { c.esperaDe = Date.now(); c.esperaAte = Date.now() + 3 * 3600000; c.recepcao = false; }
+  }
+
+  return { configurar, aoReceber, marcarMinha, ligada, relatorioDaSemana, retornoEnviado, ativaAgora: () => !!(cfg && client && dentroDaJanela(cfg.janelas)), status };
+}
+
+// ---------- retorno no tempo certo ----------
+// O sistema aprende, pela agenda da AppBarber, de quantos em quantos dias cada cliente volta (mediana dos últimos
+// intervalos), o dia da semana, o horário e o profissional de costume. Um dia depois do prazo dele, se ainda não marcou,
+// recebe um convite com um horário livre no dia e horário de costume, com o profissional de sempre.
+const mediana = (l) => { const s = [...l].sort((a, b) => a - b), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+// Mais frequente; no empate, o mais recente (a lista vem em ordem de data).
+const moda = (l) => { const n = new Map(); for (const x of l) n.set(x, (n.get(x) || 0) + 1); let best = null, c = 0; for (let i = l.length - 1; i >= 0; i--) if (n.get(l[i]) > c) { best = l[i]; c = n.get(l[i]); } return [best, c]; };
+const diasEntre = (a, b) => Math.round((new Date(b + "T12:00:00Z") - new Date(a + "T12:00:00Z")) / 86400000);
+const diaDaSemana = (iso) => new Date(iso + "T12:00:00Z").getUTCDay();
+const semAcento = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
+export const RT_MIN_VISITAS = 3, RT_MIN_DIAS = 7, RT_MAX_DIAS = 60;
+// visitas: [[AAAA-MM-DD, minutos do horário, profissional, serviços], …]
+export function analisarCliente(visitas, hoje = hojeSP()) {
+  const v = (visitas || []).filter((x) => x && x[0] && x[0] <= hoje).sort((a, b) => a[0].localeCompare(b[0]));
+  if (v.length < RT_MIN_VISITAS) return null;
+  const ult = v.slice(-7), inter = [];
+  for (let i = 1; i < ult.length; i++) inter.push(diasEntre(ult[i - 1][0], ult[i][0]));
+  const media = Math.round(mediana(inter));
+  if (media < RT_MIN_DIAS || media > RT_MAX_DIAS) return null; // muito irregular ou raro: fica com a reconquista
+  const rec = v.slice(-8), [dia, vezesDia] = moda(rec.map((x) => diaDaSemana(x[0])));
+  const doDia = rec.filter((x) => diaDaSemana(x[0]) === dia && x[1] > 0).map((x) => x[1]);
+  const hora = doDia.length ? Math.round(mediana(doDia) / 10) * 10 : null;
+  const [prof] = moda(v.slice(-5).map((x) => x[2]).filter(Boolean));
+  const [serv] = moda(v.slice(-5).map((x) => x[3]).filter(Boolean));
+  const ultima = v[v.length - 1][0];
+  return { media, dia, vezesDia, hora, prof, serv, ultima, dias: diasEntre(ultima, hoje), visitas: v.length };
+}
+// Junta as linhas da agenda (um serviço por linha) em visitas: uma por cliente por dia.
+export function juntarVisitas(cli, linhas) {
+  const porDia = new Map();
+  for (const a of linhas || []) {
+    const m = String(a.scheduling_start || "").match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})/); if (!m) continue;
+    const f = so(a.client_phone); if (f.length < 10) continue;
+    const k = chaveFone(f), dia = `${m[3]}-${m[2]}-${m[1]}`, g = `${k}|${dia}`;
+    const x = porDia.get(g) || { k, f, nome: String(a.client_name || "").trim(), dia, itens: [] };
+    x.itens.push([+m[4] * 60 + +m[5], String(a.employee_name || "").trim(), String(a.service_description || "").trim()]); porDia.set(g, x);
+  }
+  for (const x of porDia.values()) {
+    x.itens.sort((a, b) => a[0] - b[0]);
+    const c = cli[x.k] || (cli[x.k] = { f: x.f, n: x.nome, v: [] });
+    c.f = x.f; if (x.nome) c.n = x.nome;
+    const nova = [x.dia, x.itens[0][0], x.itens[0][1], [...new Set(x.itens.map((i) => i[2]).filter(Boolean))].join(" + ")];
+    const i = c.v.findIndex((y) => y[0] === x.dia); if (i >= 0) c.v[i] = nova; else c.v.push(nova);
+    c.v.sort((a, b) => a[0].localeCompare(b[0])); if (c.v.length > 15) c.v.splice(0, c.v.length - 15);
+  }
+  return cli;
+}
+export const TEXTOS_RT = [
+  "{Saudacao}, {cliente}! Tudo bem? 😊\nJá faz {dias} dias desde o seu último atendimento com {profissional}. Separei um horário do jeitinho que você costuma vir: *{dia} às {hora}*, com {profissional}.\nQuer que eu reserve pra você?",
+  "{Saudacao}, {cliente}! 😊 Já está chegando a hora de dar aquele trato no visual ✂️\n{profissional} tem horário *{dia} às {hora}*, do jeito que você costuma vir. Posso reservar pra você?",
+  "{Saudacao}, {cliente}! 💈 Já são {dias} dias desde a sua última visita. Que tal *{dia} às {hora}* com {profissional}, como de costume?\nSe quiser, já deixo reservado pra você!"];
+const horaTexto = (h) => String(h).slice(0, 5).replace(":", "h").replace(/h00$/, "h");
+export function textoRetorno(modelo, { nome, dias, profissional, data, hora, servico, barbearia }, hoje = hojeSP(), agora = agoraSP()) {
+  const versoes = (modelo ? modelo.split(/\n\s*-{3,}\s*\n/) : TEXTOS_RT).map((t) => t.trim()).filter(Boolean);
+  const sd = agora < 12 * 60 ? "Bom dia" : agora < 18 * 60 ? "Boa tarde" : "Boa noite";
+  const dm = data.split("-").reverse().slice(0, 2).join("/"), ds = DIAS[diaDaSemana(data)];
+  const dia = data === hoje ? "hoje" : data === somaDias(hoje, 1) ? `amanhã (${ds.replace("-feira", "")}, ${dm})` : `${ds} (${dm})`;
+  let t = versoes[Math.floor(Math.random() * versoes.length)];
+  if (!nome) t = t.replace(/,\s*\{cliente\}/g, "").replace(/\{cliente\},?\s*/g, "");
+  return t.replace(/\{Saudacao\}/g, sd).replace(/\{saudacao\}/g, sd.toLowerCase()).replace(/\{cliente\}/g, nome).replace(/\{dias\}/g, String(dias))
+    .replace(/\{profissional\}/g, profissional).replace(/\{dia\}/g, dia).replace(/\{hora\}/g, horaTexto(hora)).replace(/\{servico\}/g, servico || "")
+    .replace(/\{barbearia\}/g, barbearia || "").replace(/https?:\/\/\S+/gi, "").replace(/ !/g, "!").trim();
+}
+export function criarRetorno({ dir, log = () => {}, api = async () => ({}), sock = () => null, sofia = () => null, req = null, pode = () => true, esperaDigitando = 3000, relogio = agoraSP }) {
+  const HIST = join(dir, "retorno-historico.json"), ENV = join(dir, "retorno-enviados.json");
+  const ler = (f, pad) => { try { return JSON.parse(readFileSync(f, "utf8")); } catch { return pad; } };
+  const gravar = (f, v) => { try { writeFileSync(f, JSON.stringify(v), { mode: 0o600 }); } catch (e) { log("Retorno: não gravei o arquivo: " + e.message); } };
+  let ab = null, abChave = "", ultimoEnvio = 0, statusEm = 0, ocupado = false;
+  const mesmoProf = (p, nome) => { const a = semAcento(nome), b = semAcento(p.completo || p.nome), c = semAcento(p.nome); return !!a && (a === b || a === c || a.split(" ")[0] === c.split(" ")[0] || a.split(" ")[0] === b.split(" ")[0]); };
+
+  // Horário livre com o profissional de costume no dia d, o mais perto do horário de costume (até tol minutos).
+  async function vagaEm(d, s, a, tol, hoje) {
+    const lista = await ab.horarios(d, s.codigo), p = lista.find((x) => mesmoProf(x, a.prof)); if (!p) return null;
+    let best = null;
+    for (const h of p.horarios) { const dif = Math.abs(mins(h) - a.hora); if (dif <= tol && (d > hoje || mins(h) > relogio() + 120) && (!best || dif < best.dif)) best = { h, dif }; }
+    return best ? { data: d, hora: best.h, prof: p, serv: s } : null;
+  }
+  async function acharVaga(a, hoje, fechados) {
+    const servs = await ab.servicos(), primeiro = String(a.serv || "").split(" + ")[0];
+    const s = servs.find((x) => semAcento(x.nome) === semAcento(primeiro)); if (!s) return null;
+    // 1º: o dia da semana de costume (as próximas 2 vezes), perto do horário de costume.
+    const datas = []; for (let i = 0; i <= 14 && datas.length < 2; i++) { const d = somaDias(hoje, i); if (diaDaSemana(d) === a.dia && !fechados.includes(a.dia)) datas.push(d); }
+    for (const d of datas) { const v = await vagaEm(d, s, a, 90, hoje); if (v) return v; }
+    // 2º: outro dia nos próximos dias (até 3 tentativas), perto do horário de costume.
+    let n = 0;
+    for (let i = 1; i <= 7 && n < 3; i++) { const d = somaDias(hoje, i); if (datas.includes(d) || fechados.includes(diaDaSemana(d))) continue; n++; const v = await vagaEm(d, s, a, 60, hoje); if (v) return v; }
+    return null;
+  }
+
+  async function passo(e, hoje) {
+    const c = e.retorno, agora = relogio(), fechados = ((e.horario && e.horario.fechados) || []).map(Number);
+    if (fechados.includes(diaDaSemana(hoje)) || agora < 10 * 60 || agora > 19 * 60) return; // envia entre 10h e 19h, em dia aberto
+    const k = `${c.codigo_estabelecimento}|${c.appbarber_api_key}`;
+    if (!ab || abChave !== k) { abChave = k; ab = ferramentasAppBarber({ cfg: c, ...(req ? { req } : {}), creditos: (n, zero) => api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: n, ...(zero ? { sem_saldo: true } : {}) }).catch(() => {}) }); }
+    let h = ler(HIST, null);
+    if (!h || h.cid !== e.company_id) h = { cid: e.company_id, ate: null, cli: {} };
+    const env = ler(ENV, {});
+    // Histórico: na 1ª vez, 12 meses de atendimentos realizados (12 créditos); depois, 1 vez por dia, os últimos dias (1 crédito).
+    if (h.ate !== hoje) {
+      const ini = h.ate ? somaDias(h.ate, -3) : somaDias(hoje, -365), linhas = [];
+      for (let fim = somaDias(hoje, -1), i = 0; fim >= ini && i < 13; i++) { const de = somaDias(fim, -30) < ini ? ini : somaDias(fim, -30); linhas.push(...await ab.agenda(de, fim, "2")); fim = somaDias(de, -1); }
+      juntarVisitas(h.cli, linhas);
+      // Quem recebeu o convite e veio depois: "voltou".
+      for (const [kf, x] of Object.entries(env)) if (x.enviado && !x.voltou && h.cli[kf]) { const v = h.cli[kf].v.find((y) => y[0] >= x.em); if (v) x.voltou = v[0]; }
+      h.ate = hoje; h.marcadosEm = 0; gravar(HIST, h); gravar(ENV, env);
+      log(`Retorno: histórico atualizado (${Object.keys(h.cli).length} clientes).`);
+    }
+    // Quem já tem horário marcado (de hoje a 30 dias) não recebe. Conferido a cada 1h30 (2 créditos).
+    if (!h.marcadosEm || Date.now() - h.marcadosEm > 90 * 60000) {
+      // Inclui quem já foi atendido hoje (ainda não está no histórico, que vai até ontem).
+      const ag = [...await ab.agenda(hoje, somaDias(hoje, 30), "1"), ...await ab.agenda(hoje, hoje, "2")];
+      h.marcados = [...new Set(ag.map((x) => so(x.client_phone)).filter((f) => f.length >= 10).map(chaveFone))];
+      h.marcadosEm = Date.now(); gravar(HIST, h);
+    }
+    const marc = new Set(h.marcados || []), sair = new Set(ler(join(dir, "reconquista-sair.json"), [])), wb = ler(join(dir, "reconquista-enviados.json"), {});
+    const fila = [];
+    for (const [kf, cl] of Object.entries(h.cli)) {
+      const a = analisarCliente(cl.v, hoje); if (!a || a.hora == null || !a.prof || !a.serv) continue;
+      const atraso = a.dias - a.media, x = env[kf] || {};
+      if (atraso < 1 || atraso > 7) continue; // um dia depois do prazo de costume (até 1 semana, se não deu para mandar antes)
+      if (marc.has(kf) || sair.has(kf) || (x.em && (x.ult === a.ultima || diasEntre(x.em, hoje) < 7)) || x.semVaga === hoje) continue;
+      if (wb[kf] && wb[kf].em && diasEntre(wb[kf].em, hoje) < 30) continue;
+      fila.push({ kf, cl, a, atraso });
+    }
+    fila.sort((p, q) => p.atraso - q.atraso || q.a.visitas - p.a.visitas);
+    const hojeEnv = Object.values(env).filter((x) => x.em === hoje && x.enviado).length;
+    const intervalo = Math.max(5, Math.floor(9 * 60 / c.porDia)) * 60000; // espalha as mensagens entre 10h e 19h
+    const s = sock();
+    if (s && pode() && hojeEnv < c.porDia && fila.length && Date.now() - ultimoEnvio >= intervalo) {
+      for (const { kf, cl, a } of fila.slice(0, 3)) {
+        const vaga = await acharVaga(a, hoje, fechados);
+        if (!vaga) { env[kf] = { ...(env[kf] || {}), semVaga: hoje }; gravar(ENV, env); continue; }
+        const d = so(cl.f), cand = d.length <= 11 ? "55" + d : d;
+        const [w] = await s.onWhatsApp(cand).catch(() => []);
+        if (!w || !w.exists) { env[kf] = { ult: a.ultima, em: hoje, semZap: true }; gravar(ENV, env); continue; }
+        const nome = primeiroNome(cl.n), profissional = primeiroNome(vaga.prof.nome);
+        const texto = textoRetorno(c.texto, { nome, dias: a.dias, profissional, data: vaga.data, hora: vaga.hora, servico: a.serv, barbearia: e.nome }, hoje, relogio());
+        env[kf] = { ult: a.ultima, em: hoje, enviado: true, vaga: `${vaga.data} ${vaga.hora}` }; gravar(ENV, env); ultimoEnvio = Date.now();
+        try {
+          await s.presenceSubscribe(w.jid).catch(() => {}); await s.sendPresenceUpdate("composing", w.jid).catch(() => {});
+          await espera(esperaDigitando + Math.random() * esperaDigitando); await s.sendPresenceUpdate("paused", w.jid).catch(() => {});
+          const r = await s.sendMessage(w.jid, { text: texto });
+          const so2 = sofia(); if (so2 && so2.retornoEnviado) so2.retornoEnviado(w.jid, r && r.key && r.key.id, { fone: normFone(d), nome, texto,
+            detalhe: `[horário sugerido: ${vaga.data} ${vaga.hora}, profissional código ${vaga.prof.codigo} (${vaga.prof.nome}), serviço código ${vaga.serv.codigo} (${vaga.serv.nome}); de costume o cliente faz: ${a.serv}; vem a cada ~${a.media} dias. Se ele aceitar, confira com ver_horarios e agende; se não der, ofereça outro horário.]` });
+          log(`Retorno: convite enviado (${nome || "cliente"}, volta a cada ~${a.media} dias → ${vaga.data} ${vaga.hora}).`);
+        } catch (err) { env[kf].enviado = false; env[kf].erro = String(err.message).slice(0, 80); gravar(ENV, env); log("Retorno: convite não enviado: " + err.message); }
+        break; // um por vez; o próximo no próximo intervalo
+      }
+    }
+    if (Date.now() - statusEm > 1800000) {
+      statusEm = Date.now();
+      const vals = Object.values(ler(ENV, {})).filter((x) => x.enviado);
+      const quando = new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+      const conhecidos = Object.values(h.cli).filter((cl) => analisarCliente(cl.v, hoje)).length;
+      await api("POST", { company_id: e.company_id, acao: "rt_status", status: `ok: ${quando} · ${vals.filter((x) => x.em === hoje).length} de ${c.porDia} enviados hoje · ${fila.length} na fila · ${conhecidos} clientes com frequência conhecida · ${vals.length} enviados no total · ${vals.filter((x) => x.voltou).length} voltaram.` }).catch(() => {});
+    }
+  }
+  async function rodar(e, hoje = hojeSP()) {
+    if (ocupado || !e || !e.retorno) return; ocupado = true;
+    try { await passo(e, hoje); } finally { ocupado = false; }
+  }
+  return { rodar };
 }

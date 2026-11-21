@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "5.2";
+const VERSAO = "5.3";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -51,7 +51,7 @@ async function carregarSofiaMod() {
   try { return await import("./sofia.mjs"); } catch (e) { console.log("Sofia indisponível: " + e.message); return null; }
 }
 const SOFIA = CLI ? await carregarSofiaMod() : null;
-let sofia = null;
+let sofia = null, retorno = null;
 
 // ---------- conexão ----------
 let sock = null, aberto = false, saiu = false, geracao = 0;
@@ -512,7 +512,7 @@ async function ciclo() {
   await atualizar();
   const { empresas = [], hoje } = await api("GET", null, "?acao=lembretes");
   // Cada número cuida só das empresas com o seu tipo de lembrete ligado.
-  const minhas = empresas.filter((e) => (CLI ? !!(e.clientes || e.feedback || e.reconquista || e.aniversario || e.sofia) : e.cfg.ligado !== false));
+  const minhas = empresas.filter((e) => (CLI ? !!(e.clientes || e.feedback || e.reconquista || e.retorno || e.aniversario || e.sofia) : e.cfg.ligado !== false));
   empresasConhecidas = minhas.map((e) => e.company_id);
   if (CLI) await escolherNumero(minhas);
   // Sofia: atende o número dos clientes da primeira barbearia com a atendente IA ligada.
@@ -526,6 +526,12 @@ async function ciclo() {
     for (const e of minhas) if (e.feedback) await feedbacks(e, hoje).catch((err) => log(`${e.nome}: feedback: ${err.message}`));
     for (const e of minhas) if (e.aniversario && e.appbarber) await aniversarios(e, hoje).catch((err) => { log(`${e.nome}: aniversário: ${err.message}`); api("POST", { company_id: e.company_id, acao: "bd_status", status: "erro: " + err.message }).catch(() => {}); });
     for (const e of minhas) if (e.reconquista) await reconquista(e, hoje).catch((err) => { log(`${e.nome}: reconquista: ${err.message}`); api("POST", { company_id: e.company_id, acao: "wb_status", status: "erro: " + err.message }).catch(() => {}); });
+    // Retorno no tempo certo: convite um dia depois do prazo de costume de cada cliente (aprendido da agenda).
+    const eRt = minhas.find((e) => e.retorno);
+    if (eRt && SOFIA && SOFIA.criarRetorno) {
+      if (!retorno) retorno = SOFIA.criarRetorno({ dir: DIR, log, api, sock: () => (aberto ? sock : null), sofia: () => sofia, pode: () => pausadoDia !== hoje });
+      await retorno.rodar(eRt, hoje).catch((err) => { log(`${eRt.nome}: retorno: ${err.message}`); api("POST", { company_id: eRt.company_id, acao: "rt_status", status: "erro: " + err.message }).catch(() => {}); });
+    }
     return;
   }
   const env = lerEnviados(); for (const d of Object.keys(env)) if (d < hoje) delete env[d];
