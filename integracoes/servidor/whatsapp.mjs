@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "5.3";
+const VERSAO = "5.4";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -526,7 +526,7 @@ async function ciclo() {
     for (const e of minhas) if (e.feedback) await feedbacks(e, hoje).catch((err) => log(`${e.nome}: feedback: ${err.message}`));
     for (const e of minhas) if (e.aniversario && e.appbarber) await aniversarios(e, hoje).catch((err) => { log(`${e.nome}: aniversário: ${err.message}`); api("POST", { company_id: e.company_id, acao: "bd_status", status: "erro: " + err.message }).catch(() => {}); });
     for (const e of minhas) if (e.reconquista) await reconquista(e, hoje).catch((err) => { log(`${e.nome}: reconquista: ${err.message}`); api("POST", { company_id: e.company_id, acao: "wb_status", status: "erro: " + err.message }).catch(() => {}); });
-    // Retorno no tempo certo: convite um dia depois do prazo de costume de cada cliente (aprendido da agenda).
+    // Retorno no tempo certo: convite alguns dias antes do prazo de costume de cada cliente (aprendido da agenda).
     const eRt = minhas.find((e) => e.retorno);
     if (eRt && SOFIA && SOFIA.criarRetorno) {
       if (!retorno) retorno = SOFIA.criarRetorno({ dir: DIR, log, api, sock: () => (aberto ? sock : null), sofia: () => sofia, pode: () => pausadoDia !== hoje });
