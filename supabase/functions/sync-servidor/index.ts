@@ -2,7 +2,7 @@
 // Authorization: Bearer <SYNC_TOKEN>  (segredo da função no Supabase; nunca vai para o app)
 // GET  → lista as barbearias com sincronização automática ligada e assinatura em dia.
 // GET ?acao=lembretes → dados do dia para os lembretes no WhatsApp.
-// POST { company_id, acao: 'wa_status' | 'cl_status' | 'fb_status' | 'wb_status' | 'bd_status' | 'ia_status', status } → grava o estado dos lembretes (equipe | clientes).
+// POST { company_id, acao: 'wa_status' | 'cl_status' | 'fb_status' | 'wb_status' | 'rt_status' | 'bd_status' | 'ia_status', status } → grava o estado dos lembretes (equipe | clientes).
 // POST { company_id, acao: 'ia_report', relatorio } → grava o relatório semanal da Sofia.
 // POST { company_id, creditos, sem_saldo } (com qualquer ação, ou acao: 'ab_uso') → soma as consultas gastas na AppBarber.
 // POST → { company_id, ok, mensagem } grava o resultado da última sincronização.
@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
   if (req.method === "GET" && url.searchParams.get("acao") === "lembretes") {
     const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
     const { data: ints, error } = await db.from("integrations")
-      .select("company_id, est_code, api_key, branch_code, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, bd_on, bd_text, ia_on, ia_name, ia_model, ia_hours, ia_pause, ia_notes, ia_report_phone, ia_alert_phone, ia_arts, names").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,bd_on.eq.true,ia_on.eq.true");
+      .select("company_id, est_code, api_key, branch_code, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, rt_on, rt_daily, rt_text, bd_on, bd_text, ia_on, ia_name, ia_model, ia_hours, ia_pause, ia_notes, ia_report_phone, ia_alert_phone, ia_arts, names").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,rt_on.eq.true,bd_on.eq.true,ia_on.eq.true");
     if (error) return json({ erro: error.message }, 500);
     const empresas = [];
     for (const i of ints || []) {
@@ -65,6 +65,8 @@ Deno.serve(async (req) => {
         appbarber: i.est_code && i.api_key ? { codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
         // Reconquista de clientes sumidos (lista de clientes da AppBarber, 1 crédito por página).
         reconquista: i.wb_on && i.est_code && i.api_key ? { porDia: Math.max(1, Math.min(40, Number(i.wb_daily) || 15)), minDias: Math.max(30, Number(i.wb_min_days) || 90), maxDias: Math.max(60, Number(i.wb_max_days) || 365), texto: i.wb_text || "", codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
+        // Retorno no tempo certo: convite no dia seguinte ao prazo de costume de cada cliente (agenda da AppBarber).
+        retorno: i.rt_on && i.est_code && i.api_key ? { porDia: Math.max(1, Math.min(30, Number(i.rt_daily) || 10)), texto: i.rt_text || "", codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
         cfg: { ligado: !!i.wa_on, hora: i.wa_hour || "13:00", minimo: Number(i.wa_min) || 0, texto: i.wa_text || "" },
         // Lembrete de agendamento para os clientes (o servidor consulta a agenda da AppBarber).
         clientes: i.cl_on && i.est_code && i.api_key ? { numero: i.cl_numero === "principal" ? "principal" : "chip", antecedencia: Number(i.cl_lead) || 60, texto: i.cl_text || "", resposta: i.cl_reply || "", codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
@@ -127,7 +129,7 @@ Deno.serve(async (req) => {
       const { error } = await db.from("integrations").update({ ia_report: rel, ia_report_at: new Date().toISOString() }).eq("company_id", b.company_id);
       return error ? json({ erro: error.message }, 500) : json({ ok: true });
     }
-    if (["wa_status", "cl_status", "fb_status", "wb_status", "bd_status", "ia_status"].includes(b.acao)) {
+    if (["wa_status", "cl_status", "fb_status", "wb_status", "rt_status", "bd_status", "ia_status"].includes(b.acao)) {
       const k = String(b.acao).slice(0, 2);
       const { error } = await db.from("integrations").update({ [k + "_status"]: String(b.status || "").slice(0, 500), [k + "_status_at"]: new Date().toISOString() }).eq("company_id", b.company_id);
       return error ? json({ erro: error.message }, 500) : json({ ok: true });
