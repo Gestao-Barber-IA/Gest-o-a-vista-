@@ -75,6 +75,22 @@ input.txt:focus { outline:none; border-color:var(--ac); }
 .vazio-m { color:var(--muted); font-size:19px; text-align:center; padding:20px; }
 .voltar { position:absolute; left:20px; top:max(84px, calc(env(safe-area-inset-top) + 70px)); }
 h1.tit-ini { max-width:720px; }
+.ini, .ini-a, .ini-b { display:flex; flex-direction:column; align-items:center; width:100%; }
+/* Tablet deitado: logo e título à esquerda, celular e teclado à direita. */
+@media (orientation:landscape) and (min-width:820px) {
+  body.ini main { justify-content:center; padding-top:0; max-width:1240px; }
+  .ini { flex-direction:row; align-items:center; justify-content:center; gap:clamp(32px,5vw,80px); }
+  .ini-a { flex:1 1 0; max-width:560px; }
+  .ini-b { flex:1 1 0; max-width:520px; }
+  .ini .logo-ini { width:clamp(180px,30vh,300px); height:clamp(180px,30vh,300px); margin-bottom:22px; }
+  .ini h1 { font-size:clamp(32px,4.6vh,52px); }
+  .ini p.sub { margin-bottom:0; }
+  .ini .fone { margin:0 0 16px; font-size:clamp(38px,6vh,56px); }
+  .ini .pad { grid-template-columns:repeat(3, minmax(100px,150px)); gap:12px; }
+  .ini .pad button { height:clamp(64px,9.5vh,96px); }
+  .ini .acoes { margin-top:18px; }
+  .ini .acoes .btn { max-width:none; min-height:clamp(64px,9vh,84px); }
+}
 /* Tablet em pé: teclado e botões maiores, ocupando melhor a altura. */
 @media (orientation:portrait) and (min-width:600px) {
   h1 { font-size:clamp(36px,6vw,56px); }
@@ -135,11 +151,11 @@ h1.tit-ini { max-width:720px; }
     $('aviso').innerHTML = info && info.ativo && !info.online ? '<div class="aviso">A agenda está sem conexão agora. Para check-in ou agendamento, fale com a recepção.</div>' : '';
     if (tela === 'inicio') {
       var d = st.fone || '';
-      h = (info && info.logo ? '<img class="logo-ini" src="' + esc(logoSrc || info.logo) + '" alt="">' : '') + '<h1 class="tit-ini">Faça o check-in ou agende seu horário agora</h1><p class="sub">Digite seu celular com DDD</p>' +
+      h = '<div class="ini"><div class="ini-a">' + (info && info.logo ? '<img class="logo-ini" src="' + esc(logoSrc || info.logo) + '" alt="">' : '') + '<h1 class="tit-ini">Faça o check-in ou agende seu horário agora</h1><p class="sub">Digite seu celular com DDD</p></div><div class="ini-b">' +
         '<div class="fone' + (d ? '' : ' vazio') + '">' + (d ? esc(fmtFone(d)) : '(00) 00000-0000') + '</div><div class="pad">' +
         [1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (n) { return '<button type="button" data-k="' + n + '">' + n + '</button>'; }).join('') +
         '<button type="button" class="del" data-k="del" aria-label="Apagar">⌫</button><button type="button" data-k="0">0</button><button type="button" class="del" data-k="lim" aria-label="Limpar">Limpar</button></div>' +
-        '<div class="acoes"><button class="btn pri" type="button" data-a="buscar"' + (d.length >= 10 ? '' : ' disabled') + '>Continuar</button></div>';
+        '<div class="acoes"><button class="btn pri" type="button" data-a="buscar"' + (d.length >= 10 ? '' : ' disabled') + '>Continuar</button></div></div></div>';
     } else if (tela === 'agendado') {
       var r = st.busca;
       h = '<h1>Olá, ' + esc(r.nome || 'tudo bem') + '! 👋</h1><p class="sub">' + (r.horarios.length > 1 ? 'Seus horários de hoje:' : 'Seu horário de hoje:') + '</p><div class="lista">' +
