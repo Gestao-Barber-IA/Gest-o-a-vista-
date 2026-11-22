@@ -17,10 +17,14 @@
 * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-family:"Hind",system-ui,sans-serif; overscroll-behavior:none; user-select:none; -webkit-user-select:none; }
 body { --g1:rgba(52,88,190,.16); --g2:rgba(212,178,102,.10); background: radial-gradient(1200px 700px at 10% -10%, var(--g1), transparent 60%), radial-gradient(900px 600px at 110% 110%, var(--g2), transparent 60%), var(--bg); background-attachment:fixed; transition:background-color .4s; }
-.logo-ini { width:clamp(120px,18vw,190px); height:clamp(120px,18vw,190px); border-radius:50%; object-fit:cover; background:var(--s2); box-shadow:0 0 0 4px var(--ac), 0 18px 50px var(--glow, rgba(214,180,106,.3)); margin:0 0 26px; }
+.logo-ini { width:clamp(170px,26vw,260px); height:clamp(170px,26vw,260px); border-radius:50%; object-fit:cover; background:var(--s2); box-shadow:0 0 0 4px var(--ac), 0 18px 50px var(--glow, rgba(214,180,106,.3)); margin:0 0 26px; }
 .app { min-height:100%; display:flex; flex-direction:column; padding: max(18px, env(safe-area-inset-top)) 24px max(18px, env(safe-area-inset-bottom)); }
 header { display:flex; align-items:center; gap:14px; min-height:56px; }
 header img.hide { display:none; }
+body.ini header { position:absolute; top:max(12px, env(safe-area-inset-top)); right:16px; min-height:0; }
+body.ini .tiny { opacity:.45; }
+body.ini main { justify-content:flex-start; padding-top:max(28px, 3vh); }
+body.cheia .tiny { display:none; }
 header img { width:52px; height:52px; border-radius:50%; object-fit:cover; background:var(--s2); }
 header .nm { font-family:"Archivo",sans-serif; font-weight:800; font-size:20px; letter-spacing:.02em; }
 header .sp { flex:1; }
@@ -75,12 +79,13 @@ h1.tit-ini { max-width:720px; }
 @media (orientation:portrait) and (min-width:600px) {
   h1 { font-size:clamp(36px,6vw,56px); }
   p.sub { font-size:clamp(20px,3vw,26px); }
-  .fone { font-size:clamp(44px,7vw,64px); margin:6px 0 20px; }
-  .pad { grid-template-columns:repeat(3, minmax(120px,190px)); gap:18px; }
-  .pad button { height:clamp(80px,7.6vh,124px); font-size:42px; }
-  .logo-ini { width:clamp(130px,17vw,200px); height:clamp(130px,17vw,200px); margin-bottom:20px; }
+  .fone { font-size:clamp(44px,6.6vw,60px); margin:0 0 16px; }
+  .pad { grid-template-columns:repeat(3, minmax(120px,190px)); gap:14px; }
+  .pad button { height:clamp(70px,6.6vh,112px); font-size:40px; }
+  .logo-ini { width:clamp(220px,31vw,300px); height:clamp(220px,31vw,300px); margin-bottom:20px; }
+  body.ini p.sub { margin-bottom:10px; }
   .btn { min-height:88px; font-size:28px; }
-  .acoes { margin-top:24px; }
+  .acoes { margin-top:20px; }
   .grade { max-height:60vh; grid-template-columns:repeat(auto-fill, minmax(260px,1fr)); }
   .rolar { max-height:58vh; }
   .chips { flex-wrap:wrap; overflow:visible; }
@@ -90,7 +95,7 @@ h1.tit-ini { max-width:720px; }
 </head>
 <body>
 <div class="app">
-  <header><img id="logo" alt="" hidden><span class="nm" id="nome"></span><span class="sp"></span><button class="tiny" id="tela" type="button">Tela cheia</button></header>
+  <header><img id="logo" alt="" hidden><span class="sp"></span><button class="tiny" id="tela" type="button">Tela cheia</button></header>
   <div id="aviso"></div>
   <main id="m"></main>
 </div>
@@ -180,7 +185,8 @@ h1.tit-ini { max-width:720px; }
       h = '<h2>Totem desligado</h2><p class="sub">Fale com a recepção, por favor. 😊</p>';
     }
     m.innerHTML = h;
-    $('logo').classList.toggle('hide', tela === 'inicio'); // na tela inicial o logo aparece grande no meio
+    $('logo').classList.toggle('hide', tela === 'inicio');
+    document.body.classList.toggle('ini', tela === 'inicio'); // na tela inicial o logo aparece grande no meio
   }
 
   function horas() {
@@ -222,6 +228,7 @@ h1.tit-ini { max-width:720px; }
     if (a === 'voltaHoraRecarrega') { ir('horario'); return horas(); }
   });
   document.addEventListener('touchstart', tocar, { passive: true });
+  document.addEventListener('fullscreenchange', function () { document.body.classList.toggle('cheia', !!document.fullscreenElement); });
   $('tela').addEventListener('click', function () { var el = document.documentElement; if (document.fullscreenElement) document.exitFullscreen(); else if (el.requestFullscreen) el.requestFullscreen().catch(function () {}); });
   // Tela sempre ligada (quando o navegador permite).
   var trava = null; function manterLigada() { if ('wakeLock' in navigator && !trava) navigator.wakeLock.request('screen').then(function (t) { trava = t; t.addEventListener('release', function () { trava = null; }); }).catch(function () {}); }
@@ -264,7 +271,7 @@ h1.tit-ini { max-width:720px; }
     if (!cred) return ir('sem_link');
     return chamar('info').then(function (r) {
       var antes = info; info = r;
-      $('nome').textContent = r.nome || ''; if (r.logo) { $('logo').src = r.logo; $('logo').hidden = false; aplicarCores(r.logo); }
+      if (r.logo) { $('logo').src = r.logo; $('logo').hidden = false; aplicarCores(r.logo); }
       document.title = 'Totem · ' + (r.nome || 'Autoatendimento');
       if (!r.ativo) return ir('desligado');
       if (!antes || tela === 'desligado' || tela === 'sem_link') reiniciar(); else if (tela === 'inicio') render();
