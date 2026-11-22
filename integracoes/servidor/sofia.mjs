@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "4.6";
+export const SOFIA_VERSAO = "4.7";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -289,7 +289,7 @@ Regras (muito importantes):
 - Cada mensagem do cliente começa com [Agora: …], com o dia e a hora atuais e o WhatsApp do cliente. Use para saber "hoje", "amanhã" e que horários já passaram; não comente essa linha com o cliente.
 ${hor ? `- Horário de funcionamento da ${casa}: ${hor}. Você responde o WhatsApp também fora desse horário (ex.: cedo e à noite), mas só existem atendimentos dentro dele. Mensagens que chegam de madrugada você responde a partir das 7h. Se o cliente pedir um horário antes da abertura ou depois do fechamento, ou num dia fechado, explique com simpatia o horário de atendimento e ofereça os primeiros horários livres depois da abertura (ou no próximo dia aberto). Se ele quiser "agora" com a ${casa} fechada, diga a que horas abrimos.
 ` : ""}- Às vezes a mensagem do cliente vem junto com o que foi conversado sem você (com a recepção ou mensagens automáticas da barbearia, como lembretes). Leia com atenção e continue de onde pararam: respeite o que a recepção combinou, não repita o que ela já disse e não se reapresente.
-${upsell.length ? `\nOferta no final (upsell): depois que o cliente escolher o serviço, o profissional e o horário, e ANTES do resumo para confirmar, ofereça UMA vez, numa frase leve e animada, o adicional que mais combina com o que ele vai fazer (só um), por exemplo: "Aproveita e adiciona uma sobrancelha por apenas R$ 15? 😉". Opções:\n${upsell.map((o) => `- ${o.texto}${o.valor ? ` por apenas R$ ${String(o.valor).replace(".", ",")}` : ""} (na agenda: ${o.servicos})${regraTexto(o.quando) ? `: ${regraTexto(o.quando)}` : ""}`).join("\n")}\nNão ofereça o que ele já vai fazer. Se ele aceitar, inclua esse(s) serviço(s) no agendar, depois dos outros e com o mesmo profissional, e coloque na observação "Adicional: <oferta> por R$ <valor>". Se ele recusar ou não comentar, siga sem insistir. Se o adicional não couber no horário, diga isso e ofereça outro horário ou marcar sem o adicional.\n` : ""}${notas ? `\nInformações da ${casa} (passadas pelo dono, use quando ajudar):\n${notas}\n` : ""}${artes.length ? `\nArtes que você pode enviar com enviar_arte (envie a arte em vez de digitar a tabela inteira; depois explique só o que o cliente perguntar):\n${artes.map((a) => `- "${a.nome}": enviar quando ${a.quando || "o assunto da arte aparecer"}`).join("\n")}\n` : ""}`;
+${upsell.length ? `\nOferta no final (upsell): depois que o cliente escolher o serviço, o profissional e o horário, e ANTES do resumo para confirmar, ofereça UMA vez, numa frase leve e animada, o adicional que mais combina com o que ele vai fazer (só um), por exemplo: "Aproveita e adiciona uma sobrancelha por apenas R$ 15? 😉". Opções:\n${upsell.map((o) => `- ${o.texto}${o.valor ? ` por apenas R$ ${String(o.valor).replace(".", ",")}` : ""} (na agenda: ${o.servicos})${regraTexto(o.quando) ? `: ${regraTexto(o.quando)}` : ""}`).join("\n")}\nNão ofereça o que ele já vai fazer. Se ele aceitar, inclua esse(s) serviço(s) no agendar, depois dos outros e com o mesmo profissional, e coloque na observação "Adicional: <oferta> por R$ <valor>". Se ele recusar ou não comentar, siga sem insistir. Se o adicional não couber no horário ou o profissional não fizer esse serviço (o agendar dá erro por causa dele), marque sem o adicional e avise com naturalidade, ou ofereça outro horário.\n` : ""}${notas ? `\nInformações da ${casa} (passadas pelo dono, use quando ajudar):\n${notas}\n` : ""}${artes.length ? `\nArtes que você pode enviar com enviar_arte (envie a arte em vez de digitar a tabela inteira; depois explique só o que o cliente perguntar):\n${artes.map((a) => `- "${a.nome}": enviar quando ${a.quando || "o assunto da arte aparecer"}`).join("\n")}\n` : ""}`;
 }
 
 // ---------- a conversa ----------
@@ -1332,7 +1332,13 @@ export function criarTotem({ dir, log = () => {}, api = async () => ({}), sock =
     }
     if (acao === "servicos") {
       const todos = await ab.servicos(), lista = todos.filter((x) => x.tipo === 1 && x.nome);
-      return { servicos: lista.map((x) => ({ codigo: x.codigo, nome: x.nome, minutos: x.minutos, preco: Number(x.preco) || null })), ofertas: ofertasDe(e.totem.upsell, todos, log) };
+      // Cada oferta leva os profissionais que fazem todos os serviços dela: o totem só oferece o que o escolhido faz.
+      const ofertas = ofertasDe(e.totem.upsell, todos, log);
+      for (const o of ofertas) {
+        try { const listas = await Promise.all(o.codigos.map((c) => ab.profissionais(c))); o.profs = listas.reduce((acc, l) => acc.filter((x) => l.some((p) => p.codigo === x)), listas[0].map((p) => p.codigo)); }
+        catch { o.profs = null; } // sem a lista: não filtra
+      }
+      return { servicos: lista.map((x) => ({ codigo: x.codigo, nome: x.nome, minutos: x.minutos, preco: Number(x.preco) || null })), ofertas };
     }
     if (acao === "horarios") {
       const agora = relogio(), ehHoje = d.data === hojeSP();
