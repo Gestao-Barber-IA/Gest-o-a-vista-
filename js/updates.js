@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-22-sofia-endereco', date: '2026-11-22', title: 'Sofia: resposta ao convite de retorno não fica mais sem resposta', items: [
+    ['correcao', 'O WhatsApp às vezes identifica o mesmo cliente por dois endereços diferentes. Quando o convite saía por um e a resposta chegava pelo outro, a Sofia não ligava as duas mensagens e o cliente ficava sem resposta. Agora ela reconhece que é o mesmo cliente, lê o convite e continua a conversa (o mesmo vale para a pausa quando a recepção responde pelo celular).'],
+  ] },
   { id: '2026-11-22-fila-sofia', date: '2026-11-22', title: 'Sofia: mensagens esperando resposta não se perdem mais', items: [
     ['correcao', 'Se o servidor reiniciar (atualização, instalador, reinício), as mensagens que a Sofia ainda ia responder (da noite, de quando ela estava desligada ou fora do horário) ficam guardadas e ela responde quando voltar. Áudio que não dá para recuperar vira um pedido gentil para o cliente mandar de novo.'],
   ] },
