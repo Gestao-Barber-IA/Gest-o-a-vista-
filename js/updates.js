@@ -3,8 +3,8 @@
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
   { id: '2026-11-22-ofertas', date: '2026-11-22', title: 'Ofertas no final do agendamento (totem e Sofia)', items: [
-    ['novo', 'Em Integração, o cartão Ofertas no final do agendamento: cadastre até 4 adicionais (ex.: sobrancelha por R$ 15, depilação de nariz e orelha, hidratação). Antes de confirmar, o totem da recepção mostra "Aproveite e adicione" e a Sofia oferece no WhatsApp, uma vez, sem insistir.'],
-    ['melhoria', 'Aceitando, o serviço entra logo depois no mesmo horário, com o mesmo profissional, e a oferta vai na observação do agendamento. Dá para escolher quando oferecer (ex.: sobrancelha só para quem faz corte).'],
+    ['novo', 'Em Integração, o cartão Ofertas no final do agendamento: cadastre até 6 adicionais (ex.: sobrancelha por R$ 15, depilação de nariz e orelha, hidratação). Antes de confirmar, o totem da recepção mostra "Aproveite e adicione" e a Sofia oferece no WhatsApp, uma vez, sem insistir.'],
+    ['melhoria', 'Aceitando, o serviço entra logo depois no mesmo horário, com o mesmo profissional, e a oferta vai na observação do agendamento. Dá para escolher quando oferecer: corte (tem corte), corte + barba (tem os dois) ou corte, sem barba (tem corte e não tem barba). Assim a hidratação de cabelo e barba aparece para quem faz os dois, e a de cabelo ou a de barba para quem faz só um. Até 6 ofertas.'],
   ] },
   { id: '2026-11-22-totem', date: '2026-11-22', title: 'Totem de autoatendimento na recepção', items: [
     ['novo', 'Em Integração, o cartão Totem de autoatendimento: gere o link e deixe aberto num tablet na recepção. O cliente digita o celular; se tem horário hoje, toca em Cheguei e o horário fica como "No local" na AppBarber, com aviso ao profissional no WhatsApp.'],

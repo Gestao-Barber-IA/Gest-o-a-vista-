@@ -228,7 +228,11 @@ h1.tit-ini { max-width:720px; }
   function semAc(t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
   function ofertasAplicaveis() {
     var nomes = (st.sel || []).map(function (cd) { return semAc((st.servicos.filter(function (q) { return q.codigo === cd; })[0] || {}).nome); }).join(' | ');
-    return (st.ofertas || []).filter(function (o) { return !o.codigos.some(function (c) { return (st.sel || []).indexOf(c) >= 0; }) && (!o.quando.length || o.quando.some(function (w) { return nomes.indexOf(w) >= 0; })); });
+    var tem = function (w) { return nomes.indexOf(w) >= 0; };
+    // regra: { ou: [["corte","barba"], …] (algum grupo com todas as palavras), sem: ["barba"] (nenhuma) }; versão antiga: quando: [...]
+    var vale = function (o) { var g = o.regra || { ou: (o.quando || []).map(function (w) { return [w]; }), sem: [] };
+      if ((g.sem || []).some(tem)) return false; return !(g.ou || []).length || g.ou.some(function (t) { return t.every(tem); }); };
+    return (st.ofertas || []).filter(function (o) { return !o.codigos.some(function (c) { return (st.sel || []).indexOf(c) >= 0; }) && vale(o); });
   }
   function escolhidas() { var add = st.add || []; return (st.ofertas || []).filter(function (o) { return add.indexOf(o.id) >= 0; }); }
   // "Sem preferência" da própria AppBarber (e parecidos) não é um profissional: fica de fora da lista.
