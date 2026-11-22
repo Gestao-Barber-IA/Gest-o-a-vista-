@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "5.9";
+const VERSAO = "6.0";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -519,6 +519,8 @@ async function ciclo() {
   // Sofia: atende o número dos clientes da primeira barbearia com a atendente IA ligada.
   if (CLI && SOFIA) { if (!sofia) sofia = SOFIA.criarSofia({ dir: DIR, log, api, sock: () => sock, conectado: () => aberto, cmdConectar: () => CMD,
     baixarMidia: (msg) => downloadMediaMessage(msg, "buffer", {}, { logger: pino({ level: "silent" }), reuploadRequest: sock.updateMediaMessage }) }); await sofia.configurar(minhas.find((e) => e.sofia)).catch((err) => log("Sofia: " + err.message)); }
+  // Serviços da AppBarber para o app sugerir os nomes nas ofertas (upsell): 1 vez a cada 6 horas.
+  if (CLI && SOFIA && SOFIA.publicarServicos) { const eA = minhas.find((e) => e.appbarber && (e.sofia || e.totem)); if (eA) SOFIA.publicarServicos(eA, api).catch((err) => log("Serviços da AppBarber: " + err.message)); }
   // Totem da recepção: funciona mesmo com o WhatsApp desconectado (só o aviso ao profissional usa o WhatsApp).
   if (CLI && SOFIA && SOFIA.criarTotem) { if (!totem) totem = SOFIA.criarTotem({ dir: DIR, log, api, sock: () => (aberto ? sock : null) }); try { totem.configurar(minhas.find((e) => e.totem)); } catch (err) { log("Totem: " + err.message); } }
   if (!aberto) { if (Date.now() - avisouOff > 3600000) { avisouOff = Date.now(); await status(`desconectado: conecte o número no servidor (${CMD}).`); } return; }
@@ -629,7 +631,7 @@ if (process.argv.includes("--sofia")) {
   const s = e.sofia || {}, modelo = s.modelo || SOFIA.MODELO_PADRAO;
   const ab = SOFIA.ferramentasAppBarber({ cfg: e.appbarber, creditos: (n, z) => api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: n, ...(z ? { sem_saldo: true } : {}) }).catch(() => {}) });
   const artes = Array.isArray(s.artes) ? s.artes.filter((a) => a && a.url && a.nome) : [];
-  const sistema = SOFIA.promptSistema({ nome: s.nome || "Sofia", barbearia: e.nome, notas: s.notas || "", brand: e.brand, artes, horario: e.horario });
+  const sistema = SOFIA.promptSistema({ nome: s.nome || "Sofia", barbearia: e.nome, notas: s.notas || "", brand: e.brand, artes, horario: e.horario, upsell: s.upsell || [] });
   const conv = { mensagens: [] }, stats = { agendados: 0, remarcados: 0, cancelados: 0, recepcao: 0 };
   const fone = arg("--fone") ? SOFIA.normFone(arg("--fone")) : "";
   const ctx = { ab, fone, stats, simular: true, artes, falha: (t) => console.log("  [falha: " + t + "]"), registro: (t) => console.log("  [" + t + "]"), pendencia: (t) => console.log("  [recepção: " + t + "]") };

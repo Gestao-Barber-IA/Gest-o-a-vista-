@@ -37,8 +37,10 @@ function limpar(acao: string, d: any, dias: number) {
     case "horarios": return dataOk(d.data) && int(d.servico) ? { data: d.data, servico: Number(d.servico) } : null;
     case "agendar": {
       const nome = String(d.nome || "").replace(/[^\p{L}\p{M}' .-]/gu, "").replace(/\s+/g, " ").trim().slice(0, 60);
-      if (!foneOk || !dataOk(d.data) || !/^\d{2}:\d{2}$/.test(String(d.hora)) || !int(d.profissional) || !Array.isArray(d.servicos) || !d.servicos.length || d.servicos.length > 3 || !d.servicos.every(int)) return null;
-      return { fone, nome, data: d.data, hora: d.hora, profissional: Number(d.profissional), servicos: d.servicos.map(Number) };
+      if (!foneOk || !dataOk(d.data) || !/^\d{2}:\d{2}$/.test(String(d.hora)) || !int(d.profissional) || !Array.isArray(d.servicos) || !d.servicos.length || d.servicos.length > 6 || !d.servicos.every(int)) return null;
+      // Ofertas aceitas no final (upsell): só o texto, para a observação do agendamento.
+      const adicionais = (Array.isArray(d.adicionais) ? d.adicionais : []).slice(0, 4).map((x: unknown) => String(x ?? "").replace(/[<>]/g, "").slice(0, 90)).filter(Boolean);
+      return { fone, nome, data: d.data, hora: d.hora, profissional: Number(d.profissional), servicos: d.servicos.map(Number), adicionais };
     }
   }
   return null;

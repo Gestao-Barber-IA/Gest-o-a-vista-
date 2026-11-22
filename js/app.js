@@ -4068,7 +4068,7 @@ ${rows.length ? '' : emptyBarbers()}
     const ex = JSON.stringify([
       { data: iso(new Date()), barbeiro: state.barbers[0]?.name || 'Nome do barbeiro', faturamento: 420.5, servicos: 9, clientes: 8, checklist_pop: 1, horas_disponiveis: 8, horas_ocupadas: 6.5, planos_mensais: 1, clientes_retorno: 5, venda_produtos: 2 },
     ], null, 2);
-    return `${apiTutorial()}${autoSyncCard()}${abCard()}${waRemindCard()}${clRemindCard()}${iaCard()}${ttCard()}${fbCard()}${bdCard()}${rtCard()}${wbCard()}
+    return `${apiTutorial()}${autoSyncCard()}${abCard()}${waRemindCard()}${clRemindCard()}${iaCard()}${ttCard()}${upCard()}${fbCard()}${bdCard()}${rtCard()}${wbCard()}
       <section class="section card" id="api-ref">
         <h2 class="section-title">Como funciona ${tip('api')}</h2>
         <p class="section-note">Outro sistema (agenda, caixa, ERP) envia os resultados de cada barbeiro por dia. Os números entram no ranking na hora, junto com os lançados à mão.</p>
@@ -4402,6 +4402,33 @@ Content-Type: application/json</pre>
           <button class="btn btn-sm ${it.tt_token_hash ? '' : 'btn-primary'}" type="button" data-action="ttLink" ${noAb ? 'disabled' : ''}>${icon('plug')} ${it.tt_token_hash ? 'Gerar novo link' : 'Gerar link do totem'}</button>`}
       </div>
     </section>`;
+  }
+  // Ofertas no final do agendamento (upsell): o totem mostra antes de confirmar e a Sofia oferece no WhatsApp.
+  const upSemAc = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+  function upCard() {
+    if (!isGestor(currentUser())) return '';
+    const it = Cloud.enabled ? ui.integ : (state.integ || {});
+    if (!it || it.erro) return '';
+    const lista = Array.isArray(it.upsell) ? it.upsell : [], ab = Array.isArray(it.ab_services) ? it.ab_services : [], nomesAb = new Set(ab.map(x => upSemAc(x.nome)));
+    const falta = o => o.servicos && ab.length ? String(o.servicos).split(/\s+\+\s+/).filter(n => !nomesAb.has(upSemAc(n))) : [];
+    const linha = (o, i) => { const f = falta(o);
+      return `<div class="up-row" data-i="${i}">
+        <label class="field"><span>Oferta</span><input class="input" name="t${i}" maxlength="60" value="${esc(o.texto || '')}" placeholder="Ex.: Sobrancelha"></label>
+        <label class="field up-val"><span>Valor (R$)</span><input class="input num" name="v${i}" type="number" min="0" max="9999" step="1" value="${o.valor != null && o.valor !== '' ? esc(String(o.valor)) : ''}" placeholder="15"></label>
+        <label class="field"><span>Serviço(s) na agenda</span><input class="input" name="s${i}" list="up-ab" maxlength="160" value="${esc(o.servicos || '')}" placeholder="Ex.: Sobrancelha"></label>
+        <label class="field"><span>Oferecer quando o serviço tiver</span><input class="input" name="q${i}" maxlength="120" value="${esc(o.quando || '')}" placeholder="Ex.: corte (vazio = sempre)"></label>
+        ${f.length ? `<p class="up-warn">${icon('alert')} Não encontrei na agenda: <b>${esc(f.join(', '))}</b>. Escolha o nome exato na lista.</p>` : ''}
+      </div>`; };
+    const rows = [0, 1, 2, 3].map(i => linha(lista[i] || {}, i)).join('');
+    return `<section class="section card as-card">
+      <h2 class="section-title">${icon('gift')} Ofertas no final do agendamento</h2>
+      <p class="section-note">Antes de confirmar um agendamento, o cliente recebe uma oferta para adicionar um serviço, como <i>"Aproveite e adicione uma sobrancelha por apenas R$ 15"</i>. Vale no <b>totem da recepção</b> (tela "Aproveite e adicione") e na <b>Sofia</b> no WhatsApp, que oferece uma vez, sem insistir. Aceitando, o serviço entra no mesmo horário, logo depois, com o mesmo profissional, e o valor da oferta vai na observação do agendamento.</p>
+      <p class="section-note">Em <b>Serviço(s) na agenda</b>, use o nome exato da AppBarber${ab.length ? ' (a lista aparece ao digitar)' : ''}; para mais de um serviço, separe com <b>+</b> (ex.: <i>Depilação de Nariz + Depilação de Orelha</i>). Em <b>Oferecer quando</b>, palavras do serviço escolhido (ex.: <i>corte</i>); vazio oferece sempre.</p>
+      <datalist id="up-ab">${ab.map(x => `<option value="${esc(x.nome)}">`).join('')}</datalist>
+      <form class="form" data-form="upSave" novalidate>${rows}
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar ofertas</button></div>
+      </form></section>`;
   }
   // Sofia, a atendente IA: responde o WhatsApp dos clientes nos dias e horários escolhidos e marca, remarca e cancela na AppBarber.
   const IA_DIAS = [[1, 'Segunda'], [2, 'Terça'], [3, 'Quarta'], [4, 'Quinta'], [5, 'Sexta'], [6, 'Sábado'], [0, 'Domingo']];
@@ -8954,6 +8981,22 @@ Content-Type: application/json</pre>
       setMsg(f, 'Salvando…', true);
       Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(row.rt_on ? `Retorno no tempo certo ligado: até ${daily} por dia.` : 'Retorno no tempo certo desligado.'); render(); })
         .catch(e => { const m = Cloud.message(e); setMsg(f, /rt_|column|schema cache/i.test(m) ? 'O retorno no tempo certo ainda está sendo ativado no servidor.' : m); });
+    },
+    upSave(f) {
+      const out = [];
+      for (let i = 0; i < 4; i++) {
+        const t = (f.elements['t' + i].value || '').trim(), sv = (f.elements['s' + i].value || '').trim(), v = f.elements['v' + i].value, q = (f.elements['q' + i].value || '').trim();
+        if (!t && !sv) continue;
+        if (!t || !sv) return setMsg(f, `Oferta ${i + 1}: preencha o texto e o serviço na agenda.`);
+        const valor = v === '' ? 0 : Number(v);
+        if (!(valor >= 0 && valor <= 9999)) return setMsg(f, `Oferta ${i + 1}: valor inválido.`);
+        out.push({ texto: t.slice(0, 60), valor, servicos: sv.slice(0, 160), quando: q.slice(0, 120) });
+      }
+      const row = { upsell: out }, cur = (Cloud.enabled ? ui.integ : state.integ) || {};
+      if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Ofertas salvas.'); return render(); }
+      setMsg(f, 'Salvando…', true);
+      Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(out.length ? `${out.length} oferta(s) salva(s).` : 'Ofertas desligadas.'); render(); })
+        .catch(e => { const m = Cloud.message(e); setMsg(f, /upsell|column|schema cache/i.test(m) ? 'As ofertas ainda estão sendo ativadas no servidor.' : m); });
     },
     ttSave(f) {
       const days = Math.round(Number(f.elements.days.value) || 0);

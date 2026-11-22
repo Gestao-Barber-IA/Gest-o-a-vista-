@@ -3078,3 +3078,9 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .tt-link .section-sub { margin: 0 0 8px; font-family: var(--font-display); font-size: 16px; letter-spacing: .02em; }
 .tt-url { word-break: break-all; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 13px; user-select: all; }
 .row-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Ofertas no final do agendamento (Integração) */
+.up-row { display: grid; grid-template-columns: 1.3fr .6fr 1.6fr 1.3fr; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.up-row:last-of-type { border-bottom: 0; }
+.up-warn { grid-column: 1 / -1; margin: 0; color: var(--danger); font-size: 13px; display: flex; gap: 6px; align-items: center; }
+@media (max-width: 720px) { .up-row { grid-template-columns: 1fr 1fr; } .up-row .up-val { order: 0; } }

@@ -5,6 +5,7 @@
 // POST { company_id, acao: 'wa_status' | 'cl_status' | 'fb_status' | 'wb_status' | 'rt_status' | 'bd_status' | 'ia_status', status } → grava o estado dos lembretes (equipe | clientes).
 // GET ?acao=totem_espera&empresas=id1,id2 → espera até ~25 s por pedidos novos do totem da recepção e os devolve.
 // POST { company_id, acao: 'totem_resposta', id, ok, resposta } → grava a resposta de um pedido do totem.
+// POST { company_id, acao: 'ab_servicos', lista } → grava os serviços da AppBarber (para o app sugerir nas ofertas).
 // POST { company_id, acao: 'ia_report', relatorio } → grava o relatório semanal da Sofia.
 // POST { company_id, creditos, sem_saldo } (com qualquer ação, ou acao: 'ab_uso') → soma as consultas gastas na AppBarber.
 // POST → { company_id, ok, mensagem } grava o resultado da última sincronização.
@@ -20,10 +21,14 @@ function igual(a: string, b: string) {
   return d === 0;
 }
 
+// Ofertas no final do agendamento (upsell): até 4, só com texto e serviço preenchidos.
+const upsellCfg = (i: any) => (Array.isArray(i.upsell) ? i.upsell : []).filter((o: any) => o && o.texto && o.servicos).slice(0, 4)
+  .map((o: any) => ({ texto: String(o.texto).slice(0, 60), valor: Math.max(0, Math.min(9999, Number(o.valor) || 0)), servicos: String(o.servicos).slice(0, 160), quando: String(o.quando || "").slice(0, 120) }));
 // Configuração da Sofia (atendente IA) que vai para o servidor.
 const sofiaCfg = (i: any) => ({ nome: String(i.ia_name || "Sofia").slice(0, 40), modelo: i.ia_model || "claude-sonnet-5-5", janelas: i.ia_hours || null, pausa: Number(i.ia_pause) || 60,
   notas: String(i.ia_notes || "").slice(0, 8000), avisar: String(i.ia_report_phone || "").replace(/\D/g, "").slice(0, 15), alerta: String(i.ia_alert_phone || "").replace(/\D/g, "").slice(0, 15), nomes: i.names || {},
   // Artes (imagens) que a Sofia pode enviar, com a pergunta depois e o retorno de 15 minutos.
+  upsell: upsellCfg(i),
   artes: (Array.isArray(i.ia_arts) ? i.ia_arts : []).filter((a: any) => a && a.url && a.nome).slice(0, 6)
     .map((a: any) => ({ nome: String(a.nome).slice(0, 60), url: String(a.url), quando: String(a.quando || "").slice(0, 200), pergunta: String(a.pergunta || "").slice(0, 300), retorno: String(a.retorno || "").slice(0, 300) })) });
 
@@ -59,7 +64,7 @@ Deno.serve(async (req) => {
   if (req.method === "GET" && url.searchParams.get("acao") === "lembretes") {
     const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
     const { data: ints, error } = await db.from("integrations")
-      .select("company_id, est_code, api_key, branch_code, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, cl_status, cl_status_at, rt_on, rt_daily, rt_lead, rt_text, tt_on, tt_notify, tt_days, bd_on, bd_text, ia_on, ia_name, ia_model, ia_hours, ia_pause, ia_notes, ia_report_phone, ia_alert_phone, ia_arts, names").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,rt_on.eq.true,tt_on.eq.true,bd_on.eq.true,ia_on.eq.true");
+      .select("company_id, est_code, api_key, branch_code, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, cl_status, cl_status_at, rt_on, rt_daily, rt_lead, rt_text, tt_on, tt_notify, tt_days, upsell, bd_on, bd_text, ia_on, ia_name, ia_model, ia_hours, ia_pause, ia_notes, ia_report_phone, ia_alert_phone, ia_arts, names").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,rt_on.eq.true,tt_on.eq.true,bd_on.eq.true,ia_on.eq.true");
     if (error) return json({ erro: error.message }, 500);
     const empresas = [];
     for (const i of ints || []) {
@@ -90,7 +95,7 @@ Deno.serve(async (req) => {
         // Retorno no tempo certo: convite N dias antes do prazo de costume de cada cliente (agenda da AppBarber).
         retorno: i.rt_on && i.est_code && i.api_key ? { porDia: Math.max(1, Math.min(30, Number(i.rt_daily) || 10)), antes: i.rt_lead == null || !Number.isFinite(Number(i.rt_lead)) ? 2 : Math.max(-3, Math.min(7, Math.round(Number(i.rt_lead)))), texto: i.rt_text || "", codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
         // Totem de autoatendimento na recepção (check-in e agendamento na hora).
-        totem: i.tt_on && i.est_code && i.api_key ? { avisar: i.tt_notify !== false, dias: Math.max(1, Math.min(30, Number(i.tt_days) || 7)) } : null,
+        totem: i.tt_on && i.est_code && i.api_key ? { avisar: i.tt_notify !== false, dias: Math.max(1, Math.min(30, Number(i.tt_days) || 7)), upsell: upsellCfg(i) } : null,
         // Estado do número dos clientes: o programa da equipe (outro número) avisa quando ele desconecta.
         wa_clientes: i.cl_on || i.ia_on || i.wb_on || i.bd_on || i.fb_on || i.rt_on ? { status: i.cl_status || "", em: i.cl_status_at, numero: i.cl_numero === "principal" ? "principal" : "chip", sofia: !!i.ia_on, alerta: String(i.ia_alert_phone || i.ia_report_phone || "").replace(/\D/g, "") } : null,
         cfg: { ligado: !!i.wa_on, hora: i.wa_hour || "13:00", minimo: Number(i.wa_min) || 0, texto: i.wa_text || "" },
@@ -148,6 +153,12 @@ Deno.serve(async (req) => {
     const usoN = Math.max(0, Math.min(5000, Number(b.creditos) || 0)), zero = b.sem_saldo === true;
     if (usoN || zero) await db.rpc("ab_add_uso", { p_company: b.company_id, p_n: usoN, p_zero: zero });
     if (b.acao === "ab_uso") return json({ ok: true });
+    // Lista de serviços da AppBarber (código e nome) para o app sugerir os nomes ao montar as ofertas.
+    if (b.acao === "ab_servicos") {
+      const lista = (Array.isArray(b.lista) ? b.lista : []).slice(0, 400).map((x: any) => ({ codigo: Number(x.codigo) || 0, nome: String(x.nome || "").slice(0, 80) })).filter((x: any) => x.nome);
+      const { error } = await db.from("integrations").update({ ab_services: lista }).eq("company_id", b.company_id);
+      return error ? json({ erro: error.message }, 500) : json({ ok: true });
+    }
     if (b.acao === "totem_resposta") {
       const resp = b.resposta && typeof b.resposta === "object" ? b.resposta : {};
       if (JSON.stringify(resp).length > 60000) return json({ erro: "Resposta grande demais." }, 400);
