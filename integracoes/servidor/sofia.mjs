@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "4.1";
+export const SOFIA_VERSAO = "4.2";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -877,6 +877,17 @@ export function criarSofia({ dir, log, api, sock, conectado = () => true, cmdCon
   // Conversa deste contato (cria se não houver ou se estiver parada há mais de 6 horas).
   function obter(jid, msg) {
     let c = conversas.get(jid);
+    // O WhatsApp às vezes identifica o mesmo cliente por dois endereços (o número ou um código interno "@lid").
+    // Ex.: o convite do retorno sai pelo número e a resposta chega pelo código. Se já há conversa recente com
+    // esse telefone em outro endereço, ela passa a ser esta (com o contexto, o horário sugerido e a espera).
+    if (!c && msg && msg.key) {
+      const f = foneDe(msg), k = f && chaveFone(f);
+      if (k) for (const [j2, c2] of conversas) if (j2 !== jid && c2.fone && chaveFone(c2.fone) === k && (Date.now() - c2.ultima < 6 * 3600000 || c2.noturna)) {
+        conversas.delete(j2); conversas.set(jid, c2); c = c2;
+        if (pausas.has(j2)) { pausas.set(jid, pausas.get(j2)); pausas.delete(j2); }
+        break;
+      }
+    }
     if (!c || (Date.now() - c.ultima > 6 * 3600000 && !c.noturna)) {
       c = { mensagens: [], inicio: Date.now(), ultima: Date.now(), ultimaSofia: 0, humanoEm: 0, contexto: [], contada: false, nome: "", agenda: null, recepcao: false, fone: "", fila: [], ocupado: false };
       conversas.set(jid, c);
