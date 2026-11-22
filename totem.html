@@ -68,6 +68,20 @@ input.txt:focus { outline:none; border-color:var(--ac); }
 .aviso { width:100%; max-width:880px; margin:0 auto; background:rgba(255,107,107,.12); border:1px solid rgba(255,107,107,.4); color:#ffd2d2; border-radius:16px; padding:12px 16px; font-size:17px; text-align:center; }
 .vazio-m { color:var(--muted); font-size:19px; text-align:center; padding:20px; }
 .voltar { position:absolute; left:20px; top:max(84px, calc(env(safe-area-inset-top) + 70px)); }
+h1.tit-ini { max-width:720px; }
+/* Tablet em pé: teclado e botões maiores, ocupando melhor a altura. */
+@media (orientation:portrait) and (min-width:600px) {
+  h1 { font-size:clamp(36px,6vw,56px); }
+  p.sub { font-size:clamp(20px,3vw,26px); }
+  .fone { font-size:clamp(44px,7vw,64px); margin:12px 0 28px; }
+  .pad { grid-template-columns:repeat(3, minmax(120px,190px)); gap:18px; }
+  .pad button { height:clamp(96px,9vh,130px); font-size:42px; }
+  .btn { min-height:88px; font-size:28px; }
+  .acoes { margin-top:32px; }
+  .grade { max-height:60vh; grid-template-columns:repeat(auto-fill, minmax(260px,1fr)); }
+  .rolar { max-height:58vh; }
+  .chips { flex-wrap:wrap; overflow:visible; }
+}
 @media (max-height:700px) { .pad button { height:64px; } .btn { min-height:62px; } }
 </style>
 </head>
@@ -113,7 +127,7 @@ input.txt:focus { outline:none; border-color:var(--ac); }
     $('aviso').innerHTML = info && info.ativo && !info.online ? '<div class="aviso">A agenda está sem conexão agora. Para check-in ou agendamento, fale com a recepção.</div>' : '';
     if (tela === 'inicio') {
       var d = st.fone || '';
-      h = '<h1>Bem-vindo' + (info && info.marca === 'salon' ? '(a)' : '') + '!</h1><p class="sub">Digite seu celular com DDD para fazer o check-in ou agendar</p>' +
+      h = '<h1 class="tit-ini">Faça o check-in ou agende seu horário agora</h1><p class="sub">Digite seu celular com DDD</p>' +
         '<div class="fone' + (d ? '' : ' vazio') + '">' + (d ? esc(fmtFone(d)) : '(00) 00000-0000') + '</div><div class="pad">' +
         [1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (n) { return '<button type="button" data-k="' + n + '">' + n + '</button>'; }).join('') +
         '<button type="button" class="del" data-k="del" aria-label="Apagar">⌫</button><button type="button" data-k="0">0</button><button type="button" class="del" data-k="lim" aria-label="Limpar">Limpar</button></div>' +
