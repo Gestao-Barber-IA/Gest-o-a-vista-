@@ -1258,7 +1258,7 @@ export async function publicarServicos(e, api, req = null) {
   if (!e || !e.appbarber || Date.now() - servicosPublicadosEm < 6 * 3600000) return;
   servicosPublicadosEm = Date.now();
   const ab = ferramentasAppBarber({ cfg: e.appbarber, ...(req ? { req } : {}), creditos: (n, zero) => api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: n, ...(zero ? { sem_saldo: true } : {}) }).catch(() => {}) });
-  const lista = (await ab.servicos()).map((x) => ({ codigo: x.codigo, nome: x.nome }));
+  const lista = (await ab.servicos()).map((x) => ({ codigo: x.codigo, nome: x.nome, preco: Number(x.preco) || null, minutos: x.minutos }));
   await api("POST", { company_id: e.company_id, acao: "ab_servicos", lista });
 }
 
