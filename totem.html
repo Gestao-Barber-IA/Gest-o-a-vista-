@@ -60,6 +60,10 @@ p.sub { color:var(--muted); font-size:clamp(17px,2.2vw,22px); text-align:center;
 .opt b { display:block; font-size:20px; line-height:1.2; } .opt small { color:var(--muted); font-size:16px; }
 .opt.on { border-color:var(--ac); background:rgba(214,180,106,.12); }
 .chips { display:flex; gap:10px; overflow-x:auto; width:100%; padding:4px 2px 10px; scrollbar-width:none; } .chips::-webkit-scrollbar { display:none; }
+.oferta { position:relative; padding-left:76px; min-height:96px; display:flex; flex-direction:column; justify-content:center; }
+.oferta .mais { position:absolute; left:18px; top:50%; transform:translateY(-50%); width:42px; height:42px; border-radius:50%; display:grid; place-items:center; font-size:26px; font-weight:800; background:var(--s3); color:var(--ac); }
+.oferta.on .mais { background:var(--ac); color:var(--ink); }
+.oferta small em { font-style:normal; color:var(--ac); font-weight:700; font-size:20px; }
 .chips.quebra { flex-wrap:wrap; overflow:visible; justify-content:center; }
 .rolar .horas { justify-content:center; }
 .chip { flex:0 0 auto; border-radius:999px; border:2px solid var(--line); background:var(--s1); color:var(--fg); font:inherit; font-size:19px; font-weight:600; padding:12px 20px; }
@@ -194,11 +198,16 @@ h1.tit-ini { max-width:720px; }
         (st.carregandoHoras ? '<div class="spin"></div>' : lista.length ? '<div class="rolar"><div class="horas">' + lista.map(function (x) { return '<button type="button" class="chip" data-a="hora" data-h="' + esc(x.hora) + '">' + esc(hr(x.hora)) + '</button>'; }).join('') + '</div></div>'
           : '<p class="vazio-m">' + (nomePf ? esc(nomePf) + ' não tem horário livre neste dia.' : 'Não há horários livres neste dia.') + ' Escolha outro dia acima.</p>') +
         '<div class="acoes"><button class="btn sec" type="button" data-a="voltaProf">Voltar</button></div>';
+    } else if (tela === 'upsell') {
+      var add = st.add || [];
+      h = '<h2>Aproveite e adicione ✨</h2><p class="sub">Toque para incluir no seu agendamento</p><div class="grade ofertas">' +
+        ofertasAplicaveis().map(function (o) { return '<button type="button" class="opt oferta' + (add.indexOf(o.id) >= 0 ? ' on' : '') + '" data-a="oferta" data-o="' + o.id + '"><span class="mais">' + (add.indexOf(o.id) >= 0 ? '✓' : '+') + '</span><b>' + esc(o.texto) + '</b>' + (o.valor ? '<small>por apenas <em>' + esc(reais(o.valor)) + '</em></small>' : '') + '</button>'; }).join('') +
+        '</div><div class="acoes"><button class="btn pri" type="button" data-a="ofertaOk">' + (add.length ? 'Adicionar e continuar' : 'Continuar sem adicional') + '</button><button class="btn sec" type="button" data-a="voltaHorario">Voltar</button></div>';
     } else if (tela === 'confirmar') {
-      var c = st.escolha;
-      h = '<h2>Confira seu agendamento</h2><p class="sub">Está tudo certo?</p><div class="resumo"><div><span>Nome</span><b>' + esc(st.nomeAg || '') + '</b></div><div><span>Serviço</span><b>' + esc(c.servicos) + '</b></div><div><span>Profissional</span><b>' + esc(c.prof) + '</b></div>' +
-        '<div><span>Dia</span><b>' + esc(diaTexto(st.data)) + '</b></div><div><span>Horário</span><b>' + esc(hr(c.hora)) + '</b></div>' + (c.preco && (st.sel || []).length === 1 ? '<div><span>Valor</span><b>' + esc(reais(c.preco)) + '</b></div>' : '') + '</div>' +
-        '<div class="acoes"><button class="btn pri" type="button" data-a="agendar">Confirmar agendamento</button><button class="btn sec" type="button" data-a="voltaHora">Voltar</button></div>';
+      var c = st.escolha, extras = escolhidas(), somaExtra = extras.reduce(function (t, o) { return t + (o.valor || 0); }, 0);
+      h = '<h2>Confira seu agendamento</h2><p class="sub">Está tudo certo?</p><div class="resumo"><div><span>Nome</span><b>' + esc(st.nomeAg || '') + '</b></div><div><span>Serviço</span><b>' + esc(c.servicos) + '</b></div>' + (extras.length ? '<div><span>Adicional</span><b>' + extras.map(function (o) { return esc(o.texto) + (o.valor ? ' (+' + esc(reais(o.valor)) + ')' : ''); }).join('<br>') + '</b></div>' : '') + '<div><span>Profissional</span><b>' + esc(c.prof) + '</b></div>' +
+        '<div><span>Dia</span><b>' + esc(diaTexto(st.data)) + '</b></div><div><span>Horário</span><b>' + esc(hr(c.hora)) + '</b></div>' + (c.preco && (st.sel || []).length === 1 ? '<div><span>Valor</span><b>' + esc(reais(c.preco + somaExtra)) + '</b></div>' : '') + '</div>' +
+        '<div class="acoes"><button class="btn pri" type="button" data-a="agendar">Confirmar agendamento</button><button class="btn sec" type="button" data-a="' + (c.ofereceu ? 'voltaOferta' : 'voltaHora') + '">Voltar</button></div>';
     } else if (tela === 'agendado_ok') {
       var a = st.ag;
       h = '<div class="grande">✂️</div><h1>Agendado, ' + esc(a.nome) + '!</h1><p class="sub">' + esc(diaTexto(a.data)) + ' às ' + esc(hr(a.hora)) + ' com ' + esc(a.profissional) + '<br>' + esc(a.servicos) + (a.chegou ? '<br><br>Seu check-in já está feito. Fique à vontade! ☕' : '') + '</p>' +
@@ -215,6 +224,13 @@ h1.tit-ini { max-width:720px; }
     document.body.classList.toggle('ini', tela === 'inicio'); // na tela inicial o logo aparece grande no meio
   }
 
+  // Ofertas que combinam com o que o cliente escolheu (sem repetir serviço já escolhido).
+  function semAc(t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+  function ofertasAplicaveis() {
+    var nomes = (st.sel || []).map(function (cd) { return semAc((st.servicos.filter(function (q) { return q.codigo === cd; })[0] || {}).nome); }).join(' | ');
+    return (st.ofertas || []).filter(function (o) { return !o.codigos.some(function (c) { return (st.sel || []).indexOf(c) >= 0; }) && (!o.quando.length || o.quando.some(function (w) { return nomes.indexOf(w) >= 0; })); });
+  }
+  function escolhidas() { var add = st.add || []; return (st.ofertas || []).filter(function (o) { return add.indexOf(o.id) >= 0; }); }
   // "Sem preferência" da própria AppBarber (e parecidos) não é um profissional: fica de fora da lista.
   var FALSO = /sem prefer|qualquer|ordem de chegada|indiferente/i;
   function porHora(a, b) { return a.hora.localeCompare(b.hora); }
@@ -242,7 +258,7 @@ h1.tit-ini { max-width:720px; }
   }
   function agendarFluxo() {
     carregando('Carregando os serviços…');
-    (st.servicos ? Promise.resolve({ servicos: st.servicos }) : chamar('servicos')).then(function (r) { st.servicos = r.servicos || []; st.sel = []; ir('servico'); }).catch(erro);
+    (st.servicos ? Promise.resolve({ servicos: st.servicos, ofertas: st.ofertas }) : chamar('servicos')).then(function (r) { st.servicos = r.servicos || []; st.ofertas = r.ofertas || []; st.sel = []; ir('servico'); }).catch(erro);
   }
 
   document.addEventListener('click', function (ev) {
@@ -272,10 +288,16 @@ h1.tit-ini { max-width:720px; }
       cands.sort(function (x, y) { return y.horarios.length - x.horarios.length || Math.random() - 0.5; });
       var p = cands[0], slot = p.horarios.filter(function (q) { return q.hora === hh; })[0];
       var nomes = st.sel.map(function (cd) { return (st.servicos.filter(function (q) { return q.codigo === cd; })[0] || {}).nome; }).join(' + ');
-      return ir('confirmar', { escolha: { prof: p.nome, profCod: p.codigo, hora: hh, preco: slot && slot.preco, servicos: nomes } }); }
+      var oferece = ofertasAplicaveis().length > 0;
+      return ir(oferece ? 'upsell' : 'confirmar', { add: [], escolha: { prof: p.nome, profCod: p.codigo, hora: hh, preco: slot && slot.preco, servicos: nomes, ofereceu: oferece } }); }
+    if (a === 'oferta') { var oi = Number(b.getAttribute('data-o')), lst2 = st.add || [], k2 = lst2.indexOf(oi); if (k2 >= 0) lst2.splice(k2, 1); else lst2.push(oi); st.add = lst2; return render(); }
+    if (a === 'ofertaOk') return ir('confirmar');
+    if (a === 'voltaOferta') return ir('upsell');
+    if (a === 'voltaHorario') { st.add = []; return ir('horario'); }
     if (a === 'voltaHora') return ir('horario');
     if (a === 'agendar') { carregando('Agendando…');
-      return chamar('agendar', { fone: st.fone, nome: st.nome || '', servicos: st.sel, profissional: st.escolha.profCod, data: st.data, hora: st.escolha.hora })
+      var ex = escolhidas(), todosServ = st.sel.slice(); ex.forEach(function (o) { o.codigos.forEach(function (c) { if (todosServ.indexOf(c) < 0) todosServ.push(c); }); });
+      return chamar('agendar', { fone: st.fone, nome: st.nome || '', servicos: todosServ, profissional: st.escolha.profCod, data: st.data, hora: st.escolha.hora, adicionais: ex.map(function (o) { return o.texto + (o.valor ? ' por ' + reais(o.valor) : ''); }) })
         .then(function (r) { ir('agendado_ok', { ag: r }); }).catch(function (e) { ir('erro', { erro: e.message, voltarPara: /ocupado|outro/i.test(e.message) ? 'voltaHoraRecarrega' : '' }); }); }
     if (a === 'voltaHoraRecarrega') { if (st.porDia) delete st.porDia[st.data]; ir('horario'); return horas(); }
   });

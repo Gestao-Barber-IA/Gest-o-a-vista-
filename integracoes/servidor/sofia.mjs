@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "4.4";
+export const SOFIA_VERSAO = "4.5";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -243,7 +243,7 @@ export function textoHorario(h) {
   return `${dias}, das ${h.abertura} às ${h.fechamento}${fech.length ? ` (fechado: ${fech.map((d) => nomes[d]).join(", ")})` : ""}`;
 }
 
-export function promptSistema({ nome, barbearia, notas, brand, artes = [], horario = null }) {
+export function promptSistema({ nome, barbearia, notas, brand, artes = [], horario = null, upsell = [] }) {
   const casa = brand === "salao" ? "salão" : "barbearia", hor = textoHorario(horario);
   return `Você é ${nome}, atendente da ${barbearia} (${casa}) no WhatsApp. Você conversa com clientes para tirar dúvidas e marcar, remarcar ou cancelar horários direto no sistema de agenda (AppBarber), usando as ferramentas.
 
@@ -254,7 +254,7 @@ Jeito de falar:
 - Nunca fale das suas limitações ("não consigo ver", "não tenho acesso", "por aqui não aparece"). Se precisar de uma informação, simplesmente pergunte ao cliente com naturalidade (ex.: "Lembra com qual barbeiro ele cortou da última vez? 😊").
 - Chame o cliente pelo primeiro nome quando souber. Não se apresente como robô nem fale de "sistema", "ferramenta" ou "IA", a não ser que perguntem; se perguntarem, diga com naturalidade que é a assistente virtual da ${barbearia}.
 - Sem listas longas nem markdown (nada de **negrito** ou #). Ao oferecer horários, sugira 2 ou 3 opções próximas do que o cliente pediu.
-- UMA pergunta por mensagem (nunca "você tem preferência de barbeiro E qual horário?", nem "qual dia E qual serviço?"). Mande UMA mensagem por vez de resposta: não mande duas respostas seguidas para o mesmo pedido. Para agendar, siga esta ordem e pule o que o cliente já disse: 1) qual serviço; 2) preferência de barbeiro(a); 3) dia e período (manhã, tarde ou noite); 4) ofereça 2 ou 3 horários; 5) resumo para confirmar. Se o cliente responder só parte, siga com o que já sabe e pergunte só o que falta, sem repetir a pergunta inteira.
+- UMA pergunta por mensagem (nunca "você tem preferência de barbeiro E qual horário?", nem "qual dia E qual serviço?"). Mande UMA mensagem por vez de resposta: não mande duas respostas seguidas para o mesmo pedido. Para agendar, siga esta ordem e pule o que o cliente já disse: 1) qual serviço; 2) preferência de barbeiro(a); 3) dia e período (manhã, tarde ou noite); 4) ofereça 2 ou 3 horários;${upsell.length ? " 5) ofereça o adicional (veja Oferta no final); 6) resumo para confirmar." : " 5) resumo para confirmar."} Se o cliente responder só parte, siga com o que já sabe e pergunte só o que falta, sem repetir a pergunta inteira.
 - Antes de consultar ver_horarios, não diga que tem horário ("tem sim"): diga que vai verificar.
 - Barbeiro sem horário livre no dia pedido: diga que a agenda dele está completa nesse dia (ex.: "A agenda do Lucas está completa hoje, todos os horários já foram reservados 😊"); nunca diga que ele não está disponível, não está na agenda ou não trabalha. Ofereça, nessa ordem: o próximo dia com horário dele (proximo_dia_com_horario), outro barbeiro no mesmo dia, ou a lista de espera.
 - Ao falar de horário, diga sempre com quem: ex. "17h com o Igor ou 17h20 com o Izaquias". Nunca solte um horário sem o barbeiro(a).
@@ -289,7 +289,7 @@ Regras (muito importantes):
 - Cada mensagem do cliente começa com [Agora: …], com o dia e a hora atuais e o WhatsApp do cliente. Use para saber "hoje", "amanhã" e que horários já passaram; não comente essa linha com o cliente.
 ${hor ? `- Horário de funcionamento da ${casa}: ${hor}. Você responde o WhatsApp também fora desse horário (ex.: cedo e à noite), mas só existem atendimentos dentro dele. Mensagens que chegam de madrugada você responde a partir das 7h. Se o cliente pedir um horário antes da abertura ou depois do fechamento, ou num dia fechado, explique com simpatia o horário de atendimento e ofereça os primeiros horários livres depois da abertura (ou no próximo dia aberto). Se ele quiser "agora" com a ${casa} fechada, diga a que horas abrimos.
 ` : ""}- Às vezes a mensagem do cliente vem junto com o que foi conversado sem você (com a recepção ou mensagens automáticas da barbearia, como lembretes). Leia com atenção e continue de onde pararam: respeite o que a recepção combinou, não repita o que ela já disse e não se reapresente.
-${notas ? `\nInformações da ${casa} (passadas pelo dono, use quando ajudar):\n${notas}\n` : ""}${artes.length ? `\nArtes que você pode enviar com enviar_arte (envie a arte em vez de digitar a tabela inteira; depois explique só o que o cliente perguntar):\n${artes.map((a) => `- "${a.nome}": enviar quando ${a.quando || "o assunto da arte aparecer"}`).join("\n")}\n` : ""}`;
+${upsell.length ? `\nOferta no final (upsell): depois que o cliente escolher o serviço, o profissional e o horário, e ANTES do resumo para confirmar, ofereça UMA vez, numa frase leve e animada, o adicional que mais combina com o que ele vai fazer (só um), por exemplo: "Aproveita e adiciona uma sobrancelha por apenas R$ 15? 😉". Opções:\n${upsell.map((o) => `- ${o.texto}${o.valor ? ` por apenas R$ ${String(o.valor).replace(".", ",")}` : ""} (na agenda: ${o.servicos})${o.quando ? `: ofereça quando o serviço tiver ${o.quando}` : ""}`).join("\n")}\nNão ofereça o que ele já vai fazer. Se ele aceitar, inclua esse(s) serviço(s) no agendar, depois dos outros e com o mesmo profissional, e coloque na observação "Adicional: <oferta> por R$ <valor>". Se ele recusar ou não comentar, siga sem insistir. Se o adicional não couber no horário, diga isso e ofereça outro horário ou marcar sem o adicional.\n` : ""}${notas ? `\nInformações da ${casa} (passadas pelo dono, use quando ajudar):\n${notas}\n` : ""}${artes.length ? `\nArtes que você pode enviar com enviar_arte (envie a arte em vez de digitar a tabela inteira; depois explique só o que o cliente perguntar):\n${artes.map((a) => `- "${a.nome}": enviar quando ${a.quando || "o assunto da arte aparecer"}`).join("\n")}\n` : ""}`;
 }
 
 // ---------- a conversa ----------
@@ -678,7 +678,7 @@ export function criarSofia({ dir, log, api, sock, conectado = () => true, cmdCon
   async function configurar(e) {
     if (!e || !e.sofia || !e.appbarber) { cfg = null; return; }
     const novo = { company_id: e.company_id, barbearia: e.nome, brand: e.brand, nome: e.sofia.nome || "Sofia", modelo: MODELOS.includes(e.sofia.modelo) ? e.sofia.modelo : MODELO_PADRAO,
-      janelas: e.sofia.janelas || JANELAS_PADRAO, horario: e.horario || null, artes: Array.isArray(e.sofia.artes) ? e.sofia.artes.filter((a) => a && a.url && a.nome) : [], avisar: so(e.sofia.avisar || ""), alerta: so(e.sofia.alerta || ""), equipe: Array.isArray(e.barbers) ? e.barbers : [], nomesAB: (e.sofia && e.sofia.nomes) || {}, pausaMin: Math.max(15, Math.min(1440, Number(e.sofia.pausa) || 60)), notas: e.sofia.notas || "", ab: e.appbarber };
+      janelas: e.sofia.janelas || JANELAS_PADRAO, horario: e.horario || null, artes: Array.isArray(e.sofia.artes) ? e.sofia.artes.filter((a) => a && a.url && a.nome) : [], avisar: so(e.sofia.avisar || ""), alerta: so(e.sofia.alerta || ""), equipe: Array.isArray(e.barbers) ? e.barbers : [], nomesAB: (e.sofia && e.sofia.nomes) || {}, pausaMin: Math.max(15, Math.min(1440, Number(e.sofia.pausa) || 60)), notas: e.sofia.notas || "", upsell: Array.isArray(e.sofia.upsell) ? e.sofia.upsell : [], ab: e.appbarber };
     cfg = novo;
     if (abKey !== e.appbarber.appbarber_api_key + e.appbarber.codigo_estabelecimento) {
       abKey = e.appbarber.appbarber_api_key + e.appbarber.codigo_estabelecimento;
@@ -951,7 +951,7 @@ export function criarSofia({ dir, log, api, sock, conectado = () => true, cmdCon
         const antesStats = { agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados };
         const artesAntes = (c.artesEnviadas || []).length;
         // Instruções congeladas no começo da conversa (mudanças no app valem para as próximas conversas).
-        const sistema = c.sistema || (c.sistema = promptSistema({ nome: cfg.nome, barbearia: cfg.barbearia, notas: cfg.notas, brand: cfg.brand, artes: c.artes, horario: cfg.horario }));
+        const sistema = c.sistema || (c.sistema = promptSistema({ nome: cfg.nome, barbearia: cfg.barbearia, notas: cfg.notas, brand: cfg.brand, artes: c.artes, horario: cfg.horario, upsell: cfg.upsell }));
         const r = await rodada({ client, modelo: cfg.modelo, sistema, conv: c, ctx });
         stats.gasto += r.gasto; c.gasto = (c.gasto || 0) + r.gasto; c.registrada = false;
         c.feitos = c.feitos || {}; for (const [k, v] of Object.entries({ agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados })) c.feitos[k] = (c.feitos[k] || 0) + Math.max(0, v - antesStats[k]);
@@ -1216,6 +1216,29 @@ export function criarRetorno({ dir, log = () => {}, api = async () => ({}), sock
   return { rodar };
 }
 
+// ---------- ofertas no final do agendamento (upsell) ----------
+// Liga cada oferta do app aos serviços da AppBarber pelo nome (sem acento/maiúsculas). Oferta com serviço que não
+// existe na agenda fica de fora (e vai para o log). "quando": palavras do serviço escolhido para mostrar a oferta.
+export function ofertasDe(upsell, servicos, log = () => {}) {
+  const out = [];
+  for (const [i, o] of (upsell || []).entries()) {
+    const nomes = String(o.servicos || "").split(/\s+\+\s+/).map((x) => x.trim()).filter(Boolean);
+    const achados = nomes.map((n) => servicos.find((x) => semAcento(x.nome) === semAcento(n)));
+    if (!nomes.length || achados.some((x) => !x)) { log(`Ofertas: "${o.texto}" ficou de fora (serviço não encontrado na agenda: ${nomes.filter((n, k) => !achados[k]).join(", ")}).`); continue; }
+    out.push({ id: i, texto: o.texto, valor: Number(o.valor) || 0, codigos: achados.map((x) => x.codigo), quando: String(o.quando || "").split(/[,;]/).map((x) => semAcento(x)).filter(Boolean) });
+  }
+  return out;
+}
+// Publica a lista de serviços da AppBarber no app (Integração › Ofertas), para sugerir os nomes certos. 1 vez a cada 6 h.
+let servicosPublicadosEm = 0;
+export async function publicarServicos(e, api, req = null) {
+  if (!e || !e.appbarber || Date.now() - servicosPublicadosEm < 6 * 3600000) return;
+  servicosPublicadosEm = Date.now();
+  const ab = ferramentasAppBarber({ cfg: e.appbarber, ...(req ? { req } : {}), creditos: (n, zero) => api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: n, ...(zero ? { sem_saldo: true } : {}) }).catch(() => {}) });
+  const lista = (await ab.servicos()).map((x) => ({ codigo: x.codigo, nome: x.nome }));
+  await api("POST", { company_id: e.company_id, acao: "ab_servicos", lista });
+}
+
 // ---------- totem de autoatendimento (tablet na recepção) ----------
 // O tablet manda pedidos pela função "totem"; aqui o servidor (IP liberado na AppBarber) busca os pedidos pela
 // sync-servidor (espera longa), executa na AppBarber e devolve a resposta. Check-in = status "No local" na AppBarber.
@@ -1285,8 +1308,8 @@ export function criarTotem({ dir, log = () => {}, api = async () => ({}), sock =
       return { profissional: primeiroNome(g.profissional), hora: g.hora, avisado };
     }
     if (acao === "servicos") {
-      const lista = (await ab.servicos()).filter((x) => x.tipo === 1 && x.nome);
-      return { servicos: lista.map((x) => ({ codigo: x.codigo, nome: x.nome, minutos: x.minutos, preco: Number(x.preco) || null })) };
+      const todos = await ab.servicos(), lista = todos.filter((x) => x.tipo === 1 && x.nome);
+      return { servicos: lista.map((x) => ({ codigo: x.codigo, nome: x.nome, minutos: x.minutos, preco: Number(x.preco) || null })), ofertas: ofertasDe(e.totem.upsell, todos, log) };
     }
     if (acao === "horarios") {
       const agora = relogio(), ehHoje = d.data === hojeSP();
@@ -1309,7 +1332,7 @@ export function criarTotem({ dir, log = () => {}, api = async () => ({}), sock =
         await ab.salvarCliente({ fone: d.fone, nome: d.nome, origem: "Totem da recepção" });
         cad = { nome: d.nome }; cads.set(chaveFone(d.fone), { em: Date.now(), v: cad });
       }
-      const r = await ab.criar({ fone: d.fone, nome: cad.nome, servicos: servs, profissional: d.profissional, quando: `${d.data} ${d.hora}`, obs: "Agendado pelo cliente no totem da recepção" });
+      const r = await ab.criar({ fone: d.fone, nome: cad.nome, servicos: servs, profissional: d.profissional, quando: `${d.data} ${d.hora}`, obs: ["Agendado pelo cliente no totem da recepção", ...(d.adicionais || []).map((a) => "Adicional: " + a)].join(" · ").slice(0, 250) });
       conta.agendados++; cache.em = 0;
       // Marcou para agora (até 1h30): ele já está aqui, então o check-in vai junto.
       let chegou = false;
