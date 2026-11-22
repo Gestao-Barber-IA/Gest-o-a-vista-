@@ -23,6 +23,9 @@ header { display:flex; align-items:center; gap:14px; min-height:56px; }
 header img.hide { display:none; }
 body.ini header { position:absolute; top:max(12px, env(safe-area-inset-top)); right:16px; min-height:0; }
 body.ini .tiny { opacity:.45; }
+body.ini #aviso { margin-top:52px; }
+body.semcheia .tiny { display:none; }
+body.semcheia.ini #aviso { margin-top:0; }
 body.ini main { justify-content:flex-start; padding-top:max(28px, 3vh); }
 body.cheia .tiny { display:none; }
 header img { width:52px; height:52px; border-radius:50%; object-fit:contain; background:var(--logo-bg, var(--s2)); }
@@ -123,7 +126,7 @@ h1.tit-ini { max-width:720px; }
   var $ = function (id) { return document.getElementById(id); };
   var esc = function (t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
   var cred = null;
-  try { var h = new URLSearchParams(location.hash.slice(1)); if (h.get('e') && h.get('t')) { cred = { e: h.get('e'), t: h.get('t') }; localStorage.setItem('gbTotem', JSON.stringify(cred)); history.replaceState(null, '', location.pathname); } } catch (e) { /* segue */ }
+  try { var h = new URLSearchParams(location.hash.slice(1)); if (h.get('e') && h.get('t')) { cred = { e: h.get('e'), t: h.get('t') }; localStorage.setItem('gbTotem', JSON.stringify(cred)); } } catch (e) { /* segue */ }
   if (!cred) { try { cred = JSON.parse(localStorage.getItem('gbTotem') || 'null'); } catch (e) { cred = null; } }
   var info = null, st = {}, tela = 'inicio', idle = null, volta = null;
 
@@ -244,6 +247,8 @@ h1.tit-ini { max-width:720px; }
     if (a === 'voltaHoraRecarrega') { ir('horario'); return horas(); }
   });
   document.addEventListener('touchstart', tocar, { passive: true });
+  // iPhone e iPad (Safari) não deixam a página entrar em tela cheia: some o botão (use "Adicionar à Tela de Início").
+  if (!(document.fullscreenEnabled || document.webkitFullscreenEnabled)) document.body.classList.add('semcheia');
   document.addEventListener('fullscreenchange', function () { document.body.classList.toggle('cheia', !!document.fullscreenElement); });
   $('tela').addEventListener('click', function () { var el = document.documentElement; if (document.fullscreenElement) document.exitFullscreen(); else if (el.requestFullscreen) el.requestFullscreen().catch(function () {}); });
   // Tela sempre ligada (quando o navegador permite).
@@ -325,7 +330,9 @@ h1.tit-ini { max-width:720px; }
       if (!antes || tela === 'desligado' || tela === 'sem_link') reiniciar(); else if (tela === 'inicio') render();
     }).catch(function (e) { if (/inválido/i.test(e.message)) { try { localStorage.removeItem('gbTotem'); } catch (x) { /* segue */ } cred = null; return ir('sem_link'); } if (!info) ir('erro', { erro: e.message }); });
   }
-  carregarInfo(); setInterval(function () { if (tela === 'inicio' || tela === 'desligado') carregarInfo(); }, 60000);
+  // Confere a conexão a cada 20 s enquanto estiver sem conexão; senão, a cada 1 min (só na tela inicial).
+  var tique = 0;
+  carregarInfo(); setInterval(function () { tique++; if ((tela === 'inicio' || tela === 'desligado') && (!info || !info.online || tique % 3 === 0)) carregarInfo(); }, 20000);
 })();
 </script>
 </body>
