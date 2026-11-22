@@ -4416,14 +4416,14 @@ Content-Type: application/json</pre>
         <label class="field"><span>Oferta</span><input class="input" name="t${i}" maxlength="60" value="${esc(o.texto || '')}" placeholder="Ex.: Sobrancelha"></label>
         <label class="field up-val"><span>Valor (R$)</span><input class="input num" name="v${i}" type="number" min="0" max="9999" step="1" value="${o.valor != null && o.valor !== '' ? esc(String(o.valor)) : ''}" placeholder="15"></label>
         <label class="field"><span>Serviço(s) na agenda</span><input class="input" name="s${i}" list="up-ab" maxlength="160" value="${esc(o.servicos || '')}" placeholder="Ex.: Sobrancelha"></label>
-        <label class="field"><span>Oferecer quando o serviço tiver</span><input class="input" name="q${i}" maxlength="120" value="${esc(o.quando || '')}" placeholder="Ex.: corte (vazio = sempre)"></label>
+        <label class="field"><span>Oferecer quando o serviço tiver</span><input class="input" name="q${i}" maxlength="120" value="${esc(o.quando || '')}" placeholder="Ex.: corte, sem barba"></label>
         ${f.length ? `<p class="up-warn">${icon('alert')} Não encontrei na agenda: <b>${esc(f.join(', '))}</b>. Escolha o nome exato na lista.</p>` : ''}
       </div>`; };
-    const rows = [0, 1, 2, 3].map(i => linha(lista[i] || {}, i)).join('');
+    const rows = [0, 1, 2, 3, 4, 5].map(i => linha(lista[i] || {}, i)).join('');
     return `<section class="section card as-card">
       <h2 class="section-title">${icon('gift')} Ofertas no final do agendamento</h2>
       <p class="section-note">Antes de confirmar um agendamento, o cliente recebe uma oferta para adicionar um serviço, como <i>"Aproveite e adicione uma sobrancelha por apenas R$ 15"</i>. Vale no <b>totem da recepção</b> (tela "Aproveite e adicione") e na <b>Sofia</b> no WhatsApp, que oferece uma vez, sem insistir. Aceitando, o serviço entra no mesmo horário, logo depois, com o mesmo profissional, e o valor da oferta vai na observação do agendamento.</p>
-      <p class="section-note">Em <b>Serviço(s) na agenda</b>, use o nome exato da AppBarber${ab.length ? ' (a lista aparece ao digitar)' : ''}; para mais de um serviço, separe com <b>+</b> (ex.: <i>Depilação de Nariz + Depilação de Orelha</i>). Em <b>Oferecer quando</b>, palavras do serviço escolhido (ex.: <i>corte</i>); vazio oferece sempre.</p>
+      <p class="section-note">Em <b>Serviço(s) na agenda</b>, use o nome exato da AppBarber${ab.length ? ' (a lista aparece ao digitar)' : ''}; para mais de um serviço, separe com <b>+</b> (ex.: <i>Depilação de Nariz + Depilação de Orelha</i>). Em <b>Oferecer quando</b>, palavras do serviço escolhido; vazio oferece sempre. Exemplos: <i>corte</i> (tem corte) · <i>corte + barba</i> (tem os dois) · <i>corte, sem barba</i> (tem corte e não tem barba) · <i>barba, sem corte</i>.</p>
       <datalist id="up-ab">${ab.map(x => `<option value="${esc(x.nome)}">`).join('')}</datalist>
       <form class="form" data-form="upSave" novalidate>${rows}
         <p class="form-msg" data-msg></p>
@@ -8984,7 +8984,7 @@ Content-Type: application/json</pre>
     },
     upSave(f) {
       const out = [];
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < 6; i++) {
         const t = (f.elements['t' + i].value || '').trim(), sv = (f.elements['s' + i].value || '').trim(), v = f.elements['v' + i].value, q = (f.elements['q' + i].value || '').trim();
         if (!t && !sv) continue;
         if (!t || !sv) return setMsg(f, `Oferta ${i + 1}: preencha o texto e o serviço na agenda.`);
