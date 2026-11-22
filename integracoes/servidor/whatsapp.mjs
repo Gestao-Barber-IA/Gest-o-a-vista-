@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "5.5";
+const VERSAO = "5.6";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -493,7 +493,7 @@ async function atualizar() {
     // A Sofia (sofia.mjs) atualiza junto.
     const rs = await fetch(`${SITE}/integracoes/servidor/sofia.mjs`, { cache: "no-store" });
     if (rs.ok) { const ns = await rs.text(), ts = join(DIR, "sofia.novo.mjs"); writeFileSync(ts, ns); if (ns.length > 1000 && spawnSync(process.execPath, ["--check", ts]).status === 0) renameSync(ts, join(DIR, "sofia.mjs")); else rmSync(ts, { force: true }); }
-    renameSync(tmp, eu); log(`Atualizado para a versão ${v}. Reiniciando…`); process.exit(0);
+    renameSync(tmp, eu); log(`Atualizado para a versão ${v}. Reiniciando…`); if (sofia && sofia.salvar) sofia.salvar(); process.exit(0);
   } catch { /* sem internet: tenta depois */ }
 }
 
@@ -655,6 +655,8 @@ if (!CLI) {
   if (existsSync(join(AUTH, "creds.json"))) conectar().then((ok) => { if (ok) avisarConectado = true; });
   else log(`Sem número conectado: rode ${CMD} no servidor.`);
 }
+// Parada do serviço (reinício, instalador, atualização): grava as conversas da Sofia antes de sair.
+for (const sinal of ["SIGTERM", "SIGINT"]) process.on(sinal, () => { try { if (sofia && sofia.salvar) sofia.salvar(); } catch { /* sai assim mesmo */ } process.exit(0); });
 for (;;) {
   await ciclo().catch((e) => log("ERRO no ciclo: " + e.message));
   if (saiu) { await espera(600000); continue; }

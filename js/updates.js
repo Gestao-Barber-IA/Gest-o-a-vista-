@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-22-fila-sofia', date: '2026-11-22', title: 'Sofia: mensagens esperando resposta não se perdem mais', items: [
+    ['correcao', 'Se o servidor reiniciar (atualização, instalador, reinício), as mensagens que a Sofia ainda ia responder (da noite, de quando ela estava desligada ou fora do horário) ficam guardadas e ela responde quando voltar. Áudio que não dá para recuperar vira um pedido gentil para o cliente mandar de novo.'],
+  ] },
   { id: '2026-11-21-aviso-desconectado', date: '2026-11-21', title: 'Aviso quando o WhatsApp dos clientes desconecta', items: [
     ['novo', 'Se o WhatsApp que fala com os clientes (lembretes, Sofia, parabéns, reconquista) desconectar do servidor por 10 minutos, o número da equipe manda um aviso para o WhatsApp de avisos urgentes, com o comando para reconectar. Quando voltar, avisa que está tudo funcionando de novo.'],
     ['correcao', 'O cartão da Atendente IA mostra erro "WhatsApp desconectado" em vez de "ok" quando o número cai, e o status dos lembretes volta para "conectado" sozinho depois de uma reconexão automática.'],
