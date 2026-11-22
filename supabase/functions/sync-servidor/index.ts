@@ -3,6 +3,8 @@
 // GET  → lista as barbearias com sincronização automática ligada e assinatura em dia.
 // GET ?acao=lembretes → dados do dia para os lembretes no WhatsApp.
 // POST { company_id, acao: 'wa_status' | 'cl_status' | 'fb_status' | 'wb_status' | 'rt_status' | 'bd_status' | 'ia_status', status } → grava o estado dos lembretes (equipe | clientes).
+// GET ?acao=totem_espera&empresas=id1,id2 → espera até ~25 s por pedidos novos do totem da recepção e os devolve.
+// POST { company_id, acao: 'totem_resposta', id, ok, resposta } → grava a resposta de um pedido do totem.
 // POST { company_id, acao: 'ia_report', relatorio } → grava o relatório semanal da Sofia.
 // POST { company_id, creditos, sem_saldo } (com qualquer ação, ou acao: 'ab_uso') → soma as consultas gastas na AppBarber.
 // POST → { company_id, ok, mensagem } grava o resultado da última sincronização.
@@ -33,11 +35,31 @@ Deno.serve(async (req) => {
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 
   const url = new URL(req.url);
+  // Totem: o servidor espera pedidos novos (long polling). Marca que está no ar (o tablet mostra "sem conexão" se não estiver).
+  if (req.method === "GET" && url.searchParams.get("acao") === "totem_espera") {
+    const ids = String(url.searchParams.get("empresas") || "").split(",").filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 20);
+    if (!ids.length) return json({ pedidos: [] });
+    await db.from("integrations").update({ tt_seen_at: new Date().toISOString() }).in("company_id", ids);
+    // Limpeza: pedidos com mais de 1 hora (normalmente já apagados quando o tablet lê a resposta).
+    if (Math.random() < 0.05) await db.from("totem_pedidos").delete().lt("criado_em", new Date(Date.now() - 3600000).toISOString());
+    const fim = Date.now() + 25000;
+    while (Date.now() < fim) {
+      const { data: novos } = await db.from("totem_pedidos").select("id").in("company_id", ids).eq("status", "novo")
+        .gte("criado_em", new Date(Date.now() - 25000).toISOString()).order("id").limit(10);
+      if (novos && novos.length) {
+        const { data: pegos } = await db.from("totem_pedidos").update({ status: "pego", pego_em: new Date().toISOString() })
+          .in("id", novos.map((n) => n.id)).eq("status", "novo").select("id, company_id, acao, dados");
+        if (pegos && pegos.length) return json({ pedidos: pegos });
+      }
+      await new Promise((r) => setTimeout(r, 600));
+    }
+    return json({ pedidos: [] });
+  }
   // Lembretes no WhatsApp: dados do dia de quem ligou os lembretes (checklist, agenda e telefones).
   if (req.method === "GET" && url.searchParams.get("acao") === "lembretes") {
     const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
     const { data: ints, error } = await db.from("integrations")
-      .select("company_id, est_code, api_key, branch_code, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, cl_status, cl_status_at, rt_on, rt_daily, rt_lead, rt_text, bd_on, bd_text, ia_on, ia_name, ia_model, ia_hours, ia_pause, ia_notes, ia_report_phone, ia_alert_phone, ia_arts, names").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,rt_on.eq.true,bd_on.eq.true,ia_on.eq.true");
+      .select("company_id, est_code, api_key, branch_code, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, cl_status, cl_status_at, rt_on, rt_daily, rt_lead, rt_text, tt_on, tt_notify, tt_days, bd_on, bd_text, ia_on, ia_name, ia_model, ia_hours, ia_pause, ia_notes, ia_report_phone, ia_alert_phone, ia_arts, names").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,rt_on.eq.true,tt_on.eq.true,bd_on.eq.true,ia_on.eq.true");
     if (error) return json({ erro: error.message }, 500);
     const empresas = [];
     for (const i of ints || []) {
@@ -67,6 +89,8 @@ Deno.serve(async (req) => {
         reconquista: i.wb_on && i.est_code && i.api_key ? { porDia: Math.max(1, Math.min(40, Number(i.wb_daily) || 15)), minDias: Math.max(30, Number(i.wb_min_days) || 90), maxDias: Math.max(60, Number(i.wb_max_days) || 365), texto: i.wb_text || "", codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
         // Retorno no tempo certo: convite N dias antes do prazo de costume de cada cliente (agenda da AppBarber).
         retorno: i.rt_on && i.est_code && i.api_key ? { porDia: Math.max(1, Math.min(30, Number(i.rt_daily) || 10)), antes: i.rt_lead == null || !Number.isFinite(Number(i.rt_lead)) ? 2 : Math.max(-3, Math.min(7, Math.round(Number(i.rt_lead)))), texto: i.rt_text || "", codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
+        // Totem de autoatendimento na recepção (check-in e agendamento na hora).
+        totem: i.tt_on && i.est_code && i.api_key ? { avisar: i.tt_notify !== false, dias: Math.max(1, Math.min(30, Number(i.tt_days) || 7)) } : null,
         // Estado do número dos clientes: o programa da equipe (outro número) avisa quando ele desconecta.
         wa_clientes: i.cl_on || i.ia_on || i.wb_on || i.bd_on || i.fb_on || i.rt_on ? { status: i.cl_status || "", em: i.cl_status_at, numero: i.cl_numero === "principal" ? "principal" : "chip", sofia: !!i.ia_on, alerta: String(i.ia_alert_phone || i.ia_report_phone || "").replace(/\D/g, "") } : null,
         cfg: { ligado: !!i.wa_on, hora: i.wa_hour || "13:00", minimo: Number(i.wa_min) || 0, texto: i.wa_text || "" },
@@ -124,6 +148,13 @@ Deno.serve(async (req) => {
     const usoN = Math.max(0, Math.min(5000, Number(b.creditos) || 0)), zero = b.sem_saldo === true;
     if (usoN || zero) await db.rpc("ab_add_uso", { p_company: b.company_id, p_n: usoN, p_zero: zero });
     if (b.acao === "ab_uso") return json({ ok: true });
+    if (b.acao === "totem_resposta") {
+      const resp = b.resposta && typeof b.resposta === "object" ? b.resposta : {};
+      if (JSON.stringify(resp).length > 60000) return json({ erro: "Resposta grande demais." }, 400);
+      const { error } = await db.from("totem_pedidos").update({ status: b.ok ? "feito" : "erro", resposta: resp, feito_em: new Date().toISOString() })
+        .eq("id", Number(b.id)).eq("company_id", b.company_id).in("status", ["pego", "expirado"]);
+      return error ? json({ erro: error.message }, 500) : json({ ok: true });
+    }
     // Relatório semanal da Sofia (atendente IA): números, motivos e sugestões para o dono aprovar no app.
     if (b.acao === "ia_report") {
       const rel = b.relatorio && typeof b.relatorio === "object" ? b.relatorio : null;
@@ -131,7 +162,7 @@ Deno.serve(async (req) => {
       const { error } = await db.from("integrations").update({ ia_report: rel, ia_report_at: new Date().toISOString() }).eq("company_id", b.company_id);
       return error ? json({ erro: error.message }, 500) : json({ ok: true });
     }
-    if (["wa_status", "cl_status", "fb_status", "wb_status", "rt_status", "bd_status", "ia_status"].includes(b.acao)) {
+    if (["wa_status", "cl_status", "fb_status", "wb_status", "rt_status", "tt_status", "bd_status", "ia_status"].includes(b.acao)) {
       const k = String(b.acao).slice(0, 2);
       const { error } = await db.from("integrations").update({ [k + "_status"]: String(b.status || "").slice(0, 500), [k + "_status_at"]: new Date().toISOString() }).eq("company_id", b.company_id);
       return error ? json({ erro: error.message }, 500) : json({ ok: true });
