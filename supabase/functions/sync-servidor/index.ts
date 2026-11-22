@@ -155,7 +155,7 @@ Deno.serve(async (req) => {
     if (b.acao === "ab_uso") return json({ ok: true });
     // Lista de serviços da AppBarber (código e nome) para o app sugerir os nomes ao montar as ofertas.
     if (b.acao === "ab_servicos") {
-      const lista = (Array.isArray(b.lista) ? b.lista : []).slice(0, 400).map((x: any) => ({ codigo: Number(x.codigo) || 0, nome: String(x.nome || "").slice(0, 80) })).filter((x: any) => x.nome);
+      const lista = (Array.isArray(b.lista) ? b.lista : []).slice(0, 400).map((x: any) => ({ codigo: Number(x.codigo) || 0, nome: String(x.nome || "").slice(0, 80), preco: Number(x.preco) || null, minutos: Number(x.minutos) || null })).filter((x: any) => x.nome);
       const { error } = await db.from("integrations").update({ ab_services: lista }).eq("company_id", b.company_id);
       return error ? json({ erro: error.message }, 500) : json({ ok: true });
     }
