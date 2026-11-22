@@ -60,6 +60,8 @@ p.sub { color:var(--muted); font-size:clamp(17px,2.2vw,22px); text-align:center;
 .opt b { display:block; font-size:20px; line-height:1.2; } .opt small { color:var(--muted); font-size:16px; }
 .opt.on { border-color:var(--ac); background:rgba(214,180,106,.12); }
 .chips { display:flex; gap:10px; overflow-x:auto; width:100%; padding:4px 2px 10px; scrollbar-width:none; } .chips::-webkit-scrollbar { display:none; }
+.chips.quebra { flex-wrap:wrap; overflow:visible; justify-content:center; }
+.rolar .horas { justify-content:center; }
 .chip { flex:0 0 auto; border-radius:999px; border:2px solid var(--line); background:var(--s1); color:var(--fg); font:inherit; font-size:19px; font-weight:600; padding:12px 20px; }
 .chip.on { border-color:var(--ac); background:var(--ac); color:var(--ink); }
 .prof { width:100%; background:var(--s1); border:1px solid var(--line); border-radius:var(--r); padding:16px 18px; margin-bottom:12px; }
@@ -180,13 +182,18 @@ h1.tit-ini { max-width:720px; }
       h = '<h2>Qual serviço você quer fazer?</h2><p class="sub">Pode escolher mais de um (até 3)</p><div class="grade">' +
         st.servicos.map(function (s) { return '<button type="button" class="opt' + (sel.indexOf(s.codigo) >= 0 ? ' on' : '') + '" data-a="serv" data-c="' + s.codigo + '"><b>' + esc(s.nome) + '</b><small>' + (s.minutos ? s.minutos + ' min' : '') + '</small></button>'; }).join('') +
         '</div><div class="acoes"><button class="btn pri" type="button" data-a="servOk"' + (sel.length ? '' : ' disabled') + '>Continuar</button><button class="btn sec" type="button" data-a="inicio">Cancelar</button></div>';
+    } else if (tela === 'prof') {
+      var todos = st.todos || [];
+      h = '<h2>Com qual profissional você prefere?</h2><p class="sub">Depois você escolhe o dia e o horário</p><div class="grade">' +
+        '<button type="button" class="opt" data-a="escProf" data-p="0"><b>Sem preferência</b><small>Qualquer profissional disponível</small></button>' +
+        todos.map(function (p) { return '<button type="button" class="opt" data-a="escProf" data-p="' + p.codigo + '"><b>' + esc(p.nome) + '</b></button>'; }).join('') +
+        '</div><div class="acoes"><button class="btn sec" type="button" data-a="voltaServ">Voltar</button></div>';
     } else if (tela === 'horario') {
-      var profs = st.profs || [], pf = st.pf || 0, lst = pf ? profs.filter(function (p) { return p.codigo === pf; }) : profs;
-      h = '<h2>Escolha o dia e o horário</h2><div class="chips">' + datas().map(function (d) { return '<button type="button" class="chip' + (d === st.data ? ' on' : '') + '" data-a="dia" data-d="' + d + '">' + esc(diaTexto(d)) + '</button>'; }).join('') + '</div>' +
-        (st.carregandoHoras ? '<div class="spin"></div>' : profs.length ? '<div class="chips"><button type="button" class="chip' + (!pf ? ' on' : '') + '" data-a="pf" data-p="0">Qualquer profissional</button>' + profs.map(function (p) { return '<button type="button" class="chip' + (pf === p.codigo ? ' on' : '') + '" data-a="pf" data-p="' + p.codigo + '">' + esc(p.nome) + '</button>'; }).join('') + '</div>' +
-          '<div class="rolar">' + lst.map(function (p) { return '<div class="prof"><h3>' + esc(p.nome) + '</h3><div class="horas">' + p.horarios.map(function (x) { return '<button type="button" class="chip" data-a="hora" data-p="' + p.codigo + '" data-h="' + esc(x.hora) + '">' + esc(hr(x.hora)) + '</button>'; }).join('') + '</div></div>'; }).join('') + '</div>'
-          : '<p class="vazio-m">Não há horários livres neste dia. Escolha outro dia acima.</p>') +
-        '<div class="acoes"><button class="btn sec" type="button" data-a="voltaServ">Voltar</button></div>';
+      var lista = horasDoDia(), nomePf = st.pf ? ((st.todos || []).filter(function (p) { return p.codigo === st.pf; })[0] || {}).nome : '';
+      h = '<h2>Escolha o dia e o horário</h2><p class="sub">' + (nomePf ? 'Com ' + esc(nomePf) : 'Sem preferência de profissional') + '</p><div class="chips quebra">' + datas().map(function (d) { return '<button type="button" class="chip' + (d === st.data ? ' on' : '') + '" data-a="dia" data-d="' + d + '">' + esc(diaTexto(d)) + '</button>'; }).join('') + '</div>' +
+        (st.carregandoHoras ? '<div class="spin"></div>' : lista.length ? '<div class="rolar"><div class="horas">' + lista.map(function (x) { return '<button type="button" class="chip" data-a="hora" data-h="' + esc(x.hora) + '">' + esc(hr(x.hora)) + '</button>'; }).join('') + '</div></div>'
+          : '<p class="vazio-m">' + (nomePf ? esc(nomePf) + ' não tem horário livre neste dia.' : 'Não há horários livres neste dia.') + ' Escolha outro dia acima.</p>') +
+        '<div class="acoes"><button class="btn sec" type="button" data-a="voltaProf">Voltar</button></div>';
     } else if (tela === 'confirmar') {
       var c = st.escolha;
       h = '<h2>Confira seu agendamento</h2><p class="sub">Está tudo certo?</p><div class="resumo"><div><span>Nome</span><b>' + esc(st.nomeAg || '') + '</b></div><div><span>Serviço</span><b>' + esc(c.servicos) + '</b></div><div><span>Profissional</span><b>' + esc(c.prof) + '</b></div>' +
@@ -208,10 +215,30 @@ h1.tit-ini { max-width:720px; }
     document.body.classList.toggle('ini', tela === 'inicio'); // na tela inicial o logo aparece grande no meio
   }
 
+  // "Sem preferência" da própria AppBarber (e parecidos) não é um profissional: fica de fora da lista.
+  var FALSO = /sem prefer|qualquer|ordem de chegada|indiferente/i;
+  function porHora(a, b) { return a.hora.localeCompare(b.hora); }
+  // Horários livres do dia escolhido, do profissional escolhido (ou de todos, sem repetir, em "sem preferência").
+  function horasDoDia() {
+    var profs = (st.porDia || {})[st.data] || [], vistos = {}, out = [];
+    profs.forEach(function (p) { if (st.pf && p.codigo !== st.pf) return; p.horarios.forEach(function (x) { if (!vistos[x.hora]) { vistos[x.hora] = 1; out.push(x); } }); });
+    return out.sort(porHora);
+  }
+  // Busca os horários de um dia (guarda por dia). Na primeira busca, monta também a lista de profissionais.
+  function carregarDia(d) {
+    st.data = d; st.porDia = st.porDia || {};
+    if (st.porDia[d]) return Promise.resolve();
+    return chamar('horarios', { data: d, servico: st.sel[0] }).then(function (r) {
+      st.porDia[d] = (r.profissionais || []).filter(function (p) { return !FALSO.test(p.nome); }).map(function (p) { return { codigo: p.codigo, nome: p.nome, horarios: (p.horarios || []).slice().sort(porHora) }; });
+      if (!st.todos) {
+        var base = (r.todos && r.todos.length ? r.todos : st.porDia[d]).filter(function (p) { return !FALSO.test(p.nome); });
+        st.todos = base.map(function (p) { return { codigo: p.codigo, nome: p.nome }; });
+      }
+    });
+  }
   function horas() {
-    st.carregandoHoras = true; st.profs = []; render();
-    chamar('horarios', { data: st.data, servico: st.sel[0] }).then(function (r) { st.carregandoHoras = false; st.profs = r.profissionais || []; if (st.pf && !st.profs.some(function (p) { return p.codigo === st.pf; })) st.pf = 0; render(); })
-      .catch(function (e) { st.carregandoHoras = false; ir('erro', { erro: e.message, voltarPara: 'voltaServ' }); });
+    st.carregandoHoras = true; render();
+    carregarDia(st.data).then(function () { st.carregandoHoras = false; render(); }).catch(function (e) { st.carregandoHoras = false; ir('erro', { erro: e.message, voltarPara: 'voltaProf' }); });
   }
   function agendarFluxo() {
     carregando('Carregando os serviços…');
@@ -233,18 +260,24 @@ h1.tit-ini { max-width:720px; }
       if (n.split(' ').length < 2 || n.length < 5) { $('inNome').focus(); $('inNome').placeholder = 'Digite nome e sobrenome'; $('inNome').value = n; return; }
       st.nome = n; st.nomeAg = n.split(' ')[0]; return agendarFluxo(); }
     if (a === 'serv') { var c = Number(b.getAttribute('data-c')), s = st.sel || [], i = s.indexOf(c); if (i >= 0) s.splice(i, 1); else if (s.length < 3) s.push(c); st.sel = s; return render(); }
-    if (a === 'servOk') { st.data = datas()[0]; st.pf = 0; ir('horario'); return horas(); }
+    if (a === 'servOk') { st.porDia = {}; st.todos = null; st.pf = 0; carregando('Carregando os profissionais…');
+      return carregarDia(datas()[0]).then(function () { ir('prof'); }).catch(erro); }
     if (a === 'voltaServ') return ir('servico');
+    if (a === 'escProf') { st.pf = Number(b.getAttribute('data-p')); st.data = datas()[0]; ir('horario'); return horas(); }
+    if (a === 'voltaProf') return ir('prof');
     if (a === 'dia') { st.data = b.getAttribute('data-d'); return horas(); }
-    if (a === 'pf') { st.pf = Number(b.getAttribute('data-p')); return render(); }
-    if (a === 'hora') { var p = (st.profs || []).filter(function (q) { return q.codigo === Number(b.getAttribute('data-p')); })[0], hh = b.getAttribute('data-h'), slot = p.horarios.filter(function (q) { return q.hora === hh; })[0];
+    if (a === 'hora') { var hh = b.getAttribute('data-h'), cands = ((st.porDia || {})[st.data] || []).filter(function (q) { return (!st.pf || q.codigo === st.pf) && q.horarios.some(function (x) { return x.hora === hh; }); });
+      if (!cands.length) return horas();
+      // Sem preferência: vai para quem tem mais horários livres no dia (divide o movimento entre a equipe); empate, sorteio.
+      cands.sort(function (x, y) { return y.horarios.length - x.horarios.length || Math.random() - 0.5; });
+      var p = cands[0], slot = p.horarios.filter(function (q) { return q.hora === hh; })[0];
       var nomes = st.sel.map(function (cd) { return (st.servicos.filter(function (q) { return q.codigo === cd; })[0] || {}).nome; }).join(' + ');
       return ir('confirmar', { escolha: { prof: p.nome, profCod: p.codigo, hora: hh, preco: slot && slot.preco, servicos: nomes } }); }
     if (a === 'voltaHora') return ir('horario');
     if (a === 'agendar') { carregando('Agendando…');
       return chamar('agendar', { fone: st.fone, nome: st.nome || '', servicos: st.sel, profissional: st.escolha.profCod, data: st.data, hora: st.escolha.hora })
         .then(function (r) { ir('agendado_ok', { ag: r }); }).catch(function (e) { ir('erro', { erro: e.message, voltarPara: /ocupado|outro/i.test(e.message) ? 'voltaHoraRecarrega' : '' }); }); }
-    if (a === 'voltaHoraRecarrega') { ir('horario'); return horas(); }
+    if (a === 'voltaHoraRecarrega') { if (st.porDia) delete st.porDia[st.data]; ir('horario'); return horas(); }
   });
   document.addEventListener('touchstart', tocar, { passive: true });
   // iPhone e iPad (Safari) não deixam a página entrar em tela cheia: some o botão (use "Adicionar à Tela de Início").

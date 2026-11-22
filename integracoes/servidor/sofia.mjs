@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "4.3";
+export const SOFIA_VERSAO = "4.4";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -1290,9 +1290,13 @@ export function criarTotem({ dir, log = () => {}, api = async () => ({}), sock =
     }
     if (acao === "horarios") {
       const agora = relogio(), ehHoje = d.data === hojeSP();
-      const lista = (await ab.horarios(d.data, d.servico)).map((p) => ({ codigo: p.codigo, nome: p.nome,
-        horarios: p.horarios.filter((h) => !ehHoje || mins(h) >= agora + 5).map((h) => ({ hora: h, preco: Number((p.precos[h] || [])[0]) || null })) })).filter((p) => p.horarios.length);
-      return { profissionais: lista };
+      // "Sem preferência" (e parecidos) que a AppBarber devolve como profissional fica de fora; horários em ordem.
+      const falso = (n) => /sem prefer|qualquer|ordem de chegada|indiferente/i.test(n);
+      const lista = (await ab.horarios(d.data, d.servico)).filter((p) => !falso(p.nome)).map((p) => ({ codigo: p.codigo, nome: p.nome,
+        horarios: p.horarios.filter((h) => !ehHoje || mins(h) >= agora + 5).sort().map((h) => ({ hora: h, preco: Number((p.precos[h] || [])[0]) || null })) })).filter((p) => p.horarios.length);
+      // Todos os profissionais que fazem o serviço (para escolher antes do dia), mesmo quem não tem horário nesse dia.
+      const todos = (await ab.profissionais(d.servico).catch(() => [])).filter((p) => p.nome && !falso(p.nome)).map((p) => ({ codigo: p.codigo, nome: p.nome }));
+      return { profissionais: lista, todos };
     }
     if (acao === "agendar") {
       const todos = await ab.servicos(), servs = d.servicos.map((c) => todos.find((x) => x.codigo === c)).filter(Boolean);
