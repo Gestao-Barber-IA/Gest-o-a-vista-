@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "4.0";
+export const SOFIA_VERSAO = "4.1";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -613,15 +613,32 @@ export function criarSofia({ dir, log, api, sock, conectado = () => true, cmdCon
   const conversas = new Map(); // jid → { mensagens, ultima, ultimaSofia, humanoEm, contexto, nome, agenda, recepcao, fone, fila, ocupado }
   // As conversas sobrevivem a reinícios (atualização, instalador): ficam num arquivo do servidor por até 6 horas.
   const CONV = join(dir, "sofia-conversas.json");
-  const CAMPOS = ["mensagens", "inicio", "ultima", "ultimaSofia", "humanoEm", "contexto", "contada", "nome", "recepcao", "fone", "cadastro", "verificado", "sistema", "artes", "feitos", "gasto", "motivo", "pushName", "esperaAte", "esperaDe", "registrada", "regId"];
+  const CAMPOS = ["mensagens", "inicio", "ultima", "ultimaSofia", "humanoEm", "contexto", "contada", "nome", "recepcao", "fone", "cadastro", "verificado", "sistema", "artes", "feitos", "gasto", "motivo", "pushName", "esperaAte", "esperaDe", "registrada", "regId", "fila", "noturna", "pendTipo", "ultimaCliente"];
+  // Mensagens esperando resposta (fila) também ficam salvas: um reinício não faz ninguém ficar sem resposta.
+  // Áudio não dá para guardar (o arquivo fica no WhatsApp): vira um aviso para a Sofia pedir de novo.
+  const AUDIO_PERDIDO = "[o cliente mandou um áudio que não deu para ouvir; peça, com gentileza, para ele mandar de novo ou escrever]";
+  const guardavel = (c, j) => Date.now() - (c.ultima || 0) < 6 * 3600000 || (c.noturna && c.fila && c.fila.length && Date.now() - c.noturna < 36 * 3600000);
   try {
-    for (const [j, x] of Object.entries(JSON.parse(readFileSync(CONV, "utf8")))) if (Date.now() - (x.ultima || 0) < 6 * 3600000) conversas.set(j, { agenda: null, fila: [], ocupado: false, ...x });
+    for (const [j, x] of Object.entries(JSON.parse(readFileSync(CONV, "utf8")))) {
+      if (!guardavel(x)) continue;
+      const c = { agenda: null, ocupado: false, ...x, fila: Array.isArray(x.fila) ? x.fila : [] };
+      // Estava esperando os 7 segundos (ou sendo respondida) quando o programa reiniciou: entra na fila de pendentes.
+      if (c.fila.length && !c.noturna) { c.noturna = c.ultimaCliente || c.ultima || Date.now(); c.pendTipo = "recente"; }
+      conversas.set(j, c);
+    }
+    const n = [...conversas.values()].filter((c) => c.fila.length).length;
+    if (n) log(`Sofia: ${n} conversa(s) com mensagens esperando resposta recuperadas depois do reinício.`);
   } catch { /* primeira vez ou arquivo vazio */ }
-  let salvarEm = 0;
+  let salvarEm = 0, salvarDepois = null;
   function salvarConversas(forcar = false) {
-    if (!forcar && Date.now() - salvarEm < 5000) return; salvarEm = Date.now();
+    if (!forcar && Date.now() - salvarEm < 5000) { if (!salvarDepois) salvarDepois = setTimeout(() => { salvarDepois = null; salvarConversas(true); }, 5000); return; }
+    salvarEm = Date.now();
     const out = {};
-    for (const [j, c] of conversas) if (Date.now() - c.ultima < 6 * 3600000) { const x = {}; for (const k of CAMPOS) if (c[k] !== undefined) x[k] = c[k]; out[j] = x; }
+    for (const [j, c] of conversas) if (guardavel(c)) {
+      const x = {}; for (const k of CAMPOS) if (c[k] !== undefined) x[k] = c[k];
+      if (c.fila) x.fila = c.fila.map((f) => (typeof f === "string" ? f : AUDIO_PERDIDO));
+      out[j] = x;
+    }
     try { writeFileSync(CONV, JSON.stringify(out), { mode: 0o600 }); } catch (e) { log("Sofia: conversas não gravadas: " + e.message); }
   }
   const pausas = new Map();    // jid → até quando a Sofia fica quieta (a recepção respondeu pelo celular)
@@ -948,6 +965,9 @@ export function criarSofia({ dir, log, api, sock, conectado = () => true, cmdCon
   const PEND_MIN = 30;
   const vistas = new Set(); // ids já tratados: a mesma mensagem nunca é processada duas vezes
   async function aoReceber(m) {
+    try { await aoReceber2(m); } finally { salvarConversas(); }
+  }
+  async function aoReceber2(m) {
     for (const msg of m.messages || []) {
       const jid = msg.key && msg.key.remoteJid;
       const idv = msg.key && msg.key.id && `${jid}|${msg.key.id}`;
@@ -1007,7 +1027,7 @@ export function criarSofia({ dir, log, api, sock, conectado = () => true, cmdCon
     if (ligada()) { c.esperaDe = Date.now(); c.esperaAte = Date.now() + 3 * 3600000; c.recepcao = false; }
   }
 
-  return { configurar, aoReceber, marcarMinha, ligada, relatorioDaSemana, retornoEnviado, ativaAgora: () => !!(cfg && client && dentroDaJanela(cfg.janelas)), status };
+  return { configurar, aoReceber, marcarMinha, ligada, relatorioDaSemana, retornoEnviado, salvar: () => salvarConversas(true), ativaAgora: () => !!(cfg && client && dentroDaJanela(cfg.janelas)), status };
 }
 
 // ---------- retorno no tempo certo ----------
