@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "4.2";
+export const SOFIA_VERSAO = "4.3";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -154,10 +154,10 @@ export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) 
   }
   const nomeDe = async (fone) => ((await clienteDe(fone)) || {}).nome || "";
   // Cadastro novo (nome, celular do WhatsApp e, se o cliente quiser, data de nascimento) ou só a data num cadastro que não tinha.
-  async function salvarCliente({ codigo, fone, nome, nascimento }) {
+  async function salvarCliente({ codigo, fone, nome, nascimento, origem = "WhatsApp (Sofia, atendente IA)" }) {
     const cel = so(fone).replace(/^55(?=\d{10,11}$)/, "");
     const corpo = codigo ? { establishment: Number(est), ...(nascimento ? { person_birth_date: nascimento } : {}), ...(nome ? { person_name: nome } : {}), ...(arguments[0].novoCelular ? { person_cellphone: cel } : {}) }
-      : { establishment: Number(est), person_name: nome, person_cellphone: cel, person_dial_code: "+55", person_signup_origin: "WhatsApp (Sofia, atendente IA)", ...(nascimento ? { person_birth_date: nascimento } : {}) };
+      : { establishment: Number(est), person_name: nome, person_cellphone: cel, person_dial_code: "+55", person_signup_origin: origem, ...(nascimento ? { person_birth_date: nascimento } : {}) };
     const r = (await chamar(codigo ? "PUT" : "POST", codigo ? `/v1/establishment/clients/${encodeURIComponent(codigo)}` : "/v1/establishment/clients", corpo)).data || {};
     if (Number(r.error) > 0) throw new Error(r.result || "a AppBarber não aceitou o cadastro");
     return { codigo: codigo || Number(r.person_code) || null };
@@ -194,7 +194,13 @@ export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) 
   }
   // Linhas da agenda num período (até 31 dias; 1 crédito). status "1" = agendado, "2" = realizado.
   async function agenda(ini, fim, st) { const q = new URLSearchParams({ start_date: ini, end_date: fim, status_type: st }); if (filial) q.set("branch_code", filial); return (await chamar("GET", "/v1/appointments/history?" + q)).data || []; }
-  return { servicos, profissionais, horarios, agendamentosDe, ultimoDe, buscarClientes, nomeDe, clienteDe, salvarCliente, criar, cancelarComanda, agenda };
+  // Marca o cliente como "No local" (chegou na barbearia) no agendamento.
+  async function noLocal(codigo) {
+    const r = (await chamar("PUT", `/v1/appointments/${encodeURIComponent(codigo)}/status`, { establishment_code: Number(est), status_type: 3 })).data || {};
+    if (Number(r.error) > 0) throw new Error(r.result || "a AppBarber não aceitou o check-in");
+    return true;
+  }
+  return { servicos, profissionais, horarios, agendamentosDe, ultimoDe, buscarClientes, nomeDe, clienteDe, salvarCliente, criar, cancelarComanda, agenda, noLocal };
 }
 
 // ---------- o que a Sofia pode fazer (ferramentas para o Claude) ----------
@@ -1208,4 +1214,140 @@ export function criarRetorno({ dir, log = () => {}, api = async () => ({}), sock
     try { await passo(e, hoje); } finally { ocupado = false; }
   }
   return { rodar };
+}
+
+// ---------- totem de autoatendimento (tablet na recepção) ----------
+// O tablet manda pedidos pela função "totem"; aqui o servidor (IP liberado na AppBarber) busca os pedidos pela
+// sync-servidor (espera longa), executa na AppBarber e devolve a resposta. Check-in = status "No local" na AppBarber.
+export function criarTotem({ dir, log = () => {}, api = async () => ({}), sock = () => null, req = null, relogio = agoraSP }) {
+  const CHEG = join(dir, "totem-chegadas.json");
+  const ler = (f, pad) => { try { return JSON.parse(readFileSync(f, "utf8")); } catch { return pad; } };
+  let e = null, ab = null, abChave = "", rodando = false, cache = { em: 0, dia: "", lista: [] }, statusEm = 0;
+  let conta = { dia: "", checkins: 0, agendados: 0 };
+  const zera = () => { const d = hojeSP(); if (conta.dia !== d) conta = { dia: d, checkins: 0, agendados: 0 }; };
+  const hr = (h) => String(h).replace(/:00$/, "h").replace(":", "h");
+  // Cadastro por celular, guardado 5 min (busca e agendamento seguidos gastam 1 consulta só).
+  const cads = new Map();
+  async function cadastro(fone) { const k = chaveFone(fone), c = cads.get(k); if (c && Date.now() - c.em < 300000) return c.v; const v = await ab.clienteDe(fone); cads.set(k, { em: Date.now(), v }); return v; }
+  const hhmmDe = (t) => { const m = String(t || "").match(/(\d{2}):(\d{2})/); return m ? `${m[1]}:${m[2]}` : ""; };
+  const amigavel = (err) => /CHOQUE|não está mais livre/i.test(err.message) ? "Esse horário acabou de ser ocupado. Escolha outro, por favor."
+    : /saldo insuficiente/i.test(err.message) ? "A agenda está indisponível agora. Fale com a recepção, por favor." : "Não consegui concluir agora. Fale com a recepção, por favor.";
+
+  // Agenda de hoje (status agendado), guardada por 40 s: várias buscas seguidas gastam 1 crédito só.
+  async function hoje(forcar = false) {
+    const d = hojeSP();
+    if (!forcar && cache.dia === d && Date.now() - cache.em < 40000) return cache.lista;
+    const linhas = await ab.agenda(d, d, "1");
+    cache = { em: Date.now(), dia: d, lista: linhas.map((a) => ({ codigo: Number(a.appointment_code || a.scheduling_code), hora: hhmmDe(a.scheduling_start), fone: chaveFone(a.client_phone), nome: String(a.client_name || "").trim(),
+      profissional: String(a.employee_name || "").trim(), servico: String(a.service_description || "").trim() })).filter((x) => x.codigo && x.hora) };
+    return cache.lista;
+  }
+  const chegadas = () => { const c = ler(CHEG, {}); return c.dia === hojeSP() ? c : { dia: hojeSP(), codigos: [] }; };
+  const gravarChegada = (cods) => { const c = chegadas(); c.codigos = [...new Set([...c.codigos, ...cods])]; try { writeFileSync(CHEG, JSON.stringify(c), { mode: 0o600 }); } catch { /* segue */ } };
+  // Horários de hoje deste celular, juntando os serviços seguidos com o mesmo profissional.
+  async function meusHoje(fone) {
+    const k = chaveFone(fone), feitos = new Set(chegadas().codigos);
+    const lista = (await hoje()).filter((x) => x.fone === k).sort((a, b) => a.hora.localeCompare(b.hora));
+    const grupos = [];
+    for (const x of lista) {
+      const g = grupos.find((y) => y.profissional === x.profissional);
+      if (g) { g.codigos.push(x.codigo); if (x.servico && !g.servicos.includes(x.servico)) g.servicos.push(x.servico); }
+      else grupos.push({ codigos: [x.codigo], hora: x.hora, profissional: x.profissional, servicos: x.servico ? [x.servico] : [], nome: x.nome });
+    }
+    return grupos.map((g) => ({ ...g, chegou: g.codigos.every((c) => feitos.has(c)) }));
+  }
+  async function avisarProf(profissional, texto) {
+    const s = sock(); if (!s || !e.totem.avisar) return false;
+    const p = semAcento(profissional).split(" ")[0];
+    const b = (e.barbers || []).find((x) => x.phone && semAcento(x.name).split(" ")[0] === p);
+    if (!b) return false;
+    const d = so(b.phone), cand = d.length <= 11 ? "55" + d : d;
+    try { const [w] = await s.onWhatsApp(cand); if (!w || !w.exists) return false; await s.sendMessage(w.jid, { text: texto }); return true; } catch { return false; }
+  }
+
+  async function executar(acao, d) {
+    zera();
+    if (acao === "buscar") {
+      const grupos = await meusHoje(d.fone);
+      if (grupos.length) return { agendado: true, nome: primeiroNome(grupos[0].nome), horarios: grupos.map((g) => ({ codigos: g.codigos, hora: g.hora, profissional: primeiroNome(g.profissional), servicos: g.servicos.join(" + "), chegou: g.chegou })) };
+      const cad = await cadastro(d.fone);
+      return { agendado: false, cadastrado: !!cad, nome: cad ? primeiroNome(cad.nome) : "" };
+    }
+    if (acao === "chegou") {
+      const grupos = await meusHoje(d.fone), meus = new Set(grupos.flatMap((g) => g.codigos));
+      const cods = d.codigos.filter((c) => meus.has(c)); if (!cods.length) throw new Error("agendamento não é deste celular");
+      const ja = new Set(chegadas().codigos), g = grupos.find((x) => x.codigos.some((c) => cods.includes(c)));
+      if (cods.every((c) => ja.has(c))) return { profissional: primeiroNome(g.profissional), hora: g.hora, avisado: false, ja: true }; // já tinha feito
+      for (const c of cods) if (!ja.has(c)) await ab.noLocal(c); // "No local" pode alternar: nunca manda duas vezes
+      gravarChegada(cods); conta.checkins++;
+      const avisado = await avisarProf(g.profissional, `✅ ${primeiroNome(g.nome) || "Seu cliente"} chegou para o horário das ${hr(g.hora)} (${g.servicos.join(" + ")}). Check-in feito no totem da recepção.`);
+      log(`Totem: check-in (${primeiroNome(g.nome) || "cliente"}, ${g.hora}).`);
+      return { profissional: primeiroNome(g.profissional), hora: g.hora, avisado };
+    }
+    if (acao === "servicos") {
+      const lista = (await ab.servicos()).filter((x) => x.tipo === 1 && x.nome);
+      return { servicos: lista.map((x) => ({ codigo: x.codigo, nome: x.nome, minutos: x.minutos, preco: Number(x.preco) || null })) };
+    }
+    if (acao === "horarios") {
+      const agora = relogio(), ehHoje = d.data === hojeSP();
+      const lista = (await ab.horarios(d.data, d.servico)).map((p) => ({ codigo: p.codigo, nome: p.nome,
+        horarios: p.horarios.filter((h) => !ehHoje || mins(h) >= agora + 5).map((h) => ({ hora: h, preco: Number((p.precos[h] || [])[0]) || null })) })).filter((p) => p.horarios.length);
+      return { profissionais: lista };
+    }
+    if (acao === "agendar") {
+      const todos = await ab.servicos(), servs = d.servicos.map((c) => todos.find((x) => x.codigo === c)).filter(Boolean);
+      if (servs.length !== d.servicos.length) throw new Error("serviço não encontrado");
+      const livre = (await ab.horarios(d.data, servs[0].codigo)).find((p) => p.codigo === d.profissional);
+      if (!livre || !livre.horarios.includes(d.hora)) throw new Error("CHOQUE: horário não está mais livre");
+      let cad = await cadastro(d.fone);
+      if (!cad) {
+        if (!d.nome || d.nome.split(" ").length < 2) throw new Error("falta nome e sobrenome");
+        await ab.salvarCliente({ fone: d.fone, nome: d.nome, origem: "Totem da recepção" });
+        cad = { nome: d.nome }; cads.set(chaveFone(d.fone), { em: Date.now(), v: cad });
+      }
+      const r = await ab.criar({ fone: d.fone, nome: cad.nome, servicos: servs, profissional: d.profissional, quando: `${d.data} ${d.hora}`, obs: "Agendado pelo cliente no totem da recepção" });
+      conta.agendados++; cache.em = 0;
+      // Marcou para agora (até 1h30): ele já está aqui, então o check-in vai junto.
+      let chegou = false;
+      if (d.data === hojeSP() && mins(d.hora) - relogio() <= 90 && r.codigos.length) {
+        try { for (const c of r.codigos) await ab.noLocal(c); gravarChegada(r.codigos); chegou = true; conta.checkins++; } catch (err) { log("Totem: check-in do agendamento novo falhou: " + err.message); }
+      }
+      const pn = primeiroNome(livre.nome);
+      if (d.data === hojeSP()) await avisarProf(livre.nome, `🆕 ${primeiroNome(cad.nome)} agendou pelo totem da recepção: hoje às ${hr(d.hora)} (${servs.map((x) => x.nome).join(" + ")})${chegou ? " e já está na barbearia" : ""}.`);
+      log(`Totem: agendamento (${primeiroNome(cad.nome)}, ${d.data} ${d.hora}).`);
+      return { nome: primeiroNome(cad.nome), data: d.data, hora: d.hora, profissional: pn, servicos: servs.map((x) => x.nome).join(" + "), chegou };
+    }
+    throw new Error("ação desconhecida");
+  }
+
+  async function tratar(p) {
+    let ok = true, resposta;
+    try { resposta = await executar(p.acao, p.dados || {}); }
+    catch (err) { ok = false; resposta = { erro: amigavel(err) }; log(`Totem: ${p.acao} não deu certo (${err.message}).`); }
+    await api("POST", { company_id: p.company_id, acao: "totem_resposta", id: p.id, ok, resposta }).catch((err) => log("Totem: resposta não enviada: " + err.message));
+  }
+  async function laco() {
+    rodando = true;
+    while (e) {
+      try {
+        const r = await api("GET", null, `?acao=totem_espera&empresas=${encodeURIComponent(e.company_id)}`);
+        for (const p of r.pedidos || []) tratar(p); // em paralelo: o próximo pedido não espera este terminar
+      } catch (err) { log("Totem: " + err.message); await espera(15000); }
+    }
+    rodando = false;
+  }
+  async function status() {
+    if (!e || Date.now() - statusEm < 30 * 60000) return; statusEm = Date.now(); zera();
+    const quando = new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+    await api("POST", { company_id: e.company_id, acao: "tt_status", status: `ok: ${quando} · hoje: ${conta.checkins} check-in(s) e ${conta.agendados} agendamento(s) pelo totem.` }).catch(() => {});
+  }
+  function configurar(emp) {
+    e = emp && emp.totem && emp.appbarber ? emp : null;
+    if (!e) return;
+    const k = `${e.appbarber.codigo_estabelecimento}|${e.appbarber.appbarber_api_key}`;
+    if (!ab || abChave !== k) { abChave = k; ab = ferramentasAppBarber({ cfg: e.appbarber, ...(req ? { req } : {}), creditos: (n, zero) => api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: n, ...(zero ? { sem_saldo: true } : {}) }).catch(() => {}) }); }
+    if (!rodando) { laco(); log("Totem da recepção ligado."); }
+    status();
+  }
+  return { configurar, executar };
 }

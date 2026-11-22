@@ -4068,7 +4068,7 @@ ${rows.length ? '' : emptyBarbers()}
     const ex = JSON.stringify([
       { data: iso(new Date()), barbeiro: state.barbers[0]?.name || 'Nome do barbeiro', faturamento: 420.5, servicos: 9, clientes: 8, checklist_pop: 1, horas_disponiveis: 8, horas_ocupadas: 6.5, planos_mensais: 1, clientes_retorno: 5, venda_produtos: 2 },
     ], null, 2);
-    return `${apiTutorial()}${autoSyncCard()}${abCard()}${waRemindCard()}${clRemindCard()}${iaCard()}${fbCard()}${bdCard()}${rtCard()}${wbCard()}
+    return `${apiTutorial()}${autoSyncCard()}${abCard()}${waRemindCard()}${clRemindCard()}${iaCard()}${ttCard()}${fbCard()}${bdCard()}${rtCard()}${wbCard()}
       <section class="section card" id="api-ref">
         <h2 class="section-title">Como funciona ${tip('api')}</h2>
         <p class="section-note">Outro sistema (agenda, caixa, ERP) envia os resultados de cada barbeiro por dia. Os números entram no ranking na hora, junto com os lançados à mão.</p>
@@ -4369,6 +4369,39 @@ Content-Type: application/json</pre>
         <p class="form-msg" data-msg></p>
         <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
       </form></section>`;
+  }
+  // Totem de autoatendimento: página para deixar aberta num tablet na recepção. O cliente digita o celular e faz o
+  // check-in do horário ("No local" na AppBarber) ou agenda na hora. O link tem um código secreto (só o hash fica salvo).
+  function ttCard() {
+    if (!isGestor(currentUser())) return '';
+    const it = Cloud.enabled ? ui.integ : (state.integ || {});
+    if (!it || it.erro) return '';
+    const st = String(it.tt_status || ''), on = !!it.tt_on, noAb = !it.est_code, bad = /^erro/.test(st);
+    const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const online = it.tt_seen_at && Date.now() - new Date(it.tt_seen_at).getTime() < 120000;
+    const link = ui.ttLink || '';
+    return `<section class="section card as-card">
+      <h2 class="section-title">${icon('monitor')} Totem de autoatendimento</h2>
+      <p class="section-note">Uma página para deixar aberta num <b>tablet na recepção</b>. O cliente digita o celular: se tem horário hoje, toca em <b>Cheguei</b> e o horário fica como <b>No local</b> na AppBarber (e o profissional é avisado no WhatsApp); se não tem, <b>agenda na hora</b>, escolhendo serviço, profissional, dia e horário livre. Cliente novo informa nome e sobrenome e já sai cadastrado.</p>
+      <p class="section-note">${icon('alert')} Funciona pelo servidor do WhatsApp dos clientes (IP liberado na AppBarber). Cada consulta gasta cerca de 1 crédito da AppBarber (a agenda do dia fica guardada por 40 segundos).</p>
+      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}
+      <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : online ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.tt_status_at ? 'Atualizado ' + when(it.tt_status_at) : ''}</small>${st ? `<p class="muted as-msg">${esc(st.replace(/^(ok|erro): /, ''))}</p>` : ''}` : '<span class="chip">Aguardando o servidor</span> <small class="muted">rode o instalador do WhatsApp no servidor para ativar</small>'}</div>
+      <form class="form" data-form="ttSave" novalidate>
+        <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''} ${noAb ? 'disabled' : ''}><span><b>Totem ligado</b><small>Desligado, o tablet mostra “Totem desligado”.</small></span></label>
+        <label class="check"><input type="checkbox" name="notify" ${it.tt_notify !== false ? 'checked' : ''}><span><b>Avisar o profissional no WhatsApp</b><small>Quando o cliente faz check-in ou agenda para hoje (usa o telefone do profissional cadastrado na Equipe).</small></span></label>
+        <label class="field"><span>Dá para agendar até quantos dias</span><input class="input num" type="number" name="days" min="1" max="30" step="1" value="${esc(String(it.tt_days || 7))}"><small class="muted">1 = só hoje.</small></label>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
+      </form>
+      <div class="tt-link">
+        <h3 class="section-sub">Link do tablet</h3>
+        ${link ? `<p class="section-note">Abra este link no navegador do tablet (ele fica salvo no aparelho). <b>Guarde-o só no tablet:</b> quem tiver o link consegue ver os horários de hoje digitando o celular de um cliente.</p>
+          <p class="tt-url" id="tt-url">${esc(link)}</p>
+          <div class="row-btns"><button class="btn btn-sm btn-primary" type="button" data-action="ttCopy">${icon('copy')} Copiar link</button> <a class="btn btn-sm" href="${esc(link)}" target="_blank" rel="noopener">Abrir</a></div>`
+        : `<p class="section-note">${it.tt_token_hash ? 'Já existe um link gerado (por segurança, ele não fica guardado no app). Se perdeu o link ou trocou de tablet, gere um novo: o anterior para de funcionar.' : 'Gere o link e abra no tablet da recepção.'}</p>
+          <button class="btn btn-sm ${it.tt_token_hash ? '' : 'btn-primary'}" type="button" data-action="ttLink" ${noAb ? 'disabled' : ''}>${icon('plug')} ${it.tt_token_hash ? 'Gerar novo link' : 'Gerar link do totem'}</button>`}
+      </div>
+    </section>`;
   }
   // Sofia, a atendente IA: responde o WhatsApp dos clientes nos dias e horários escolhidos e marca, remarca e cancela na AppBarber.
   const IA_DIAS = [[1, 'Segunda'], [2, 'Terça'], [3, 'Quarta'], [4, 'Quinta'], [5, 'Sexta'], [6, 'Sábado'], [0, 'Domingo']];
@@ -7806,6 +7839,19 @@ Content-Type: application/json</pre>
       iaArtsSave(arts, 'Arte retirada.');
     },
     // Atendente IA: mais um horário no dia (até 4) ou tirar um.
+    async ttLink() {
+      const cur = (Cloud.enabled ? ui.integ : state.integ) || {};
+      if (cur.tt_token_hash && !confirm('Gerar um link novo? O link que está no tablet para de funcionar.')) return;
+      const b = new Uint8Array(24); crypto.getRandomValues(b);
+      const token = [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+      const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token)))].map(x => x.toString(16).padStart(2, '0')).join('');
+      const emp = Cloud.enabled ? Cloud.companyId : 'demo';
+      const link = `${location.origin}/totem.html#e=${encodeURIComponent(emp)}&t=${token}`;
+      if (!Cloud.enabled) { state.integ = { ...cur, tt_token_hash: hash }; save(); ui.ttLink = link; return render(); }
+      Cloud.integ.save({ tt_token_hash: hash }).then(r => { ui.integ = r || { ...cur, tt_token_hash: hash }; ui.ttLink = link; toast('Link do totem gerado.'); render(); })
+        .catch(e => { const m = Cloud.message(e); toast(/tt_|column|schema cache/i.test(m) ? 'O totem ainda está sendo ativado no servidor.' : m); });
+    },
+    ttCopy() { copyText(ui.ttLink || '', document.getElementById('tt-url'), 'Link do totem copiado.'); },
     iaWinAdd(el) {
       const box = el.closest('.ia-range'); if (!box) return;
       if (box.querySelectorAll('.ia-win').length >= 4) return toast('Até 4 horários por dia.');
@@ -8908,6 +8954,16 @@ Content-Type: application/json</pre>
       setMsg(f, 'Salvando…', true);
       Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(row.rt_on ? `Retorno no tempo certo ligado: até ${daily} por dia.` : 'Retorno no tempo certo desligado.'); render(); })
         .catch(e => { const m = Cloud.message(e); setMsg(f, /rt_|column|schema cache/i.test(m) ? 'O retorno no tempo certo ainda está sendo ativado no servidor.' : m); });
+    },
+    ttSave(f) {
+      const days = Math.round(Number(f.elements.days.value) || 0);
+      if (days < 1 || days > 30) return setMsg(f, 'Dias para agendar: de 1 a 30.');
+      const row = { tt_on: !!f.elements.on.checked, tt_notify: !!f.elements.notify.checked, tt_days: days };
+      const cur = (Cloud.enabled ? ui.integ : state.integ) || {};
+      if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Totem salvo.'); return render(); }
+      setMsg(f, 'Salvando…', true);
+      Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(row.tt_on ? 'Totem ligado.' : 'Totem desligado.'); render(); })
+        .catch(e => { const m = Cloud.message(e); setMsg(f, /tt_|column|schema cache/i.test(m) ? 'O totem ainda está sendo ativado no servidor.' : m); });
     },
     wbRemind(f) {
       const daily = Math.round(Number(f.elements.daily.value) || 0), mn = Math.round(Number(f.elements.min.value) || 0), mx = Math.round(Number(f.elements.max.value) || 0);

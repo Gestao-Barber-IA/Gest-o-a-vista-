@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-22-totem', date: '2026-11-22', title: 'Totem de autoatendimento na recepção', items: [
+    ['novo', 'Em Integração, o cartão Totem de autoatendimento: gere o link e deixe aberto num tablet na recepção. O cliente digita o celular; se tem horário hoje, toca em Cheguei e o horário fica como "No local" na AppBarber, com aviso ao profissional no WhatsApp.'],
+    ['novo', 'Quem não tem horário agenda na hora no próprio tablet: escolhe o serviço, o profissional, o dia e um horário livre. Cliente novo informa nome e sobrenome e já sai cadastrado. Agendando para agora, o check-in já é feito junto.'],
+  ] },
   { id: '2026-11-22-sofia-endereco', date: '2026-11-22', title: 'Sofia: resposta ao convite de retorno não fica mais sem resposta', items: [
     ['correcao', 'O WhatsApp às vezes identifica o mesmo cliente por dois endereços diferentes. Quando o convite saía por um e a resposta chegava pelo outro, a Sofia não ligava as duas mensagens e o cliente ficava sem resposta. Agora ela reconhece que é o mesmo cliente, lê o convite e continua a conversa (o mesmo vale para a pausa quando a recepção responde pelo celular).'],
   ] },
