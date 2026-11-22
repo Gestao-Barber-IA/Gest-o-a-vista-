@@ -466,7 +466,7 @@
     return `<div class="notif-panel" role="dialog" aria-label="Notificações">
       <div class="notif-head"><b>Notificações</b><button class="icon-btn" data-action="notifOpen" aria-label="Fechar">${icon('x')}</button></div>
       ${pending ? `<a class="notif-item notif-app" href="#barbeiros">${icon('users')}<span><b>${pending} aprovação${pending > 1 ? 'ões' : ''} pendente${pending > 1 ? 's' : ''}</b><small>Toque para aprovar em Adicionar profissional</small></span></a>` : ''}
-      ${(() => { const ab = abAviso(); return ab ? `<p class="notif-sub">${icon('wallet')} Créditos da AppBarber</p><ul class="notif-list"><li class="notif-item new notif-pen"><a class="notif-penbtn" href="#integracao">${icon('alert')}<span><span><b>${ab.nivel === 'zero' ? 'Os créditos acabaram' : 'Créditos acabando'}</b></span><small>${ab.nivel === 'zero' ? 'A sincronização e o lembrete dos clientes pararam. Recarregue na AppBarber e registre a recarga.' : `Saldo estimado: ${nf0.format(ab.saldo)}${ab.restam !== null ? ` · dura cerca de ${nf0.format(Math.floor(ab.restam))} dias` : ''}`} · toque para abrir</small></span></a></li></ul>` : ''; })()}
+      ${(() => { const ab = abAviso(); return ab ? `<p class="notif-sub">${icon('wallet')} Créditos da AppBarber</p><ul class="notif-list"><li class="notif-item new notif-pen"><a class="notif-penbtn" href="#creditos">${icon('alert')}<span><span><b>${ab.nivel === 'zero' ? 'Os créditos acabaram' : 'Créditos acabando'}</b></span><small>${ab.nivel === 'zero' ? 'A sincronização e o lembrete dos clientes pararam. Recarregue na AppBarber e registre a recarga.' : `Saldo estimado: ${nf0.format(ab.saldo)}${ab.restam !== null ? ` · dura cerca de ${nf0.format(Math.floor(ab.restam))} dias` : ''}`} · toque para abrir</small></span></a></li></ul>` : ''; })()}
       ${relUnseen(user) ? `<p class="notif-sub">${icon('chart')} Relatório da Fiscalização</p><ul class="notif-list"><li class="notif-item new notif-pen"><button class="notif-penbtn" data-action="relOpen">${icon('chart')}<span><span><b>Relatório de ${esc(monthRange(relPrevYm()).label)} pronto</b></span><small>Resumo do mês, quem precisa de atenção e sugestões de atitudes · toque para abrir</small></span></button></li></ul>` : ''}
       ${(() => { const pu = penUnseen(user); if (!pu) return ''; const l = penList().slice().sort((a, b) => String(b.created_at || b.day).localeCompare(String(a.created_at || a.day))).slice(0, pu); return `<p class="notif-sub">${icon('alert')} Penalidades novas</p><ul class="notif-list">${l.map(x => `<li class="notif-item new notif-pen"><button class="notif-penbtn" data-action="penOpen">${avatar(barberById(x.barber_id) || { name: '?' }, 36)}<span><span><b>${esc((barberById(x.barber_id) || { name: 'Profissional' }).name)}</b> levou penalidade (${esc((DISC_KIND[x.kind] || ['falta'])[0].toLowerCase())})</span><small>${dayLabel(String(x.day).slice(0, 10))} · toque para ver em Fiscalização</small></span></button></li>`).join('')}</ul>`; })()}
       <p class="notif-sub">${icon('trophy')} Ultrapassagens no ranking</p>
@@ -4068,8 +4068,35 @@ ${rows.length ? '' : emptyBarbers()}
     const ex = JSON.stringify([
       { data: iso(new Date()), barbeiro: state.barbers[0]?.name || 'Nome do barbeiro', faturamento: 420.5, servicos: 9, clientes: 8, checklist_pop: 1, horas_disponiveis: 8, horas_ocupadas: 6.5, planos_mensais: 1, clientes_retorno: 5, venda_produtos: 2 },
     ], null, 2);
-    return `${apiTutorial()}${autoSyncCard()}${abCard()}${waRemindCard()}${clRemindCard()}${iaCard()}${ttCard()}${upCard()}${fbCard()}${bdCard()}${rtCard()}${wbCard()}
-      <section class="section card" id="api-ref">
+    autoSyncCard(); // carrega a configuração da integração (na primeira vez)
+    const it = (Cloud.enabled ? ui.integ : state.integ) || {};
+    const sec = INT_SECS.find(x => x[0] === ui.intSec);
+    if (sec) return `<div class="int-back"><button type="button" class="btn btn-sm" data-action="intSec" data-s="">${icon('left')} Integrações</button></div>${sec[4](ex)}`;
+    const tiles = g => INT_SECS.filter(x => x[5] === g && (x[0] === 'api' || x[0] === 'passo' || x[4](ex))).map(([k, t, ic, d, , , stf]) => { const st = stf ? stf(it) : null;
+      return `<button type="button" class="int-tile" data-action="intSec" data-s="${k}"><span class="int-ic">${icon(ic)}</span><span class="int-tx"><b>${t}</b><small>${d}</small>${st ? `<span class="chip ${st[1]}">${st[0]}</span>` : ''}</span>${icon('right')}</button>`; }).join('');
+    return `<p class="section-note int-intro">Escolha o que você quer configurar:</p>${INT_GRUPOS.map(([g, nome]) => { const h = tiles(g); return h ? `<h3 class="int-grp">${nome}</h3><div class="int-grid">${h}</div>` : ''; }).join('')}`;
+  }
+  // Integração & API em cartões: cada um abre só a sua configuração (antes era tudo numa página só, muito longa).
+  const INT_GRUPOS = [['agenda', 'Agenda e dados'], ['whats', 'Atendimento no WhatsApp'], ['recepcao', 'Recepção'], ['mkt', 'Mensagens automáticas para clientes'], ['tec', 'Técnico']];
+  // status: [texto, classe do chip] a partir dos dados da integração
+  const intSt = (on, st, extra) => !on ? ['Desligado', ''] : /^erro/.test(String(st || '')) ? ['Com erro', 'chip-bad'] : /^desconectado/.test(String(st || '')) ? ['Desconectado', 'chip-bad'] : extra || ['Ligado', 'chip-ok'];
+  const INT_SECS = [
+    ['passo', 'Passo a passo da integração', 'book', 'Como ligar a AppBarber ou outro sistema', () => apiTutorial(), 'agenda'],
+    ['sync', 'Sincronização AppBarber', 'plug', 'Atendimentos e comandas entram sozinhos, e os créditos da API', () => autoSyncCard() + abCard(), 'agenda',
+      it => !it.est_code ? ['Desligada', ''] : it.active === false ? ['Pausada', ''] : /^erro/.test(String(it.last_status || '')) ? ['Com erro', 'chip-bad'] : (abCred(it) || {}).nivel === 'zero' ? ['Sem créditos', 'chip-bad'] : (abCred(it) || {}).nivel === 'baixo' ? ['Créditos acabando', 'chip-bad'] : ['Funcionando', 'chip-ok']],
+    ['ia', 'Atendente IA (Sofia)', 'chat', 'Responde e agenda pelo WhatsApp da barbearia', () => iaCard(), 'whats', it => intSt(it.ia_on, it.ia_status)],
+    ['clientes', 'Lembrete de agendamento', 'bell', 'Aviso do horário para o cliente no WhatsApp', () => clRemindCard(), 'whats', it => intSt(it.cl_on, it.cl_status)],
+    ['equipe', 'Lembretes para a equipe', 'users', 'Checklist do dia no WhatsApp de cada profissional', () => waRemindCard(), 'whats', it => intSt(it.wa_on, it.wa_status)],
+    ['totem', 'Totem de autoatendimento', 'monitor', 'Check-in e agendamento num tablet na recepção', () => ttCard(), 'recepcao', it => intSt(it.tt_on, it.tt_status)],
+    ['ofertas', 'Ofertas no final do agendamento', 'gift', 'Adicionais oferecidos pelo totem e pela Sofia', () => upCard(), 'recepcao', it => { const n = (it.upsell || []).length; return n ? [`${n} oferta${n > 1 ? 's' : ''}`, 'chip-ok'] : ['Nenhuma', '']; }],
+    ['retorno', 'Retorno no tempo certo', 'clock', 'Convite no ritmo de cada cliente', () => rtCard(), 'mkt', it => intSt(it.rt_on, it.rt_status)],
+    ['reconquista', 'Reconquista de sumidos', 'rocket', 'Presente de retorno para quem não vem há meses', () => wbCard(), 'mkt', it => intSt(it.wb_on, it.wb_status)],
+    ['aniversario', 'Parabéns aos aniversariantes', 'sparkle', 'Mensagem no dia do aniversário', () => bdCard(), 'mkt', it => intSt(it.bd_on, it.bd_status)],
+    ['feedback', 'Pedido de feedback', 'vote', 'Opinião dos clientes novos depois do atendimento', () => fbCard(), 'mkt', it => intSt(it.fb_on, it.fb_status)],
+    ['api', 'API e importação', 'file', 'Chave da API, envio de dados e planilha (CSV)', ex => apiRef(ex), 'tec'],
+  ];
+  function apiRef(ex) {
+    return `<section class="section card" id="api-ref">
         <h2 class="section-title">Como funciona ${tip('api')}</h2>
         <p class="section-note">Outro sistema (agenda, caixa, ERP) envia os resultados de cada barbeiro por dia. Os números entram no ranking na hora, junto com os lançados à mão.</p>
         <div class="field"><span>Chave da API</span><div class="invite-link" id="api-key">${esc(state.apiKey)}</div></div>
@@ -4158,7 +4185,7 @@ Content-Type: application/json</pre>
           <li><b>Eles fazem o envio</b> dos totais de cada profissional por dia, ao longo do dia ou uma vez por dia depois do fechamento.</li>
           <li><b>Confira.</b> Quando chegar o primeiro envio, os números aparecem em Lançamentos marcados como <i>API</i>. Se faltar algum profissional, confira se o nome é igual nos dois sistemas.</li>
         </ol>
-        <p class="tut-warn">${icon('lock')} A chave da API funciona como uma senha da sua empresa: envie só para quem vai fazer a integração. Se ela vazar, gere uma nova em <a href="#api-ref">Chave da API</a> (a antiga para de funcionar).</p></details>
+        <p class="tut-warn">${icon('lock')} A chave da API funciona como uma senha da sua empresa: envie só para quem vai fazer a integração. Se ela vazar, gere uma nova em <button type="button" class="link-btn" data-action="intSec" data-s="api">API e importação</button> (a antiga para de funcionar).</p></details>
       <details class="tut"><summary><b>Meu sistema não tem integração</b><small>Dá para usar do mesmo jeito.</small></summary>
         <ul class="tut-steps">
           <li><b>Importe uma planilha</b>: exporte o relatório do seu sistema em CSV e use <i>Importar planilha</i> no fim desta página.</li>
@@ -7628,7 +7655,8 @@ Content-Type: application/json</pre>
     if (route !== 'fechamento') ui.fcPeek = false;
     if (route === 'fechamento' && new Date().getDate() <= 7) DB.pref.set('fcSeen', addMonths(curYm(), -1));
     if (route !== 'time') ui.profSel = null;
-    const alias = { empresa: 'empresa', integracao: 'integracao', horarios: 'indicadores' };
+    const alias = { empresa: 'empresa', integracao: 'integracao', creditos: 'integracao', horarios: 'indicadores' };
+    if (route === 'creditos') ui.intSec = 'sync'; else if (route === 'integracao' && h === 'integracao' && ui.cfgTab !== 'integracao') ui.intSec = '';
     if (route === 'horarios') setTimeout(() => { const el = document.getElementById('horarios'); if (el) el.scrollIntoView({ block: 'start' }); }, 450);
     if (alias[route]) { ui.cfgTab = alias[route]; route = 'configuracoes'; }
     if (route === 'gestao-visual') route = 'inicio';
@@ -8175,7 +8203,8 @@ Content-Type: application/json</pre>
       setTimeout(() => { const f = $('#hg-fat'); if (f) { f.focus(); f.scrollIntoView({ block: 'center' }); } }, 150);
     },
     hgEdit() { ui.hgEdit = !ui.hgEdit; ui.hgYm = null; render(); if (ui.hgEdit) setTimeout(() => { const f = $('#hg-fat'); if (f) { f.focus(); f.scrollIntoView({ block: 'center' }); } }, 50); },
-    cfgTab(el) { ui.cfgTab = el.dataset.t; ui.confirm = null; render(); },
+    cfgTab(el) { ui.cfgTab = el.dataset.t; ui.intSec = ''; ui.confirm = null; render(); },
+    intSec(el) { ui.intSec = el.dataset.s || ''; ui.confirm = null; render(); window.scrollTo(0, 0); },
     pdLayout(el) { state.theme = { ...pdTheme(), layout: el.dataset.v }; save(); render(); toast('Formato do escudo: ' + (PD_LAYOUTS.find(l => l.k === el.dataset.v) || {}).n + '.'); },
     pdAutoToggle(el) {
       const th = pdTheme(), k = el.dataset.v, off = th.autoOff.includes(k);

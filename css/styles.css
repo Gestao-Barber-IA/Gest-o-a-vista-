@@ -3084,3 +3084,20 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .up-row:last-of-type { border-bottom: 0; }
 .up-warn { grid-column: 1 / -1; margin: 0; color: var(--danger); font-size: 13px; display: flex; gap: 6px; align-items: center; }
 @media (max-width: 720px) { .up-row { grid-template-columns: 1fr 1fr; } .up-row .up-val { order: 0; } }
+
+/* Integração & API em cartões */
+.int-intro { margin: 4px 0 2px; }
+.int-grp { margin: 22px 0 10px; font-family: var(--font-display); font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.int-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.int-tile { display: flex; align-items: flex-start; gap: 14px; width: 100%; text-align: left; padding: 16px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--surface); color: var(--fg); font: inherit; cursor: pointer; transition: border-color .15s, transform .15s; }
+.int-tile:hover { border-color: var(--line-accent); }
+.int-tile:active { transform: scale(.99); }
+.int-tile .int-ic { flex: 0 0 auto; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: var(--surface-2); color: var(--accent); }
+.int-tile .int-ic svg { width: 22px; height: 22px; }
+.int-tile .int-tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.int-tile .int-tx b { font-size: 15px; }
+.int-tile .int-tx small { color: var(--muted); font-size: 13px; line-height: 1.35; }
+.int-tile .int-tx .chip { align-self: flex-start; margin-top: 8px; }
+.int-tile > svg:last-child { flex: 0 0 auto; width: 18px; height: 18px; color: var(--faint); align-self: center; }
+.int-back { margin: 4px 0 12px; }
+@media (max-width: 520px) { .int-grid { grid-template-columns: 1fr; } }
