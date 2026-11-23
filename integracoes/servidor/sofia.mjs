@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "5.3";
+export const SOFIA_VERSAO = "5.4";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -1115,7 +1115,10 @@ export function criarSofia({ dir, log, api, sock, conectado = () => true, cmdCon
       if (!dentroDaJanela(cfg.janelas) && !continua) { c.fila.push(msgCli); if (!c.noturna) { c.noturna = Date.now(); c.pendTipo = "recente"; } clearTimeout(c.timer); continue; }
       c.fila.push(msgCli);
       // Espera o cliente terminar de escrever (várias mensagens seguidas viram uma só).
-      clearTimeout(c.timer); c.timer = setTimeout(() => processar(jid).catch(() => {}), 7000);
+      // "Pode sim", "sim", "claro"… sozinho costuma vir antes do dado pedido (ex.: a data de nascimento na mensagem seguinte):
+      // espera um pouco mais para responder tudo junto, sem perguntar o que ele já está mandando.
+      const soSim = typeof msgCli === "string" && /^(pode(\s+sim)?|sim|claro|ok|okay|beleza|blz|pode ser|bora|com certeza|isso)[\s!.,😊🙂👍]*$/i.test(msgCli.trim());
+      clearTimeout(c.timer); c.timer = setTimeout(() => processar(jid).catch(() => {}), soSim && c.fila.length === 1 ? 16000 : 7000);
     }
   }
 
