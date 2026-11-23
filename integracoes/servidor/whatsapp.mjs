@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "6.9";
+const VERSAO = "7.0";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -145,7 +145,8 @@ async function enviar(numero, texto) {
   await sock.sendPresenceUpdate("composing", r.jid).catch(() => {});
   await espera(2500 + Math.random() * 2500);
   await sock.sendPresenceUpdate("paused", r.jid).catch(() => {});
-  await sock.sendMessage(r.jid, { text: texto });
+  const m = await sock.sendMessage(r.jid, { text: texto });
+  return { jid: r.jid, id: m && m.key && m.key.id };
 }
 const agoraSP = () => { const p = new Intl.DateTimeFormat("en-GB", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date()); const [h, m] = p.split(":").map(Number); return h * 60 + m; };
 const min = (t) => { const [h, m] = String(t || "13:00").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
@@ -390,7 +391,15 @@ async function reconquista(e, hoje) {
       let texto = versoes[Math.floor(Math.random() * versoes.length)].replace(/\{Saudacao\}/g, sd).replace(/\{saudacao\}/g, sd.toLowerCase())
         .replace(/\{cliente\}/g, nome || "tudo bem").replace(/\{barbearia\}/g, e.nome).replace(/https?:\/\/\S+/gi, "").trim();
       env[k] = { em: hoje }; writeFileSync(WB_ENV, JSON.stringify(env)); wbUltimo = Date.now();
-      try { await enviar(f, texto); erroSeguido = 0; log(`${e.nome}: reconquista enviada (${nome || "cliente"}).`); }
+      try {
+        const env1 = await enviar(f, texto); erroSeguido = 0; log(`${e.nome}: reconquista enviada (${nome || "cliente"}).`);
+        // Com o texto do presente configurado, a Sophia responde quem aceitar (até 24 h depois do convite).
+        if (c.presente && sofia && sofia.conviteEnviado && env1) {
+          const presente = c.presente.replace(/\{cliente\}/g, nome || "").replace(/,\s*!/g, "!").replace(/\s+!/g, "!");
+          sofia.conviteEnviado(env1.jid, env1.id, { fone: so(f).length <= 11 ? "55" + so(f) : so(f), nome, texto, tipo: "reconquista: convite com presente de retorno para quem não vem há meses", horas: 24,
+            detalhe: `[Se o cliente aceitar o presente (ex.: "sim", "pode", "quero"), responda com exatamente esta mensagem, sem mudar o conteúdo:\n${presente}\nDepois siga para agendar normalmente e coloque na observação do agendamento "Presente de retorno (reconquista)" e o presente em poucas palavras. Se ele recusar ou disser SAIR, agradeça em uma frase e não insista.]` });
+        }
+      }
       catch (err) { log(`${e.nome}: reconquista não enviada (${err.message}).`); if (!/sem WhatsApp/.test(err.message) && ++erroSeguido >= 3) pausadoDia = hoje; }
       break; // uma por vez; a próxima no próximo intervalo
     }

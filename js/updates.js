@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-23-presente', date: '2026-11-23', title: 'Reconquista: a atendente IA envia o presente de retorno', items: [
+    ['novo', 'No cartão Reconquista de clientes sumidos, o campo Presente de retorno: quando o cliente aceita o presente, a atendente IA responde com esse texto (até 24 h depois do convite, mesmo fora do horário dela) e já ajuda a agendar, anotando o presente na observação do agendamento.'],
+  ] },
   { id: '2026-11-23-ranking-novato', date: '2026-11-23', title: 'Ranking justo para quem entrou no meio do mês', items: [
     ['melhoria', 'Quem começou na equipe no meio do mês tem a nota dos indicadores de total (faturamento, serviços, clientes, planos, produtos, extras e checklist) proporcional aos dias que trabalhou, como se tivesse os mesmos dias de quem mais trabalhou. Os números mostrados continuam os reais, a nota dos outros não muda e o título (MVP ou Destaque) usa os números reais. No ranking aparece "proporcional" ao lado do nome.'],
     ['novo', 'Em Equipe, o campo Data de início na equipe (no cadastro de um profissional novo e em cada profissional). Com a data preenchida, o sistema sabe exatamente quando ele começou; sem ela, descobre pelo primeiro lançamento.'],

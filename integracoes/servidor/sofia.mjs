@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "5.4";
+export const SOFIA_VERSAO = "5.5";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -1124,15 +1124,18 @@ export function criarSofia({ dir, log, api, sock, conectado = () => true, cmdCon
 
   // Convite do "retorno no tempo certo" enviado: a Sofia fica sabendo do horário sugerido e, se a Sofia estiver ligada,
   // responde o cliente nas próximas 3 horas (se a recepção entrar na conversa, ela sai como sempre).
-  function retornoEnviado(jid, id, { fone = "", nome = "", texto = "", detalhe = "" } = {}) {
+  // Convite automático enviado (retorno no tempo certo, reconquista): a Sophia fica sabendo do convite e, ligada,
+  // responde o cliente nas próximas horas, mesmo fora do horário dela (se a recepção entrar na conversa, ela sai).
+  function conviteEnviado(jid, id, { fone = "", nome = "", texto = "", detalhe = "", tipo = "convite de retorno: o cliente costuma voltar nesse prazo", horas = 3 } = {}) {
     if (id) daSofia.add(id);
     const c = obter(jid, null); if (!c.fone && fone) c.fone = fone; if (!c.pushName && nome) c.pushName = nome;
-    anotar(c, "Mensagem automática da barbearia (convite de retorno: o cliente costuma voltar nesse prazo)", `${texto} ${detalhe}`.trim());
+    anotar(c, `Mensagem automática da barbearia (${tipo})`, `${texto} ${detalhe}`.trim());
     c.ultima = Date.now();
-    if (ligada()) { c.esperaDe = Date.now(); c.esperaAte = Date.now() + 3 * 3600000; c.recepcao = false; }
+    if (ligada()) { c.esperaDe = Date.now(); c.esperaAte = Date.now() + horas * 3600000; c.recepcao = false; }
   }
+  const retornoEnviado = (jid, id, x) => conviteEnviado(jid, id, x);
 
-  return { configurar, aoReceber, marcarMinha, ligada, relatorioDaSemana, retornoEnviado, salvar: () => salvarConversas(true), ativaAgora: () => !!(cfg && client && dentroDaJanela(cfg.janelas)), status };
+  return { configurar, aoReceber, marcarMinha, ligada, relatorioDaSemana, retornoEnviado, conviteEnviado, salvar: () => salvarConversas(true), ativaAgora: () => !!(cfg && client && dentroDaJanela(cfg.janelas)), status };
 }
 
 // ---------- retorno no tempo certo ----------
