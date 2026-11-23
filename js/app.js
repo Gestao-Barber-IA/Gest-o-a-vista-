@@ -4451,6 +4451,7 @@ Content-Type: application/json</pre>
         <label class="field up-val"><span>Valor (R$)</span><input class="input num" name="v${i}" type="number" min="0" max="9999" step="1" value="${o.valor != null && o.valor !== '' ? esc(String(o.valor)) : ''}" placeholder="15"></label>
         <label class="field"><span>Serviço(s) na agenda</span><input class="input" name="s${i}" list="up-ab" maxlength="160" value="${esc(o.servicos || '')}" placeholder="Ex.: Sobrancelha"></label>
         <label class="field"><span>Oferecer quando o serviço tiver</span><input class="input" name="q${i}" maxlength="120" value="${esc(o.quando || '')}" placeholder="Ex.: corte, sem barba"></label>
+        <label class="check up-sem"><input type="checkbox" name="z${i}" ${o.semTempo ? 'checked' : ''}><span>Vai na comanda, sem tempo extra na agenda<small>Ex.: sobrancelha junto do corte. O totem troca pelo combo da agenda quando existir (mesmo tempo); a ${iaNome()} avisa a recepção e o profissional para incluir na comanda.</small></span></label>
         ${f.length ? `<p class="up-warn">${icon('alert')} Não encontrei na agenda: <b>${esc(f.join(', '))}</b>. Escolha o nome exato na lista.</p>` : ''}
       </div>`; };
     const rows = [0, 1, 2, 3, 4, 5].map(i => linha(lista[i] || {}, i)).join('');
@@ -9028,7 +9029,7 @@ Content-Type: application/json</pre>
         if (!t || !sv) return setMsg(f, `Oferta ${i + 1}: preencha o texto e o serviço na agenda.`);
         const valor = v === '' ? 0 : Number(v);
         if (!(valor >= 0 && valor <= 9999)) return setMsg(f, `Oferta ${i + 1}: valor inválido.`);
-        out.push({ texto: t.slice(0, 60), valor, servicos: sv.slice(0, 160), quando: q.slice(0, 120) });
+        out.push({ texto: t.slice(0, 60), valor, servicos: sv.slice(0, 160), quando: q.slice(0, 120), semTempo: !!(f.elements['z' + i] && f.elements['z' + i].checked) });
       }
       const row = { upsell: out }, cur = (Cloud.enabled ? ui.integ : state.integ) || {};
       if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Ofertas salvas.'); return render(); }

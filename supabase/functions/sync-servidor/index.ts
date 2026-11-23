@@ -23,7 +23,7 @@ function igual(a: string, b: string) {
 
 // Ofertas no final do agendamento (upsell): até 6, só com texto e serviço preenchidos.
 const upsellCfg = (i: any) => (Array.isArray(i.upsell) ? i.upsell : []).filter((o: any) => o && o.texto && o.servicos).slice(0, 6)
-  .map((o: any) => ({ texto: String(o.texto).slice(0, 60), valor: Math.max(0, Math.min(9999, Number(o.valor) || 0)), servicos: String(o.servicos).slice(0, 160), quando: String(o.quando || "").slice(0, 120) }));
+  .map((o: any) => ({ texto: String(o.texto).slice(0, 60), valor: Math.max(0, Math.min(9999, Number(o.valor) || 0)), servicos: String(o.servicos).slice(0, 160), quando: String(o.quando || "").slice(0, 120), semTempo: o.semTempo === true }));
 // Configuração da Sofia (atendente IA) que vai para o servidor.
 const sofiaCfg = (i: any) => ({ nome: String(i.ia_name || "Sofia").slice(0, 40), modelo: i.ia_model || "claude-sonnet-5-5", janelas: i.ia_hours || null, pausa: Number(i.ia_pause) || 60,
   notas: String(i.ia_notes || "").slice(0, 8000), avisar: String(i.ia_report_phone || "").replace(/\D/g, "").slice(0, 15), alerta: String(i.ia_alert_phone || "").replace(/\D/g, "").slice(0, 15), nomes: i.names || {},

@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "5.5";
+export const SOFIA_VERSAO = "5.6";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -293,7 +293,7 @@ Regras (muito importantes):
 - Cada mensagem do cliente começa com [Agora: …], com o dia e a hora atuais e o WhatsApp do cliente. Use para saber "hoje", "amanhã" e que horários já passaram; não comente essa linha com o cliente.
 ${hor ? `- Horário de funcionamento da ${casa}: ${hor}. Você responde o WhatsApp também fora desse horário (ex.: cedo e à noite), mas só existem atendimentos dentro dele. Mensagens que chegam de madrugada você responde a partir das 7h. Se o cliente pedir um horário antes da abertura ou depois do fechamento, ou num dia fechado, explique com simpatia o horário de atendimento e ofereça os primeiros horários livres depois da abertura (ou no próximo dia aberto). Se ele quiser "agora" com a ${casa} fechada, diga a que horas abrimos.
 ` : ""}- Às vezes a mensagem do cliente vem junto com o que foi conversado sem você (com a recepção ou mensagens automáticas da barbearia, como lembretes). Leia com atenção e continue de onde pararam: respeite o que a recepção combinou, não repita o que ela já disse e não se reapresente.
-${upsell.length ? `\nOferta no final (upsell): primeiro MARQUE o horário que o cliente escolheu (agendar); a oferta nunca segura o agendamento. Na mensagem que confirma o horário marcado, ofereça UMA vez, numa frase leve e animada, o adicional que mais combina com o que ele vai fazer (só um), por exemplo: "Prontinho, Pedro! Quarta às 19h com o Igor está marcado ✅ Aproveita e adiciona uma hidratação no cabelo e na barba por apenas R$ 50? 😉". Opções:\n${upsell.map((o) => `- ${o.texto}${o.valor ? ` por apenas R$ ${String(o.valor).replace(".", ",")}` : ""} (na agenda: ${o.servicos})${regraTexto(o.quando) ? `: ${regraTexto(o.quando)}` : ""}`).join("\n")}\nNão ofereça o que ele já vai fazer. Se ele aceitar, use agendar de novo só com o(s) serviço(s) do adicional, com o mesmo profissional, começando no horário em que termina o serviço já marcado (horário marcado + duração do serviço, de ver_servicos), e coloque na observação "Adicional: <oferta> por R$ <valor>". Se ele recusar ou não comentar, siga sem insistir (o horário dele já está garantido). Se o adicional não couber logo depois ou o profissional não fizer esse serviço (o agendar dá erro), avise com naturalidade que o horário principal continua marcado e que o adicional pode ser combinado na barbearia.\n` : ""}${notas ? `\nInformações da ${casa} (passadas pelo dono, use quando ajudar):\n${notas}\n` : ""}${artes.length ? `\nArtes que você pode enviar com enviar_arte (envie a arte em vez de digitar a tabela inteira; depois explique só o que o cliente perguntar):\n${artes.map((a) => `- "${a.nome}": enviar quando ${a.quando || "o assunto da arte aparecer"}`).join("\n")}\n` : ""}`;
+${upsell.length ? `\nOferta no final (upsell): primeiro MARQUE o horário que o cliente escolheu (agendar); a oferta nunca segura o agendamento. Na mensagem que confirma o horário marcado, ofereça UMA vez, numa frase leve e animada, o adicional que mais combina com o que ele vai fazer (só um), por exemplo: "Prontinho, Pedro! Quarta às 19h com o Igor está marcado ✅ Aproveita e adiciona uma hidratação no cabelo e na barba por apenas R$ 50? 😉". Opções:\n${upsell.map((o) => `- ${o.texto}${o.valor ? ` por apenas R$ ${String(o.valor).replace(".", ",")}` : ""} (${o.semTempo ? "vai na comanda, sem tempo extra na agenda" : `na agenda: ${o.servicos}`})${regraTexto(o.quando) ? `: ${regraTexto(o.quando)}` : ""}`).join("\n")}\nAdicionais marcados "vai na comanda": NÃO marque nada na agenda (não ocupam tempo); se ele aceitar, use avisar_equipe com o profissional do horário, ex.: "Incluir na comanda de <cliente> (<dia> <hora>): <adicional> por R$ <valor>", e confirme ao cliente que já está incluído, no mesmo horário. Não ofereça o que ele já vai fazer. Nos outros adicionais, se ele aceitar, use agendar de novo só com o(s) serviço(s) do adicional, com o mesmo profissional, começando no horário em que termina o serviço já marcado (horário marcado + duração do serviço, de ver_servicos), e coloque na observação "Adicional: <oferta> por R$ <valor>". Se ele recusar ou não comentar, siga sem insistir (o horário dele já está garantido). Se o adicional não couber logo depois ou o profissional não fizer esse serviço (o agendar dá erro), avise com naturalidade que o horário principal continua marcado e que o adicional pode ser combinado na barbearia.\n` : ""}${notas ? `\nInformações da ${casa} (passadas pelo dono, use quando ajudar):\n${notas}\n` : ""}${artes.length ? `\nArtes que você pode enviar com enviar_arte (envie a arte em vez de digitar a tabela inteira; depois explique só o que o cliente perguntar):\n${artes.map((a) => `- "${a.nome}": enviar quando ${a.quando || "o assunto da arte aparecer"}`).join("\n")}\n` : ""}`;
 }
 
 // ---------- a conversa ----------
@@ -1339,7 +1339,7 @@ export function ofertasDe(upsell, servicos, log = () => {}) {
     const nomes = String(o.servicos || "").split(/\s+\+\s+/).map((x) => x.trim()).filter(Boolean);
     const achados = nomes.map((n) => servicos.find((x) => semAcento(x.nome) === semAcento(n)));
     if (!nomes.length || achados.some((x) => !x)) { log(`Ofertas: "${o.texto}" ficou de fora (serviço não encontrado na agenda: ${nomes.filter((n, k) => !achados[k]).join(", ")}).`); continue; }
-    out.push({ id: i, texto: o.texto, valor: Number(o.valor) || 0, codigos: achados.map((x) => x.codigo), regra: regraQuando(o.quando) });
+    out.push({ id: i, texto: o.texto, valor: Number(o.valor) || 0, codigos: achados.map((x) => x.codigo), regra: regraQuando(o.quando), semTempo: !!o.semTempo });
   }
   return out;
 }
@@ -1442,8 +1442,25 @@ export function criarTotem({ dir, log = () => {}, api = async () => ({}), sock =
       return { profissionais: lista, todos };
     }
     if (acao === "agendar") {
-      const todos = await ab.servicos(), servs = d.servicos.map((c) => todos.find((x) => x.codigo === c)).filter(Boolean);
+      const todos = await ab.servicos();
+      let servs = d.servicos.map((c) => todos.find((x) => x.codigo === c)).filter(Boolean);
       if (servs.length !== d.servicos.length) throw new Error("serviço não encontrado");
+      // Ofertas "sem tempo extra" (ex.: sobrancelha): não ocupam a agenda. Se houver um combo do serviço principal com o
+      // adicional (ex.: "1.1 Corte Tradicional" + sobrancelha → "1.2 Corte Tradicional & Sobrancelha") com o mesmo tempo,
+      // troca pelo combo; senão, o adicional vai só na observação, para entrar na comanda.
+      const semTempo = ofertasDe(e.totem.upsell, todos).filter((o) => o.semTempo), naComanda = [];
+      for (const o of semTempo) {
+        if (!o.codigos.every((c) => servs.some((x) => x.codigo === c))) continue;
+        servs = servs.filter((x) => !o.codigos.includes(x.codigo));
+        const extra = todos.find((x) => x.codigo === o.codigos[0]), palavra = semAcento(extra.nome).replace(/^[\d.]+\s*/, "").split(/\s+/)[0];
+        const nucleo = (n) => semAcento(n).replace(/^[\d.]+\s*/, "").replace(/\(.*?\)/g, "").trim();
+        let trocou = false;
+        servs = servs.map((x) => { if (trocou) return x; const combo = todos.find((y) => y.tipo === 1 && y.codigo !== x.codigo && nucleo(y.nome).includes(nucleo(x.nome)) && nucleo(y.nome).includes(palavra) && Number(y.minutos) === Number(x.minutos));
+          if (combo) { trocou = true; return combo; } return x; });
+        if (!trocou) naComanda.push(`${o.texto}${o.valor ? ` por R$ ${o.valor}` : ""}`);
+        else d.adicionais = (d.adicionais || []).filter((x) => !x.startsWith(o.texto)); // o combo já tem o adicional
+      }
+      if (naComanda.length) d.adicionais = (d.adicionais || []).filter((a) => !naComanda.some((n) => a.startsWith(n.split(" por ")[0]))).concat(naComanda.map((n) => `${n} (incluir na comanda, sem tempo extra)`));
       const livre = (await ab.horarios(d.data, servs[0].codigo)).find((p) => p.codigo === d.profissional);
       if (!livre || !livre.horarios.includes(d.hora)) throw new Error("CHOQUE: horário não está mais livre");
       let cad = await cadastro(d.fone);
