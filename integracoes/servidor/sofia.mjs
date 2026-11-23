@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "5.6";
+export const SOFIA_VERSAO = "5.7";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -390,6 +390,12 @@ export async function executar(nomeTool, input, ctx) {
             const dd = new Date(input.data + "T12:00:00Z"); dd.setUTCDate(dd.getUTCDate() + i); const iso = dd.toISOString().slice(0, 10);
             const p = (await ab.horarios(iso, input.servico).catch(() => [])).find((x) => bate(x.nome) && x.horarios.length);
             if (p) proximo = { dia: `${DIAS[dd.getUTCDay()]}, ${iso.split("-").reverse().join("/")}`, data: iso, primeiros: p.horarios.slice(0, 4), valor_com_ele_nesse_dia: reais(((p.precos || {})[p.horarios[0]] || [])[0]) || "confira com ver_horarios" };
+          }
+          // Nenhum horário nos próximos dias e fora da equipe cadastrada no sistema: saiu da equipe (a AppBarber pode
+          // continuar listando). Não é "agenda completa".
+          const equipe = ctx.equipe || [];
+          if (!proximo && equipe.length && !equipe.some((n) => mesmoNome(n, input.profissional) || semAcentoP(n).includes(semAcentoP(input.profissional)))) {
+            return { nao_atende_mais: true, profissional: input.profissional, nota: `${input.profissional} não está atendendo na barbearia no momento (não está na equipe atual nem tem horários nos próximos dias). Diga isso com naturalidade e gentileza, sem falar em agenda completa nem lista de espera com ele, e ofereça outro barbeiro.`, outros_com_horario_nesse_dia: lista.filter((p) => p.horarios.length).map((p) => p.nome) };
           }
           return { agenda_completa: true, profissional: input.profissional, nota: `A agenda de ${input.profissional} está completa nesse dia (todos os horários já foram reservados). Diga isso com essas palavras, de forma profissional; nunca diga que ele não está disponível, não está na agenda ou não trabalha.`, proximo_dia_com_horario: proximo, outros_com_horario_nesse_dia: lista.filter((p) => p.horarios.length).map((p) => p.nome) };
         }
@@ -1026,7 +1032,7 @@ export function criarSofia({ dir, log, api, sock, conectado = () => true, cmdCon
           : novas.join("\n")) });
         if (!c.contada) { c.contada = true; zera(); stats.conversas++; }
         if (!c.artes) c.artes = cfg.artes; // congeladas junto com as instruções
-        const ctx = { ab, fone: c.fone, stats, simular: false, artes: c.artes, enviarArte: (a) => enviarArte(jid, a), registro: (t) => log(`Sofia: ${t}.`),
+        const ctx = { ab, fone: c.fone, stats, simular: false, equipe: [...(cfg.equipe || []).map((b) => b.name), cfg.barbearia].filter(Boolean), // o dono costuma ter o nome da barbearia artes: c.artes, enviarArte: (a) => enviarArte(jid, a), registro: (t) => log(`Sofia: ${t}.`),
           falha: (t) => { log(`Sofia: (…${String(c.fone).slice(-4)}) ${t}`); pendencias.push(`(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); status().catch(() => {}); },
           listaEspera: (x) => listaEspera(jid, c, x), alertar: (t) => alertaEquipe(c, t), avisarProfissional: (nome, t) => avisarProfissional(c, nome, t), pendencia: (t) => { c.motivo = t; pendencias.push(`${c.nome ? c.nome.split(" ")[0] + " " : ""}(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); } };
         const antesStats = { agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados };
