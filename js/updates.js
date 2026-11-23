@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-24-feedback-elogio', date: '2026-11-24', title: 'Feedback: resposta ao elogio e parabéns ao profissional', items: [
+    ['novo', 'No cartão Pedido de feedback, dois campos novos: a resposta da atendente IA quando o cliente elogia (ex.: pedindo a avaliação no Google) e os parabéns que o profissional recebe no WhatsApp dele, com as palavras do cliente. Crítica ou reclamação continua indo para a recepção.'],
+  ] },
   { id: '2026-11-23-presente', date: '2026-11-23', title: 'Reconquista: a atendente IA envia o presente de retorno', items: [
     ['novo', 'No cartão Reconquista de clientes sumidos, o campo Presente de retorno: quando o cliente aceita o presente, a atendente IA responde com esse texto (até 24 h depois do convite, mesmo fora do horário dela) e já ajuda a agendar, anotando o presente na observação do agendamento. No campo Depois de agendar, a mensagem que vai junto da confirmação do horário (ex.: o cupom de desconto).'],
   ] },

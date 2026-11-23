@@ -4329,6 +4329,10 @@ Content-Type: application/json</pre>
         <label class="field"><span>Mensagem</span><textarea class="input" name="text" rows="6" maxlength="1000">${esc(it.fb_text || FB_TEXT)}</textarea>
           <small class="muted">Use {cliente}, {saudacao} (bom dia, boa tarde ou boa noite, conforme o horário), {profissional} e {barbearia}. Para versões diferentes sorteadas a cada envio, separe com uma linha só com <b>---</b>.</small></label>
         <details class="wa-prev"><summary>Ver como chega para o cliente</summary><p class="wa-bubble">${esc(prev).replace(/\n/g, '<br>')}</p></details>
+        <label class="field"><span>Resposta ao elogio (${iaNome()})</span><textarea class="input" name="reply" rows="5" maxlength="1200" placeholder="Ex.: Ficamos felizes com esse feedback, {cliente}! 😁 Pode nos ajudar avaliando nosso trabalho no Google? 🙏 (link)">${esc(it.fb_reply || '')}</textarea>
+          <small class="muted">Quando o cliente responder com um elogio, a ${iaNome()} manda este texto (até 24 h depois do pedido). Use {cliente} e {profissional}. Vazio: quem responder fala com a recepção. Crítica ou reclamação vai para a recepção.</small></label>
+        <label class="field"><span>Parabéns para o profissional (WhatsApp dele)</span><textarea class="input" name="pro" rows="4" maxlength="800" placeholder="Parabéns, {profissional}! 👏 O cliente {cliente} elogiou seu atendimento: &quot;{elogio}&quot;. Continue fazendo esse excelente trabalho! 💈">${esc(it.fb_pro_text || '')}</textarea>
+          <small class="muted">Vai para o WhatsApp do profissional (cadastrado na Equipe) quando o cliente elogiar. Use {profissional}, {cliente} e {elogio} (as palavras do cliente). Vazio: usa o texto de exemplo.</small></label>
         <p class="form-msg" data-msg></p>
         <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
       </form>
@@ -9060,7 +9064,7 @@ Content-Type: application/json</pre>
         .catch(e => { const m = Cloud.message(e); setMsg(f, /wb_|column|schema cache/i.test(m) ? 'A reconquista ainda está sendo ativada no servidor.' : m); });
     },
     fbRemind(f) {
-      const row = { fb_on: !!f.elements.on.checked, fb_text: (f.elements.text.value || '').trim().slice(0, 1000) };
+      const row = { fb_on: !!f.elements.on.checked, fb_text: (f.elements.text.value || '').trim().slice(0, 1000), fb_reply: (f.elements.reply.value || '').trim().slice(0, 1200), fb_pro_text: (f.elements.pro.value || '').trim().slice(0, 800) };
       if (row.fb_text === FB_TEXT) row.fb_text = '';
       const cur = (Cloud.enabled ? ui.integ : state.integ) || {};
       if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Pedido de feedback salvo.'); return render(); }
