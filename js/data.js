@@ -480,6 +480,8 @@
     const monthOnly = (state.monthly || []).some(m => m.barberId === barberId && fullMonths(range).includes(m.month) && (isNum(m.fat) || isNum(m.cli)));
     return set.size ? set.size : monthOnly ? null : 0;
   }
+  // Indicadores de total do período (somam dia a dia): para quem entrou no meio do período, a nota é proporcional aos dias.
+  const TOTAIS = new Set(['fat', 'check', 'serv', 'cli', 'planos', 'prod', 'extra']);
   // Nota do indicador: % do que o líder fez (líder = 100). Sem resultado = 0.
   const indScore = (v, max) => (max > 0 ? Math.max(0, Math.min(100, (v / max) * 100)) : 0);
 
@@ -492,6 +494,10 @@
    * - Pontuação geral = média ponderada das notas pelos pesos.
    * - Mínimo de dias: para disputar posição, metade dos dias de quem mais trabalhou no período (no máximo 5).
    *   Quem ainda não chegou fica "Entrando no ranking": aparece no fim, sem afetar a nota dos outros.
+   * - Quem começou no meio do período (sem nenhum lançamento antes e o 1º dia depois do início da equipe):
+   *   nos indicadores de total (faturamento, serviços, clientes, planos, produtos, extras, checklist) a nota
+   *   é proporcional aos dias trabalhados (como se tivesse os dias de quem mais trabalhou; até 4x). Os números
+   *   mostrados continuam os reais, a liderança e o título usam os reais, e a nota dos outros não muda.
    * - Empate no 1º lugar conta como liderança para todos os empatados.
    * - Destaque: 1º em pelo menos metade dos indicadores (arredonda para cima).
    * - MVP: 1º em metade + 1. Só existe um título por período: ou MVP, ou Destaque.
@@ -507,6 +513,19 @@
     const minDays = Math.min(5, Math.ceil(maxDays / 2));
     all.forEach(r => { r.entering = r.days !== null && maxDays > 0 && r.days < minDays; r.needDays = r.entering ? minDays - r.days : 0; });
     const rows = all.filter(r => !r.entering), entering = all.filter(r => r.entering);
+    // Quem entrou na equipe no meio do período: fator para os indicadores de total.
+    const temDado = e => Number(e.cli) > 0 || Number(e.fat) > 0 || Number(e.comanda) > 0;
+    const primeiroDia = id => { let m = null; for (const e of state.entries || []) if (e.barberId === id && e.date >= range.start && e.date <= range.end && temDado(e) && (!m || e.date < m)) m = e.date; return m; };
+    const veterano = id => (state.entries || []).some(e => e.barberId === id && e.date < range.start && temDado(e)) || (state.monthly || []).some(m => m.barberId === id && m.month < range.start.slice(0, 7));
+    const inicios = all.filter(r => veterano(r.barber.id)).map(r => primeiroDia(r.barber.id)).filter(Boolean).sort();
+    const inicioEquipe = inicios[0] || null;
+    for (const r of all) {
+      r.proj = 1; r.inicio = null;
+      if (!inicioEquipe || !r.days || r.days >= maxDays || veterano(r.barber.id)) continue;
+      const d1 = primeiroDia(r.barber.id);
+      if (!d1 || (new Date(d1 + 'T12:00:00Z') - new Date(inicioEquipe + 'T12:00:00Z')) / 86400000 < 3) continue;
+      r.proj = Math.min(4, maxDays / r.days); r.inicio = d1;
+    }
 
     const active = [], inactive = [];
     const hidden = [...(state.hidden || []), ...RETIRED];
@@ -514,18 +533,22 @@
       const w = weights[ind.key] ?? ind.weight;
       if (hidden.includes(ind.key)) { inactive.push({ ...ind, weight: w, reason: 'oculto' }); continue; }
       const vals = rows.map(r => ind.calc(r.sums));
+      const total = TOTAIS.has(ind.key), pj = (r, v) => (total && v !== null && v !== undefined && r.proj > 1 ? v * r.proj : v);
       if (w <= 0) { inactive.push({ ...ind, weight: w, reason: 'peso zero' }); continue; }
       if (vals.every(v => v === null)) { inactive.push({ ...ind, weight: w, reason: 'sem dados' }); continue; }
       const out = v => ind.sample && v === null; // sem amostra suficiente: fica de fora
       const nums = vals.map(v => v ?? 0);
       const max = Math.max(...nums.filter((v, i) => !out(vals[i])));
       const leaders = [];
+      // Para a nota e a posição, quem entrou no meio do período usa o valor proporcional; o máximo (líder) e a
+      // liderança usam sempre os valores reais, então a nota dos outros não muda.
+      const ajust = rows.map((r, i) => (out(vals[i]) ? null : pj(r, nums[i])));
       rows.forEach((r, i) => {
         r.values[ind.key] = vals[i];
         if (out(vals[i])) { r.ranks[ind.key] = null; r.scores[ind.key] = null; return; }
-        const v = nums[i];
-        r.ranks[ind.key] = 1 + nums.filter((x, k) => !out(vals[k]) && x > v).length;
-        r.scores[ind.key] = indScore(v, max);
+        const v = nums[i], va = ajust[i];
+        r.ranks[ind.key] = 1 + ajust.filter((x, k) => x !== null && x > va).length;
+        r.scores[ind.key] = indScore(va, max);
         if (v === max && max > 0) { leaders.push(r.barber.id); r.leads.push(ind.key); }
       });
       // Quem está entrando no ranking vê os próprios números e a nota que teria, sem mexer na dos outros.
@@ -533,7 +556,7 @@
         const v = ind.calc(r.sums);
         r.values[ind.key] = v;
         r.ranks[ind.key] = null;
-        r.scores[ind.key] = out(v) ? null : indScore(v ?? 0, max);
+        r.scores[ind.key] = out(v) ? null : indScore(pj(r, v ?? 0), max);
       }
       active.push({ ...ind, weight: w, leaders, max });
     }

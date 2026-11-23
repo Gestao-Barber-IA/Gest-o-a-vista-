@@ -3101,3 +3101,4 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 .int-tile > svg:last-child { flex: 0 0 auto; width: 18px; height: 18px; color: var(--faint); align-self: center; }
 .int-back { margin: 4px 0 12px; }
 @media (max-width: 520px) { .int-grid { grid-template-columns: 1fr; } }
+.rank-prop { color: var(--accent); white-space: nowrap; }
