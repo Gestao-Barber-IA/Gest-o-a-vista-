@@ -370,3 +370,13 @@ test('primeiro mês da empresa (ninguém com lançamento antes): não projeta', 
   const st = porDia({ a: diasDe(2, 19, 600), n: diasDe(14, 19, 600) });
   assert.equal(byId(GB.computeRanking(st, R), 'n').proj, 1);
 });
+
+test('data de início cadastrada: vale ela (proporcional se começou no período; normal se antes)', () => {
+  const base = { a: [['2026-09-30', 100], ...diasDe(2, 19, 600)], n: diasDe(16, 19, 600), v: [['2026-09-28', 100], ...diasDe(14, 19, 600)] };
+  const st = { ...porDia(base), starts: { n: '2026-10-16', v: '2026-10-12' } };
+  const res = GB.computeRanking(st, R);
+  assert.equal(byId(res, 'n').inicio, '2026-10-16'); assert.equal(byId(res, 'n').proj, 4); // 18/4 = 4,5 → limite 4
+  assert.equal(byId(res, 'v').proj, 1.0 * (18 / 6) > 1 ? 3 : 1);                           // início 12/10 no período: proporcional
+  const st2 = { ...porDia(base), starts: { v: '2026-09-01' } };
+  assert.equal(byId(GB.computeRanking(st2, R), 'v').proj, 1);                                  // começou antes do mês: normal
+});

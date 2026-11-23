@@ -4,6 +4,7 @@
 window.GB_UPDATES = [
   { id: '2026-11-23-ranking-novato', date: '2026-11-23', title: 'Ranking justo para quem entrou no meio do mês', items: [
     ['melhoria', 'Quem começou na equipe no meio do mês tem a nota dos indicadores de total (faturamento, serviços, clientes, planos, produtos, extras e checklist) proporcional aos dias que trabalhou, como se tivesse os mesmos dias de quem mais trabalhou. Os números mostrados continuam os reais, a nota dos outros não muda e o título (MVP ou Destaque) usa os números reais. No ranking aparece "proporcional" ao lado do nome.'],
+    ['novo', 'Em Equipe, o campo Data de início na equipe (no cadastro de um profissional novo e em cada profissional). Com a data preenchida, o sistema sabe exatamente quando ele começou; sem ela, descobre pelo primeiro lançamento.'],
   ] },
   { id: '2026-11-22-integracao-cartoes', date: '2026-11-22', title: 'Integração & API organizada em cartões', items: [
     ['melhoria', 'Em Configurações › Integração & API, cada configuração virou um cartão, separado por assunto (agenda, WhatsApp, recepção, mensagens para clientes e técnico), com o status de cada um (ligado, desligado, com erro). Tocando no cartão, abre só aquela configuração, com o botão para voltar.'],
