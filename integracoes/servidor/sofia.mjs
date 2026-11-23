@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "5.1";
+export const SOFIA_VERSAO = "5.2";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -729,7 +729,7 @@ export function criarSofia({ dir, log, api, sock, conectado = () => true, cmdCon
     zera(); statusEm = Date.now();
     const quando = new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
     const ativa = dentroDaJanela(cfg.janelas);
-    const partes = [`${quando} · ${ativa ? "atendendo agora" : "fora do horário dela (a recepção atende)"}`,
+    const partes = [`${quando} · versão ${SOFIA_VERSAO} · ${ativa ? "atendendo agora" : "fora do horário dela (a recepção atende)"}`,
       `hoje: ${stats.conversas} conversa(s), ${stats.agendados} agendamento(s), ${stats.remarcados} remarcação(ões), ${stats.cancelados} cancelamento(s), ${stats.recepcao} passada(s) para a recepção`,
       `custo da IA hoje ≈ US$ ${stats.gasto.toFixed(2).replace(".", ",")}`];
     const esperando = [...conversas.values()].filter((c) => c.noturna && c.pendTipo === "noite" && c.fila.length).length;
@@ -1017,7 +1017,11 @@ export function criarSofia({ dir, log, api, sock, conectado = () => true, cmdCon
         const antesStats = { agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados };
         const artesAntes = (c.artesEnviadas || []).length;
         // Instruções congeladas no começo da conversa (mudanças no app valem para as próximas conversas).
-        const sistema = c.sistema || (c.sistema = promptSistema({ nome: cfg.nome, barbearia: cfg.barbearia, notas: cfg.notas, brand: cfg.brand, artes: c.artes, horario: cfg.horario, upsell: cfg.upsell }));
+        // Instruções fixas durante a conversa (cache), mas atualizadas se mudarem (nova versão, preços, ofertas, nome):
+        // uma conversa que começou antes de uma atualização passa a seguir as regras novas na próxima resposta.
+        const atual = promptSistema({ nome: cfg.nome, barbearia: cfg.barbearia, notas: cfg.notas, brand: cfg.brand, artes: c.artes, horario: cfg.horario, upsell: cfg.upsell });
+        if (c.sistema !== atual) c.sistema = atual;
+        const sistema = c.sistema;
         const r = await rodada({ client, modelo: cfg.modelo, sistema, conv: c, ctx });
         stats.gasto += r.gasto; c.gasto = (c.gasto || 0) + r.gasto; c.registrada = false;
         c.feitos = c.feitos || {}; for (const [k, v] of Object.entries({ agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados })) c.feitos[k] = (c.feitos[k] || 0) + Math.max(0, v - antesStats[k]);
