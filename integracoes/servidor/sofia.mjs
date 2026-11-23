@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "5.8";
+export const SOFIA_VERSAO = "5.9";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -158,7 +158,12 @@ export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) 
     const cel = so(fone).replace(/^55(?=\d{10,11}$)/, "");
     const corpo = codigo ? { establishment: Number(est), ...(nascimento ? { person_birth_date: nascimento } : {}), ...(nome ? { person_name: nome } : {}), ...(arguments[0].novoCelular ? { person_cellphone: cel } : {}) }
       : { establishment: Number(est), person_name: nome, person_cellphone: cel, person_dial_code: "+55", person_signup_origin: origem, ...(nascimento ? { person_birth_date: nascimento } : {}) };
-    const r = (await chamar(codigo ? "PUT" : "POST", codigo ? `/v1/establishment/clients/${encodeURIComponent(codigo)}` : "/v1/establishment/clients", corpo)).data || {};
+    const envia = async (c) => (await chamar(codigo ? "PUT" : "POST", codigo ? `/v1/establishment/clients/${encodeURIComponent(codigo)}` : "/v1/establishment/clients", c)).data || {};
+    let r;
+    // A documentação pede a data como AAAA-MM-DD, mas a AppBarber devolve datas como DD/MM/AAAA: se recusar, tenta o outro formato.
+    const outra = nascimento && /^\d{4}-\d{2}-\d{2}$/.test(nascimento) ? nascimento.split("-").reverse().join("/") : null;
+    try { r = await envia(corpo); if (Number(r.error) > 0 && outra) throw new Error(r.result || "recusado"); }
+    catch (e) { if (!outra) throw e; r = await envia({ ...corpo, person_birth_date: outra }); }
     if (Number(r.error) > 0) throw new Error(r.result || "a AppBarber não aceitou o cadastro");
     return { codigo: codigo || Number(r.person_code) || null };
   }
@@ -614,7 +619,7 @@ export async function rodada({ client, modelo, sistema, conv, ctx, maxPassos = 8
     for (const u of usos) {
       let out, erro = false;
       try { out = await executar(u.name, u.input || {}, { ...ctx, conv }); }
-      catch (e) { out = { erro: e.message }; erro = true; }
+      catch (e) { out = { erro: e.message }; erro = true; if (ctx.registro) ctx.registro(`a ferramenta ${u.name} deu erro: ${String(e.message).slice(0, 160)}`); }
       // Falha ao gravar na AppBarber: fica no log do servidor e no recado para a recepção (no card).
       if (out && out.erro && /^(agendar|remarcar|cancelar|salvar_cadastro)$/.test(u.name) && !/não cabe|não está mais livre|já passou|não atende esse serviço|CHOQUE/.test(String(out.erro)) && ctx.falha) ctx.falha(`${u.name} não deu certo: ${String(out.erro).slice(0, 200)}`);
       resultados.push({ type: "tool_result", tool_use_id: u.id, content: JSON.stringify(out), ...(erro ? { is_error: true } : {}) });
