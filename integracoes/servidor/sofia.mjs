@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "5.2";
+export const SOFIA_VERSAO = "5.3";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -253,6 +253,7 @@ Jeito de falar:
 - Se o cliente falar de algo que não está no histórico desta conversa (ex.: "deu certo?", "e aí, marcou?"), não diga que não sabe do que se trata: use consultar_cliente e responda com base nos horários dele (ex.: se não houver horário marcado, peça desculpas e retome o agendamento).
 - Nunca fale das suas limitações ("não consigo ver", "não tenho acesso", "por aqui não aparece"). Se precisar de uma informação, simplesmente pergunte ao cliente com naturalidade (ex.: "Lembra com qual barbeiro ele cortou da última vez? 😊").
 - Cumprimento: se o cliente perguntar como você está ("tudo bem?", "como vai?"), responda e pergunte de volta antes de seguir, como uma pessoa faria (ex.: "Bom dia, Pedro! Tudo bem sim, e com você? 😊"). Se ele só disser "bom dia", responda o bom dia. Faça isso na mesma mensagem em que já ajuda com o pedido, sem esperar a resposta dele.
+- Nomes de barbeiro podem estar escritos diferente no histórico e na agenda de hoje (cadastro antigo, apelido, nome completo). Mesmo sobrenome e primeiro nome parecido é a mesma pessoa (ex.: Izaque Macedo e Izaquias Macedo). Não diga ao cliente que pode ser outro barbeiro por causa disso.
 - Chame o cliente pelo primeiro nome quando souber. Não se apresente como robô nem fale de "sistema", "ferramenta" ou "IA", a não ser que perguntem; se perguntarem, diga com naturalidade que é a assistente virtual da ${barbearia}.
 - Sem listas longas nem markdown (nada de **negrito** ou #). Ao oferecer horários, sugira 2 ou 3 opções próximas do que o cliente pediu.
 - UMA pergunta por mensagem (nunca "você tem preferência de barbeiro E qual horário?", nem "qual dia E qual serviço?"). Mande UMA mensagem por vez de resposta: não mande duas respostas seguidas para o mesmo pedido. Para agendar, siga esta ordem e pule o que o cliente já disse: 1) qual serviço; 2) preferência de barbeiro(a); 3) dia e período (manhã, tarde ou noite); 4) ofereça 2 ou 3 horários; 5) quando ele escolher, marque na hora e confirme${upsell.length ? ", já oferecendo o adicional na mesma mensagem (veja Oferta no final)" : ""}. Se o cliente responder só parte, siga com o que já sabe e pergunte só o que falta, sem repetir a pergunta inteira.
@@ -320,7 +321,18 @@ function precosDoDia(p) {
 // horários que ficam livres se o horário dele for trocado.
 const primeiroDe = (n) => semAcentoP(n).split(" ")[0];
 function semAcentoP(t) { return String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim(); }
-const mesmoNome = (a, b) => !!a && !!b && (semAcentoP(a) === semAcentoP(b) || primeiroDe(a) === primeiroDe(b));
+// Mesmo profissional com nome escrito diferente (cadastro antigo × atual, apelido): igual, mesmo primeiro nome,
+// ou mesmo sobrenome com o primeiro nome começando igual (ex.: "Izaque Macedo" e "Izaquias Macedo").
+const ultimoDe_ = (n) => { const p = semAcentoP(n).replace(/\(.*?\)/g, "").trim().split(" "); return p.length > 1 ? p[p.length - 1] : ""; };
+const mesmoNome = (a, b) => { if (!a || !b) return false; const A = semAcentoP(a), B = semAcentoP(b); if (A === B || primeiroDe(a) === primeiroDe(b)) return true;
+  const sa = ultimoDe_(a), sb = ultimoDe_(b), pa = primeiroDe(a), pb = primeiroDe(b);
+  return !!sa && sa === sb && pa.slice(0, 4) === pb.slice(0, 4) && Math.min(pa.length, pb.length) >= 4; };
+// Nome do profissional como está na agenda hoje (procura nos profissionais dos serviços mais comuns).
+async function nomeNaAgendaAtual(ab, nome) {
+  const servs = (await ab.servicos()).filter((x) => x.tipo === 1).slice(0, 6);
+  for (const sv of servs) { const p = (await ab.profissionais(sv.codigo).catch(() => [])).find((x) => mesmoNome(x.nome, nome)); if (p) return p.nome; }
+  return null;
+}
 const hhmmM = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 // Blocos do cliente no dia: horários seguidos com o mesmo profissional viram um bloco [ini, fim).
 async function blocosDoCliente(ab, agenda, data) {
@@ -435,7 +447,10 @@ export async function executar(nomeTool, input, ctx) {
       if (!fone) return { aviso: "telefone do cliente desconhecido" };
       if (conv.ultimo === undefined) conv.ultimo = await ab.ultimoDe(fone);
       const u = conv.ultimo;
-      return u ? { ultimo: { dia: u.quando.split("-").reverse().join("/"), barbeiro: u.profissional, servico: u.servico } } : { ultimo: null, nota: "sem atendimento nos últimos 3 meses: pergunte a preferência de barbeiro(a)" };
+      if (!u) return { ultimo: null, nota: "sem atendimento nos últimos 3 meses: pergunte a preferência de barbeiro(a)" };
+      // O histórico pode ter o nome antigo do cadastro (ex.: "Izaque Macedo") e a agenda de hoje outro ("Izaquias Macedo").
+      if (u.atual === undefined) u.atual = await nomeNaAgendaAtual(ab, u.profissional).catch(() => null);
+      return { ultimo: { dia: u.quando.split("-").reverse().join("/"), barbeiro: u.profissional, ...(u.atual && semAcentoP(u.atual) !== semAcentoP(u.profissional) ? { mesmo_barbeiro_na_agenda_de_hoje: u.atual, nota: `é a mesma pessoa: na agenda de hoje o nome está como ${u.atual}; use esse nome com o cliente` } : {}), servico: u.servico } };
     }
     case "consultar_cliente": {
       if (!fone) return { aviso: "telefone do cliente desconhecido: peça o número de celular com DDD" };
