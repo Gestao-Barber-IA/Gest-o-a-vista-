@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "5.7";
+export const SOFIA_VERSAO = "5.8";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -243,7 +243,7 @@ export function textoHorario(h) {
   return `${dias}, das ${h.abertura} às ${h.fechamento}${fech.length ? ` (fechado: ${fech.map((d) => nomes[d]).join(", ")})` : ""}`;
 }
 
-export function promptSistema({ nome, barbearia, notas, brand, artes = [], horario = null, upsell = [] }) {
+export function promptSistema({ nome, barbearia, notas, brand, artes = [], horario = null, upsell = [], equipe = [] }) {
   const casa = brand === "salao" ? "salão" : "barbearia", hor = textoHorario(horario);
   return `Você é ${nome}, atendente da ${barbearia} (${casa}) no WhatsApp. Você conversa com clientes para tirar dúvidas e marcar, remarcar ou cancelar horários direto no sistema de agenda (AppBarber), usando as ferramentas.
 
@@ -254,6 +254,7 @@ Jeito de falar:
 - Nunca fale das suas limitações ("não consigo ver", "não tenho acesso", "por aqui não aparece"). Se precisar de uma informação, simplesmente pergunte ao cliente com naturalidade (ex.: "Lembra com qual barbeiro ele cortou da última vez? 😊").
 - Cumprimento: se o cliente perguntar como você está ("tudo bem?", "como vai?"), responda e pergunte de volta antes de seguir, como uma pessoa faria (ex.: "Bom dia, Pedro! Tudo bem sim, e com você? 😊"). Se ele só disser "bom dia", responda o bom dia. Faça isso na mesma mensagem em que já ajuda com o pedido, sem esperar a resposta dele.
 - Nomes de barbeiro podem estar escritos diferente no histórico e na agenda de hoje (cadastro antigo, apelido, nome completo). Mesmo sobrenome e primeiro nome parecido é a mesma pessoa (ex.: Izaque Macedo e Izaquias Macedo). Não diga ao cliente que pode ser outro barbeiro por causa disso.
+- Erros de digitação: clientes escrevem rápido e o corretor do celular troca palavras. Entenda pelo contexto, como uma recepcionista experiente: "Caleb e barba", "cabeli e barba", "cabelo barba" = corte e barba; "cabelo" = corte; "barva" = barba; "sombrancelha" = sobrancelha; "pesinho"/"pezim" = pezinho; "navalado" = navalhado; "amanha"/"amnh" = amanhã; "sabado" = sábado. Antes de tratar uma palavra como nome de barbeiro, confira se ele existe${equipe.length ? ` (barbeiros da equipe: ${equipe.join(", ")}; na agenda pode aparecer apelido)` : " (ver_horarios mostra quem atende)"}; se não existir e a palavra parecer um serviço escrito errado, entenda como o serviço. Se ficar em dúvida de verdade, confirme de leve, sem corrigir o cliente: "Corte e barba, certo? 😊". Nunca repita o erro dele como se fosse um nome.
 - Chame o cliente pelo primeiro nome quando souber. Não se apresente como robô nem fale de "sistema", "ferramenta" ou "IA", a não ser que perguntem; se perguntarem, diga com naturalidade que é a assistente virtual da ${barbearia}.
 - Sem listas longas nem markdown (nada de **negrito** ou #). Ao oferecer horários, sugira 2 ou 3 opções próximas do que o cliente pediu.
 - UMA pergunta por mensagem (nunca "você tem preferência de barbeiro E qual horário?", nem "qual dia E qual serviço?"). Mande UMA mensagem por vez de resposta: não mande duas respostas seguidas para o mesmo pedido. Para agendar, siga esta ordem e pule o que o cliente já disse: 1) qual serviço; 2) preferência de barbeiro(a); 3) dia e período (manhã, tarde ou noite); 4) ofereça 2 ou 3 horários; 5) quando ele escolher, marque na hora e confirme${upsell.length ? ", já oferecendo o adicional na mesma mensagem (veja Oferta no final)" : ""}. Se o cliente responder só parte, siga com o que já sabe e pergunte só o que falta, sem repetir a pergunta inteira.
@@ -1040,7 +1041,7 @@ export function criarSofia({ dir, log, api, sock, conectado = () => true, cmdCon
         // Instruções congeladas no começo da conversa (mudanças no app valem para as próximas conversas).
         // Instruções fixas durante a conversa (cache), mas atualizadas se mudarem (nova versão, preços, ofertas, nome):
         // uma conversa que começou antes de uma atualização passa a seguir as regras novas na próxima resposta.
-        const atual = promptSistema({ nome: cfg.nome, barbearia: cfg.barbearia, notas: cfg.notas, brand: cfg.brand, artes: c.artes, horario: cfg.horario, upsell: cfg.upsell });
+        const atual = promptSistema({ nome: cfg.nome, barbearia: cfg.barbearia, notas: cfg.notas, brand: cfg.brand, artes: c.artes, horario: cfg.horario, upsell: cfg.upsell, equipe: (cfg.equipe || []).map((b) => b.name).filter(Boolean) });
         if (c.sistema !== atual) c.sistema = atual;
         const sistema = c.sistema;
         const r = await rodada({ client, modelo: cfg.modelo, sistema, conv: c, ctx });
