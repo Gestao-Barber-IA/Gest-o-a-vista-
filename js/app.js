@@ -4073,12 +4073,13 @@ ${rows.length ? '' : emptyBarbers()}
     const sec = INT_SECS.find(x => x[0] === ui.intSec);
     if (sec) return `<div class="int-back"><button type="button" class="btn btn-sm" data-action="intSec" data-s="">${icon('left')} Integrações</button></div>${sec[4](ex)}`;
     const tiles = g => INT_SECS.filter(x => x[5] === g && (x[0] === 'api' || x[0] === 'passo' || x[4](ex))).map(([k, t, ic, d, , , stf]) => { const st = stf ? stf(it) : null;
-      return `<button type="button" class="int-tile" data-action="intSec" data-s="${k}"><span class="int-ic">${icon(ic)}</span><span class="int-tx"><b>${t}</b><small>${d}</small>${st ? `<span class="chip ${st[1]}">${st[0]}</span>` : ''}</span>${icon('right')}</button>`; }).join('');
+      return `<button type="button" class="int-tile" data-action="intSec" data-s="${k}"><span class="int-ic">${icon(ic)}</span><span class="int-tx"><b>${t.replace('Sofia', iaNome())}</b><small>${d.replace('Sofia', iaNome())}</small>${st ? `<span class="chip ${st[1]}">${st[0]}</span>` : ''}</span>${icon('right')}</button>`; }).join('');
     return `<p class="section-note int-intro">Escolha o que você quer configurar:</p>${INT_GRUPOS.map(([g, nome]) => { const h = tiles(g); return h ? `<h3 class="int-grp">${nome}</h3><div class="int-grid">${h}</div>` : ''; }).join('')}`;
   }
   // Integração & API em cartões: cada um abre só a sua configuração (antes era tudo numa página só, muito longa).
   const INT_GRUPOS = [['agenda', 'Agenda e dados'], ['whats', 'Atendimento no WhatsApp'], ['recepcao', 'Recepção'], ['mkt', 'Mensagens automáticas para clientes'], ['tec', 'Técnico']];
   // status: [texto, classe do chip] a partir dos dados da integração
+  const iaNome = () => { const it = (Cloud.enabled ? ui.integ : state.integ) || {}; return esc(it.ia_name || 'Sofia'); };
   const intSt = (on, st, extra) => !on ? ['Desligado', ''] : /^erro/.test(String(st || '')) ? ['Com erro', 'chip-bad'] : /^desconectado/.test(String(st || '')) ? ['Desconectado', 'chip-bad'] : extra || ['Ligado', 'chip-ok'];
   const INT_SECS = [
     ['passo', 'Passo a passo da integração', 'book', 'Como ligar a AppBarber ou outro sistema', () => apiTutorial(), 'agenda'],
@@ -4380,7 +4381,7 @@ Content-Type: application/json</pre>
     return `<section class="section card as-card">
       <h2 class="section-title">${icon('clock')} Retorno no tempo certo</h2>
       <p class="section-note">O sistema lê a agenda da AppBarber e aprende, para cada cliente, <b>de quantos em quantos dias ele costuma voltar</b>, o <b>dia da semana</b>, o <b>horário</b> e o <b>profissional</b> de costume. Alguns dias antes do prazo dele, se ainda não marcou, ele recebe um convite com um horário livre <b>no dia do prazo</b>, do jeito dele (ex.: quem vem a cada 21 dias, às sextas por volta das 14h com o Lucas, recebe na quarta: <i>sexta às 14h com o Lucas</i>).</p>
-      <p class="section-note">Só entra quem tem pelo menos 3 atendimentos e volta num ritmo entre 7 e 60 dias. Quem já tem horário marcado, pediu SAIR ou recebeu a reconquista há pouco não recebe; cada cliente recebe no máximo 1 convite por ciclo. ${it.ia_on ? 'Quando o cliente responde, a <b>Sofia</b> já sabe o horário sugerido e marca na hora.' : 'Quem responder fala com a recepção (com a Sofia ligada, ela responde e marca sozinha).'}</p>
+      <p class="section-note">Só entra quem tem pelo menos 3 atendimentos e volta num ritmo entre 7 e 60 dias. Quem já tem horário marcado, pediu SAIR ou recebeu a reconquista há pouco não recebe; cada cliente recebe no máximo 1 convite por ciclo. ${it.ia_on ? 'Quando o cliente responde, a <b>${iaNome()}</b> já sabe o horário sugerido e marca na hora.' : 'Quem responder fala com a recepção (com a ${iaNome()} ligada, ela responde e marca sozinha).'}</p>
       <p class="section-note">${icon('alert')} Sai pelo ${it.cl_numero === 'principal' ? '<b>WhatsApp principal</b>' : '<b>2º chip</b> (troque para o principal no lembrete de agendamento, para receber as respostas)'}, entre 10h e 19h, em dia aberto. Gasta cerca de 15 créditos da AppBarber no primeiro dia (12 meses de agenda) e depois uns 15 por dia (agenda do dia e horários livres).</p>
       ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}
       <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.rt_status_at ? 'Atualizado ' + when(it.rt_status_at) : ''}</small><p class="muted as-msg">${esc(st.replace(/^(ok|erro): /, ''))}</p>` : '<span class="chip">Aguardando o servidor</span>'}</div>
@@ -4449,7 +4450,7 @@ Content-Type: application/json</pre>
     const rows = [0, 1, 2, 3, 4, 5].map(i => linha(lista[i] || {}, i)).join('');
     return `<section class="section card as-card">
       <h2 class="section-title">${icon('gift')} Ofertas no final do agendamento</h2>
-      <p class="section-note">Antes de confirmar um agendamento, o cliente recebe uma oferta para adicionar um serviço, como <i>"Aproveite e adicione uma sobrancelha por apenas R$ 15"</i>. Vale no <b>totem da recepção</b> (tela "Aproveite e adicione") e na <b>Sofia</b> no WhatsApp, que oferece uma vez, sem insistir. Aceitando, o serviço entra no mesmo horário, logo depois, com o mesmo profissional, e o valor da oferta vai na observação do agendamento.</p>
+      <p class="section-note">Antes de confirmar um agendamento, o cliente recebe uma oferta para adicionar um serviço, como <i>"Aproveite e adicione uma sobrancelha por apenas R$ 15"</i>. Vale no <b>totem da recepção</b> (tela "Aproveite e adicione") e na <b>${iaNome()}</b> no WhatsApp, que oferece uma vez, sem insistir. Aceitando, o serviço entra no mesmo horário, logo depois, com o mesmo profissional, e o valor da oferta vai na observação do agendamento.</p>
       <p class="section-note">Em <b>Serviço(s) na agenda</b>, use o nome exato da AppBarber${ab.length ? ' (a lista aparece ao digitar)' : ''}; para mais de um serviço, separe com <b>+</b> (ex.: <i>Depilação de Nariz + Depilação de Orelha</i>). Em <b>Oferecer quando</b>, palavras do serviço escolhido; vazio oferece sempre. Exemplos: <i>corte</i> (tem corte) · <i>corte + barba</i> (tem os dois) · <i>corte, sem barba</i> (tem corte e não tem barba) · <i>barba, sem corte</i>.</p>
       <datalist id="up-ab">${ab.map(x => `<option value="${esc(x.nome)}">`).join('')}</datalist>
       <form class="form" data-form="upSave" novalidate>${rows}
