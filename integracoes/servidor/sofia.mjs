@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "4.8";
+export const SOFIA_VERSAO = "4.9";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -278,6 +278,7 @@ Regras (muito importantes):
 - Lista de espera: se o cliente quer um dia e horário específicos que estão cheios e diz que não pode em outro dia ou horário, ofereça colocar na lista de espera daquele dia/faixa (com o barbeiro dele, se ele fizer questão). Se ele aceitar, use lista_de_espera. Quando a lista avisa de uma vaga, a mensagem aparece no contexto: se o cliente quiser, confira o horário (ver_horarios) e siga o resumo normal para agendar.
 - Depois de cancelar um horário, nunca termine com uma afirmação ("quando quiser, é só chamar"): termine sempre perguntando "Para quando você gostaria de reagendar, [primeiro nome]?".
 - Remarcar ou cancelar: só horários do próprio cliente (consultar_cliente). Confirme qual horário antes.
+- Adiantar ou atrasar: se o cliente já tem horário e quer adiantar/atrasar (mesmo profissional, mesmo dia), use consultar_cliente e depois ver_horarios: o horário dele ocupa a agenda, então confira também livres_trocando_o_horario_do_cliente (horários que só ficam livres trocando o dele). Ofereça esses e, se ele aceitar, use remarcar.
 - Nunca diga que o cliente tem ou não tem horário marcado sem antes usar consultar_cliente nesta conversa. Se o cliente falar do horário dele, de chegada, de atraso ou de "vou mais tarde", use consultar_cliente antes de responder.
 - Atraso: se o cliente avisar que vai atrasar para um horário de hoje, confirme o horário dele (consultar_cliente), tranquilize-o e use avisar_equipe na hora com nome, quanto vai atrasar e o horário, passando o barbeiro(a) em profissional (ele recebe o aviso no WhatsApp dele). Se o atraso for grande ou ele quiser outro horário, ofereça remarcar.
 - Depois de marcar, confirme de forma calorosa com dia, hora e profissional.
@@ -311,6 +312,34 @@ function precosDoDia(p) {
 }
 
 // Executa uma ferramenta pedida pelo Claude. `simular` = não grava nada na AppBarber (teste no terminal).
+// ---------- adiantar/atrasar o próprio horário ----------
+// O horário do próprio cliente ocupa a agenda: para o mesmo profissional, no mesmo dia, a AppBarber não mostra os
+// horários que "encostam" nele (ex.: tem 10h40; barba e pezinho de 1 h às 10h20 bateria no dele). Aqui calcula os
+// horários que ficam livres se o horário dele for trocado.
+const primeiroDe = (n) => semAcentoP(n).split(" ")[0];
+function semAcentoP(t) { return String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim(); }
+const mesmoNome = (a, b) => !!a && !!b && (semAcentoP(a) === semAcentoP(b) || primeiroDe(a) === primeiroDe(b));
+const hhmmM = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+// Blocos do cliente no dia: horários seguidos com o mesmo profissional viram um bloco [ini, fim).
+async function blocosDoCliente(ab, agenda, data) {
+  const todos = await ab.servicos(), dur = (nome) => (todos.find((x) => semAcentoP(x.nome) === semAcentoP(nome)) || {}).minutos || 30;
+  const meus = (agenda || []).filter((a) => String(a.quando).startsWith(data)).map((a) => ({ ...a, ini: mins(String(a.quando).slice(11, 16)), min: dur(a.servico) })).sort((x, y) => x.ini - y.ini);
+  const blocos = [];
+  for (const a of meus) { const b = blocos.find((x) => mesmoNome(x.profissional, a.profissional) && Math.abs(x.fim - a.ini) <= 5); if (b) { b.fim = Math.max(b.fim, a.ini + a.min); b.itens.push(a); } else blocos.push({ profissional: a.profissional, ini: a.ini, fim: a.ini + a.min, itens: [a] }); }
+  return blocos;
+}
+// Horários em que cabe um serviço de `duracao` minutos com o profissional, contando o bloco do cliente como livre.
+async function livresSemOBloco(ab, data, bloco, duracao) {
+  const todos = (await ab.servicos()).filter((x) => x.tipo === 1).sort((a, b) => a.minutos - b.minutos);
+  for (const curto of todos.slice(0, 3)) {
+    const p = (await ab.horarios(data, curto.codigo).catch(() => [])).find((x) => mesmoNome(x.completo || x.nome, bloco.profissional) || mesmoNome(x.nome, bloco.profissional));
+    if (!p) continue;
+    const livre = (t0, t1) => { for (let t = t0; t < t1; t += 5) { if (t >= bloco.ini && t < bloco.fim) continue; if (!p.horarios.some((h) => t >= mins(h) && t < mins(h) + curto.minutos)) return false; } return true; };
+    const cands = [...new Set([...p.horarios.map(mins), bloco.ini, ...[1, 2, 3].map((k) => bloco.ini - k * 20)])].filter((t) => t >= 0).sort((a, b) => a - b);
+    return { profissional: p, horarios: cands.filter((t) => t !== bloco.ini && livre(t, t + duracao)).map(hhmmM) };
+  }
+  return null;
+}
 export async function executar(nomeTool, input, ctx) {
   const { ab, conv, simular } = ctx, fone = ctx.fone || (conv && conv.fone) || "";
   const servicosPorCodigo = async (cods) => { const todos = await ab.servicos(); return cods.map((c) => todos.find((s) => Number(s.codigo) === Number(c))).filter(Boolean); };
@@ -352,7 +381,20 @@ export async function executar(nomeTool, input, ctx) {
         }
       }
       const d = new Date(input.data + "T12:00:00Z");
-      return { dia: `${DIAS[d.getUTCDay()]}, ${input.data.split("-").reverse().join("/")}`, profissionais: lista.map((p) => ({ codigo: p.codigo, nome: p.nome, ...precosDoDia(p) })) };
+      const out = { dia: `${DIAS[d.getUTCDay()]}, ${input.data.split("-").reverse().join("/")}`, profissionais: lista.map((p) => ({ codigo: p.codigo, nome: p.nome, ...precosDoDia(p) })) };
+      // O cliente já tem horário nesse dia (consultar_cliente): mostra também o que fica livre trocando o horário dele.
+      if (conv.agenda && conv.agenda.some((a) => String(a.quando).startsWith(input.data))) {
+        const serv = (await ab.servicos()).find((x) => Number(x.codigo) === Number(input.servico)), extra = [];
+        for (const b of await blocosDoCliente(ab, conv.agenda, input.data)) {
+          if (input.profissional && !mesmoNome(b.profissional, input.profissional)) continue;
+          const l = await livresSemOBloco(ab, input.data, b, (serv && serv.minutos) || 30).catch(() => null);
+          const ja = new Set(((lista.find((p) => l && p.codigo === l.profissional.codigo) || {}).horarios) || []);
+          const novos = l ? l.horarios.filter((h) => !ja.has(h) && (input.data > hojeSP() || mins(h) >= agoraSP() + 15)) : [];
+          if (novos.length) extra.push({ profissional: l.profissional.nome, codigo: l.profissional.codigo, horario_atual_do_cliente: hhmmM(b.ini), horarios: novos });
+        }
+        if (extra.length) { out.livres_trocando_o_horario_do_cliente = extra; out.nota_troca = "Estes horários só ficam livres se o horário atual do cliente for trocado (use remarcar com o código do horário dele). Se ele quer adiantar ou atrasar o próprio horário, ofereça estes."; }
+      }
+      return out;
     }
     case "buscar_cadastro": {
       const lista = await ab.buscarClientes({ celular: input.celular ? normFone(input.celular) : null, nome: input.nome ? String(input.nome).trim() : null });
@@ -423,6 +465,28 @@ export async function executar(nomeTool, input, ctx) {
       if (!velho) return { erro: "esse horário não é deste cliente; use consultar_cliente" };
       const servs = await servicosPorCodigo(input.servicos || []);
       if (!servs.length) return { erro: "serviço não encontrado; use ver_servicos" };
+      // Novo horário encosta no próprio horário do cliente (mesmo dia e profissional)? Então ele só fica livre liberando o antigo.
+      const [diaN, horaN] = String(input.data_hora).split(" "), durN = servs.reduce((t, x) => t + (Number(x.minutos) || 30), 0);
+      const bloco = String(velho.quando).startsWith(diaN) ? (await blocosDoCliente(ab, ag, diaN)).find((b) => b.itens.some((i) => i.codigo === velho.codigo)) : null;
+      const sobrepoe = bloco && mins(horaN) < bloco.fim && mins(horaN) + durN > bloco.ini;
+      if (sobrepoe) {
+        const l = await livresSemOBloco(ab, diaN, bloco, durN).catch(() => null);
+        if (!l || Number(l.profissional.codigo) !== Number(input.profissional) || !l.horarios.includes(horaN)) return { erro: `esse horário não está livre nem trocando o horário atual; livres trocando: ${(l && l.horarios.join(", ")) || "nenhum"}` };
+        if (simular) { ctx.stats.remarcados++; return { ok: true, simulado: true }; }
+        const comandas = [...new Set(bloco.itens.map((i) => i.comanda).filter(Boolean))];
+        if (comandas.length !== bloco.itens.length && comandas.length < 1) return { erro: "não consegui liberar o horário atual; peça para a recepção trocar" };
+        for (const c of comandas) await ab.cancelarComanda(c, fone);
+        try { await ab.criar({ fone, nome: velho.nome || conv.nome || "Cliente", servicos: servs, profissional: input.profissional, quando: input.data_hora }); }
+        catch (e) {
+          // Não deu: volta o horário antigo.
+          const todos = await ab.servicos(), antigos = bloco.itens.map((i) => todos.find((x) => semAcentoP(x.nome) === semAcentoP(i.servico))).filter(Boolean);
+          try { await ab.criar({ fone, nome: velho.nome || conv.nome || "Cliente", servicos: antigos, profissional: input.profissional, quando: `${diaN} ${hhmmM(bloco.ini)}` }); }
+          catch { ctx.pendencia(`ao adiantar o horário de ${velho.quando}, o novo não foi marcado e o antigo não voltou: confira na agenda`); }
+          return { erro: `não consegui trocar (${e.message}); o horário antigo foi mantido` };
+        }
+        conv.agenda = null; ctx.stats.remarcados++; ctx.registro(`remarcou de ${velho.quando} para ${input.data_hora}`);
+        return { ok: true };
+      }
       const prob = await confere(servs, input.profissional, input.data_hora); if (prob) return { erro: prob };
       if (simular) { ctx.stats.remarcados++; return { ok: true, simulado: true }; }
       await ab.criar({ fone, nome: velho.nome || conv.nome || "Cliente", servicos: servs, profissional: input.profissional, quando: input.data_hora });
