@@ -3839,6 +3839,7 @@ ${rows.length ? '' : emptyBarbers()}
             <label class="field"><span>Nome</span><input class="input" name="name" value="${esc(b.name)}" maxlength="60" data-change="barberName" data-id="${esc(b.id)}" aria-label="Nome de ${esc(b.name)}"></label>
             <label class="field"><span>Função</span><input class="input" name="role" list="role-list" value="${esc(b.role || '')}" placeholder="Ex.: Barbeiro" maxlength="60" data-change="barberRole" data-id="${esc(b.id)}"></label>
             <label class="field"><span>Nascimento</span><input class="input" type="date" value="${esc((state.births || {})[b.id] || '')}" data-change="barberBirth" data-id="${esc(b.id)}" aria-label="Data de nascimento de ${esc(b.name)}"></label>
+            <label class="field"><span>Início na equipe</span><input class="input" type="date" value="${esc((state.starts || {})[b.id] || '')}" data-change="barberStart" data-id="${esc(b.id)}" aria-label="Data de início de ${esc(b.name)} na equipe"></label>
             ${unitsList().length ? `<label class="field"><span>Unidade</span><select class="input" data-change="barberUnit" data-id="${esc(b.id)}"><option value="">Sem unidade</option>${unitsList().map(u => `<option ${b.unit === u ? 'selected' : ''}>${esc(u)}</option>`).join('')}</select></label>` : ''}
             <label class="field"><span>Nível de acesso</span><select class="input" data-change="barberAccess" data-id="${esc(b.id)}">${ACCESS.map(([k, l]) => `<option value="${k}" ${accessOf(b.id) === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
           </div>${accessOf(b.id) === 'lider' ? leaderExtrasBox(b) : ''}</div>
@@ -3871,6 +3872,7 @@ ${rows.length ? '' : emptyBarbers()}
           <label class="field"><span>Foto</span><input class="input" id="nb-photo" name="photo" type="file" accept="image/*"></label>
           <label class="field"><span>Função</span><input class="input" id="nb-role" name="role" list="role-list" placeholder="Ex.: Barbeiro, Barbeiro líder, Recepcionista" maxlength="60"></label>
           <label class="field"><span>Data de nascimento</span><input class="input" id="nb-birth" name="birth" type="date"></label>
+          <label class="field"><span>Data de início na equipe</span><input class="input" id="nb-start" name="start" type="date" value="${iso(new Date())}"><small class="muted">Quem começa no meio do mês tem a nota proporcional aos dias trabalhados.</small></label>
           <label class="field"><span>Nível de acesso</span><select class="input" id="nb-access" name="access">${ACCESS.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label></div>
           <ul class="acc-help">${ACCESS.map(([, l, d]) => `<li><b>${l}:</b> ${d}</li>`).join('')}</ul>
           ${roleList()}
@@ -7797,6 +7799,7 @@ Content-Type: application/json</pre>
       state.invites = state.invites.filter(i => i.barberId !== id);
       state.pop = (state.pop || []).filter(r => r.barberId !== id);
       if (state.births) delete state.births[id];
+      if (state.starts) delete state.starts[id];
       if (state.goals?.byBarber) delete state.goals.byBarber[id];
       if (state.comCfg?.pctBy) delete state.comCfg.pctBy[id];
       if (ui.teamBarber === id) ui.teamBarber = null;
@@ -8751,6 +8754,7 @@ Content-Type: application/json</pre>
       const id = uid('b_'), access = val(f, 'access');
       state.barbers.push({ id, name, photo, active: true, role: val(f, 'role') || B().role, instagram: '' });
       const birth = val(f, 'birth'); if (/^\d{4}-\d{2}-\d{2}$/.test(birth)) state.births = { ...(state.births || {}), [id]: birth };
+      const start = val(f, 'start'); if (/^\d{4}-\d{2}-\d{2}$/.test(start)) state.starts = { ...(state.starts || {}), [id]: start };
       if (access === 'lider' || access === 'gestor') { const o = org(); o.access[id] = access; }
       save();
       toast(`${U(name)} adicionado. Agora envie o convite.`); render();
@@ -9210,6 +9214,12 @@ Content-Type: application/json</pre>
       try { await Cloud.admin.leadUpdate(l.id, { status: el.value }); toast('Situação atualizada.'); render(); } catch (e) { l.status = prev; toast(Cloud.message(e)); render(); }
     },
     popsCap(el) { if (!isGestor(currentUser())) return; const p = popsById(el.dataset.id); if (!p || !p.steps[Number(el.dataset.i)]) return; p.steps[Number(el.dataset.i)].cap = el.value.trim().slice(0, 140); p.at = Date.now(); save(); toast('Legenda salva.'); },
+    barberStart(el) {
+      const b = barberById(el.dataset.id); if (!b) return;
+      const v = el.value, ss = { ...(state.starts || {}) };
+      if (/^\d{4}-\d{2}-\d{2}$/.test(v)) ss[b.id] = v; else delete ss[b.id];
+      state.starts = ss; save(); toast(v ? 'Data de início salva.' : 'Data de início removida.');
+    },
     barberBirth(el) {
       const b = barberById(el.dataset.id); if (!b) return;
       const v = el.value, bs = { ...(state.births || {}) };

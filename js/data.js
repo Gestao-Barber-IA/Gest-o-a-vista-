@@ -494,7 +494,8 @@
    * - Pontuação geral = média ponderada das notas pelos pesos.
    * - Mínimo de dias: para disputar posição, metade dos dias de quem mais trabalhou no período (no máximo 5).
    *   Quem ainda não chegou fica "Entrando no ranking": aparece no fim, sem afetar a nota dos outros.
-   * - Quem começou no meio do período (sem nenhum lançamento antes e o 1º dia depois do início da equipe):
+   * - Quem começou no meio do período (data de início cadastrada na Equipe dentro do período; sem data,
+   *   quem não tem nenhum lançamento antes e teve o 1º dia depois do início da equipe):
    *   nos indicadores de total (faturamento, serviços, clientes, planos, produtos, extras, checklist) a nota
    *   é proporcional aos dias trabalhados (como se tivesse os dias de quem mais trabalhou; até 4x). Os números
    *   mostrados continuam os reais, a liderança e o título usam os reais, e a nota dos outros não muda.
@@ -519,8 +520,16 @@
     const veterano = id => (state.entries || []).some(e => e.barberId === id && e.date < range.start && temDado(e)) || (state.monthly || []).some(m => m.barberId === id && m.month < range.start.slice(0, 7));
     const inicios = all.filter(r => veterano(r.barber.id)).map(r => primeiroDia(r.barber.id)).filter(Boolean).sort();
     const inicioEquipe = inicios[0] || null;
+    const starts = state.starts || {};
     for (const r of all) {
       r.proj = 1; r.inicio = null;
+      // Data de início cadastrada (Equipe): vale ela. Começou dentro do período = proporcional; antes = normal.
+      const st = starts[r.barber.id];
+      if (st && /^\d{4}-\d{2}-\d{2}$/.test(st)) {
+        if (st > range.start && st <= range.end && r.days && r.days < maxDays) { r.proj = Math.min(4, maxDays / r.days); r.inicio = st; }
+        continue;
+      }
+      // Sem data cadastrada: descobre pelo primeiro lançamento.
       if (!inicioEquipe || !r.days || r.days >= maxDays || veterano(r.barber.id)) continue;
       const d1 = primeiroDia(r.barber.id);
       if (!d1 || (new Date(d1 + 'T12:00:00Z') - new Date(inicioEquipe + 'T12:00:00Z')) / 86400000 < 3) continue;
