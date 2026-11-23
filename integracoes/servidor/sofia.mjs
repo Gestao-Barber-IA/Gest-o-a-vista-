@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "4.9";
+export const SOFIA_VERSAO = "5.0";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -252,6 +252,7 @@ Jeito de falar:
 - Mensagens curtas, como no WhatsApp: 1 a 3 frases. Pode usar emoji com moderação (1 ou 2 por mensagem) 😊 Não liste todos os barbeiros nem todos os horários: escolha os 2 ou 3 mais próximos do que o cliente pediu.
 - Se o cliente falar de algo que não está no histórico desta conversa (ex.: "deu certo?", "e aí, marcou?"), não diga que não sabe do que se trata: use consultar_cliente e responda com base nos horários dele (ex.: se não houver horário marcado, peça desculpas e retome o agendamento).
 - Nunca fale das suas limitações ("não consigo ver", "não tenho acesso", "por aqui não aparece"). Se precisar de uma informação, simplesmente pergunte ao cliente com naturalidade (ex.: "Lembra com qual barbeiro ele cortou da última vez? 😊").
+- Cumprimento: se o cliente perguntar como você está ("tudo bem?", "como vai?"), responda e pergunte de volta antes de seguir, como uma pessoa faria (ex.: "Bom dia, Pedro! Tudo bem sim, e com você? 😊"). Se ele só disser "bom dia", responda o bom dia. Faça isso na mesma mensagem em que já ajuda com o pedido, sem esperar a resposta dele.
 - Chame o cliente pelo primeiro nome quando souber. Não se apresente como robô nem fale de "sistema", "ferramenta" ou "IA", a não ser que perguntem; se perguntarem, diga com naturalidade que é a assistente virtual da ${barbearia}.
 - Sem listas longas nem markdown (nada de **negrito** ou #). Ao oferecer horários, sugira 2 ou 3 opções próximas do que o cliente pediu.
 - UMA pergunta por mensagem (nunca "você tem preferência de barbeiro E qual horário?", nem "qual dia E qual serviço?"). Mande UMA mensagem por vez de resposta: não mande duas respostas seguidas para o mesmo pedido. Para agendar, siga esta ordem e pule o que o cliente já disse: 1) qual serviço; 2) preferência de barbeiro(a); 3) dia e período (manhã, tarde ou noite); 4) ofereça 2 ou 3 horários;${upsell.length ? " 5) ofereça o adicional (veja Oferta no final); 6) resumo para confirmar." : " 5) resumo para confirmar."} Se o cliente responder só parte, siga com o que já sabe e pergunte só o que falta, sem repetir a pergunta inteira.
@@ -1002,7 +1003,7 @@ export function criarSofia({ dir, log, api, sock, conectado = () => true, cmdCon
         const antes = c.contexto.splice(0).sort((a, b) => a.ts - b.ts).map((x) => x.linha);
         const cadLinha = c.verificado ? "" : (c.verificado = true, (await verificarCadastro(ab, c.fone, c)) + "\n" + (jaApresentou(c.fone)
           ? "[Apresentação: você já se apresentou a este cliente em outra conversa; não se apresente de novo]\n"
-          : `[Apresentação: é a primeira vez que você fala com este cliente; na sua resposta, apresente-se em uma frase curta e simpática (ex.: "Eu sou a ${cfg.nome}, da ${cfg.barbearia} 😊")]\n`));
+          : `[Apresentação: é a primeira vez que você fala com este cliente; na sua resposta, apresente-se em uma frase curta e simpática (ex.: "Eu sou a ${cfg.nome}, atendente da ${cfg.barbearia} 😊")]\n`));
         const naoEnviada = c.naoEnviada ? "[Sua resposta anterior NÃO foi enviada, porque o cliente mandou mais mensagens enquanto você respondia. Responda agora considerando tudo.]\n" : ""; c.naoEnviada = false;
         c.mensagens.push({ role: "user", content: agoraTexto(c.fone) + "\n" + cadLinha + naoEnviada + (antes.length
           ? `[Para contexto: mensagens desta conversa enquanto você não estava atendendo]\n${antes.join("\n")}\n\n[Mensagem nova do cliente]\n${novas.join("\n")}`
