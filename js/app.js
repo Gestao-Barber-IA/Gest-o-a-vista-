@@ -4349,7 +4349,7 @@ Content-Type: application/json</pre>
     const mes = d => Math.round(Number(d) / 30);
     return `<section class="section card as-card">
       <h2 class="section-title">${icon('rocket')} Reconquista de clientes sumidos</h2>
-      <p class="section-note">Clientes que não vêm há algum tempo recebem um convite perguntando se podem receber um <b>presente de retorno</b>. Quem responder fala com a recepção, que envia o presente. A fila começa por quem sumiu há menos tempo; cada cliente recebe no máximo 1 vez a cada 6 meses, e antes de cada envio o sistema confere se ele já não marcou horário.</p>
+      <p class="section-note">Clientes que não vêm há algum tempo recebem um convite perguntando se podem receber um <b>presente de retorno</b>. ${it.wb_gift ? `Quem aceitar recebe o presente da <b>${iaNome()}</b>, que já ajuda a agendar.` : 'Quem responder fala com a recepção, que envia o presente (ou preencha o Presente de retorno abaixo para a atendente IA responder).'} A fila começa por quem sumiu há menos tempo; cada cliente recebe no máximo 1 vez a cada 6 meses, e antes de cada envio o sistema confere se ele já não marcou horário.</p>
       <p class="section-note">${icon('alert')} É a mensagem com <b>maior risco de bloqueio</b> (é marketing para quem não fala com a barbearia há meses): mantenha poucas por dia. Sai pelo ${it.cl_numero === 'principal' ? '<b>WhatsApp principal</b>' : '<b>2º chip</b> (troque para o principal no lembrete de agendamento, para a recepção receber as respostas)'}, entre 10h e 18h. Gasta cerca de 1 crédito da AppBarber por mensagem, mais a lista de clientes, baixada uma vez por mês.</p>
       ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}
       <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.wb_status_at ? 'Atualizado ' + when(it.wb_status_at) : ''}</small><p class="muted as-msg">${esc(st.replace(/^(ok|erro): /, ''))}</p>` : '<span class="chip">Aguardando o servidor</span>'}</div>
@@ -4362,6 +4362,8 @@ Content-Type: application/json</pre>
         <label class="field"><span>Mensagem</span><textarea class="input" name="text" rows="9" maxlength="2000">${esc(it.wb_text || WB_TEXT)}</textarea>
           <small class="muted">Use {Saudacao} (Bom dia, Boa tarde…), {cliente} e {barbearia}. As versões separadas por uma linha com <b>---</b> são sorteadas a cada envio. Links são retirados (aumentam a chance de bloqueio).</small></label>
         <details class="wa-prev"><summary>Ver como chega para o cliente</summary><p class="wa-bubble">${esc(prev).replace(/\n/g, '<br>')}</p></details>
+        <label class="field"><span>Presente de retorno (resposta da ${iaNome()})</span><textarea class="input" name="gift" rows="6" maxlength="1500" placeholder="Ex.: Que bom, {cliente}! 😊 Seu presente é 20% de desconto no próximo atendimento. 🎁 Você pode usar hoje ou nos próximos 30 dias. Você prefere vir durante a semana ou no final de semana?">${esc(it.wb_gift || '')}</textarea>
+          <small class="muted">Quando o cliente aceitar o presente, a ${iaNome()} responde com este texto (até 24 h depois do convite, mesmo fora do horário dela) e segue para agendar. Use {cliente} para o nome. Vazio: quem responder fala com a recepção.</small></label>
         <p class="form-msg" data-msg></p>
         <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
       </form></section>`;
@@ -9046,7 +9048,7 @@ Content-Type: application/json</pre>
       const daily = Math.round(Number(f.elements.daily.value) || 0), mn = Math.round(Number(f.elements.min.value) || 0), mx = Math.round(Number(f.elements.max.value) || 0);
       if (daily < 1 || daily > 40) return setMsg(f, 'Mensagens por dia: de 1 a 40.');
       if (mn < 1 || mx <= mn) return setMsg(f, 'Confira os meses: o segundo número precisa ser maior que o primeiro.');
-      const row = { wb_on: !!f.elements.on.checked, wb_daily: daily, wb_min_days: mn * 30, wb_max_days: mx * 30 + 5, wb_text: (f.elements.text.value || '').trim().slice(0, 2000) };
+      const row = { wb_on: !!f.elements.on.checked, wb_daily: daily, wb_min_days: mn * 30, wb_max_days: mx * 30 + 5, wb_text: (f.elements.text.value || '').trim().slice(0, 2000), wb_gift: (f.elements.gift.value || '').trim().slice(0, 1500) };
       if (row.wb_text === WB_TEXT) row.wb_text = '';
       const cur = (Cloud.enabled ? ui.integ : state.integ) || {};
       if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Reconquista salva.'); return render(); }
