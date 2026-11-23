@@ -4364,6 +4364,8 @@ Content-Type: application/json</pre>
         <details class="wa-prev"><summary>Ver como chega para o cliente</summary><p class="wa-bubble">${esc(prev).replace(/\n/g, '<br>')}</p></details>
         <label class="field"><span>Presente de retorno (resposta da ${iaNome()})</span><textarea class="input" name="gift" rows="6" maxlength="1500" placeholder="Ex.: Que bom, {cliente}! 😊 Seu presente é 20% de desconto no próximo atendimento. 🎁 Você pode usar hoje ou nos próximos 30 dias. Você prefere vir durante a semana ou no final de semana?">${esc(it.wb_gift || '')}</textarea>
           <small class="muted">Quando o cliente aceitar o presente, a ${iaNome()} responde com este texto (até 24 h depois do convite, mesmo fora do horário dela) e segue para agendar. Use {cliente} para o nome. Vazio: quem responder fala com a recepção.</small></label>
+        <label class="field"><span>Depois de agendar (ex.: o cupom)</span><textarea class="input" name="giftDone" rows="4" maxlength="1000" placeholder="Ex.: Ao finalizar seu atendimento na barbearia, informe à recepção o seu cupom de desconto: VIP20. Bem-vindo de volta! 🤩">${esc(it.wb_gift_done || '')}</textarea>
+          <small class="muted">Vai no fim da mensagem em que a ${iaNome()} confirma o horário marcado com o presente.</small></label>
         <p class="form-msg" data-msg></p>
         <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
       </form></section>`;
@@ -9048,7 +9050,7 @@ Content-Type: application/json</pre>
       const daily = Math.round(Number(f.elements.daily.value) || 0), mn = Math.round(Number(f.elements.min.value) || 0), mx = Math.round(Number(f.elements.max.value) || 0);
       if (daily < 1 || daily > 40) return setMsg(f, 'Mensagens por dia: de 1 a 40.');
       if (mn < 1 || mx <= mn) return setMsg(f, 'Confira os meses: o segundo número precisa ser maior que o primeiro.');
-      const row = { wb_on: !!f.elements.on.checked, wb_daily: daily, wb_min_days: mn * 30, wb_max_days: mx * 30 + 5, wb_text: (f.elements.text.value || '').trim().slice(0, 2000), wb_gift: (f.elements.gift.value || '').trim().slice(0, 1500) };
+      const row = { wb_on: !!f.elements.on.checked, wb_daily: daily, wb_min_days: mn * 30, wb_max_days: mx * 30 + 5, wb_text: (f.elements.text.value || '').trim().slice(0, 2000), wb_gift: (f.elements.gift.value || '').trim().slice(0, 1500), wb_gift_done: (f.elements.giftDone.value || '').trim().slice(0, 1000) };
       if (row.wb_text === WB_TEXT) row.wb_text = '';
       const cur = (Cloud.enabled ? ui.integ : state.integ) || {};
       if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Reconquista salva.'); return render(); }
