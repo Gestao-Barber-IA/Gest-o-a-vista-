@@ -156,7 +156,7 @@
     prod: ['Venda de produtos', 'Quantidade de produtos (pomadas, shampoos, óleos…) vendidos pelo barbeiro no período.'],
     agend: ['Agendamentos', 'Quantidade de agendamentos do barbeiro no mês. Aparece nos totais da Performance; não entra na pontuação.'],
     aus: ['Dias de ausência', 'Dias em que o barbeiro não trabalhou por férias, atestado ou folga extra. Cada dia desconta um dia da capacidade da taxa de ocupação.'],
-    score: ['Como a pontuação funciona', 'Em cada indicador, a nota é a porcentagem do que o 1º fez: o líder tira 100 e quem fez 70% do resultado dele tira 70. A pontuação geral é a média dessas notas, ponderada pelos pesos. Em Retenção e Fidelização, quem ainda tem poucos clientes fica de fora do indicador (sem nota zero). Para disputar posição é preciso ter trabalhado pelo menos metade dos dias de quem mais trabalhou no período (no máximo 5 dias); antes disso a pessoa aparece como Entrando no ranking. Quem tem título (MVP ou Destaque) fica em 1º; os demais seguem pela pontuação.'],
+    score: ['Como a pontuação funciona', 'Em cada indicador, a nota é a porcentagem do que o 1º fez: o líder tira 100 e quem fez 70% do resultado dele tira 70. A pontuação geral é a média dessas notas, ponderada pelos pesos. Em Retenção e Fidelização, quem ainda tem poucos clientes fica de fora do indicador (sem nota zero). Para disputar posição é preciso ter trabalhado pelo menos metade dos dias de quem mais trabalhou no período (no máximo 5 dias); antes disso a pessoa aparece como Entrando no ranking. Quem começou na equipe no meio do período tem a nota dos indicadores de total (faturamento, serviços, clientes, planos, produtos, extras e checklist) proporcional aos dias que trabalhou (aparece "proporcional" no ranking); os números mostrados continuam os reais. Quem tem título (MVP ou Destaque) fica em 1º; os demais seguem pela pontuação.'],
     title: ['MVP e Destaque', 'Destaque: 1º lugar em pelo menos metade dos indicadores com dados (arredonda para cima; com 8, são 4). MVP: um a mais que a metade (5 de 8). Nunca há os dois ao mesmo tempo. Empate no 1º lugar conta para todos os empatados.'],
     live: ['Ranking em tempo real', 'Atualiza assim que entram lançamentos ou dados da integração. As setas mostram quantas posições cada um subiu ou desceu em relação ao período anterior.'],
     leaders: ['Destaques por indicador', 'Quem está em 1º em cada indicador. O número ao lado do nome do indicador é o peso dele na pontuação. Empates aparecem juntos.'],
@@ -1159,7 +1159,7 @@
         ? `<small class="rank-sub sub-mvp">${icon('diamond')} MVP · ${r.leads.length}/${R.N}</small>`
         : t === 'destaque'
           ? `<small class="rank-sub sub-gold">${icon('crown')} Destaque · ${r.leads.length}/${R.N}</small>`
-          : `<small class="rank-sub">${r.leads.length}/${R.N} ${liveRecent(R, r.barber.id) ? 'ind.' : 'indicadores'}</small>`;
+          : `<small class="rank-sub">${r.leads.length}/${R.N} ${liveRecent(R, r.barber.id) ? 'ind.' : 'indicadores'}${r.proj > 1 ? ` <span class="rank-prop" title="Começou em ${esc(r.inicio.split('-').reverse().slice(0, 2).join('/'))}: nos indicadores de total, a nota é proporcional aos dias trabalhados">· proporcional</span>` : ''}</small>`;
       const zone = r.pos <= 3 ? 'top' : (n >= 5 && r.pos > n - 2 ? 'low' : '');
       const nowD = liveRecent(R, r.barber.id);
       const nowChip = nowD ? `<span class="rk-now ${nowD > 0 ? 'up' : 'down'}" title="Mudança nos últimos 15 minutos">${nowD > 0 ? '↑' : '↓'}${Math.abs(nowD)} agora</span>` : '';

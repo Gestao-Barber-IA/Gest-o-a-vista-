@@ -332,3 +332,41 @@ test('fiscalização por áudio: acha profissional, tipo de falta e data', () =>
   r = GB.parseDiscVoice('o Santos não veio trabalhar', bs, '2026-11-17');
   assert.equal(r.barberId, ''); assert.equal(r.kind, 'falta'); // "Santos" está em dois nomes: o líder escolhe
 });
+
+// Equipe com lançamentos por dia. dias: { id: [[data, fat], ...] }
+function porDia(dias) {
+  const ids = Object.keys(dias);
+  return {
+    barbers: ids.map(id => ({ id, name: id.toUpperCase(), active: true })),
+    entries: ids.flatMap(id => dias[id].map(([date, fat]) => ({ barberId: id, date, fat, cli: 1, serv: 1 }))),
+    monthly: [], weights: Object.fromEntries(GB.INDICATORS.map(i => [i.key, i.weight])), hidden: [],
+  };
+}
+const diasDe = (de, ate, fat) => { const out = []; for (let d = de; d <= ate; d++) out.push([`2026-10-${String(d).padStart(2, '0')}`, fat]); return out; };
+
+test('quem entrou no meio do mês: total proporcional aos dias, sem mudar a nota dos outros', () => {
+  const st = porDia({
+    a: [['2026-09-30', 100], ...diasDe(2, 19, 600)], // veterano: 18 dias
+    b: [['2026-09-30', 100], ...diasDe(2, 19, 400)], // veterano: 18 dias
+    n: diasDe(14, 19, 390),                           // novo: começou dia 14, 6 dias
+  });
+  const res = GB.computeRanking(st, R), n = byId(res, 'n'), a = byId(res, 'a'), b = byId(res, 'b');
+  assert.equal(n.proj, 3); assert.equal(n.inicio, '2026-10-14');
+  assert.equal(n.values.fat, 6 * 390);                          // número mostrado é o real
+  assert.equal(Math.round(n.scores.fat), Math.round((6 * 390 * 3) / (18 * 600) * 100)); // nota proporcional (65)
+  assert.equal(a.scores.fat, 100);                              // líder continua 100
+  assert.equal(Math.round(b.scores.fat), Math.round(400 / 600 * 100)); // nota do outro não muda
+  assert.deepEqual(Array.from(n.leads), []);                    // não vira líder com valor projetado
+});
+
+test('veterano com folgas no começo do mês não é projetado', () => {
+  const st = porDia({ a: [['2026-09-30', 100], ...diasDe(2, 19, 600)], v: [['2026-09-28', 100], ...diasDe(14, 19, 600)] });
+  const v = byId(GB.computeRanking(st, R), 'v');
+  assert.equal(v.proj, 1);
+  assert.equal(Math.round(v.scores.fat), Math.round((6 * 600) / (18 * 600) * 100));
+});
+
+test('primeiro mês da empresa (ninguém com lançamento antes): não projeta', () => {
+  const st = porDia({ a: diasDe(2, 19, 600), n: diasDe(14, 19, 600) });
+  assert.equal(byId(GB.computeRanking(st, R), 'n').proj, 1);
+});
