@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "7.0";
+const VERSAO = "7.1";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -395,9 +395,10 @@ async function reconquista(e, hoje) {
         const env1 = await enviar(f, texto); erroSeguido = 0; log(`${e.nome}: reconquista enviada (${nome || "cliente"}).`);
         // Com o texto do presente configurado, a Sophia responde quem aceitar (até 24 h depois do convite).
         if (c.presente && sofia && sofia.conviteEnviado && env1) {
-          const presente = c.presente.replace(/\{cliente\}/g, nome || "").replace(/,\s*!/g, "!").replace(/\s+!/g, "!");
+          const troca = (t) => String(t || "").replace(/\{cliente\}/g, nome || "").replace(/,\s*!/g, "!").replace(/\s+!/g, "!").trim();
+          const presente = troca(c.presente), final = troca(c.presenteFinal);
           sofia.conviteEnviado(env1.jid, env1.id, { fone: so(f).length <= 11 ? "55" + so(f) : so(f), nome, texto, tipo: "reconquista: convite com presente de retorno para quem não vem há meses", horas: 24,
-            detalhe: `[Se o cliente aceitar o presente (ex.: "sim", "pode", "quero"), responda com exatamente esta mensagem, sem mudar o conteúdo:\n${presente}\nDepois siga para agendar normalmente e coloque na observação do agendamento "Presente de retorno (reconquista)" e o presente em poucas palavras. Se ele recusar ou disser SAIR, agradeça em uma frase e não insista.]` });
+            detalhe: `[Se o cliente aceitar o presente (ex.: "sim", "pode", "quero"), responda com exatamente esta mensagem, sem mudar o conteúdo:\n${presente}\nDepois siga para agendar normalmente e coloque na observação do agendamento "Presente de retorno (reconquista)" e o presente em poucas palavras.${final ? ` Quando o horário for marcado, na mensagem que confirma o agendamento (dia, hora e profissional), inclua no final, separado por uma linha em branco, exatamente este texto:\n${final}\nNesse agendamento não ofereça adicional (upsell).` : ""} Se ele recusar ou disser SAIR, agradeça em uma frase e não insista.]` });
         }
       }
       catch (err) { log(`${e.nome}: reconquista não enviada (${err.message}).`); if (!/sem WhatsApp/.test(err.message) && ++erroSeguido >= 3) pausadoDia = hoje; }
