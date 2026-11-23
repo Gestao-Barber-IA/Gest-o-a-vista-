@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "4.7";
+export const SOFIA_VERSAO = "4.8";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -262,7 +262,7 @@ Jeito de falar:
 Regras (muito importantes):
 - Nunca invente preço, serviço, profissional ou horário: tudo vem das ferramentas.
 - Para explicar como é um serviço, use só o que está nas Informações da casa ou na observação do serviço (ver_servicos). Se não tiver, diga que o barbeiro(a) explica certinho no atendimento ou pergunte à recepção; não descreva por conta própria.
-- Preço: se as Informações da casa trouxerem preços por dia da semana (promoções), ELAS VALEM sobre o preço de tabela de ver_servicos. Quando o cliente fala de um dia, informe o valor daquele dia. Destaque a promoção 🎉 só na primeira vez que falar de preço e de novo no resumo para confirmar; nas outras mensagens, não repita. Se perguntarem o preço sem dizer o dia, informe o valor de hoje (se for dia promocional, diga que hoje está em promoção) e mencione rapidamente a diferença nos outros dias, convidando para os dias promocionais. Se a ferramenta não trouxer, diga que vai verificar com a recepção (chamar_recepcao).
+- Preço: o valor que ver_horarios traz para o profissional naquele dia é o CERTO e vale sobre qualquer tabela: ele já tem a promoção do dia e o preço próprio de cada profissional (ex.: o dono ou um barbeiro sênior pode cobrar mais). Sempre que for falar o preço de um horário, use esse valor. As tabelas das Informações da casa servem para responder preço antes de consultar a agenda e para explicar a promoção dos dias; se o valor de ver_horarios for diferente da tabela para um profissional, vale o de ver_horarios. Promoção: destaque 🎉 só na primeira vez que falar de preço e de novo no resumo para confirmar; nas outras mensagens, não repita. Só fale da promoção/economia de outros dias para um profissional se ele atender nesses dias com o valor menor (confira em ver_horarios); se o profissional tem preço próprio ou não atende nos dias da promoção, não fale da promoção para ele (pode oferecer outro profissional nos dias promocionais, se o cliente quiser economizar). Se perguntarem o preço sem dizer o dia nem o profissional, informe o valor de hoje pela tabela (se for dia promocional, diga que hoje está em promoção). Se não souber o valor, diga que vai verificar com a recepção (chamar_recepcao).
 - Antes de agendar, remarcar ou cancelar, mande um resumo (serviço, profissional, dia da semana, data e hora) e espere o cliente confirmar. Só então use a ferramenta. Nunca marque sem confirmação.
 - Confirmação uma vez só: se a sua pergunta já tinha serviço, profissional, dia e hora (ex.: "Corte + Barba com o Izaquias hoje às 11h40, por R$ 95. Posso marcar?") e o cliente disse sim, marque direto; não peça para confirmar de novo.
 - Não repita na mensagem seguinte uma pergunta ou pedido que você acabou de fazer (ex.: pedir a data de nascimento duas vezes).
@@ -346,7 +346,7 @@ export async function executar(nomeTool, input, ctx) {
           for (let i = 1; i <= 6 && !proximo; i++) {
             const dd = new Date(input.data + "T12:00:00Z"); dd.setUTCDate(dd.getUTCDate() + i); const iso = dd.toISOString().slice(0, 10);
             const p = (await ab.horarios(iso, input.servico).catch(() => [])).find((x) => bate(x.nome) && x.horarios.length);
-            if (p) proximo = { dia: `${DIAS[dd.getUTCDay()]}, ${iso.split("-").reverse().join("/")}`, data: iso, primeiros: p.horarios.slice(0, 4) };
+            if (p) proximo = { dia: `${DIAS[dd.getUTCDay()]}, ${iso.split("-").reverse().join("/")}`, data: iso, primeiros: p.horarios.slice(0, 4), valor_com_ele_nesse_dia: reais(((p.precos || {})[p.horarios[0]] || [])[0]) || "confira com ver_horarios" };
           }
           return { agenda_completa: true, profissional: input.profissional, nota: `A agenda de ${input.profissional} está completa nesse dia (todos os horários já foram reservados). Diga isso com essas palavras, de forma profissional; nunca diga que ele não está disponível, não está na agenda ou não trabalha.`, proximo_dia_com_horario: proximo, outros_com_horario_nesse_dia: lista.filter((p) => p.horarios.length).map((p) => p.nome) };
         }
