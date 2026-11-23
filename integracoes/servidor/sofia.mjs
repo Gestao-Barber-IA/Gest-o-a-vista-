@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "5.9";
+export const SOFIA_VERSAO = "6.0";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -230,6 +230,8 @@ export const TOOLS = [
     input_schema: obj({ codigo_agendamento: { type: "integer", description: "Código do horário (de consultar_cliente)" } }, ["codigo_agendamento"]) },
   { name: "enviar_arte", description: "Envia ao cliente, no WhatsApp, uma das artes (imagens) da barbearia listadas nas instruções, como a tabela de planos. Use quando a situação da arte acontecer (ex.: cliente perguntou de planos). Depois de enviar, termine sua resposta com a pergunta indicada no resultado.", strict: true,
     input_schema: obj({ arte: { type: "string", description: "Nome exato da arte, como aparece na lista de artes" } }, ["arte"]) },
+  { name: "parabenizar_profissional", description: "Manda para o WhatsApp do profissional os parabéns pelo elogio que o cliente fez ao atendimento dele (resposta a um pedido de feedback). Use uma vez, só quando o cliente elogiar.", strict: true,
+    input_schema: obj({ profissional: { type: "string", description: "Nome do profissional que atendeu" }, elogio: { type: "string", description: "As palavras do cliente sobre o atendimento, como ele escreveu" } }, ["profissional", "elogio"]) },
   { name: "avisar_equipe", description: "Manda um recado para a equipe (WhatsApp de avisos) SEM sair da conversa. Use para avisos que a equipe precisa saber na hora, principalmente atraso de cliente com horário hoje (ex.: 'Francis vai atrasar uns 15 min por causa da chuva (horário 15h com o Well)').", strict: true,
     input_schema: obj({ recado: { type: "string", description: "Recado curto e completo: quem, o quê e o horário" }, profissional: { type: ["string", "null"], description: "Nome do barbeiro(a) do horário (de consultar_cliente) para avisá-lo também, ex. no atraso; ou null" } }, ["recado", "profissional"]) },
   { name: "lista_de_espera", description: "Coloca o cliente na lista de espera para um dia e uma faixa de horário (ou tira dela). Use quando ele quer um dia/horário específico que está cheio e NÃO pode em outro dia ou horário, depois de oferecer e ele aceitar. Se abrir uma vaga nessa faixa, ele recebe uma mensagem no WhatsApp perguntando se quer agendar.", strict: true,
@@ -549,6 +551,19 @@ export async function executar(nomeTool, input, ctx) {
       const pergunta = (a.pergunta || "").replace(/\{cliente\}/g, primeiroNome(conv.nome || conv.pushName)).trim();
       return { ok: true, nota: pergunta ? `A arte foi enviada. Termine sua resposta com esta pergunta, com estas palavras: "${limpaNome(pergunta)}"` : "A arte foi enviada. Termine com uma pergunta curta para continuar a conversa." };
     }
+    case "parabenizar_profissional": {
+      if (conv.parabenizou) return { ok: true, nota: "o profissional já recebeu os parabéns nesta conversa" };
+      const prof = String(input.profissional || "").trim(), elogio = String(input.elogio || "").replace(/\s+/g, " ").trim().slice(0, 300);
+      if (!prof || !elogio) return { erro: "falta o profissional ou o elogio" };
+      const cli = String(conv.nome || conv.pushName || "").trim().split(" ")[0] || "um cliente";
+      const modelo = ctx.parabens || "Parabéns, {profissional}! 👏 O cliente {cliente} elogiou seu atendimento: \"{elogio}\". Continue fazendo esse excelente trabalho! 💈";
+      const t = modelo.replace(/\{profissional\}/g, prof.split(" ")[0]).replace(/\{cliente\}/g, cli).replace(/\{elogio\}/g, elogio);
+      conv.parabenizou = true;
+      if (simular) { ctx.registro(`parabenizaria ${prof}: ${t}`); return { ok: true, simulado: true }; }
+      if (ctx.avisarProfissional) await ctx.avisarProfissional(prof, t);
+      ctx.registro(`parabenizou ${prof.split(" ")[0]} pelo elogio de um cliente`);
+      return { ok: true, nota: "o profissional recebeu os parabéns. Não precisa contar isso ao cliente." };
+    }
     case "avisar_equipe": {
       const t = String(input.recado || "").trim().slice(0, 300); if (!t) return { erro: "recado vazio" };
       ctx.pendencia(`recado: ${t}`); if (ctx.alertar && !simular) await ctx.alertar(`📣 ${t}`); else if (simular) ctx.registro(`avisaria a equipe: ${t}`);
@@ -712,7 +727,7 @@ export function criarSofia({ dir, log, api, sock, conectado = () => true, cmdCon
   const conversas = new Map(); // jid → { mensagens, ultima, ultimaSofia, humanoEm, contexto, nome, agenda, recepcao, fone, fila, ocupado }
   // As conversas sobrevivem a reinícios (atualização, instalador): ficam num arquivo do servidor por até 6 horas.
   const CONV = join(dir, "sofia-conversas.json");
-  const CAMPOS = ["mensagens", "inicio", "ultima", "ultimaSofia", "humanoEm", "contexto", "contada", "nome", "recepcao", "fone", "cadastro", "verificado", "sistema", "artes", "feitos", "gasto", "motivo", "pushName", "esperaAte", "esperaDe", "registrada", "regId", "fila", "noturna", "pendTipo", "ultimaCliente"];
+  const CAMPOS = ["parabenizou", "mensagens", "inicio", "ultima", "ultimaSofia", "humanoEm", "contexto", "contada", "nome", "recepcao", "fone", "cadastro", "verificado", "sistema", "artes", "feitos", "gasto", "motivo", "pushName", "esperaAte", "esperaDe", "registrada", "regId", "fila", "noturna", "pendTipo", "ultimaCliente"];
   // Mensagens esperando resposta (fila) também ficam salvas: um reinício não faz ninguém ficar sem resposta.
   // Áudio não dá para guardar (o arquivo fica no WhatsApp): vira um aviso para a Sofia pedir de novo.
   const AUDIO_PERDIDO = "[o cliente mandou um áudio que não deu para ouvir; peça, com gentileza, para ele mandar de novo ou escrever]";
@@ -771,7 +786,7 @@ export function criarSofia({ dir, log, api, sock, conectado = () => true, cmdCon
   async function configurar(e) {
     if (!e || !e.sofia || !e.appbarber) { cfg = null; return; }
     const novo = { company_id: e.company_id, barbearia: e.nome, brand: e.brand, nome: e.sofia.nome || "Sofia", modelo: MODELOS.includes(e.sofia.modelo) ? e.sofia.modelo : MODELO_PADRAO,
-      janelas: e.sofia.janelas || JANELAS_PADRAO, horario: e.horario || null, artes: Array.isArray(e.sofia.artes) ? e.sofia.artes.filter((a) => a && a.url && a.nome) : [], avisar: so(e.sofia.avisar || ""), alerta: so(e.sofia.alerta || ""), equipe: Array.isArray(e.barbers) ? e.barbers : [], nomesAB: (e.sofia && e.sofia.nomes) || {}, pausaMin: Math.max(15, Math.min(1440, Number(e.sofia.pausa) || 60)), notas: e.sofia.notas || "", upsell: Array.isArray(e.sofia.upsell) ? e.sofia.upsell : [], ab: e.appbarber };
+      janelas: e.sofia.janelas || JANELAS_PADRAO, horario: e.horario || null, artes: Array.isArray(e.sofia.artes) ? e.sofia.artes.filter((a) => a && a.url && a.nome) : [], avisar: so(e.sofia.avisar || ""), alerta: so(e.sofia.alerta || ""), equipe: Array.isArray(e.barbers) ? e.barbers : [], nomesAB: (e.sofia && e.sofia.nomes) || {}, pausaMin: Math.max(15, Math.min(1440, Number(e.sofia.pausa) || 60)), parabens: (e.feedback && e.feedback.parabens) || "", notas: e.sofia.notas || "", upsell: Array.isArray(e.sofia.upsell) ? e.sofia.upsell : [], ab: e.appbarber };
     cfg = novo;
     if (abKey !== e.appbarber.appbarber_api_key + e.appbarber.codigo_estabelecimento) {
       abKey = e.appbarber.appbarber_api_key + e.appbarber.codigo_estabelecimento;
@@ -1038,7 +1053,7 @@ export function criarSofia({ dir, log, api, sock, conectado = () => true, cmdCon
           : novas.join("\n")) });
         if (!c.contada) { c.contada = true; zera(); stats.conversas++; }
         if (!c.artes) c.artes = cfg.artes; // congeladas junto com as instruções
-        const ctx = { ab, fone: c.fone, stats, simular: false, equipe: [...(cfg.equipe || []).map((b) => b.name), cfg.barbearia].filter(Boolean), // o dono costuma ter o nome da barbearia artes: c.artes, enviarArte: (a) => enviarArte(jid, a), registro: (t) => log(`Sofia: ${t}.`),
+        const ctx = { ab, fone: c.fone, stats, simular: false, parabens: cfg.parabens || "", equipe: [...(cfg.equipe || []).map((b) => b.name), cfg.barbearia].filter(Boolean), // o dono costuma ter o nome da barbearia artes: c.artes, enviarArte: (a) => enviarArte(jid, a), registro: (t) => log(`Sofia: ${t}.`),
           falha: (t) => { log(`Sofia: (…${String(c.fone).slice(-4)}) ${t}`); pendencias.push(`(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); status().catch(() => {}); },
           listaEspera: (x) => listaEspera(jid, c, x), alertar: (t) => alertaEquipe(c, t), avisarProfissional: (nome, t) => avisarProfissional(c, nome, t), pendencia: (t) => { c.motivo = t; pendencias.push(`${c.nome ? c.nome.split(" ")[0] + " " : ""}(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); } };
         const antesStats = { agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados };
