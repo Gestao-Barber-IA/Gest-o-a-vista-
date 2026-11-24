@@ -4448,7 +4448,10 @@ Content-Type: application/json</pre>
   function resResumo(ev) {
     const z = () => ({ conv: 0, conversas: 0, ag: 0, valor: 0, ok: 0, falta: 0, real: 0, add: 0, addValor: 0, rec: 0, custo: 0 });
     const tot = z(), porO = {}, porP = {}, porD = {}; let canc = 0, rem = 0;
+    // Remarcação importada do histórico: o agendamento antigo (cancelado) não conta duas vezes nem como falta.
+    const remRefs = new Set(ev.filter(e => e.tipo === 'remarcacao' && /^h:rm:/.test(e.ref || '')).map(e => 'ag:' + e.ref.slice(5)));
     for (const e of ev) {
+      if (e.tipo === 'agendamento' && remRefs.has(e.ref)) continue;
       const o = porO[e.origem || 'whatsapp'] = porO[e.origem || 'whatsapp'] || z(), v = Number(e.valor) || 0;
       const soma = (k, x = 1) => { tot[k] += x; o[k] += x; };
       if (e.tipo === 'convite') soma('conv');
