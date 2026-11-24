@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "6.7";
+export const SOFIA_VERSAO = "6.8";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -110,6 +110,14 @@ export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) 
       // Valor de cada horário (a AppBarber já aplica as promoções do dia, ex.: desconto de segunda a quarta).
       const precos = {}; for (const h of lista) precos[String(h.scheduling_time).slice(0, 5)] = [h.scheduling_value, h.scheduling_discount];
       return { codigo: p.employee_code, nome: String(p.employee_nickname || p.employee_name || "").trim(), completo: String(p.employee_name || p.employee_nickname || "").trim(), horarios: Object.keys(precos), precos }; }));
+  // Assinantes (planos mensais) da barbearia, guardado por 6 horas (1 crédito).
+  const assinantes = () => memo("assinantes", 6 * 3600000, async () => ((await chamar("GET", "/v1/establishment/subscribers")).data || [])
+    .map((x) => ({ k: chaveFone(x.person_cellphone), plano: String(x.subscription_name || "").trim(), situacao: String(x.subscription_status || "").trim(), contratacao: String(x.contracting_date || ""), vencimento: String(x.due_date || "") }))
+    .filter((x) => x.k));
+  async function assinaturaDe(fone) {
+    const k = chaveFone(fone); if (!k) return null;
+    return (await assinantes()).find((x) => x.k === k && !/cancel|encerr|inativ/i.test(x.situacao)) || null;
+  }
   // Agendamentos futuros deste telefone (de hoje até 30 dias).
   async function agendamentosDe(fone) {
     const hoje = hojeSP(), k = chaveFone(fone);
@@ -117,7 +125,7 @@ export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) 
     const lista = (await chamar("GET", "/v1/appointments/history?" + q)).data || [];
     return lista.filter((a) => chaveFone(a.client_phone) === k && (!a.scheduling_status || /agendad|confirmad/i.test(a.scheduling_status))).map((a) => {
       const m = String(a.scheduling_start || "").match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})/);
-      return { codigo: Number(a.appointment_code || a.scheduling_code), comanda: Number(a.invoice_code) || null, quando: m ? `${m[3]}-${m[2]}-${m[1]} ${m[4]}:${m[5]}` : a.scheduling_start, profissional: String(a.employee_name || "").trim(), servico: String(a.service_description || "").trim(), nome: String(a.client_name || "").trim() };
+      return { codigo: Number(a.appointment_code || a.scheduling_code), comanda: Number(a.invoice_code) || null, quando: m ? `${m[3]}-${m[2]}-${m[1]} ${m[4]}:${m[5]}` : a.scheduling_start, profissional: String(a.employee_name || "").trim(), servico: String(a.service_description || "").trim(), nome: String(a.client_name || "").trim(), plano: !!a.subscription_association };
     }).sort((a, b) => String(a.quando).localeCompare(String(b.quando)));
   }
   // Último atendimento realizado deste telefone (procura nos últimos 3 meses, de 31 em 31 dias; 1 crédito por busca).
@@ -206,7 +214,7 @@ export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) 
     if (Number(r.error) > 0) throw new Error(r.result || "a AppBarber não aceitou o check-in");
     return true;
   }
-  return { servicos, profissionais, horarios, agendamentosDe, ultimoDe, buscarClientes, nomeDe, clienteDe, salvarCliente, criar, cancelarComanda, agenda, noLocal };
+  return { servicos, profissionais, horarios, assinaturaDe, agendamentosDe, ultimoDe, buscarClientes, nomeDe, clienteDe, salvarCliente, criar, cancelarComanda, agenda, noLocal };
 }
 
 // ---------- o que a Sofia pode fazer (ferramentas para o Claude) ----------
@@ -290,6 +298,7 @@ Regras (muito importantes):
 - Lista de espera: se o cliente quer um dia e horário específicos que estão cheios e diz que não pode em outro dia ou horário, ofereça colocar na lista de espera daquele dia/faixa (com o barbeiro dele, se ele fizer questão). Se ele aceitar, use lista_de_espera. Quando a lista avisa de uma vaga, a mensagem aparece no contexto: se o cliente quiser, confira o horário (ver_horarios) e siga o resumo normal para agendar.
 - Depois de cancelar um horário, nunca termine com uma afirmação ("quando quiser, é só chamar"): termine sempre perguntando "Para quando você gostaria de reagendar, [primeiro nome]?".
 - Remarcar ou cancelar: só horários do próprio cliente (consultar_cliente). Confirme qual horário antes.
+- Planos mensais (assinantes): o cliente do plano é atendido pelo profissional fixo do plano. Horário do plano (do_plano em consultar_cliente) só pode ser remarcado para a MESMA semana (segunda a domingo), nos dias que o plano permite e com o MESMO profissional; nunca troque o profissional do plano nem diga que trocar "não tem problema". Se o cliente pedir outro profissional, ou se não houver horário com o dele na semana, explique a regra com gentileza e use chamar_recepcao. Se ele contar que o horário do plano já foi trocado para outro profissional ou para outra semana, não confirme como certo: explique a regra e use chamar_recepcao para a equipe conferir.
 - Adiantar ou atrasar: se o cliente já tem horário e quer adiantar/atrasar (mesmo profissional, mesmo dia), use consultar_cliente e depois ver_horarios: o horário dele ocupa a agenda, então confira também livres_trocando_o_horario_do_cliente (horários que só ficam livres trocando o dele). Ofereça esses e, se ele aceitar, use remarcar.
 - Nunca diga que o cliente tem ou não tem horário marcado sem antes usar consultar_cliente nesta conversa. Se o cliente falar do horário dele, de chegada, de atraso ou de "vou mais tarde", use consultar_cliente antes de responder.
 - Atraso: se o cliente avisar que vai atrasar para um horário de hoje, confirme o horário dele (consultar_cliente), tranquilize-o e use avisar_equipe na hora com nome, quanto vai atrasar e o horário, passando o barbeiro(a) em profissional (ele recebe o aviso no WhatsApp dele). Se o atraso for grande ou ele quiser outro horário, ofereça remarcar.
@@ -482,7 +491,8 @@ export async function executar(nomeTool, input, ctx) {
       if (!fone) return { aviso: "telefone do cliente desconhecido: peça o número de celular com DDD" };
       const [nome, ag] = await Promise.all([conv.cadastro ? conv.cadastro.nome : ab.nomeDe(fone).catch(() => ""), ab.agendamentosDe(fone)]);
       conv.agenda = ag; if (nome) conv.nome = nome;
-      return { nome: nome || (ag[0] && ag[0].nome) || null, cadastrado: !!nome, horarios_marcados: ag.map((a) => ({ codigo: a.codigo, quando: a.quando, servico: a.servico, profissional: a.profissional })) };
+      return { nome: nome || (ag[0] && ag[0].nome) || null, cadastrado: !!nome, horarios_marcados: ag.map((a) => ({ codigo: a.codigo, quando: a.quando, servico: a.servico, profissional: a.profissional, ...(a.plano ? { do_plano: true } : {}) })),
+        ...(ag.some((a) => a.plano) ? { nota_plano: "Horários com do_plano são do plano mensal: só podem ser remarcados com o MESMO profissional, na MESMA semana (segunda a domingo) e nos dias que o plano permite (veja as Informações da casa)." } : {}) };
     }
     case "agendar": {
       if (!fone) return { erro: "telefone do cliente desconhecido" };
@@ -513,6 +523,14 @@ export async function executar(nomeTool, input, ctx) {
       if (!velho) return { erro: "esse horário não é deste cliente; use consultar_cliente" };
       const servs = await servicosPorCodigo(input.servicos || []);
       if (!servs.length) return { erro: "serviço não encontrado; use ver_servicos" };
+      // Horário do plano mensal: só com o mesmo profissional e na mesma semana (segunda a domingo).
+      if (velho.plano) {
+        const diaV = String(velho.quando).slice(0, 10), diaNv = String(input.data_hora).slice(0, 10);
+        const seg = (d) => somaDias(d, -((diaDaSemana(d) + 6) % 7));
+        const prof = ((await ab.horarios(diaNv, servs[0].codigo).catch(() => [])).find((p) => Number(p.codigo) === Number(input.profissional)) || {});
+        if (prof.nome && !mesmoNome(prof.nome, velho.profissional)) return { erro: `este é um horário do plano mensal do cliente: só pode ser remarcado com o mesmo profissional do plano (${velho.profissional}). Explique a regra do plano com gentileza e ofereça horários com ${velho.profissional} na mesma semana; se não houver, use chamar_recepcao.` };
+        if (seg(diaNv) !== seg(diaV)) return { erro: `este é um horário do plano mensal do cliente: só pode ser remarcado dentro da mesma semana (de ${seg(diaV).split("-").reverse().join("/")} a ${somaDias(seg(diaV), 6).split("-").reverse().join("/")}), nos dias que o plano permite, com ${velho.profissional}. Se não houver horário, use chamar_recepcao.` };
+      }
       // Novo horário encosta no próprio horário do cliente (mesmo dia e profissional)? Então ele só fica livre liberando o antigo.
       const [diaN, horaN] = String(input.data_hora).split(" "), durN = servs.reduce((t, x) => t + (Number(x.minutos) || 30), 0);
       const bloco = String(velho.quando).startsWith(diaN) ? (await blocosDoCliente(ab, ag, diaN)).find((b) => b.itens.some((i) => i.codigo === velho.codigo)) : null;
@@ -618,7 +636,9 @@ export async function verificarCadastro(ab, fone, conv) {
     const c = await ab.clienteDe(fone);
     if (!c) { conv.cadastro = null; return "[Cadastro: cliente SEM cadastro na barbearia (cliente novo)]"; }
     conv.cadastro = c; if (c.nome) conv.nome = c.nome;
-    return `[Cadastro: cliente cadastrado como ${c.nome || "(sem nome)"}; data de nascimento ${c.nascimento ? "cadastrada" : "NÃO cadastrada"}]`;
+    const pl = ab.assinaturaDe ? await ab.assinaturaDe(fone).catch(() => null) : null;
+    conv.plano = pl ? pl.plano || "plano mensal" : null;
+    return `[Cadastro: cliente cadastrado como ${c.nome || "(sem nome)"}; data de nascimento ${c.nascimento ? "cadastrada" : "NÃO cadastrada"}${pl ? `; ASSINANTE do ${pl.plano || "plano mensal"}${pl.situacao ? ` (situação: ${pl.situacao})` : ""}: os horários do plano são com o profissional fixo dele (veja regras dos planos)` : ""}]`;
   } catch { return "[Cadastro: não consegui verificar agora]"; }
 }
 
@@ -916,6 +936,8 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
     try { writeFileSync(CONV, JSON.stringify(out), { mode: 0o600 }); } catch (e) { log("Sofia: conversas não gravadas: " + e.message); }
   }
   const pausas = new Map();    // jid → até quando a Sofia fica quieta (a recepção respondeu pelo celular)
+  // A pausa sobrevive a reinícios (instalador, atualização): volta a partir da hora em que a recepção respondeu.
+  for (const [j, c] of conversas) if (c.humanoEm && c.humanoEm + 60 * 60000 > Date.now()) pausas.set(j, c.humanoEm + 60 * 60000);
   const minhas = new Set();    // ids das mensagens que este programa mandou (lembretes, feedback, parabéns…)
   const daSofia = new Set();   // ids das respostas da própria Sofia
   const pendencias = [];       // recados para a recepção (vão para o app)

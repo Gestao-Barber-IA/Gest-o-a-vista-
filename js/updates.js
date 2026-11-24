@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-24-ia-planos', date: '2026-11-24', title: 'Atendente IA: regra dos planos mensais', items: [
+    ['melhoria', 'A atendente IA reconhece quem é assinante de plano (pela AppBarber) e só remarca horário do plano com o mesmo profissional, na mesma semana e nos dias que o plano permite. Se o cliente pedir outro profissional ou contar que trocou, ela explica a regra e chama a recepção, sem dizer que "não tem problema".'],
+    ['correcao', 'Quando a recepção responde uma conversa pelo celular, a atendente IA fica quieta por 1 hora mesmo se o servidor reiniciar nesse tempo (antes, um reinício fazia ela voltar a responder).'],
+  ] },
   { id: '2026-11-24-preencher-vagas', date: '2026-11-24', title: 'Preencher vagas: horário cancelado vira convite na hora', items: [
     ['novo', 'Em Integração & API › Preencher vagas: quando um cliente cancela um horário de hoje ou de amanhã e ele continua livre, o sistema convida na hora clientes que costumam ser atendidos por esse profissional, já estão no prazo de voltar e costumam vir perto desse horário. A atendente IA responde e marca; o primeiro que confirmar fica com a vaga.'],
     ['novo', 'Você escolhe quantos convites por vaga (1 a 3), o máximo por dia, a antecedência mínima e o texto. No Resultado da atendente IA aparece a nova origem "Vagas preenchidas".'],
