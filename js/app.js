@@ -4096,6 +4096,7 @@ ${rows.length ? '' : emptyBarbers()}
       it => !it.est_code ? ['Desligada', ''] : it.active === false ? ['Pausada', ''] : /^erro/.test(String(it.last_status || '')) ? ['Com erro', 'chip-bad'] : (abCred(it) || {}).nivel === 'zero' ? ['Sem créditos', 'chip-bad'] : (abCred(it) || {}).nivel === 'baixo' ? ['Créditos acabando', 'chip-bad'] : ['Funcionando', 'chip-ok']],
     ['ia', 'Atendente IA (Sofia)', 'chat', 'Responde e agenda pelo WhatsApp da barbearia', () => iaCard(), 'whats', it => intSt(it.ia_on, it.ia_status)],
     ['clientes', 'Lembrete de agendamento', 'bell', 'Aviso do horário para o cliente no WhatsApp', () => clRemindCard(), 'whats', it => intSt(it.cl_on, it.cl_status)],
+    ['confirmacao', 'Confirmação de presença', 'checksq', 'Pedido na véspera para evitar faltas', () => cfCard(), 'whats', it => intSt(it.cf_on, it.cf_status)],
     ['equipe', 'Lembretes para a equipe', 'users', 'Checklist do dia no WhatsApp de cada profissional', () => waRemindCard(), 'whats', it => intSt(it.wa_on, it.wa_status)],
     ['totem', 'Totem de autoatendimento', 'monitor', 'Check-in e agendamento num tablet na recepção', () => ttCard(), 'recepcao', it => intSt(it.tt_on, it.tt_status)],
     ['ofertas', 'Ofertas no final do agendamento', 'gift', 'Adicionais oferecidos pelo totem e pela Sofia', () => upCard(), 'recepcao', it => { const n = (it.upsell || []).length; return n ? [`${n} oferta${n > 1 ? 's' : ''}`, 'chip-ok'] : ['Nenhuma', '']; }],
@@ -4387,6 +4388,45 @@ Content-Type: application/json</pre>
   const RT_TEXT = ['{Saudacao}, {cliente}! 😊 Sua próxima visita está chegando. Separei *{dia} às {hora}* com {profissional}, do jeito que você costuma vir.\nQuer que eu reserve pra você?',
     '{Saudacao}, {cliente}! Tudo bem? 😊 Já está chegando a hora de dar aquele trato no visual ✂️\n{profissional} tem horário *{dia} às {hora}*, como você costuma vir. Posso reservar pra você?',
     '{Saudacao}, {cliente}! 💈 Pensando na sua próxima visita, separei um horário com {profissional}: *{dia} às {hora}*, como de costume.\nQuer que eu deixe reservado pra você?'].join('\n---\n');
+  // Confirmação de presença (evitar faltas): pedido na véspera; a atendente IA confirma na agenda, remarca ou cancela.
+  const CF_TEXT = ['{Saudacao}, {cliente}! 😊\nPassando para confirmar seu horário de *{dia} às {hora}* com {profissional} ({servico}) aqui na {barbearia}.\nVocê confirma sua presença? Se não puder vir, me avise que eu remarco pra você.',
+    '{Saudacao}, {cliente}! Tudo bem? 😊\nSeu horário está marcado para *{dia} às {hora}* com {profissional}. Posso confirmar sua presença?\nSe tiver algum imprevisto, me fala que a gente encontra outro horário.'].join('\n---\n');
+  const CF_TEXT2 = '{cliente}, seu horário é *hoje às {hora}* com {profissional}. Consegue confirmar pra mim? 😊';
+  function cfCard() {
+    if (!isGestor(currentUser())) return '';
+    const it = Cloud.enabled ? ui.integ : (state.integ || {});
+    if (!it || it.erro) return '';
+    const st = String(it.cf_status || ''), on = !!it.cf_on, noAb = !it.est_code, bad = /^erro/.test(st), semIa = !it.ia_on;
+    const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const h = new Date().getHours(), sd = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+    const troca = t => t.replace(/\{Saudacao\}/g, sd).replace(/\{cliente\}/g, 'João').replace(/\{profissional\}/g, 'Carlos').replace(/\{dia\}/g, 'amanhã (quarta, 25/11)').replace(/\{hora\}/g, '14h').replace(/\{servico\}/g, 'Corte Tradicional').replace(/\{barbearia\}/g, state.company.name || '');
+    const prev = troca((it.cf_text || CF_TEXT).split(/\n\s*-{3,}\s*\n/)[0]), prev2 = troca(it.cf_text2 || CF_TEXT2).replace('amanhã (quarta, 25/11)', 'hoje');
+    const hora = /^\d{2}:\d{2}$/.test(it.cf_hour || '') ? it.cf_hour : '17:00', seg = it.cf_second !== false, antes = it.cf_before || 180;
+    const risco = (st.match(/sem resposta \(risco de falta\): (.*)$/) || [])[1];
+    return `<section class="section card as-card">
+      <h2 class="section-title">${icon('checksq')} Confirmação de presença</h2>
+      <p class="section-note">Na <b>véspera</b>, cada cliente com horário marcado recebe um pedido para <b>confirmar a presença</b>. Quem responder conversa com a ${iaNome()}: se confirmar, o horário fica como <b>Confirmado</b> na AppBarber; se não puder vir, ela já oferece outro horário ou cancela, e o horário liberado entra no <b>Preencher vagas</b>.</p>
+      <p class="section-note">No dia, quem não respondeu recebe um <b>2º aviso</b> algumas horas antes. Quem não responde nenhum dos dois aparece abaixo como <b>risco de falta</b>, para a recepção ligar. Quem já está confirmado ou marcou há menos de 3 horas não recebe.</p>
+      <p class="section-note">${icon('alert')} Sai pelo ${it.cl_numero === 'principal' ? '<b>WhatsApp principal</b>' : '<b>2º chip</b> (troque para o principal no lembrete de agendamento, para receber as respostas)'}, das ${esc(hora)} às 20h30, em dia aberto (horários de segunda são pedidos no sábado). Usa cerca de 2 consultas da API da AppBarber por hora.</p>
+      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}
+      ${semIa ? `<p class="section-note">${icon('alert')} A <b>Atendente IA</b> está desligada: os pedidos saem, mas quem precisa confirmar na agenda é a recepção.</p>` : ''}
+      <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.cf_status_at ? 'Atualizado ' + when(it.cf_status_at) + ' · ' : ''}${esc(st.replace(/^(ok|erro): /, '').replace(/ · sem resposta \(risco de falta\):.*$/, ''))}</small>` : '<span class="chip">Aguardando o servidor</span>'}</div>
+      ${on && risco ? `<div class="cf-risco">${icon('alert')}<div><b>Risco de falta hoje</b><small>Não responderam aos dois avisos (horário e final do telefone): ${esc(risco)}</small></div></div>` : ''}
+      <form class="form" data-form="cfSave" novalidate>
+        <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''} ${noAb ? 'disabled' : ''}><span><b>Confirmação de presença ligada</b><small>Pedido na véspera, com resposta pela atendente IA.</small></span></label>
+        <div class="grid-2">
+          <label class="field"><span>Pedir na véspera a partir de</span><input class="input" type="time" name="hora" value="${esc(hora)}" min="08:00" max="20:00"></label>
+          <label class="field"><span>2º aviso (minutos antes do horário)</span><input class="input num" type="number" name="antes" min="60" max="360" step="30" value="${antes}" ${seg ? '' : 'disabled'}></label>
+        </div>
+        <label class="check"><input type="checkbox" name="segundo" ${seg ? 'checked' : ''}><span><b>Mandar o 2º aviso no dia</b><small>Só para quem não respondeu o pedido da véspera.</small></span></label>
+        <label class="field"><span>Mensagem da véspera</span><textarea class="input" name="text" rows="8" maxlength="2000">${esc(it.cf_text || CF_TEXT)}</textarea>
+          <small class="muted">Use {Saudacao}, {cliente}, {dia}, {hora}, {profissional}, {servico} e {barbearia}. As versões separadas por uma linha com <b>---</b> são sorteadas a cada envio.</small></label>
+        <label class="field"><span>Mensagem do 2º aviso</span><textarea class="input" name="text2" rows="3" maxlength="1000">${esc(it.cf_text2 || CF_TEXT2)}</textarea></label>
+        <details class="wa-prev"><summary>Ver como chega para o cliente</summary><p class="wa-bubble">${esc(prev).replace(/\n/g, '<br>')}</p><p class="wa-bubble">${esc(prev2).replace(/\n/g, '<br>')}</p></details>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
+      </form></section>`;
+  }
   // Preencher vagas: cancelamento de hoje/amanhã vira convite na hora para clientes do mesmo profissional no prazo de voltar.
   const FV_TEXT = ['{Saudacao}, {cliente}! Tudo bem? 😊\nAcabou de abrir um horário *{dia} às {hora}* com {profissional} aqui na {barbearia}, e lembrei de você.\nQuer que eu reserve pra você?',
     '{Saudacao}, {cliente}! 😊\nVagou um horário *{dia} às {hora}* com {profissional}. Como já está chegando a hora do seu próximo atendimento, separei pra você primeiro.\nPosso reservar?'].join('\n---\n');
@@ -4482,13 +4522,15 @@ Content-Type: application/json</pre>
         out.push({ em, tipo: 'agendamento', origem: o, valor: [45, 60, 95, 110][Math.floor(rnd() * 4)], compareceu: passou ? rnd() < 0.88 : null, dados: { profissional: pro[Math.floor(rnd() * pro.length)] } });
         if (rnd() < 0.18) out.push({ em, tipo: 'adicional', origem: o, valor: [15, 25, 30][Math.floor(rnd() * 3)] });
       }
+      if (o === 'whatsapp') { const em = new Date(ini + i * 86400000 + 17 * 3600000).toISOString(), q = 8 + Math.floor(rnd() * 5);
+        for (let k = 0; k < q; k++) { out.push({ em, tipo: 'confirmacao', origem: 'confirmacao' }); const x = rnd(); if (x < 0.62) out.push({ em, tipo: 'confirmado', origem: 'confirmacao' }); else if (x < 0.72) out.push({ em, tipo: 'remarcacao', origem: 'confirmacao' }); else if (x < 0.8) out.push({ em, tipo: 'cancelamento', origem: 'confirmacao' }); } }
       if (o !== 'whatsapp' && o !== 'totem') for (let k = 0; k < Math.round(n * 2.5); k++) out.push({ em: new Date(ini + i * 86400000 + 9 * 3600000).toISOString(), tipo: 'convite', origem: o });
     }
     return out;
   }
   function resResumo(ev) {
     const z = () => ({ conv: 0, conversas: 0, ag: 0, valor: 0, ok: 0, falta: 0, real: 0, add: 0, addValor: 0, rec: 0, custo: 0 });
-    const tot = z(), porO = {}, porP = {}, porD = {}; let canc = 0, rem = 0;
+    const tot = z(), porO = {}, porP = {}, porD = {}, cf = { env: 0, ok: 0, rem: 0, canc: 0 }; let canc = 0, rem = 0;
     // Remarcação importada do histórico: o agendamento antigo (cancelado) não conta duas vezes nem como falta.
     const remRefs = new Set(ev.filter(e => e.tipo === 'remarcacao' && /^h:rm:/.test(e.ref || '')).map(e => 'ag:' + e.ref.slice(5)));
     for (const e of ev) {
@@ -4499,8 +4541,10 @@ Content-Type: application/json</pre>
       else if (e.tipo === 'conversa') soma('conversas');
       else if (e.tipo === 'recepcao') soma('rec');
       else if (e.tipo === 'uso') soma('custo', v);
-      else if (e.tipo === 'cancelamento') canc++;
-      else if (e.tipo === 'remarcacao') rem++;
+      else if (e.tipo === 'confirmacao') cf.env++;
+      else if (e.tipo === 'confirmado') cf.ok++;
+      else if (e.tipo === 'cancelamento') { canc++; if (e.origem === 'confirmacao') cf.canc++; }
+      else if (e.tipo === 'remarcacao') { rem++; if (e.origem === 'confirmacao') cf.rem++; }
       else if (e.tipo === 'adicional') { soma('add'); soma('addValor', v); }
       else if (e.tipo === 'agendamento') {
         soma('ag'); soma('valor', v);
@@ -4510,7 +4554,7 @@ Content-Type: application/json</pre>
         if (e.compareceu === true) { soma('ok'); soma('real', v); p.ok++; p.real += v; } else if (e.compareceu === false) { soma('falta'); p.falta++; }
       }
     }
-    return { tot, porO, porP, porD, canc, rem };
+    return { tot, porO, porP, porD, canc, rem, cf };
   }
   function pageResultadoIa() {
     autoSyncCard(); // carrega o nome da atendente (Integração)
@@ -4529,7 +4573,7 @@ Content-Type: application/json</pre>
       <button class="btn btn-primary" type="submit">${icon('check')} Ver resultados</button><p class="form-msg" data-msg></p></form>` : ''}`;
     if (!r.ev) return topo + '<section class="section card"><p class="muted">Carregando…</p></section>';
     if (r.erro) return topo + `<section class="section card"><p class="form-msg err">Não consegui carregar os resultados (${esc(r.erro.slice(0, 120))}). ${/ia_eventos|relation|schema/i.test(r.erro) ? 'Falta criar a tabela no Supabase (arquivo supabase/ia-resultados.sql).' : 'Tente de novo em instantes.'}</p></section>`;
-    const { tot: t, porO, porP, porD, canc, rem } = resResumo(r.ev);
+    const { tot: t, porO, porP, porD, canc, rem, cf } = resResumo(r.ev);
     if (!t.ag && !t.conversas && !t.conv && !t.add) return topo + `<section class="section card res-vazio">${icon('chart')}<h2>${rot}: ainda sem resultados</h2><p class="muted">Os números começam a aparecer com os atendimentos feitos pela ${nome} e pelo totem depois da atualização do servidor (versão 7.8). Quem veio de fato é conferido na AppBarber no dia seguinte.</p></section>`;
     const custoR = t.custo * RES_DOLAR, conf = t.ok + t.falta, txC = conf ? Math.round(t.ok / conf * 100) : null;
     const ganho = t.real + t.addValor, roi = custoR > 0.5 ? Math.round(ganho / custoR) : null;
@@ -4560,6 +4604,12 @@ Content-Type: application/json</pre>
       <div class="res-funil">${fun.map(([n, v, s], i) => `<div class="res-f ${i === 3 ? 'res-f-rec' : ''}" title="${n}: ${v}${s ? ' (' + s + ')' : ''}"><span class="res-f-n">${n}</span><span class="res-f-bar"><i style="width:${Math.max(2, v / funMax * 100)}%"></i></span><b class="num">${v}</b><small>${s}</small></div>`).join('')}</div>
       ${t.add || canc || rem ? `<p class="section-note">${[t.add ? `${t.add} adiciona${t.add > 1 ? 'is' : 'l'} aceito${t.add > 1 ? 's' : ''} nas ofertas (${money0(t.addValor)})` : '', rem ? `${rem} remarcaç${rem > 1 ? 'ões' : 'ão'}` : '', canc ? `${canc} cancelamento${canc > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ')}.</p>` : ''}</section>` : '';
 
+    // Confirmação de presença (evitar faltas)
+    const semResp = Math.max(0, cf.env - cf.ok - cf.rem - cf.canc);
+    const confirma = cf.env ? `<section class="section card"><h2 class="section-title">${icon('checksq')} Confirmação de presença</h2>
+      <div class="res-cf">${[['ok', 'Confirmaram', cf.ok], ['rem', 'Remarcaram', cf.rem], ['canc', 'Cancelaram (vaga liberada)', cf.canc], ['sem', 'Não responderam', semResp]].map(([k, n, v]) => `<div class="res-cf-i res-cf-${k}"><b class="num">${v}</b><span>${n}</span><small>${pc(v, cf.env)}%</small></div>`).join('')}</div>
+      <span class="res-cf-bar" role="img" aria-label="Confirmaram ${pc(cf.ok, cf.env)}%, remarcaram ${pc(cf.rem, cf.env)}%, cancelaram ${pc(cf.canc, cf.env)}%, não responderam ${pc(semResp, cf.env)}%">${[['ok', cf.ok], ['rem', cf.rem], ['canc', cf.canc], ['sem', semResp]].map(([k, v]) => v ? `<i class="res-cf-${k}" style="width:${v / cf.env * 100}%"></i>` : '').join('')}</span>
+      <p class="section-note">${cf.env} pedido${cf.env > 1 ? 's' : ''} de confirmação enviado${cf.env > 1 ? 's' : ''}. Cada remarcação ou cancelamento avisado é uma falta evitada: o horário volta para a agenda a tempo de outro cliente.</p></section>` : '';
     // 4. Agendamentos por dia
     const dias = []; for (let d = new Date(de); d < ate && d <= new Date(); d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) dias.push(iso(d));
     const dMax = Math.max(1, ...dias.map(d => (porD[d] || {}).ag || 0)), passo = dias.length > 16 ? 5 : dias.length > 8 ? 2 : 1;
@@ -4590,7 +4640,7 @@ Content-Type: application/json</pre>
           <span class="res-o-bar res-p-bar"><i class="ag" style="width:${p.valor / pMax * 100}%"></i><i class="re" style="width:${p.real / pMax * 100}%"></i></span>
           <small>${p.ag} agendamento${p.ag === 1 ? '' : 's'} · ${money0(p.valor)} agendados${cf ? ` · ${Math.round(p.ok / cf * 100)}% vieram` : ''}</small></div></div>`; }).join('')}</div></section>` : '';
 
-    return '<div class="res-page">' + topo + hero + tiles + `<div class="res-duo">${funil}${porDia}</div>` + origens + profs +
+    return '<div class="res-page">' + topo + hero + tiles + `<div class="res-duo">${funil}${porDia}</div>` + confirma + origens + profs +
       `<p class="section-note res-pe">"Realizado" conta só quem compareceu: a conferência na AppBarber roda todo dia de manhã, sobre a agenda do dia anterior. O custo da IA vem em dólar e é convertido a R$ ${nf2.format(RES_DOLAR)} só como referência. Para ligar ou ajustar a ${nome}, o totem e as mensagens, vá em <a href="#configuracoes" data-action="cfgTab" data-t="integracao">Configurações › Integração &amp; API</a>.</p></div>`;
   }
   function ttCard() {
@@ -9209,6 +9259,18 @@ Content-Type: application/json</pre>
       const [a, b] = [de, ate].sort();
       if ((fromIso(b) - fromIso(a)) / 86400000 > 366) return setMsg(f, 'Escolha um período de até 1 ano.');
       ui.iaRes = { p: 'per', de: a, ate: b }; render();
+    },
+    cfSave(f) {
+      const hora = f.elements.hora.value || '17:00', antes = Math.round(Number(f.elements.antes.value) || 180);
+      if (!/^\d{2}:\d{2}$/.test(hora) || hora < '08:00' || hora > '20:00') return setMsg(f, 'Horário da véspera: entre 08:00 e 20:00.');
+      if (antes < 60 || antes > 360) return setMsg(f, '2º aviso: de 60 a 360 minutos antes.');
+      const row = { cf_on: !!f.elements.on.checked, cf_hour: hora, cf_second: !!f.elements.segundo.checked, cf_before: antes, cf_text: (f.elements.text.value || '').trim().slice(0, 2000), cf_text2: (f.elements.text2.value || '').trim().slice(0, 1000) };
+      if (row.cf_text === CF_TEXT) row.cf_text = ''; if (row.cf_text2 === CF_TEXT2) row.cf_text2 = '';
+      const cur = (Cloud.enabled ? ui.integ : state.integ) || {};
+      if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Confirmação de presença salva.'); return render(); }
+      setMsg(f, 'Salvando…', true);
+      Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(row.cf_on ? 'Confirmação de presença ligada.' : 'Confirmação de presença desligada.'); render(); })
+        .catch(e => { const m = Cloud.message(e); setMsg(f, /cf_|column|schema cache/i.test(m) ? 'A confirmação de presença ainda está sendo ativada no servidor.' : m); });
     },
     fvSave(f) {
       const per = Math.round(Number(f.elements.per.value) || 0), daily = Math.round(Number(f.elements.daily.value) || 0), lead = Math.round(Number(f.elements.lead.value) || 0);

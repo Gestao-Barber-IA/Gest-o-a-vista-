@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "7.1";
+export const SOFIA_VERSAO = "7.2";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -125,7 +125,7 @@ export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) 
     const lista = (await chamar("GET", "/v1/appointments/history?" + q)).data || [];
     return lista.filter((a) => chaveFone(a.client_phone) === k && (!a.scheduling_status || /agendad|confirmad/i.test(a.scheduling_status))).map((a) => {
       const m = String(a.scheduling_start || "").match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})/);
-      return { codigo: Number(a.appointment_code || a.scheduling_code), comanda: Number(a.invoice_code) || null, quando: m ? `${m[3]}-${m[2]}-${m[1]} ${m[4]}:${m[5]}` : a.scheduling_start, profissional: String(a.employee_name || "").trim(), servico: String(a.service_description || "").trim(), nome: String(a.client_name || "").trim(), plano: !!a.subscription_association };
+      return { codigo: Number(a.appointment_code || a.scheduling_code), comanda: Number(a.invoice_code) || null, quando: m ? `${m[3]}-${m[2]}-${m[1]} ${m[4]}:${m[5]}` : a.scheduling_start, profissional: String(a.employee_name || "").trim(), servico: String(a.service_description || "").trim(), nome: String(a.client_name || "").trim(), plano: !!a.subscription_association, confirmado: /confirmad/i.test(String(a.scheduling_status || "")) };
     }).sort((a, b) => String(a.quando).localeCompare(String(b.quando)));
   }
   // Último atendimento realizado deste telefone (procura nos últimos 3 meses, de 31 em 31 dias; 1 crédito por busca).
@@ -214,7 +214,13 @@ export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) 
     if (Number(r.error) > 0) throw new Error(r.result || "a AppBarber não aceitou o check-in");
     return true;
   }
-  return { servicos, profissionais, horarios, assinaturaDe, agendamentosDe, ultimoDe, buscarClientes, nomeDe, clienteDe, salvarCliente, criar, cancelarComanda, agenda, noLocal };
+  // Marca o agendamento como "Confirmado" (a AppBarber alterna: só chame para quem ainda não está confirmado).
+  async function confirmar(codigo) {
+    const r = (await chamar("PUT", `/v1/appointments/${encodeURIComponent(codigo)}/status`, { establishment_code: Number(est), status_type: 1 })).data || {};
+    if (Number(r.error) > 0) throw new Error(r.result || "a AppBarber não aceitou a confirmação");
+    return true;
+  }
+  return { servicos, profissionais, horarios, assinaturaDe, agendamentosDe, ultimoDe, buscarClientes, nomeDe, clienteDe, salvarCliente, criar, cancelarComanda, agenda, noLocal, confirmar };
 }
 
 // ---------- o que a Sofia pode fazer (ferramentas para o Claude) ----------
@@ -235,6 +241,8 @@ export const TOOLS = [
     input_schema: obj({ servicos: { type: "array", items: { type: "integer" }, description: "Códigos dos serviços, na ordem" }, profissional: { type: "integer", description: "Código do profissional (de ver_horarios)" }, data_hora: { type: "string", description: "AAAA-MM-DD HH:MM" }, nome_cliente: { type: "string", description: "Nome completo do cliente" }, observacao: { type: ["string", "null"], description: "Recado curto para o barbeiro(a), ex.: Primeira vez na barbearia; ou null" } }, ["servicos", "profissional", "data_hora", "nome_cliente", "observacao"]) },
   { name: "remarcar", description: "Troca um horário já marcado por outro: marca o novo e depois cancela o antigo. SÓ use depois que o cliente confirmou o novo horário.", strict: true,
     input_schema: obj({ codigo_agendamento: { type: "integer", description: "Código do horário atual (de consultar_cliente)" }, servicos: { type: "array", items: { type: "integer" } }, profissional: { type: "integer" }, data_hora: { type: "string", description: "AAAA-MM-DD HH:MM" } }, ["codigo_agendamento", "servicos", "profissional", "data_hora"]) },
+  { name: "confirmar_presenca", description: "Marca como CONFIRMADO na agenda o(s) horário(s) do cliente, quando ele responde a confirmação de presença dizendo que vem (sim, confirmo, 👍, estarei aí). Use os códigos da mensagem de confirmação ou de consultar_cliente.", strict: true,
+    input_schema: obj({ codigos: { type: "array", items: { type: "integer" }, description: "Códigos dos horários a confirmar" } }, ["codigos"]) },
   { name: "cancelar", description: "Cancela um horário marcado do cliente. SÓ use depois que o cliente confirmou que quer cancelar aquele horário.", strict: true,
     input_schema: obj({ codigo_agendamento: { type: "integer", description: "Código do horário (de consultar_cliente)" } }, ["codigo_agendamento"]) },
   { name: "enviar_arte", description: "Envia ao cliente, no WhatsApp, uma das artes (imagens) da barbearia listadas nas instruções, como a tabela de planos. Use quando a situação da arte acontecer (ex.: cliente perguntou de planos). Depois de enviar, termine sua resposta com a pergunta indicada no resultado.", strict: true,
@@ -570,6 +578,18 @@ export async function executar(nomeTool, input, ctx) {
       conv.agenda = null; ctx.stats.remarcados++; ctx.registro(`remarcou de ${velho.quando} para ${input.data_hora}`);
       if (ctx.evento) ctx.evento({ tipo: "remarcacao", dados: { de: velho.quando, para: input.data_hora, antigos: [velho.codigo], codigos: (novoR && novoR.codigos) || [] } });
       return { ok: true };
+    }
+    case "confirmar_presenca": {
+      if (!fone) return { erro: "telefone do cliente desconhecido" };
+      const ag = await ab.agendamentosDe(fone), pedidos = (input.codigos || []).map(Number);
+      const meus = ag.filter((a) => pedidos.includes(a.codigo));
+      if (!meus.length) return { erro: "esses horários não são deste cliente (ou já passaram/foram cancelados); use consultar_cliente" };
+      if (simular) return { ok: true, simulado: true };
+      const feitos = [];
+      for (const a of meus) { if (!a.confirmado) await ab.confirmar(a.codigo); feitos.push(a.quando); }
+      conv.agenda = null; ctx.registro(`confirmou presença em ${feitos.join(", ")}`);
+      if (ctx.evento) ctx.evento({ tipo: "confirmado", ref: `cfok:${meus.map((a) => a.codigo).sort((x, y) => x - y).join(",")}`, dados: { quando: meus[0].quando, profissional: meus[0].profissional } });
+      return { ok: true, confirmados: feitos, nota: "Agradeça em uma frase curta e simpática (ex.: \"Perfeito, te esperamos! 😊\"). Não faça outra pergunta." };
     }
     case "cancelar": {
       if (!fone) return { erro: "telefone do cliente desconhecido" };
@@ -1403,8 +1423,10 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
     if (ligada()) { c.esperaDe = Date.now(); c.esperaAte = Date.now() + horas * 3600000; c.recepcao = false; }
   }
   const retornoEnviado = (jid, id, x) => conviteEnviado(jid, id, x);
+  // O cliente escreveu nesta conversa depois de `desde` (ms)?
+  const respondeu = (jid, desde) => ((conversas.get(jid) || {}).ultimaCliente || 0) > desde;
 
-  return { configurar, aoReceber, marcarMinha, ligada, relatorioDaSemana, retornoEnviado, conviteEnviado, salvar: () => salvarConversas(true), ativaAgora: () => !!(cfg && client && dentroDaJanela(cfg.janelas)), status };
+  return { configurar, aoReceber, marcarMinha, ligada, relatorioDaSemana, retornoEnviado, conviteEnviado, respondeu, salvar: () => salvarConversas(true), ativaAgora: () => !!(cfg && client && dentroDaJanela(cfg.janelas)), status };
 }
 
 // ---------- retorno no tempo certo ----------
@@ -1682,6 +1704,126 @@ export function criarVagas({ dir, log = () => {}, api = async () => ({}), sock =
   }
   async function rodar(e, hoje = hojeSP()) {
     if (ocupado || !e || !e.vagas) return; ocupado = true;
+    try { await passo(e, hoje); } finally { ocupado = false; }
+  }
+  return { rodar };
+}
+
+// ---------- confirmação de presença (evitar faltas) ----------
+// Na véspera (a partir do horário escolhido), pede ao cliente que confirme o horário de amanhã. A atendente IA lê a
+// resposta: confirma na agenda (status "Confirmado"), remarca ou cancela; o horário cancelado entra no Preencher vagas.
+// Quem não respondeu recebe um 2º aviso no dia, algumas horas antes; quem não responde nenhum fica como "risco de falta".
+export const TEXTOS_CF = [
+  "{Saudacao}, {cliente}! 😊\nPassando para confirmar seu horário de *{dia} às {hora}* com {profissional} ({servico}) aqui na {barbearia}.\nVocê confirma sua presença? Se não puder vir, me avise que eu remarco pra você.",
+  "{Saudacao}, {cliente}! Tudo bem? 😊\nSeu horário está marcado para *{dia} às {hora}* com {profissional}. Posso confirmar sua presença?\nSe tiver algum imprevisto, me fala que a gente encontra outro horário.",
+];
+export const TEXTO_CF2 = "{cliente}, seu horário é *hoje às {hora}* com {profissional}. Consegue confirmar pra mim? 😊";
+export function criarConfirmacao({ dir, log = () => {}, api = async () => ({}), sock = () => null, sofia = () => null, resultados = null, req = null, pode = () => true, esperaEntre = [20000, 45000], relogio = agoraSP }) {
+  const EST = join(dir, "confirmacao-estado.json");
+  const ler = (f, pad) => { try { return JSON.parse(readFileSync(f, "utf8")); } catch { return pad; } };
+  const gravar = (v) => { try { writeFileSync(EST, JSON.stringify(v), { mode: 0o600 }); } catch (e) { log("Confirmação: não gravei o arquivo: " + e.message); } };
+  let ab = null, abChave = "", ocupado = false, statusEm = 0;
+  const cache = new Map(); // dia → { em, lista }
+  async function doDia(d, st) { const k = d + st, c = cache.get(k); if (c && Date.now() - c.em < 20 * 60000) return c.lista; const lista = await ab.agenda(d, d, st); cache.set(k, { em: Date.now(), lista }); return lista; }
+  // Um pedido por cliente para cada bloco de horários seguidos no dia (ex.: corte 14h + barba 14h40).
+  function blocos(lista, dia) {
+    const porCli = new Map();
+    for (const a of lista) {
+      const m = String(a.scheduling_start || "").match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})/); if (!m || `${m[3]}-${m[2]}-${m[1]}` !== dia) continue;
+      const f = so(a.client_phone); if (f.length < 10) continue;
+      const r = String(a.scheduling_registration_date || "").match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})/);
+      const x = { cod: Number(a.appointment_code || a.scheduling_code), min: +m[4] * 60 + +m[5], prof: String(a.employee_name || "").trim(), serv: String(a.service_description || "").trim(), nome: String(a.client_name || "").trim(), f,
+        reg: r ? new Date(`${r[3]}-${r[2]}-${r[1]}T${r[4]}:${r[5]}:00-03:00`).getTime() : 0, conf: /confirmad/i.test(String(a.scheduling_status || "")) };
+      (porCli.get(chaveFone(f)) || porCli.set(chaveFone(f), []).get(chaveFone(f))).push(x);
+    }
+    const out = [];
+    for (const arr of porCli.values()) {
+      arr.sort((p, q) => p.min - q.min); let cur = null;
+      for (const x of arr) {
+        if (cur && x.min - cur.fim <= 60) { cur.cods.push(x.cod); cur.fim = x.min; if (x.serv && !cur.servs.includes(x.serv)) cur.servs.push(x.serv); cur.conf = cur.conf && x.conf; cur.reg = Math.max(cur.reg, x.reg); continue; }
+        cur = { cods: [x.cod], min: x.min, fim: x.min, prof: x.prof, servs: x.serv ? [x.serv] : [], nome: x.nome, f: x.f, reg: x.reg, conf: x.conf }; out.push(cur);
+      }
+    }
+    return out.sort((p, q) => p.min - q.min);
+  }
+  const juntos = (l) => (l.length <= 1 ? l.join("") : l.slice(0, -1).join(", ") + " e " + l[l.length - 1]);
+  function texto(modelo, b, dia, hoje, agora, e) {
+    const versoes = String(modelo).split(/\n\s*-{3,}\s*\n/).map((t) => t.trim()).filter(Boolean);
+    const sd = agora < 12 * 60 ? "Bom dia" : agora < 18 * 60 ? "Boa tarde" : "Boa noite", ds = DIAS[diaDaSemana(dia)].replace("-feira", ""), dm = dia.split("-").reverse().slice(0, 2).join("/");
+    const diaTxt = dia === hoje ? "hoje" : dia === somaDias(hoje, 1) ? `amanhã (${ds}, ${dm})` : `${ds} (${dm})`, nome = primeiroNome(b.nome);
+    let t = versoes[Math.floor(Math.random() * versoes.length)];
+    if (!nome) t = t.replace(/,\s*\{cliente\}/g, "").replace(/\{cliente\},?\s*/g, "");
+    return t.replace(/\{Saudacao\}/g, sd).replace(/\{saudacao\}/g, sd.toLowerCase()).replace(/\{cliente\}/g, nome).replace(/\{dia\}/g, diaTxt).replace(/\{hora\}/g, horaTexto(`${String(Math.floor(b.min / 60)).padStart(2, "0")}:${String(b.min % 60).padStart(2, "0")}`))
+      .replace(/\{profissional\}/g, primeiroNome(b.prof) || "a nossa equipe").replace(/\{servico\}/g, juntos(b.servs) || "seu atendimento").replace(/\{barbearia\}/g, e.nome || "")
+      .replace(/ \(\)/g, "").replace(/https?:\/\/\S+/gi, "").trim();
+  }
+  async function mandar(s, b, txt, detalhe, horas, e) {
+    const d = so(b.f), numero = d.length <= 11 ? "55" + d : d;
+    const [w] = await s.onWhatsApp(numero).catch(() => []); if (!w || !w.exists) return null;
+    await s.presenceSubscribe(w.jid).catch(() => {}); await s.sendPresenceUpdate("composing", w.jid).catch(() => {});
+    await espera(1500 + Math.random() * 2000); await s.sendPresenceUpdate("paused", w.jid).catch(() => {});
+    const r = await s.sendMessage(w.jid, { text: txt });
+    const so2 = sofia(); if (so2 && so2.conviteEnviado) so2.conviteEnviado(w.jid, r && r.key && r.key.id, { fone: normFone(d), nome: primeiroNome(b.nome), texto: txt, horas, origem: "confirmacao", tipo: "confirmação de presença do horário marcado", detalhe });
+    return w.jid;
+  }
+  const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  async function passo(e, hoje) {
+    const c = e.confirmacao, agora = relogio(), fechados = ((e.horario && e.horario.fechados) || []).map(Number);
+    if (agora < 8 * 60 || agora > 21 * 60) return;
+    const k = `${c.codigo_estabelecimento}|${c.appbarber_api_key}`;
+    if (!ab || abChave !== k) { abChave = k; ab = ferramentasAppBarber({ cfg: c, ...(req ? { req } : {}), creditos: (n, zero) => api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: n, ...(zero ? { sem_saldo: true } : {}) }).catch(() => {}) }); }
+    const st = ler(EST, {}); if (st.cid !== e.company_id) { st.cid = e.company_id; st.env = {}; }
+    st.env = st.env || {}; for (const [x, v] of Object.entries(st.env)) if (v.dia < somaDias(hoje, -2)) delete st.env[x];
+    const s = sock(), amanha = somaDias(hoje, 1);
+    // Próximo dia aberto (ex.: no sábado, com domingo fechado, pede os horários de segunda).
+    let alvo = amanha; for (let i = 0; i < 3 && fechados.includes(diaDaSemana(alvo)); i++) alvo = somaDias(alvo, 1);
+    const detalhe = (b, dia) => `[confirmação de presença: ${dia} ${hhmm(b.min)} com ${b.prof} (${juntos(b.servs)}), códigos ${b.cods.join(", ")}. Se o cliente confirmar (sim, confirmo, 👍, estarei aí), use confirmar_presenca com esses códigos e agradeça curto. Se não puder vir, seja gentil e ofereça remarcar (ver_horarios + remarcar) ou cancelar; nunca insista. Se ele só agradecer, não precisa responder de novo.]`;
+    // 1) Véspera: a partir do horário escolhido até 20h30, em dia aberto, para os horários de amanhã.
+    if (s && pode() && !fechados.includes(diaDaSemana(hoje)) && !fechados.includes(diaDaSemana(alvo)) && agora >= mins(c.hora || "17:00") && agora <= 20 * 60 + 30) {
+      let n = 0;
+      for (const b of blocos(await doDia(alvo, "1"), alvo)) {
+        const kb = b.cods.join(","); if (st.env[kb] || b.conf) continue;
+        if (b.reg && Date.now() - b.reg < 3 * 3600000) { st.env[kb] = { dia: alvo, pulado: "marcou há pouco" }; continue; } // acabou de marcar: já sabe
+        if (n >= 8) break; // no máximo 8 por rodada (a próxima continua)
+        const txt = texto(c.texto || TEXTOS_CF.join("\n---\n"), b, alvo, hoje, agora, e);
+        st.env[kb] = { dia: alvo, min: b.min, f4: b.f.slice(-4), em1: Date.now() }; gravar(st);
+        try { const jid = await mandar(s, b, txt, detalhe(b, alvo), 30, e); if (!jid) { st.env[kb].semZap = true; } else { st.env[kb].jid = jid; n++;
+          if (resultados) resultados.evento(e.company_id, { tipo: "confirmacao", origem: "confirmacao", ref: `cf:${kb}` }); log(`Confirmação: pedido enviado (${primeiroNome(b.nome) || "cliente"} → ${alvo} ${hhmm(b.min)}).`); } }
+        catch (err) { st.env[kb].erro = String(err.message).slice(0, 80); log("Confirmação: não enviada: " + err.message); }
+        gravar(st); await espera(esperaEntre[0] + Math.random() * (esperaEntre[1] - esperaEntre[0]));
+      }
+    }
+    // 2) No dia: 2º aviso para quem não respondeu, `antes` minutos antes do horário (no mínimo 30 minutos antes).
+    const doHoje = Object.entries(st.env).filter(([, v]) => v.dia === hoje && v.jid && !v.em2 && !v.ok);
+    if (doHoje.length) {
+      const atuais = new Map(blocos(await doDia(hoje, "1"), hoje).map((b) => [b.cods.join(","), b]));
+      const so2 = sofia();
+      for (const [kb, v] of doHoje) {
+        const b = atuais.get(kb);
+        if (!b) { v.ok = "remarcado ou cancelado"; continue; }
+        if (b.conf) { v.ok = "confirmado"; continue; }
+        if (so2 && so2.respondeu && so2.respondeu(v.jid, v.em1)) { v.ok = "respondeu"; continue; }
+        if (!c.segundo || !s || !pode()) continue;
+        const falta = b.min - agora; if (falta > (c.antes || 180) || falta < 30) continue;
+        try { await mandar(s, b, texto(c.texto2 || TEXTO_CF2, b, hoje, hoje, agora, e), detalhe(b, hoje), 6, e); v.em2 = Date.now(); log(`Confirmação: 2º aviso (${hhmm(b.min)}).`); } catch (err) { log("Confirmação: 2º aviso não enviado: " + err.message); }
+        gravar(st);
+      }
+      gravar(st);
+    }
+    // Situação: pedidos de hoje e de amanhã, confirmados e quem ainda não respondeu (risco de falta).
+    if (Date.now() - statusEm > 15 * 60000) {
+      statusEm = Date.now();
+      const so2 = sofia(), vals = Object.values(st.env).filter((v) => v.jid);
+      for (const v of vals) if (!v.ok && v.dia === hoje && so2 && so2.respondeu && so2.respondeu(v.jid, v.em1)) v.ok = "respondeu";
+      const amanhaN = vals.filter((v) => v.dia === alvo).length;
+      const risco = vals.filter((v) => v.dia === hoje && !v.ok && v.min > agora).sort((p, q) => p.min - q.min);
+      const quando = new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+      await api("POST", { company_id: e.company_id, acao: "cf_status", status: `ok: ${quando} · ${amanhaN} pedido(s) de confirmação para ${alvo === amanha ? "amanhã" : alvo.split("-").reverse().slice(0, 2).join("/")} · hoje: ${vals.filter((v) => v.dia === hoje && v.ok).length} responderam${risco.length ? ` · sem resposta (risco de falta): ${risco.slice(0, 12).map((v) => `${horaTexto(hhmm(v.min))} (…${v.f4})`).join(", ")}` : ""}` }).catch(() => {});
+      gravar(st);
+    }
+  }
+  async function rodar(e, hoje = hojeSP()) {
+    if (ocupado || !e || !e.confirmacao) return; ocupado = true;
     try { await passo(e, hoje); } finally { ocupado = false; }
   }
   return { rodar };
