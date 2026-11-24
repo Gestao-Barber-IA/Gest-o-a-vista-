@@ -3,7 +3,7 @@
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
   { id: '2026-11-24-resultado-ia', date: '2026-11-24', title: 'Resultado da atendente IA e do totem', items: [
-    ['novo', 'Em Configurações › Integração & API, o cartão Resultado: quantos agendamentos a atendente IA e o totem fizeram, quanto valiam, quantos clientes vieram de fato (conferido na AppBarber no dia seguinte), o faturamento realizado, o custo da IA e quanto cada real de IA trouxe de volta.'],
+    ['novo', 'Nova tela no menu, em Gestor: Resultado da atendente IA, com cores e gráficos. Mostra quantos agendamentos a atendente IA e o totem fizeram, quanto valiam, quantos clientes vieram de fato (conferido na AppBarber no dia seguinte), o faturamento realizado, o custo da IA e quanto cada real de IA trouxe de volta.'],
     ['novo', 'Mostra também de onde veio cada agendamento (WhatsApp, retorno, reconquista, feedback ou totem), os adicionais aceitos nas ofertas e o resultado por profissional. Escolha 7 dias, este mês ou o mês passado.'],
   ] },
   { id: '2026-11-24-feedback-elogio', date: '2026-11-24', title: 'Feedback: resposta ao elogio e parabéns ao profissional', items: [

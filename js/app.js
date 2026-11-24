@@ -785,6 +785,7 @@
       { r: 'organograma', t: 'Organograma', i: 'org', g: 1 },
     ] },
     { group: 'Gestor', g: 1, items: [
+      { r: 'resultado-ia', t: 'Resultado da Sofia', i: 'chart', g: 1 },
       { r: 'fiscalizacao', t: 'Fiscalização', i: 'alert', g: 1, a: 1 },
       { r: 'barbeiros', t: 'Adicionar profissional', i: 'users', g: 1 },
       { r: 'configuracoes', t: 'Configurações', i: 'gear' },
@@ -827,7 +828,7 @@
       const am = isAreaMgr(user), hg = hasGrants(user);
       const lf = lanAny();
       const items = gr.items.filter(it => (!it.g || g || (it.a && am) || (it.r === 'lancamentos' && lf) || (it.r === 'fiscalizacao' && discOk(user))) && (!it.rt || rtAuds(user).length) && (!it.cloud || billing()) && (!it.admin || (billing() && billing().admin))).map(it => `
-        <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'performance' && (g || hg) ? (g || accessOf(user.barberId) !== 'profissional' ? 'Performance da empresa' : 'Performance da área') : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}${it.r === 'avisos' && avUnseen() ? `<span class="nav-new" aria-label="${avUnseen()} avisos novos">${avUnseen()}</span>` : ''}${it.r === 'bonus' && bonusUnseen() ? `<span class="nav-new" aria-label="${bonusUnseen()} bônus novos">${bonusUnseen()}</span>` : ''}${it.r === 'atualizacoes' && updUnseen() ? `<span class="nav-new" aria-label="${updUnseen()} novidades">${updUnseen()}</span>` : ''}</a>`).join('');
+        <a class="nav-item" href="#${it.r}" ${it.r === route ? 'aria-current="page"' : ''}>${icon(it.i)}<span>${esc(it.r === 'resultado-ia' ? 'Resultado da ' + iaNomeTxt() : it.r === 'performance' && (g || hg) ? (g || accessOf(user.barberId) !== 'profissional' ? 'Performance da empresa' : 'Performance da área') : it.t)}</span>${it.soon ? '<span class="nav-soon">em breve</span>' : ''}${it.r === 'avisos' && avUnseen() ? `<span class="nav-new" aria-label="${avUnseen()} avisos novos">${avUnseen()}</span>` : ''}${it.r === 'bonus' && bonusUnseen() ? `<span class="nav-new" aria-label="${bonusUnseen()} bônus novos">${bonusUnseen()}</span>` : ''}${it.r === 'atualizacoes' && updUnseen() ? `<span class="nav-new" aria-label="${updUnseen()} novidades">${updUnseen()}</span>` : ''}</a>`).join('');
       if (!gr.group || !items.trim()) return gr.group ? '' : items;
       // Conjunto que pode ser minimizado (fica lembrado neste aparelho); o conjunto da tela aberta aparece sempre.
       const shut = navShut().includes(gr.group) && !gr.items.some(it => it.r === route);
@@ -1552,6 +1553,11 @@
       'Passou do horário (com 15 minutos de tolerância) sem marcar, a tarefa aparece como Atrasada. Feita depois do horário mostra quantos minutos atrasou.',
       'Escolha outro dia no calendário para ver o histórico: o que foi feito, a que horas, por quem e as fotos.',
     ], tips: ['Líder = quem tem nível de acesso Líder em Adicionar profissional. Recepção = quem tem "Recepcionista" na função.', 'Só o dono e o nível Gestor criam, mudam ou apagam tarefas. Pause uma tarefa (desmarque Ativa) para tirar do dia sem perder o histórico.', 'Quem marcou pode desmarcar no mesmo dia; depois disso, só a gestão.'] },
+    'resultado-ia': { t: 'Resultado da atendente IA', ic: 'chart', gestor: 1, steps: [
+      'Escolha o período: últimos 7 dias, este mês ou o mês passado.',
+      'No topo, o faturamento que entrou de verdade pelos agendamentos da atendente IA e do totem, e quanto cada R$ 1 gasto com a IA trouxe de volta.',
+      'Abaixo: quantas conversas viraram agendamento, quantos clientes vieram, os agendamentos de cada dia, de onde veio cada um (WhatsApp, retorno, reconquista, feedback ou totem) e o resultado por profissional.',
+    ], tips: ['Quem veio de fato é conferido na AppBarber toda manhã, sobre a agenda do dia anterior. Até lá o agendamento conta só como agendado.', 'Toque numa barra para ver os números daquele dia.'] },
     fiscalizacao: { t: 'Fiscalização', ic: 'alert', gestor: 1, steps: [
       'Toque em Novo registro, escolha o profissional, a data e o tipo de falta (atraso, falta, atendimento, higiene, uniforme…).',
       'A gravidade é sugerida sozinha: se a mesma falta aconteceu nos últimos 30 dias, vira Reincidência. Você pode mudar para Advertência ou Penalidade (a Penalidade reduz a comissão de quinta, sexta e sábado seguintes, em Comissões e prêmios).',
@@ -4074,17 +4080,17 @@ ${rows.length ? '' : emptyBarbers()}
     const it = (Cloud.enabled ? ui.integ : state.integ) || {};
     const sec = INT_SECS.find(x => x[0] === ui.intSec);
     if (sec) return `<div class="int-back"><button type="button" class="btn btn-sm" data-action="intSec" data-s="">${icon('left')} Integrações</button></div>${sec[4](ex)}`;
-    const tiles = g => INT_SECS.filter(x => x[5] === g && (x[0] === 'api' || x[0] === 'passo' || x[0] === 'resultado' || x[4](ex))).map(([k, t, ic, d, , , stf]) => { const st = stf ? stf(it) : null;
+    const tiles = g => INT_SECS.filter(x => x[5] === g && (x[0] === 'api' || x[0] === 'passo' || x[4](ex))).map(([k, t, ic, d, , , stf]) => { const st = stf ? stf(it) : null;
       return `<button type="button" class="int-tile" data-action="intSec" data-s="${k}"><span class="int-ic">${icon(ic)}</span><span class="int-tx"><b>${t.replace('Sofia', iaNome())}</b><small>${d.replace('Sofia', iaNome())}</small>${st ? `<span class="chip ${st[1]}">${st[0]}</span>` : ''}</span>${icon('right')}</button>`; }).join('');
     return `<p class="section-note int-intro">Escolha o que você quer configurar:</p>${INT_GRUPOS.map(([g, nome]) => { const h = tiles(g); return h ? `<h3 class="int-grp">${nome}</h3><div class="int-grid">${h}</div>` : ''; }).join('')}`;
   }
   // Integração & API em cartões: cada um abre só a sua configuração (antes era tudo numa página só, muito longa).
-  const INT_GRUPOS = [['res', 'Resultados'], ['agenda', 'Agenda e dados'], ['whats', 'Atendimento no WhatsApp'], ['recepcao', 'Recepção'], ['mkt', 'Mensagens automáticas para clientes'], ['tec', 'Técnico']];
+  const INT_GRUPOS = [['agenda', 'Agenda e dados'], ['whats', 'Atendimento no WhatsApp'], ['recepcao', 'Recepção'], ['mkt', 'Mensagens automáticas para clientes'], ['tec', 'Técnico']];
   // status: [texto, classe do chip] a partir dos dados da integração
+  const iaNomeTxt = () => { const it = (Cloud.enabled ? ui.integ : state.integ) || {}; return String(it.ia_name || 'Sofia'); };
   const iaNome = () => { const it = (Cloud.enabled ? ui.integ : state.integ) || {}; return esc(it.ia_name || 'Sofia'); };
   const intSt = (on, st, extra) => !on ? ['Desligado', ''] : /^erro/.test(String(st || '')) ? ['Com erro', 'chip-bad'] : /^desconectado/.test(String(st || '')) ? ['Desconectado', 'chip-bad'] : extra || ['Ligado', 'chip-ok'];
   const INT_SECS = [
-    ['resultado', 'Resultado da Sofia', 'chart', 'Agendamentos, clientes que vieram, faturamento e custo da IA', () => resCard(), 'res'],
     ['passo', 'Passo a passo da integração', 'book', 'Como ligar a AppBarber ou outro sistema', () => apiTutorial(), 'agenda'],
     ['sync', 'Sincronização AppBarber', 'plug', 'Atendimentos e comandas entram sozinhos, e os créditos da API', () => autoSyncCard() + abCard(), 'agenda',
       it => !it.est_code ? ['Desligada', ''] : it.active === false ? ['Pausada', ''] : /^erro/.test(String(it.last_status || '')) ? ['Com erro', 'chip-bad'] : (abCred(it) || {}).nivel === 'zero' ? ['Sem créditos', 'chip-bad'] : (abCred(it) || {}).nivel === 'baixo' ? ['Créditos acabando', 'chip-bad'] : ['Funcionando', 'chip-ok']],
@@ -4441,7 +4447,7 @@ Content-Type: application/json</pre>
   }
   function resResumo(ev) {
     const z = () => ({ conv: 0, conversas: 0, ag: 0, valor: 0, ok: 0, falta: 0, real: 0, add: 0, addValor: 0, rec: 0, custo: 0 });
-    const tot = z(), porO = {}, porP = {}; let canc = 0, rem = 0;
+    const tot = z(), porO = {}, porP = {}, porD = {}; let canc = 0, rem = 0;
     for (const e of ev) {
       const o = porO[e.origem || 'whatsapp'] = porO[e.origem || 'whatsapp'] || z(), v = Number(e.valor) || 0;
       const soma = (k, x = 1) => { tot[k] += x; o[k] += x; };
@@ -4454,14 +4460,16 @@ Content-Type: application/json</pre>
       else if (e.tipo === 'adicional') { soma('add'); soma('addValor', v); }
       else if (e.tipo === 'agendamento') {
         soma('ag'); soma('valor', v);
+        const dia = iso(new Date(e.em)), dd = porD[dia] = porD[dia] || { ag: 0, valor: 0 }; dd.ag++; dd.valor += v;
         const nome = (e.dados && e.dados.profissional) || 'Sem profissional definido', p = porP[nome] = porP[nome] || z();
         p.ag++; p.valor += v;
         if (e.compareceu === true) { soma('ok'); soma('real', v); p.ok++; p.real += v; } else if (e.compareceu === false) { soma('falta'); p.falta++; }
       }
     }
-    return { tot, porO, porP, canc, rem };
+    return { tot, porO, porP, porD, canc, rem };
   }
-  function resCard() {
+  function pageResultadoIa() {
+    autoSyncCard(); // carrega o nome da atendente (Integração)
     const r = ui.iaRes = ui.iaRes || { p: 'mes' };
     const [de, ate, rot] = resPeriodo(r.p), chave = r.p + de.toISOString().slice(0, 10);
     if (r.chave !== chave) {
@@ -4469,41 +4477,74 @@ Content-Type: application/json</pre>
       if (!Cloud.enabled) r.ev = resDemo(de, ate);
       else Cloud.iaEventos(de.toISOString(), ate.toISOString()).then(x => { if (r.chave === chave) { r.ev = x; render(); } }).catch(e => { if (r.chave === chave) { r.erro = String((e && e.message) || e); r.ev = []; render(); } });
     }
+    const nome = iaNome();
     const seg = [['sem', '7 dias'], ['mes', 'Este mês'], ['ant', 'Mês passado']].map(([k, t]) => `<button type="button" class="${r.p === k ? 'on' : ''}" data-action="resPer" data-p="${k}">${t}</button>`).join('');
-    const topo = `<section class="section card res-card"><h2 class="section-title">${icon('chart')} Resultado da ${iaNome()} e do totem</h2>
-      <p class="section-note">Quanto a atendente e o totem trouxeram em agendamentos, quantos clientes vieram de fato (conferido na AppBarber no dia seguinte) e quanto isso custou.</p>
-      <div class="seg" role="group" aria-label="Período">${seg}</div>`;
-    if (!r.ev) return topo + '<p class="muted">Carregando…</p></section>';
-    if (r.erro) return topo + `<p class="form-msg err">Não consegui carregar os resultados (${esc(r.erro.slice(0, 120))}). ${/ia_eventos|relation|schema/i.test(r.erro) ? 'Falta criar a tabela no Supabase (arquivo supabase/ia-resultados.sql).' : 'Tente de novo em instantes.'}</p></section>`;
-    const { tot: t, porO, porP, canc, rem } = resResumo(r.ev);
-    if (!t.ag && !t.conversas && !t.conv && !t.add) return topo + `<p class="muted">${rot}: ainda não há resultados. Eles começam a aparecer a partir dos atendimentos feitos depois da atualização do servidor (versão 7.8).</p></section>`;
+    const topo = `<div class="res-top"><div class="seg" role="group" aria-label="Período">${seg}</div>${Cloud.enabled ? '' : '<span class="chip">Demonstração · números de exemplo</span>'}</div>`;
+    if (!r.ev) return topo + '<section class="section card"><p class="muted">Carregando…</p></section>';
+    if (r.erro) return topo + `<section class="section card"><p class="form-msg err">Não consegui carregar os resultados (${esc(r.erro.slice(0, 120))}). ${/ia_eventos|relation|schema/i.test(r.erro) ? 'Falta criar a tabela no Supabase (arquivo supabase/ia-resultados.sql).' : 'Tente de novo em instantes.'}</p></section>`;
+    const { tot: t, porO, porP, porD, canc, rem } = resResumo(r.ev);
+    if (!t.ag && !t.conversas && !t.conv && !t.add) return topo + `<section class="section card res-vazio">${icon('chart')}<h2>${rot}: ainda sem resultados</h2><p class="muted">Os números começam a aparecer com os atendimentos feitos pela ${nome} e pelo totem depois da atualização do servidor (versão 7.8). Quem veio de fato é conferido na AppBarber no dia seguinte.</p></section>`;
     const custoR = t.custo * RES_DOLAR, conf = t.ok + t.falta, txC = conf ? Math.round(t.ok / conf * 100) : null;
     const ganho = t.real + t.addValor, roi = custoR > 0.5 ? Math.round(ganho / custoR) : null;
-    const pc = (a, b) => b ? Math.round(a / b * 100) + '%' : '—';
+    const pc = (a, b) => b ? Math.round(a / b * 100) : 0;
     const agW = t.ag - ((porO.totem || {}).ag || 0);
-    const stat = (rot, val, sub) => `<div class="stat"><span>${rot}</span><b class="num">${val}</b>${sub ? `<small class="muted">${sub}</small>` : ''}</div>`;
-    const met = (r, v) => `<div><small>${r}</small><b class="num">${v}</b></div>`;
-    const linhasO = Object.keys(RES_ORIG).filter(k => porO[k]).concat(Object.keys(porO).filter(k => !RES_ORIG[k])).map(k => { const o = porO[k], [n, ic] = RES_ORIG[k] || [k, 'chat'], cf = o.ok + o.falta;
-      return `<div class="res-row"><div class="res-nome">${icon(ic)} <b>${esc(n)}</b>${o.conv ? `<small class="muted">${o.conv} convite${o.conv > 1 ? 's' : ''}${k === 'totem' ? '' : ` · ${o.conversas} conversa${o.conversas === 1 ? '' : 's'}`}</small>` : k !== 'totem' ? `<small class="muted">${o.conversas} conversa${o.conversas === 1 ? '' : 's'}</small>` : ''}</div>
-        <div class="res-met">${met('Agendou', o.ag + (o.conv ? ` <small>(${pc(o.ag, o.conv)})</small>` : ''))}${met('Agendado', money0(o.valor + o.addValor))}${met('Vieram', cf ? Math.round(o.ok / cf * 100) + '%' : '—')}${met('Realizado', money0(o.real + o.addValor))}</div></div>`; }).join('');
-    const linhasP = Object.entries(porP).sort((a, b) => b[1].valor - a[1].valor).map(([n, p]) => { const cf = p.ok + p.falta;
-      return `<div class="res-row"><div class="res-nome"><b>${esc(n)}</b></div><div class="res-met">${met('Agendou', p.ag)}${met('Agendado', money0(p.valor))}${met('Vieram', cf ? Math.round(p.ok / cf * 100) + '%' : '—')}${met('Realizado', money0(p.real))}</div></div>`; }).join('');
-    return topo + `
-      <div class="perf-stats res-kpis">
-        ${stat('Agendamentos', t.ag, money0(t.valor) + ' agendados')}
-        ${stat('Compareceram', txC == null ? '—' : txC + '%', conf ? `${t.ok} de ${conf} já conferidos` : 'conferido no dia seguinte')}
-        ${stat('Faturamento realizado', money0(ganho), t.addValor ? `inclui ${money0(t.addValor)} em adicionais` : 'clientes que vieram')}
-        ${stat('Custo da IA', custoR ? '≈ ' + money2(custoR) : 'R$ 0', t.custo ? `US$ ${nf2.format(t.custo)}` : '')}
-        ${stat('Retorno', roi ? nf0.format(roi) + 'x' : '—', roi ? `cada R$ 1 de IA trouxe ${money0(roi)}` : 'faturamento ÷ custo')}
-        ${stat('Conversas', t.conversas, t.conversas ? `${pc(agW, t.conversas)} viraram agendamento · ${pc(t.rec, t.conversas)} foram para a recepção` : '')}
-      </div>
-      ${t.add || canc || rem ? `<p class="section-note">${[t.add ? `${t.add} adiciona${t.add > 1 ? 'is' : 'l'} aceito${t.add > 1 ? 's' : ''} nas ofertas (${money0(t.addValor)})` : '', rem ? `${rem} remarcaç${rem > 1 ? 'ões' : 'ão'}` : '', canc ? `${canc} cancelamento${canc > 1 ? 's' : ''} pelo WhatsApp` : ''].filter(Boolean).join(' · ')}.</p>` : ''}
-      <h3 class="res-sub">De onde veio</h3>
-      <div class="res-list">${linhasO}</div>
-      ${linhasP ? `<h3 class="res-sub">Por profissional</h3>
-      <div class="res-list">${linhasP}</div>` : ''}
-      <p class="section-note">${rot}. "Realizado" conta só quem compareceu (a conferência na AppBarber roda todo dia de manhã, sobre a agenda do dia anterior). O custo é convertido a R$ ${nf2.format(RES_DOLAR)} por dólar, só como referência.${Cloud.enabled ? '' : ' <b>Demonstração:</b> números de exemplo.'}</p>
+
+    // 1. Destaque: o que entrou de verdade
+    const hero = `<section class="section card res-hero">
+      <div class="res-hero-main"><span class="res-eyebrow">${icon('wallet')} Faturamento que veio pela ${nome} e pelo totem</span>
+        <b class="res-big num">${money0(ganho)}</b>
+        <span class="muted">${rot} · ${t.ag} agendamento${t.ag === 1 ? '' : 's'} (${money0(t.valor + t.addValor)} agendados)${t.addValor ? ` · ${money0(t.addValor)} em adicionais` : ''}</span></div>
+      <div class="res-roi">${roi ? `<b class="num">${nf0.format(roi)}x</b><span>cada <b>R$ 1</b> gasto com a IA trouxe <b>${money0(roi)}</b></span>` : `<b class="num">—</b><span>retorno sobre o custo da IA</span>`}</div>
     </section>`;
+
+    // 2. Indicadores
+    const tile = (cls, ic, rotulo, val, sub, extra = '') => `<div class="res-tile ${cls}"><span class="res-tile-ic">${icon(ic)}</span><span class="res-tile-r">${rotulo}</span><b class="num">${val}</b>${extra}<small>${sub}</small></div>`;
+    const tiles = `<div class="res-tiles">
+      ${tile('t-ag', 'clipboard', 'Agendamentos', t.ag, `${money0(t.valor)} agendados`)}
+      ${tile('t-ok', 'checksq', 'Compareceram', txC == null ? '—' : txC + '%', conf ? `${t.ok} de ${conf} já conferidos` : 'conferido no dia seguinte', txC == null ? '' : `<span class="res-meter" role="img" aria-label="${txC}% compareceram"><i style="width:${txC}%"></i></span>`)}
+      ${tile('t-conv', 'chat', 'Conversas', t.conversas, t.conversas ? `${pc(agW, t.conversas)}% viraram agendamento` : 'no WhatsApp')}
+      ${tile('t-custo', 'card', 'Custo da IA', custoR ? '≈ ' + money2(custoR) : 'R$ 0', t.custo ? `US$ ${nf2.format(t.custo)}${t.conversas ? ` · ≈ ${money2(custoR / t.conversas)} por conversa` : ''}` : 'sem custo no período')}
+    </div>`;
+
+    // 3. Funil do WhatsApp
+    const fun = [['Conversas', t.conversas, ''], ['Agendaram', agW, pc(agW, t.conversas) + '% das conversas'], ['Vieram', t.ok - ((porO.totem || {}).ok || 0), conf ? `${txC}% dos já conferidos` : 'conferido no dia seguinte'], ['Foram para a recepção', t.rec, pc(t.rec, t.conversas) + '% das conversas']];
+    const funMax = Math.max(1, ...fun.map(x => x[1]));
+    const funil = t.conversas ? `<section class="section card"><h2 class="section-title">${icon('chat')} Do WhatsApp ao atendimento</h2>
+      <div class="res-funil">${fun.map(([n, v, s], i) => `<div class="res-f ${i === 3 ? 'res-f-rec' : ''}" title="${n}: ${v}${s ? ' (' + s + ')' : ''}"><span class="res-f-n">${n}</span><span class="res-f-bar"><i style="width:${Math.max(2, v / funMax * 100)}%"></i></span><b class="num">${v}</b><small>${s}</small></div>`).join('')}</div>
+      ${t.add || canc || rem ? `<p class="section-note">${[t.add ? `${t.add} adiciona${t.add > 1 ? 'is' : 'l'} aceito${t.add > 1 ? 's' : ''} nas ofertas (${money0(t.addValor)})` : '', rem ? `${rem} remarcaç${rem > 1 ? 'ões' : 'ão'}` : '', canc ? `${canc} cancelamento${canc > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ')}.</p>` : ''}</section>` : '';
+
+    // 4. Agendamentos por dia
+    const dias = []; for (let d = new Date(de); d < ate && d <= new Date(); d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) dias.push(iso(d));
+    const dMax = Math.max(1, ...dias.map(d => (porD[d] || {}).ag || 0)), passo = dias.length > 16 ? 5 : dias.length > 8 ? 2 : 1;
+    const diaRot = d => d.slice(8, 10) + '/' + d.slice(5, 7);
+    const porDia = `<section class="section card"><h2 class="section-title">${icon('clock')} Agendamentos por dia</h2>
+      <div class="res-cols" style="--n:${dias.length}">${dias.map((d, i) => { const x = porD[d] || { ag: 0, valor: 0 };
+        return `<div class="res-col" title="${diaRot(d)}: ${x.ag} agendamento${x.ag === 1 ? '' : 's'} · ${money0(x.valor)}" tabindex="0"><span class="res-col-v num">${x.ag && (x.ag === dMax || dias.length <= 10) ? x.ag : ''}</span><i style="height:${x.ag ? Math.max(3, x.ag / dMax * 100) : 0}%"></i><span class="res-col-d">${i % passo === 0 || i === dias.length - 1 ? diaRot(d).slice(0, 2) : ''}</span></div>`; }).join('')}</div>
+      <p class="section-note">Toque numa barra para ver o dia. Conta o dia em que o agendamento foi feito.</p></section>`;
+
+    // 5. De onde veio (cor = origem, sempre a mesma)
+    const ordem = Object.keys(RES_ORIG).filter(k => porO[k] && (porO[k].ag || porO[k].conv || porO[k].conversas));
+    const oMax = Math.max(1, ...ordem.map(k => porO[k].valor + porO[k].addValor));
+    const origens = `<section class="section card"><h2 class="section-title">${icon('rocket')} De onde veio</h2>
+      <div class="res-leg"><span><i class="sw-ag"></i> Agendado</span><span><i class="sw-real"></i> Realizado (quem veio)</span></div>
+      <div class="res-orig">${ordem.map(k => { const o = porO[k], [n, ic] = RES_ORIG[k], cf = o.ok + o.falta, ag = o.valor + o.addValor, re = o.real + o.addValor;
+        return `<div class="res-o res-o-${k}" title="${n}: ${o.ag} agendamentos · ${money0(ag)} agendados · ${money0(re)} realizados">
+          <div class="res-o-h"><span class="res-o-ic">${icon(ic)}</span><b>${n}</b><b class="num res-o-v">${money0(re)}</b></div>
+          <span class="res-o-bar"><i class="ag" style="width:${ag / oMax * 100}%"></i><i class="re" style="width:${re / oMax * 100}%"></i></span>
+          <small>${[o.conv ? `${o.conv} convite${o.conv > 1 ? 's' : ''}` : '', k !== 'totem' && o.conversas ? `${o.conversas} conversa${o.conversas > 1 ? 's' : ''}` : '', `${o.ag} agendamento${o.ag === 1 ? '' : 's'}${o.conv ? ` (${pc(o.ag, o.conv)}% dos convites)` : ''}`, cf ? `${Math.round(o.ok / cf * 100)}% vieram` : ''].filter(Boolean).join(' · ')}</small></div>`; }).join('')}</div></section>`;
+
+    // 6. Por profissional
+    const pros = Object.entries(porP).sort((a, b) => b[1].valor - a[1].valor), pMax = Math.max(1, ...pros.map(([, p]) => p.valor));
+    const profs = pros.length ? `<section class="section card"><h2 class="section-title">${icon('users')} Por profissional</h2>
+      <div class="res-leg"><span><i class="sw-ag"></i> Agendado</span><span><i class="sw-real"></i> Realizado</span></div>
+      <div class="res-pros">${pros.map(([n, p]) => { const cf = p.ok + p.falta, b = state.barbers.find(x => x.name === n);
+        return `<div class="res-p" title="${esc(n)}: ${p.ag} agendamentos · ${money0(p.valor)} agendados · ${money0(p.real)} realizados">${b ? avatar(b, 34) : `<span class="res-p-av">${icon('users')}</span>`}
+          <div class="res-p-c"><div class="res-p-h"><b>${esc(n)}</b><b class="num">${money0(p.real)}</b></div>
+          <span class="res-o-bar res-p-bar"><i class="ag" style="width:${p.valor / pMax * 100}%"></i><i class="re" style="width:${p.real / pMax * 100}%"></i></span>
+          <small>${p.ag} agendamento${p.ag === 1 ? '' : 's'} · ${money0(p.valor)} agendados${cf ? ` · ${Math.round(p.ok / cf * 100)}% vieram` : ''}</small></div></div>`; }).join('')}</div></section>` : '';
+
+    return '<div class="res-page">' + topo + hero + tiles + `<div class="res-duo">${funil}${porDia}</div>` + origens + profs +
+      `<p class="section-note res-pe">"Realizado" conta só quem compareceu: a conferência na AppBarber roda todo dia de manhã, sobre a agenda do dia anterior. O custo da IA vem em dólar e é convertido a R$ ${nf2.format(RES_DOLAR)} só como referência. Para ligar ou ajustar a ${nome}, o totem e as mensagens, vá em <a href="#configuracoes" data-action="cfgTab" data-t="integracao">Configurações › Integração &amp; API</a>.</p></div>`;
   }
   function ttCard() {
     if (!isGestor(currentUser())) return '';
@@ -6750,6 +6791,7 @@ Content-Type: application/json</pre>
     atualizacoes: { t: 'Atualizações', r: pageAtualizacoes, g: 1 },
     avisos: { t: 'Avisos e alterações', r: pageAvisos },
     fiscalizacao: { t: 'Fiscalização', r: pageFiscalizacao, g: 1, a: 1 },
+    'resultado-ia': { t: 'Resultado da Sofia', r: pageResultadoIa, g: 1 },
     bonus: { t: 'Bônus', r: pageBonus },
     contratos: { t: 'Contratos', r: pageContratos },
     comissoes: { t: 'Comissões e prêmios', r: pageComissoes, g: 1 },
@@ -7775,6 +7817,7 @@ Content-Type: application/json</pre>
       page = { r: () => perfFor(id, user) }; title = 'Perfil';
     } else if (PAGES[route]) {
       page = PAGES[route]; title = route === 'performance' && (isGestor(user) || hasGrants(user)) ? (isGestor(user) || accessOf(user.barberId) !== 'profissional' ? 'Performance da empresa' : 'Performance da área') : page.t;
+      if (route === 'resultado-ia') title = 'Resultado da ' + iaNomeTxt();
     } else if (SOON_TEXT[route]) {
       page = { r: () => pageSoon(route) }; title = NAV.flatMap(g => g.items).find(i => i.r === route).t;
     } else { route = 'inicio'; page = PAGES.inicio; title = page.t; }
