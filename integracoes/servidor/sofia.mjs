@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "6.0";
+export const SOFIA_VERSAO = "6.1";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -1012,10 +1012,30 @@ export function criarSofia({ dir, log, api, sock, conectado = () => true, cmdCon
   // O que foi conversado sem a Sofia (cliente com a recepção, lembretes automáticos): ela lê quando voltar.
   function anotar(c, quem, t) { if (t && typeof t === "object") t = "[mandou um áudio]"; if (!t) return; c.contexto.push({ ts: Date.now(), linha: `${quem}: ${t.slice(0, 600)}` }); if (c.contexto.length > 40) c.contexto.splice(0, c.contexto.length - 40); }
 
+  // Créditos da Anthropic acabaram: ela para (sem mandar erro para o cliente), a conversa fica para a recepção como
+  // não lida, e o dono recebe UM aviso para recarregar. Tenta de novo a cada 30 minutos.
+  let semCreditoAte = 0, avisoCreditoEm = 0;
+  const ehSemCredito = (m) => /credit balance is too low|plans? & billing|purchase credits|insufficient (credit|fund|balance)/i.test(String(m || ""));
+  async function paraRecepcao(jid, c) {
+    for (const f of c.fila.splice(0)) anotar(c, "Cliente", f);
+    c.recepcao = true; c.motivo = "sem créditos da IA"; c.noturna = 0; c.pendTipo = null;
+    try { await sock().chatModify({ markRead: false, lastMessages: [c.ultimaMsg].filter(Boolean) }, jid); } catch { /* não deu para marcar como não lida */ }
+  }
+  async function avisarSemCredito() {
+    if (Date.now() - avisoCreditoEm < 6 * 3600000) return; avisoCreditoEm = Date.now();
+    const t = `⚠️ Os créditos da IA da ${cfg.nome} (Anthropic) acabaram.\n\nEla parou de responder: as conversas dos clientes ficam com a recepção, marcadas como não lidas.\n\nPara ela voltar: console.anthropic.com › Plans & Billing › Buy credits (dica: ligue o Auto-reload). Depois da recarga, ela volta sozinha em até 30 minutos.`;
+    const s = sock(); if (!s) return;
+    for (const n of [...new Set([cfg.avisar, cfg.alerta].filter(Boolean))]) {
+      try { const cand = n.length <= 11 ? "55" + n : n, [w] = await s.onWhatsApp(cand); if (!w || !w.exists) continue; const r = await s.sendMessage(w.jid, { text: t }); marcarMinha(r && r.key && r.key.id); }
+      catch (e) { log("Sofia: aviso de créditos não enviado: " + e.message); }
+    }
+    log("Sofia: créditos da Anthropic acabaram; avisei o dono.");
+  }
   async function processar(jid) {
     const c = conversas.get(jid);
     if (!c || c.ocupado || !c.fila.length) return;
     c.ocupado = true;
+    if (semCreditoAte > Date.now()) { try { await paraRecepcao(jid, c); } finally { c.ocupado = false; salvarConversas(); } return; }
     try {
       while (c.fila.length) {
         // Áudios da fila viram texto aqui (só os que a Sofia vai responder; os que ficam com a recepção não gastam).
@@ -1079,6 +1099,14 @@ export function criarSofia({ dir, log, api, sock, conectado = () => true, cmdCon
         c.ultima = Date.now();
       }
     } catch (err) {
+      if (ehSemCredito(err.message)) {
+        semCreditoAte = Date.now() + 30 * 60000;
+        log("Sofia: sem créditos da Anthropic; conversa fica para a recepção.");
+        await paraRecepcao(jid, c); stats.recepcao++;
+        await status(`erro: ${new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })} · os créditos da IA (Anthropic) acabaram: recarregue em console.anthropic.com › Plans & Billing. Enquanto isso, as conversas ficam com a recepção.`);
+        await avisarSemCredito();
+        return;
+      }
       log("Sofia: erro na conversa: " + err.message);
       c.recepcao = true; c.motivo = "erro: " + String(err.message).slice(0, 120); stats.recepcao++; pendencias.push(`(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) a Sofia teve um erro e parou nesta conversa`);
       await status(`erro: ${new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })} · ${String(err.message).slice(0, 200)}. A conversa ficou para a recepção.`);
