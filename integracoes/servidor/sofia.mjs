@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "6.1";
+export const SOFIA_VERSAO = "6.2";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -482,10 +482,15 @@ export async function executar(nomeTool, input, ctx) {
       const nomeProf = emCima ? (((await ab.horarios(diaA, servs[0].codigo)).find((x) => Number(x.codigo) === Number(input.profissional))) || {}).completo || "" : "";
       if (simular) { ctx.stats.agendados++; if (emCima) ctx.registro(`avisaria ${nomeProf} do novo cliente às ${horaA}`); return { ok: true, simulado: true }; }
       const obs = [String(input.observacao || "").trim().slice(0, 300), "Agendado pela Sofia (atendente IA) no WhatsApp"].filter(Boolean).join(" · ");
+      const valor = await valorAgendamento(ab, servs, input.profissional, diaA, horaA);
       let r;
       try { r = await ab.criar({ fone, nome: input.nome_cliente, servicos: servs, profissional: input.profissional, quando: input.data_hora, obs }); }
       catch (e) { if (/^CHOQUE:/.test(e.message)) return { erro: e.message.replace(/^CHOQUE: /, "") + ". Não chame a recepção: ofereça outro horário com tempo seguido para todos os serviços, ou outro profissional." }; throw e; }
       ctx.stats.agendados++; ctx.registro(`agendou ${servs.map((s) => s.nome).join(" + ")} em ${input.data_hora}`);
+      if (ctx.evento) { const prof = ((await ab.horarios(diaA, servs[0].codigo).catch(() => [])).find((x) => Number(x.codigo) === Number(input.profissional)) || {}).nome || "";
+        const adicional = /adicional/i.test(String(input.observacao || ""));
+        ctx.evento({ tipo: adicional && conv.jaAgendou ? "adicional" : "agendamento", valor, ref: `ag:${(r.codigos || []).join(",")}`, dados: { data: diaA, hora: horaA, profissional: prof, servicos: servs.map((s) => s.nome).join(" + "), codigos: r.codigos || [] } });
+        conv.jaAgendou = true; }
       if (ctx.listaEspera) ctx.listaEspera({ sair: true, data: diaA });
       if (emCima && ctx.avisarProfissional) await ctx.avisarProfissional(nomeProf, `✂️ Novo cliente hoje às ${horaA.replace(":", "h")}: ${input.nome_cliente} (${servs.map((s) => s.nome).join(" + ")})${input.observacao ? ` · ${String(input.observacao).slice(0, 150)}` : ""}`);
       return { ok: true, codigos: r.codigos };
@@ -525,6 +530,7 @@ export async function executar(nomeTool, input, ctx) {
       try { if (!velho.comanda) throw new Error("sem comanda"); await ab.cancelarComanda(velho.comanda, fone); }
       catch (e) { ctx.stats.remarcados++; ctx.pendencia(`remarcou para ${input.data_hora}, mas o horário antigo (${velho.quando}) não foi cancelado (${e.message}): cancele na agenda`); return { ok: true, aviso: "o novo horário foi marcado; o antigo a recepção vai liberar" }; }
       conv.agenda = null; ctx.stats.remarcados++; ctx.registro(`remarcou de ${velho.quando} para ${input.data_hora}`);
+      if (ctx.evento) ctx.evento({ tipo: "remarcacao", dados: { de: velho.quando, para: input.data_hora } });
       return { ok: true };
     }
     case "cancelar": {
@@ -536,6 +542,7 @@ export async function executar(nomeTool, input, ctx) {
       if (!a.comanda) { ctx.pendencia(`cliente pediu para cancelar o horário de ${a.quando}: cancele na agenda`); return { ok: true, aviso: "a recepção vai concluir o cancelamento" }; }
       await ab.cancelarComanda(a.comanda, fone);
       conv.agenda = null; ctx.stats.cancelados++; ctx.registro(`cancelou ${a.quando}`);
+      if (ctx.evento) ctx.evento({ tipo: "cancelamento", dados: { quando: a.quando, profissional: a.profissional } });
       if (String(a.quando).slice(0, 10) === hojeSP() && ctx.avisarProfissional) await ctx.avisarProfissional(a.profissional, `❌ ${a.nome || conv.nome || "O cliente"} cancelou o horário de hoje às ${String(a.quando).slice(11, 16).replace(":", "h")} (${[a.servico, ...juntos.map((x) => x.servico)].filter(Boolean).join(" + ")}). Seu horário ficou livre.`);
       const pn = primeiroNome(conv.nome || a.nome || conv.pushName);
       return { ok: true, ...(juntos.length ? { tambem_cancelados: juntos.map((x) => `${x.servico} ${x.quando}`) } : {}), nota: `Confirme o cancelamento em uma frase e TERMINE a mensagem com esta pergunta: "Para quando você gostaria de reagendar${pn ? ", " + pn : ""}?"` };
@@ -566,6 +573,7 @@ export async function executar(nomeTool, input, ctx) {
     }
     case "avisar_equipe": {
       const t = String(input.recado || "").trim().slice(0, 300); if (!t) return { erro: "recado vazio" };
+      if (ctx.evento && !simular && /incluir na comanda/i.test(t)) { const m = t.match(/R\$\s*([\d.,]+)/); ctx.evento({ tipo: "adicional", valor: m ? Number(m[1].replace(/\./g, "").replace(",", ".")) || null : null, dados: { recado: t.slice(0, 160) } }); }
       ctx.pendencia(`recado: ${t}`); if (ctx.alertar && !simular) await ctx.alertar(`📣 ${t}`); else if (simular) ctx.registro(`avisaria a equipe: ${t}`);
       if (input.profissional) { if (ctx.avisarProfissional && !simular) await ctx.avisarProfissional(input.profissional, `📣 ${t}`); else if (simular) ctx.registro(`avisaria ${input.profissional}: ${t}`); }
       return { ok: true, nota: "A equipe foi avisada. Continue atendendo o cliente normalmente." };
@@ -582,6 +590,7 @@ export async function executar(nomeTool, input, ctx) {
     }
     case "chamar_recepcao": {
       conv.recepcao = true; ctx.stats.recepcao++; ctx.pendencia(`precisa da recepção: ${String(input.motivo || "").slice(0, 160)}`);
+      if (ctx.evento) ctx.evento({ tipo: "recepcao", dados: { motivo: String(input.motivo || "").slice(0, 120) } });
       if (ctx.alertar && !simular) await ctx.alertar(`⚠️ Precisa de atendimento: ${String(input.motivo || "").slice(0, 200)}. A conversa ficou como não lida no WhatsApp.`); else if (simular) ctx.registro(`avisaria a equipe no WhatsApp: ${input.motivo}`);
       return { ok: true, nota: "A recepção foi avisada. Diga ao cliente, com simpatia, que a equipe já vai responder." };
     }
@@ -722,12 +731,67 @@ export async function transcreverAudio(buf, { key = process.env.OPENAI_API_KEY, 
   return String(j.text || "").trim();
 }
 
-export function criarSofia({ dir, log, api, sock, conectado = () => true, cmdConectar = () => "gbia-whatsapp-conectar-principal", baixarMidia = null, transcrever = transcreverAudio, abReq = null }) {
+// ---------- resultado da atendente IA e do totem (painel no app) ----------
+// Eventos ficam numa fila no disco e vão para o banco a cada minuto. Os agendamentos ficam guardados para, no dia
+// seguinte, conferir na agenda se o cliente veio (atendimento "realizado").
+const resultadosPorDir = new Map();
+export function resultadosDe(dir, api, log = () => {}, req = null) {
+  if (resultadosPorDir.has(dir)) return resultadosPorDir.get(dir);
+  const FILA = join(dir, "resultados-fila.json"), AGS = join(dir, "resultados-agendados.json");
+  const ler = (f, pad) => { try { return JSON.parse(readFileSync(f, "utf8")); } catch { return pad; } };
+  const gravar = (f, v) => { try { writeFileSync(f, JSON.stringify(v), { mode: 0o600 }); } catch (e) { log("Resultados: não gravei: " + e.message); } };
+  let enviando = false, conferidoEm = "", e0 = null, ab = null, abChave = "";
+  function evento(cid, ev) {
+    if (!cid || !ev || !ev.tipo) return;
+    const fila = ler(FILA, []); fila.push({ cid, em: new Date().toISOString(), ...ev }); gravar(FILA, fila.slice(-2000));
+    if (ev.tipo === "agendamento" && ev.ref && ev.dados && ev.dados.data) { const l = ler(AGS, []); l.push({ cid, ref: ev.ref, data: ev.dados.data, codigos: ev.dados.codigos || [] }); gravar(AGS, l.slice(-1000)); }
+  }
+  async function enviar() {
+    if (enviando) return; const fila = ler(FILA, []); if (!fila.length) return; enviando = true;
+    try {
+      const porCid = new Map(); for (const x of fila) (porCid.get(x.cid) || porCid.set(x.cid, []).get(x.cid)).push(x);
+      for (const [cid, l] of porCid) await api("POST", { company_id: cid, acao: "ia_eventos", eventos: l.map(({ cid: _c, ...x }) => x) });
+      const agora = ler(FILA, []); gravar(FILA, agora.slice(fila.length)); // o que chegou enquanto enviava fica
+    } catch (e) { log("Resultados: envio adiado (" + e.message + ")"); } finally { enviando = false; }
+  }
+  // Uma vez por dia (a partir das 8h): confere na agenda quem veio nos agendamentos dos dias anteriores.
+  async function conferir() {
+    const hoje = hojeSP(); if (!ab || conferidoEm === hoje || agoraSP() < 8 * 60) return; conferidoEm = hoje;
+    let l = ler(AGS, []); const pend = l.filter((x) => x.cid === e0.company_id && x.data < hoje);
+    if (!pend.length) return;
+    const datas = [...new Set(pend.map((x) => x.data))].filter((d) => d >= somaDias(hoje, -10)), itens = [];
+    for (const d of datas) {
+      try { const feitos = new Set((await ab.agenda(d, d, "2")).map((a) => Number(a.appointment_code || a.scheduling_code)));
+        for (const x of pend.filter((y) => y.data === d)) itens.push({ ref: x.ref, ok: x.codigos.some((c) => feitos.has(Number(c))) }); }
+      catch (err) { log("Resultados: não conferi " + d + ": " + err.message); }
+    }
+    if (itens.length) { try { await api("POST", { company_id: e0.company_id, acao: "ia_compareceu", itens }); } catch { return; } }
+    const feitosRef = new Set(itens.map((x) => x.ref));
+    l = l.filter((x) => !feitosRef.has(x.ref) && x.data >= somaDias(hoje, -10)); gravar(AGS, l);
+  }
+  function configurar(e) {
+    if (!e || !e.appbarber) return; e0 = e;
+    const k = `${e.appbarber.codigo_estabelecimento}|${e.appbarber.appbarber_api_key}`;
+    if (!ab || abChave !== k) { abChave = k; ab = ferramentasAppBarber({ cfg: e.appbarber, ...(req ? { req } : {}), creditos: (n, zero) => api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: n, ...(zero ? { sem_saldo: true } : {}) }).catch(() => {}) }); }
+  }
+  setInterval(() => { enviar().catch(() => {}); conferir().catch(() => {}); }, 60000).unref();
+  const r = { evento, configurar, enviar, conferir };
+  resultadosPorDir.set(dir, r); return r;
+}
+// Valor de um agendamento: preço do horário do 1º serviço na agenda (já com promoção e preço do profissional) + tabela dos outros.
+async function valorAgendamento(ab, servs, profissional, data, hora) {
+  try {
+    const p = (await ab.horarios(data, servs[0].codigo)).find((x) => Number(x.codigo) === Number(profissional));
+    const v1 = Number(((p && p.precos && p.precos[hora]) || [])[0]) || Number(servs[0].preco) || 0;
+    return v1 + servs.slice(1).reduce((t, s) => t + (Number(s.preco) || 0), 0);
+  } catch { return servs.reduce((t, s) => t + (Number(s.preco) || 0), 0); }
+}
+export function criarSofia({ dir, log, api, sock, resultados = null, conectado = () => true, cmdConectar = () => "gbia-whatsapp-conectar-principal", baixarMidia = null, transcrever = transcreverAudio, abReq = null }) {
   let Anthropic = null, client = null, cfg = null, ab = null, abKey = "";
   const conversas = new Map(); // jid → { mensagens, ultima, ultimaSofia, humanoEm, contexto, nome, agenda, recepcao, fone, fila, ocupado }
   // As conversas sobrevivem a reinícios (atualização, instalador): ficam num arquivo do servidor por até 6 horas.
   const CONV = join(dir, "sofia-conversas.json");
-  const CAMPOS = ["parabenizou", "mensagens", "inicio", "ultima", "ultimaSofia", "humanoEm", "contexto", "contada", "nome", "recepcao", "fone", "cadastro", "verificado", "sistema", "artes", "feitos", "gasto", "motivo", "pushName", "esperaAte", "esperaDe", "registrada", "regId", "fila", "noturna", "pendTipo", "ultimaCliente"];
+  const CAMPOS = ["parabenizou", "origem", "jaAgendou", "mensagens", "inicio", "ultima", "ultimaSofia", "humanoEm", "contexto", "contada", "nome", "recepcao", "fone", "cadastro", "verificado", "sistema", "artes", "feitos", "gasto", "motivo", "pushName", "esperaAte", "esperaDe", "registrada", "regId", "fila", "noturna", "pendTipo", "ultimaCliente"];
   // Mensagens esperando resposta (fila) também ficam salvas: um reinício não faz ninguém ficar sem resposta.
   // Áudio não dá para guardar (o arquivo fica no WhatsApp): vira um aviso para a Sofia pedir de novo.
   const AUDIO_PERDIDO = "[o cliente mandou um áudio que não deu para ouvir; peça, com gentileza, para ele mandar de novo ou escrever]";
@@ -1071,9 +1135,9 @@ export function criarSofia({ dir, log, api, sock, conectado = () => true, cmdCon
         c.mensagens.push({ role: "user", content: agoraTexto(c.fone) + "\n" + cadLinha + naoEnviada + (antes.length
           ? `[Para contexto: mensagens desta conversa enquanto você não estava atendendo]\n${antes.join("\n")}\n\n[Mensagem nova do cliente]\n${novas.join("\n")}`
           : novas.join("\n")) });
-        if (!c.contada) { c.contada = true; zera(); stats.conversas++; }
+        if (!c.contada) { c.contada = true; zera(); stats.conversas++; if (resultados) resultados.evento(cfg.company_id, { tipo: "conversa", origem: c.origem || "whatsapp" }); }
         if (!c.artes) c.artes = cfg.artes; // congeladas junto com as instruções
-        const ctx = { ab, fone: c.fone, stats, simular: false, parabens: cfg.parabens || "", equipe: [...(cfg.equipe || []).map((b) => b.name), cfg.barbearia].filter(Boolean), // o dono costuma ter o nome da barbearia artes: c.artes, enviarArte: (a) => enviarArte(jid, a), registro: (t) => log(`Sofia: ${t}.`),
+        const ctx = { ab, fone: c.fone, stats, simular: false, evento: (ev) => ev && resultados && cfg && resultados.evento(cfg.company_id, { origem: c.origem || "whatsapp", ...ev }), parabens: cfg.parabens || "", equipe: [...(cfg.equipe || []).map((b) => b.name), cfg.barbearia].filter(Boolean), // o dono costuma ter o nome da barbearia artes: c.artes, enviarArte: (a) => enviarArte(jid, a), registro: (t) => log(`Sofia: ${t}.`),
           falha: (t) => { log(`Sofia: (…${String(c.fone).slice(-4)}) ${t}`); pendencias.push(`(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); status().catch(() => {}); },
           listaEspera: (x) => listaEspera(jid, c, x), alertar: (t) => alertaEquipe(c, t), avisarProfissional: (nome, t) => avisarProfissional(c, nome, t), pendencia: (t) => { c.motivo = t; pendencias.push(`${c.nome ? c.nome.split(" ")[0] + " " : ""}(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); } };
         const antesStats = { agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados };
@@ -1086,6 +1150,7 @@ export function criarSofia({ dir, log, api, sock, conectado = () => true, cmdCon
         const sistema = c.sistema;
         const r = await rodada({ client, modelo: cfg.modelo, sistema, conv: c, ctx });
         stats.gasto += r.gasto; c.gasto = (c.gasto || 0) + r.gasto; c.registrada = false;
+        if (resultados && r.gasto > 0) resultados.evento(cfg.company_id, { tipo: "uso", valor: Math.round(r.gasto * 10000) / 10000, origem: c.origem || "whatsapp" });
         c.feitos = c.feitos || {}; for (const [k, v] of Object.entries({ agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados })) c.feitos[k] = (c.feitos[k] || 0) + Math.max(0, v - antesStats[k]);
         if ((pausas.get(jid) || 0) > Date.now()) return; // a recepção entrou enquanto a IA pensava
         // O cliente mandou mais mensagens enquanto ela pensava e nada foi feito na agenda: não manda esta resposta
@@ -1181,9 +1246,10 @@ export function criarSofia({ dir, log, api, sock, conectado = () => true, cmdCon
   // responde o cliente nas próximas 3 horas (se a recepção entrar na conversa, ela sai como sempre).
   // Convite automático enviado (retorno no tempo certo, reconquista): a Sophia fica sabendo do convite e, ligada,
   // responde o cliente nas próximas horas, mesmo fora do horário dela (se a recepção entrar na conversa, ela sai).
-  function conviteEnviado(jid, id, { fone = "", nome = "", texto = "", detalhe = "", tipo = "convite de retorno: o cliente costuma voltar nesse prazo", horas = 3 } = {}) {
+  function conviteEnviado(jid, id, { fone = "", nome = "", texto = "", detalhe = "", tipo = "convite de retorno: o cliente costuma voltar nesse prazo", horas = 3, origem = "retorno" } = {}) {
     if (id) daSofia.add(id);
-    const c = obter(jid, null); if (!c.fone && fone) c.fone = fone; if (!c.pushName && nome) c.pushName = nome;
+    const c = obter(jid, null); c.origem = origem;
+    if (resultados && cfg) resultados.evento(cfg.company_id, { tipo: "convite", origem }); if (!c.fone && fone) c.fone = fone; if (!c.pushName && nome) c.pushName = nome;
     anotar(c, `Mensagem automática da barbearia (${tipo})`, `${texto} ${detalhe}`.trim());
     c.ultima = Date.now();
     if (ligada()) { c.esperaDe = Date.now(); c.esperaAte = Date.now() + horas * 3600000; c.recepcao = false; }
@@ -1411,7 +1477,7 @@ export async function publicarServicos(e, api, req = null) {
 // ---------- totem de autoatendimento (tablet na recepção) ----------
 // O tablet manda pedidos pela função "totem"; aqui o servidor (IP liberado na AppBarber) busca os pedidos pela
 // sync-servidor (espera longa), executa na AppBarber e devolve a resposta. Check-in = status "No local" na AppBarber.
-export function criarTotem({ dir, log = () => {}, api = async () => ({}), sock = () => null, req = null, relogio = agoraSP }) {
+export function criarTotem({ dir, log = () => {}, api = async () => ({}), sock = () => null, req = null, relogio = agoraSP, resultados = null }) {
   const CHEG = join(dir, "totem-chegadas.json");
   const ler = (f, pad) => { try { return JSON.parse(readFileSync(f, "utf8")); } catch { return pad; } };
   let e = null, ab = null, abChave = "", rodando = false, cache = { em: 0, dia: "", lista: [] }, statusEm = 0;
@@ -1524,8 +1590,10 @@ export function criarTotem({ dir, log = () => {}, api = async () => ({}), sock =
         await ab.salvarCliente({ fone: d.fone, nome: d.nome, origem: "Totem da recepção" });
         cad = { nome: d.nome }; cads.set(chaveFone(d.fone), { em: Date.now(), v: cad });
       }
+      const valorT = await valorAgendamento(ab, servs, d.profissional, d.data, d.hora);
       const r = await ab.criar({ fone: d.fone, nome: cad.nome, servicos: servs, profissional: d.profissional, quando: `${d.data} ${d.hora}`, obs: ["Agendado pelo cliente no totem da recepção", ...(d.adicionais || []).map((a) => "Adicional: " + a)].join(" · ").slice(0, 250) });
       conta.agendados++; cache.em = 0;
+      if (resultados) resultados.evento(e.company_id, { tipo: "agendamento", origem: "totem", valor: valorT + (d.adicionais || []).reduce((t, a) => { const m = String(a).match(/R\$\s*([\d.,]+)/); return t + (m && /comanda/i.test(a) ? Number(m[1].replace(",", ".")) || 0 : 0); }, 0), ref: `ag:${(r.codigos || []).join(",")}`, dados: { data: d.data, hora: d.hora, profissional: livre.nome, servicos: servs.map((x) => x.nome).join(" + "), codigos: r.codigos || [], adicionais: d.adicionais || [] } });
       // Marcou para agora (até 1h30): ele já está aqui, então o check-in vai junto.
       let chegou = false;
       if (d.data === hojeSP() && mins(d.hora) - relogio() <= 90 && r.codigos.length) {
