@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-24-ia-brincadeira', date: '2026-11-24', title: 'Atendente IA: brincadeira, pagamento e aniversário', items: [
+    ['melhoria', 'A atendente IA entra na brincadeira do cliente com leveza e segue o agendamento, em vez de chamar a recepção. Pergunta de pagamento (Pix, cartão) no meio do agendamento não interrompe mais a marcação, e o nome para o cadastro é pedido só depois da escolha do horário.'],
+    ['melhoria', 'Com os Parabéns aos aniversariantes ligado, a atendente IA conhece o presente de aniversário prometido na mensagem e fala dele quando o cliente comentar.'],
+  ] },
   { id: '2026-11-24-ia-volta-recepcao', date: '2026-11-24', title: 'Atendente IA: conversa da recepção não fica sem resposta', items: [
     ['melhoria', 'Quando uma conversa foi passada para a recepção e a equipe não fala nela há 2 horas, se o cliente escrever de novo a atendente IA volta a atender (lendo o que a recepção já respondeu). Se a conversa foi parar na recepção por um erro da IA e ninguém respondeu, ela volta depois de 30 minutos.'],
     ['correcao', 'A atendente IA encontra o barbeiro pelo nome do cadastro mesmo quando a agenda usa outro (ex.: Izaque e Izaquias).'],
