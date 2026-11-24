@@ -11,10 +11,11 @@
 // Relatório semanal (domingo à noite): o servidor guarda por 30 dias um registro curto das conversas (telefone só com os
 // 4 últimos dígitos); a IA lê as que deram problema e sugere regras novas, que o dono aprova no app.
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "6.2";
+export const SOFIA_VERSAO = "6.3";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -489,7 +490,7 @@ export async function executar(nomeTool, input, ctx) {
       ctx.stats.agendados++; ctx.registro(`agendou ${servs.map((s) => s.nome).join(" + ")} em ${input.data_hora}`);
       if (ctx.evento) { const prof = ((await ab.horarios(diaA, servs[0].codigo).catch(() => [])).find((x) => Number(x.codigo) === Number(input.profissional)) || {}).nome || "";
         const adicional = /adicional/i.test(String(input.observacao || ""));
-        ctx.evento({ tipo: adicional && conv.jaAgendou ? "adicional" : "agendamento", valor, ref: `ag:${(r.codigos || []).join(",")}`, dados: { data: diaA, hora: horaA, profissional: prof, servicos: servs.map((s) => s.nome).join(" + "), codigos: r.codigos || [] } });
+        ctx.evento({ tipo: adicional && conv.jaAgendou ? "adicional" : "agendamento", valor, ref: `ag:${[...(r.codigos || [])].map(Number).sort((x, y) => x - y).join(",")}`, dados: { data: diaA, hora: horaA, profissional: prof, servicos: servs.map((s) => s.nome).join(" + "), codigos: r.codigos || [] } });
         conv.jaAgendou = true; }
       if (ctx.listaEspera) ctx.listaEspera({ sair: true, data: diaA });
       if (emCima && ctx.avisarProfissional) await ctx.avisarProfissional(nomeProf, `✂️ Novo cliente hoje às ${horaA.replace(":", "h")}: ${input.nome_cliente} (${servs.map((s) => s.nome).join(" + ")})${input.observacao ? ` · ${String(input.observacao).slice(0, 150)}` : ""}`);
@@ -774,9 +775,82 @@ export function resultadosDe(dir, api, log = () => {}, req = null) {
     const k = `${e.appbarber.codigo_estabelecimento}|${e.appbarber.appbarber_api_key}`;
     if (!ab || abChave !== k) { abChave = k; ab = ferramentasAppBarber({ cfg: e.appbarber, ...(req ? { req } : {}), creditos: (n, zero) => api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: n, ...(zero ? { sem_saldo: true } : {}) }).catch(() => {}) }); }
   }
-  setInterval(() => { enviar().catch(() => {}); conferir().catch(() => {}); }, 60000).unref();
-  const r = { evento, configurar, enviar, conferir };
+  // Início da contagem ao vivo: o que veio antes disso é importado uma vez do histórico (importarHistorico).
+  const INI = join(dir, "resultados-inicio.json"), HISTF = join(dir, "resultados-historico.json");
+  const inicio = (() => {
+    const v = ler(INI, null); if (v && v.em) return v.em;
+    // A primeira versão com resultados (6.2) não gravava o início: vale a criação dos arquivos de eventos, se já existem.
+    const ts = [Date.now()]; for (const f of [FILA, AGS]) { try { const st = statSync(f); ts.push(Math.min(st.birthtimeMs || st.mtimeMs, st.mtimeMs)); } catch { /* não existe */ } }
+    const em = new Date(Math.min(...ts)).toISOString(); gravar(INI, { em }); return em;
+  })();
+  let historicoEm = 0;
+  async function importarHistorico() {
+    if (!ab || !e0 || Date.now() - historicoEm < 3600000) return; const h = ler(HISTF, {}); if (h[e0.company_id]) return;
+    historicoEm = Date.now();
+    const evs = await historicoEventos({ ab, dir, inicio, hoje: hojeSP(), log });
+    const cid = e0.company_id;
+    for (let i = 0; i < evs.eventos.length; i += 200) await api("POST", { company_id: cid, acao: "ia_eventos", eventos: evs.eventos.slice(i, i + 200) });
+    for (let i = 0; i < evs.compareceu.length; i += 300) await api("POST", { company_id: cid, acao: "ia_compareceu", itens: evs.compareceu.slice(i, i + 300) });
+    if (evs.pendentes.length) { const l = ler(AGS, []); gravar(AGS, l.concat(evs.pendentes.map((x) => ({ cid, ...x }))).slice(-1000)); }
+    h[cid] = { em: new Date().toISOString(), eventos: evs.eventos.length }; gravar(HISTF, h);
+    log(`Resultados: histórico importado (${evs.resumo}).`);
+  }
+  setInterval(() => { enviar().catch(() => {}); conferir().catch(() => {}); importarHistorico().catch((e) => log("Resultados: histórico adiado (" + e.message + ")")); }, 60000).unref();
+  const r = { evento, configurar, enviar, conferir, importarHistorico, inicio };
   resultadosPorDir.set(dir, r); return r;
+}
+// Histórico de antes da contagem ao vivo: agendamentos da Sofia e do totem (pela observação na AppBarber, com valor,
+// profissional e se o cliente veio), conversas e custo (registro dos últimos 30 dias) e convites de retorno e reconquista.
+const dataBR = (t) => { const m = String(t || "").match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/); return m ? { dia: `${m[3]}-${m[2]}-${m[1]}`, hora: m[4] ? `${m[4]}:${m[5]}` : "12:00" } : null; };
+const numBR = (v) => { const t = String(v ?? "").trim(); if (!t) return 0; const n = Number(/,\d{1,2}$/.test(t) ? t.replace(/\./g, "").replace(",", ".") : t); return Number.isFinite(n) ? n : 0; };
+const hashCurto = (t) => createHash("sha256").update(String(t)).digest("hex").slice(0, 12);
+export async function historicoEventos({ ab, dir, inicio, hoje, log = () => {}, diasAtras = 92 }) {
+  const ler = (f, pad) => { try { return JSON.parse(readFileSync(join(dir, f), "utf8")); } catch { return pad; } };
+  const eventos = [], compareceu = [], pendentes = [], cont = { ag: 0, ad: 0, conv: 0, convites: 0 };
+  const ini = somaDias(hoje, -diasAtras);
+  // Convites (só a data; telefone vira chave curta para achar a origem do agendamento)
+  const convites = []; // { k, dia, origem }
+  for (const [k, x] of Object.entries(ler("reconquista-enviados.json", {}))) if (x && x.em && !x.pulado) convites.push({ k, dia: x.em, origem: "reconquista" });
+  for (const [k, x] of Object.entries(ler("retorno-enviados.json", {}))) if (x && x.em && x.enviado) convites.push({ k: chaveFone(k), dia: x.em, origem: "retorno" });
+  const diaIni = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date(inicio));
+  for (const c of convites) if (c.dia < diaIni) { eventos.push({ em: `${c.dia}T12:00:00-03:00`, tipo: "convite", origem: c.origem, ref: `h:cv:${c.origem.slice(0, 3)}:${hashCurto(c.k + c.dia)}` }); cont.convites++; }
+  const origemDe = (fone, dia) => { const k = chaveFone(fone); let o = null, melhor = ""; for (const c of convites) if (c.k === k && c.dia <= dia && c.dia >= somaDias(dia, -10) && c.dia > melhor) { melhor = c.dia; o = c.origem; } return o; };
+  // Agendamentos na AppBarber (períodos de até 31 dias)
+  const linhas = [], janelas = (de, ate) => { const l = []; for (let a = de; a <= ate; a = somaDias(a, 31)) l.push([a, somaDias(a, 30) > ate ? ate : somaDias(a, 30)]); return l; };
+  for (const [st, de, ate] of [["2", ini, hoje], ["3", ini, somaDias(hoje, 45)], ["5", ini, hoje], ["1", ini, somaDias(hoje, 45)]])
+    for (const [a, b] of janelas(de, ate)) { try { for (const x of await ab.agenda(a, b, st)) linhas.push({ ...x, _st: st }); } catch (e) { log(`Resultados: histórico ${a}…${b} (${st}): ${e.message}`); } }
+  const grupos = new Map();
+  for (const x of linhas) {
+    const obs = String(x.scheduling_observation || ""), sofia = /Agendado pela So(f|ph)ia/i.test(obs), totem = /totem da recep/i.test(obs);
+    if (!sofia && !totem) continue;
+    const reg = dataBR(x.scheduling_registration_date), quando = dataBR(x.scheduling_start); if (!reg || !quando) continue;
+    const em = new Date(`${reg.dia}T${reg.hora}:00-03:00`).toISOString(); if (em >= inicio) continue; // daqui em diante conta ao vivo
+    const cod = Number(x.appointment_code || x.scheduling_code); if (!cod) continue;
+    const g = `${so(x.client_phone)}|${reg.dia} ${reg.hora}|${totem ? "t" : "s"}|${/adicional/i.test(obs) && sofia ? "a" : ""}`;
+    const o = grupos.get(g) || { em, quando, sofia, totem, adicional: sofia && /adicional/i.test(obs), fone: x.client_phone, prof: x.employee_name || "", servs: [], cods: new Set(), valor: 0, st: new Set(), extra: 0 };
+    if (o.cods.has(cod)) continue; o.cods.add(cod); o.valor += numBR(x.service_value); o.servs.push(x.service_description || ""); o.st.add(x._st);
+    if (totem && !o.extra) { const m = obs.match(/R\$\s*([\d.,]+)[^·]*comanda/i); if (m) o.extra = numBR(m[1]); }
+    grupos.set(g, o);
+  }
+  for (const o of grupos.values()) {
+    const cods = [...o.cods].sort((a, b) => a - b), ref = `ag:${cods.join(",")}`;
+    const origem = o.totem ? "totem" : origemDe(o.fone, o.em.slice(0, 10)) || "whatsapp";
+    if (o.adicional) { eventos.push({ em: o.em, tipo: "adicional", origem, valor: o.valor, ref: "h:" + ref, dados: { profissional: o.prof, servicos: o.servs.join(" + "), historico: true } }); cont.ad++; continue; }
+    eventos.push({ em: o.em, tipo: "agendamento", origem, valor: Math.round((o.valor + o.extra) * 100) / 100, ref, dados: { data: o.quando.dia, hora: o.quando.hora, profissional: o.prof, servicos: o.servs.join(" + "), codigos: cods, historico: true } });
+    cont.ag++;
+    if (o.st.has("2")) compareceu.push({ ref, ok: true });
+    else if (o.st.has("5") || o.st.has("3") || o.quando.dia < hoje) compareceu.push({ ref, ok: false });
+    else pendentes.push({ ref, data: o.quando.dia, codigos: cods });
+  }
+  // Conversas e custo (registro do relatório semanal: últimos 30 dias)
+  for (const r of ler("sofia-registro.json", [])) {
+    if (!r || !r.em || !r.id || new Date(r.em).toISOString() >= inicio) continue;
+    const em = new Date(r.em).toISOString(); cont.conv++;
+    eventos.push({ em, tipo: "conversa", origem: "whatsapp", ref: `h:c:${r.id}` });
+    if (r.custo > 0) eventos.push({ em, tipo: "uso", origem: "whatsapp", valor: r.custo, ref: `h:u:${r.id}` });
+    if (r.resultado === "recepcao") eventos.push({ em, tipo: "recepcao", origem: "whatsapp", ref: `h:r:${r.id}` });
+  }
+  return { eventos, compareceu, pendentes, resumo: `${cont.ag} agendamento(s), ${cont.ad} adicional(is), ${cont.conv} conversa(s), ${cont.convites} convite(s)` };
 }
 // Valor de um agendamento: preço do horário do 1º serviço na agenda (já com promoção e preço do profissional) + tabela dos outros.
 async function valorAgendamento(ab, servs, profissional, data, hora) {

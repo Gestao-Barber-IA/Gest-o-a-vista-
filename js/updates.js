@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-24-resultado-historico', date: '2026-11-24', title: 'Resultado da atendente IA: histórico desde o início', items: [
+    ['melhoria', 'A tela Resultado da atendente IA também mostra o que veio antes da atualização: os agendamentos feitos pela atendente e pelo totem (até 3 meses, com valor, profissional e se o cliente veio, direto da AppBarber), as conversas e o custo dos últimos 30 dias e os convites de retorno e reconquista.'],
+  ] },
   { id: '2026-11-24-resultado-ia', date: '2026-11-24', title: 'Resultado da atendente IA e do totem', items: [
     ['novo', 'Nova tela no menu, em Gestor: Resultado da atendente IA, com cores e gráficos. Mostra quantos agendamentos a atendente IA e o totem fizeram, quanto valiam, quantos clientes vieram de fato (conferido na AppBarber no dia seguinte), o faturamento realizado, o custo da IA e quanto cada real de IA trouxe de volta.'],
     ['novo', 'Mostra também de onde veio cada agendamento (WhatsApp, retorno, reconquista, feedback ou totem), os adicionais aceitos nas ofertas e o resultado por profissional. Escolha 7 dias, este mês ou o mês passado.'],
