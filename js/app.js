@@ -4460,6 +4460,10 @@ Content-Type: application/json</pre>
   const RES_DOLAR = 5.4; // custo da IA vem em US$; conversão aproximada só para comparar
   function resPeriodo(p) {
     const h = new Date(), d0 = x => new Date(x.getFullYear(), x.getMonth(), x.getDate());
+    if (p === 'per' && ui.iaRes && ui.iaRes.de && ui.iaRes.ate) {
+      const [a1, b1] = [ui.iaRes.de, ui.iaRes.ate].sort(), br = x => x.split('-').reverse().join('/');
+      return [fromIso(a1), new Date(fromIso(b1).getTime() + 86400000), a1 === b1 ? br(a1) : `${br(a1)} a ${br(b1)}`];
+    }
     if (p === 'ant') return [new Date(h.getFullYear(), h.getMonth() - 1, 1), new Date(h.getFullYear(), h.getMonth(), 1), 'Mês passado'];
     if (p === 'mes') return [new Date(h.getFullYear(), h.getMonth(), 1), new Date(d0(h).getTime() + 86400000), 'Este mês'];
     return [new Date(d0(h).getTime() - 6 * 86400000), new Date(d0(h).getTime() + 86400000), 'Últimos 7 dias'];
@@ -4511,15 +4515,18 @@ Content-Type: application/json</pre>
   function pageResultadoIa() {
     autoSyncCard(); // carrega o nome da atendente (Integração)
     const r = ui.iaRes = ui.iaRes || { p: 'mes' };
-    const [de, ate, rot] = resPeriodo(r.p), chave = r.p + de.toISOString().slice(0, 10);
+    const [de, ate, rot] = resPeriodo(r.p), chave = r.p + de.toISOString() + ate.toISOString();
     if (r.chave !== chave) {
       r.chave = chave; r.ev = null; r.erro = '';
       if (!Cloud.enabled) r.ev = resDemo(de, ate);
       else Cloud.iaEventos(de.toISOString(), ate.toISOString()).then(x => { if (r.chave === chave) { r.ev = x; render(); } }).catch(e => { if (r.chave === chave) { r.erro = String((e && e.message) || e); r.ev = []; render(); } });
     }
     const nome = iaNome();
-    const seg = [['sem', '7 dias'], ['mes', 'Este mês'], ['ant', 'Mês passado']].map(([k, t]) => `<button type="button" class="${r.p === k ? 'on' : ''}" data-action="resPer" data-p="${k}">${t}</button>`).join('');
-    const topo = `<div class="res-top"><div class="seg" role="group" aria-label="Período">${seg}</div>${Cloud.enabled ? '' : '<span class="chip">Demonstração · números de exemplo</span>'}</div>`;
+    const seg = [['sem', '7 dias'], ['mes', 'Este mês'], ['ant', 'Mês passado'], ['per', 'Personalizar']].map(([k, t]) => `<button type="button" class="${r.p === k ? 'on' : ''}" data-action="resPer" data-p="${k}">${t}</button>`).join('');
+    const topo = `<div class="res-top"><div class="seg" role="group" aria-label="Período">${seg}</div>${Cloud.enabled ? '' : '<span class="chip">Demonstração · números de exemplo</span>'}</div>${r.p === 'per' ? `<form class="res-datas" data-form="resData" novalidate>
+      <label class="field"><span>De</span><input class="input" type="date" name="de" value="${esc(r.de || '')}" max="${iso(new Date())}" required></label>
+      <label class="field"><span>Até</span><input class="input" type="date" name="ate" value="${esc(r.ate || '')}" max="${iso(new Date())}" required></label>
+      <button class="btn btn-primary" type="submit">${icon('check')} Ver resultados</button><p class="form-msg" data-msg></p></form>` : ''}`;
     if (!r.ev) return topo + '<section class="section card"><p class="muted">Carregando…</p></section>';
     if (r.erro) return topo + `<section class="section card"><p class="form-msg err">Não consegui carregar os resultados (${esc(r.erro.slice(0, 120))}). ${/ia_eventos|relation|schema/i.test(r.erro) ? 'Falta criar a tabela no Supabase (arquivo supabase/ia-resultados.sql).' : 'Tente de novo em instantes.'}</p></section>`;
     const { tot: t, porO, porP, porD, canc, rem } = resResumo(r.ev);
@@ -8395,7 +8402,11 @@ Content-Type: application/json</pre>
     },
     hgEdit() { ui.hgEdit = !ui.hgEdit; ui.hgYm = null; render(); if (ui.hgEdit) setTimeout(() => { const f = $('#hg-fat'); if (f) { f.focus(); f.scrollIntoView({ block: 'center' }); } }, 50); },
     cfgTab(el) { ui.cfgTab = el.dataset.t; ui.intSec = ''; ui.confirm = null; render(); },
-    resPer(el) { ui.iaRes = { p: el.dataset.p }; render(); },
+    resPer(el) {
+      const ant = ui.iaRes || {}, h = new Date();
+      ui.iaRes = el.dataset.p === 'per' ? { p: 'per', de: ant.de || iso(new Date(h.getFullYear(), h.getMonth(), 1)), ate: ant.ate || iso(h) } : { p: el.dataset.p, de: ant.de, ate: ant.ate };
+      render();
+    },
     intSec(el) { ui.intSec = el.dataset.s || ''; ui.confirm = null; render(); window.scrollTo(0, 0); },
     pdLayout(el) { state.theme = { ...pdTheme(), layout: el.dataset.v }; save(); render(); toast('Formato do escudo: ' + (PD_LAYOUTS.find(l => l.k === el.dataset.v) || {}).n + '.'); },
     pdAutoToggle(el) {
@@ -9191,6 +9202,13 @@ Content-Type: application/json</pre>
       setMsg(f, 'Salvando…', true);
       Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(row.bd_on ? 'Parabéns automático ligado.' : 'Parabéns automático desligado.'); render(); })
         .catch(e => { const m = Cloud.message(e); setMsg(f, /bd_|column|schema cache/i.test(m) ? 'O parabéns automático ainda está sendo ativado no servidor.' : m); });
+    },
+    resData(f) {
+      const de = f.elements.de.value, ate = f.elements.ate.value;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(de) || !/^\d{4}-\d{2}-\d{2}$/.test(ate)) return setMsg(f, 'Escolha as duas datas.');
+      const [a, b] = [de, ate].sort();
+      if ((fromIso(b) - fromIso(a)) / 86400000 > 366) return setMsg(f, 'Escolha um período de até 1 ano.');
+      ui.iaRes = { p: 'per', de: a, ate: b }; render();
     },
     fvSave(f) {
       const per = Math.round(Number(f.elements.per.value) || 0), daily = Math.round(Number(f.elements.daily.value) || 0), lead = Math.round(Number(f.elements.lead.value) || 0);

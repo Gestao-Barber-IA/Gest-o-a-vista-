@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-24-resultado-datas', date: '2026-11-24', title: 'Resultado da atendente IA: escolha as datas', items: [
+    ['melhoria', 'Na tela Resultado da atendente IA, o botão Personalizar deixa escolher o período (de uma data até outra, até 1 ano) além de 7 dias, este mês e mês passado.'],
+  ] },
   { id: '2026-11-24-ia-brincadeira', date: '2026-11-24', title: 'Atendente IA: brincadeira, pagamento e aniversário', items: [
     ['melhoria', 'A atendente IA entra na brincadeira do cliente com leveza e segue o agendamento, em vez de chamar a recepção. Pergunta de pagamento (Pix, cartão) no meio do agendamento não interrompe mais a marcação, e o nome para o cadastro é pedido só depois da escolha do horário.'],
     ['melhoria', 'Com os Parabéns aos aniversariantes ligado, a atendente IA conhece o presente de aniversário prometido na mensagem e fala dele quando o cliente comentar.'],
