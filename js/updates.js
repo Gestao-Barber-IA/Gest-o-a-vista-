@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-24-preencher-vagas', date: '2026-11-24', title: 'Preencher vagas: horário cancelado vira convite na hora', items: [
+    ['novo', 'Em Integração & API › Preencher vagas: quando um cliente cancela um horário de hoje ou de amanhã e ele continua livre, o sistema convida na hora clientes que costumam ser atendidos por esse profissional, já estão no prazo de voltar e costumam vir perto desse horário. A atendente IA responde e marca; o primeiro que confirmar fica com a vaga.'],
+    ['novo', 'Você escolhe quantos convites por vaga (1 a 3), o máximo por dia, a antecedência mínima e o texto. No Resultado da atendente IA aparece a nova origem "Vagas preenchidas".'],
+  ] },
   { id: '2026-11-24-ia-sem-preferencia', date: '2026-11-24', title: 'Atendente IA: quem atende o cliente sem preferência', items: [
     ['melhoria', 'Quando o cliente não tem preferência de profissional, a atendente IA oferece primeiro os horários de quem tem menos atendimentos marcados no dia. Em caso de empate, vai para quem tem a maior taxa de fidelização (clientes novos que voltaram com o mesmo profissional, últimos 180 dias). Se esse profissional não tiver horário no período pedido, passa para o próximo.'],
   ] },

@@ -3106,9 +3106,9 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 
 /* Resultado da atendente IA e do totem (menu Gestor). Cores das origens: paleta categórica validada
    (daltonismo e contraste) para o fundo escuro e o claro; cada origem tem sempre a mesma cor. */
-.res-page { --o-whatsapp: #3987e5; --o-retorno: #d95926; --o-reconquista: #199e70; --o-feedback: #c98500; --o-totem: #d55181;
+.res-page { --o-whatsapp: #3987e5; --o-retorno: #d95926; --o-reconquista: #199e70; --o-feedback: #c98500; --o-totem: #d55181; --o-vaga: #0ca30c;
   --r-ag: #3987e5; --r-ok: #52d37e; --r-conv: #2bb3a3; --r-custo: #e58a3a; }
-html[data-theme="light"] .res-page { --o-whatsapp: #2a78d6; --o-retorno: #eb6834; --o-reconquista: #1baf7a; --o-feedback: #eda100; --o-totem: #e87ba4;
+html[data-theme="light"] .res-page { --o-whatsapp: #2a78d6; --o-retorno: #eb6834; --o-reconquista: #1baf7a; --o-feedback: #eda100; --o-totem: #e87ba4; --o-vaga: #008300;
   --r-ag: #2a78d6; --r-ok: #1f9d55; --r-conv: #178f82; --r-custo: #d46a1c; }
 .res-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
 .res-vazio { text-align: center; padding: 36px 20px; }
@@ -3162,7 +3162,7 @@ html[data-theme="light"] .res-big { color: #1f9d55; }
 .res-leg .sw-real { background: var(--fg-soft, var(--fg)); }
 .res-orig, .res-pros { display: grid; gap: 14px; }
 .res-o { --c: var(--accent); display: grid; gap: 6px; }
-.res-o-whatsapp { --c: var(--o-whatsapp); } .res-o-retorno { --c: var(--o-retorno); } .res-o-reconquista { --c: var(--o-reconquista); } .res-o-feedback { --c: var(--o-feedback); } .res-o-totem { --c: var(--o-totem); }
+.res-o-whatsapp { --c: var(--o-whatsapp); } .res-o-retorno { --c: var(--o-retorno); } .res-o-reconquista { --c: var(--o-reconquista); } .res-o-feedback { --c: var(--o-feedback); } .res-o-totem { --c: var(--o-totem); } .res-o-vaga { --c: var(--o-vaga); }
 .res-o-h { display: flex; align-items: center; gap: 10px; }
 .res-o-h > b:not(.res-o-v) { flex: 1; min-width: 0; font-size: .95rem; }
 .res-o-v { font-family: var(--font-display); font-size: 1.05rem; }
