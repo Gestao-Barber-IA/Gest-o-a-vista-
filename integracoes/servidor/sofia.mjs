@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "6.9";
+export const SOFIA_VERSAO = "7.0";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -911,7 +911,7 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
   const conversas = new Map(); // jid → { mensagens, ultima, ultimaSofia, humanoEm, contexto, nome, agenda, recepcao, fone, fila, ocupado }
   // As conversas sobrevivem a reinícios (atualização, instalador): ficam num arquivo do servidor por até 6 horas.
   const CONV = join(dir, "sofia-conversas.json");
-  const CAMPOS = ["parabenizou", "origem", "jaAgendou", "mensagens", "inicio", "ultima", "ultimaSofia", "humanoEm", "contexto", "contada", "nome", "recepcao", "fone", "cadastro", "verificado", "sistema", "artes", "feitos", "gasto", "motivo", "pushName", "esperaAte", "esperaDe", "registrada", "regId", "fila", "noturna", "pendTipo", "ultimaCliente"];
+  const CAMPOS = ["recepcaoEm", "parabenizou", "origem", "jaAgendou", "mensagens", "inicio", "ultima", "ultimaSofia", "humanoEm", "contexto", "contada", "nome", "recepcao", "fone", "cadastro", "verificado", "sistema", "artes", "feitos", "gasto", "motivo", "pushName", "esperaAte", "esperaDe", "registrada", "regId", "fila", "noturna", "pendTipo", "ultimaCliente"];
   // Mensagens esperando resposta (fila) também ficam salvas: um reinício não faz ninguém ficar sem resposta.
   // Áudio não dá para guardar (o arquivo fica no WhatsApp): vira um aviso para a Sofia pedir de novo.
   const AUDIO_PERDIDO = "[o cliente mandou um áudio que não deu para ouvir; peça, com gentileza, para ele mandar de novo ou escrever]";
@@ -1221,7 +1221,7 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
   const ehSemCredito = (m) => /credit balance is too low|plans? & billing|purchase credits|insufficient (credit|fund|balance)/i.test(String(m || ""));
   async function paraRecepcao(jid, c) {
     for (const f of c.fila.splice(0)) anotar(c, "Cliente", f);
-    c.recepcao = true; c.motivo = "sem créditos da IA"; c.noturna = 0; c.pendTipo = null;
+    c.recepcao = true; c.recepcaoEm = Date.now(); c.motivo = "sem créditos da IA"; c.noturna = 0; c.pendTipo = null;
     try { await sock().chatModify({ markRead: false, lastMessages: [c.ultimaMsg].filter(Boolean) }, jid); } catch { /* não deu para marcar como não lida */ }
   }
   async function avisarSemCredito() {
@@ -1317,7 +1317,7 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
       // O cliente não pode ficar sem resposta: avisa que a equipe continua e chama a equipe.
       try { await enviar(jid, "Desculpa, tive um probleminha aqui agora 😕 Já chamei a nossa equipe, que vai continuar com você por aqui em instantes."); } catch { /* sem conexão */ }
       alertaEquipe(c, `⚠️ A ${cfg ? cfg.nome : "Sofia"} teve um erro e parou nesta conversa: responda o cliente. (${String(err.message).slice(0, 120)})`).catch(() => {});
-    } finally { c.ocupado = false; salvarConversas(); }
+    } finally { c.ocupado = false; if (c.recepcao && !c.recepcaoEm) c.recepcaoEm = Date.now(); salvarConversas(); }
   }
 
   // Chamado a cada messages.upsert do WhatsApp dos clientes.
@@ -1361,6 +1361,12 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
       const msgCli = t || (md === "áudio" ? { audio: msg } : `[o cliente mandou um(a) ${md}]`);
       // "👍", "ok", "obrigado" ou figurinha em resposta a um lembrete/mensagem automática: não é conversa, ninguém responde.
       if (!continua && !c.fila.length && ((t && soConfirmacao(t)) || (!t && /figurinha/.test(md)))) { anotar(c, "Cliente", conteudo); continue; }
+      // Conversa que ficou com a recepção: se a equipe não fala nela há 2 horas (ou há 30 minutos, quando foi um erro da
+      // IA e ninguém da equipe respondeu) e o cliente escreve de novo, ela volta a atender (a conversa não fica sem resposta).
+      if (c.recepcao && !((pausas.get(jid) || 0) > Date.now())) {
+        const desde = Math.max(c.humanoEm || 0, c.recepcaoEm || 0), erro = /^erro/.test(String(c.motivo || "")) && !(c.humanoEm > (c.recepcaoEm || 0));
+        if (desde && Date.now() - desde > (erro ? 30 : 120) * 60000) { c.recepcao = false; c.recepcaoEm = 0; c.motivo = ""; log(`Sofia: (…${String(c.fone || "").slice(-4)}) voltou a atender: a conversa estava com a recepção sem resposta da equipe.`); }
+      }
       if (c.recepcao || (pausas.get(jid) || 0) > Date.now()) { anotar(c, "Cliente", conteudo); continue; }
       // Desligada: guarda; se ela for ligada em até 30 minutos (e ninguém tiver respondido), ela responde.
       if (!ligada()) { c.fila.push(msgCli); if (!c.noturna) { c.noturna = Date.now(); c.pendTipo = "recente"; } clearTimeout(c.timer); continue; }
