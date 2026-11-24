@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "6.8";
+export const SOFIA_VERSAO = "6.9";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -395,18 +395,22 @@ export async function executar(nomeTool, input, ctx) {
       if (input.data < hojeSP()) return { erro: "essa data já passou" };
       let lista = await ab.horarios(input.data, input.servico);
       if (input.data === hojeSP()) lista = lista.map((p) => ({ ...p, horarios: p.horarios.filter((h) => mins(h) >= agoraSP() + 15) }));
-      const bate = (nome) => { const q = String(input.profissional).toLowerCase().trim(), n = String(nome || "").toLowerCase(); return n.includes(q) || q.includes(n.split(" ")[0]); };
+      // O nome pedido pode ser o do cadastro no sistema ("Izaque Macedo") e a agenda ter outro ("Izaquias Macedo"):
+      // compara também pelo nome completo da equipe com o mesmo primeiro nome.
+      const pedido = String(input.profissional || "").trim(), daEquipe = (ctx.equipe || []).filter((e) => primeiroDe(e) === primeiroDe(pedido));
+      const bate = (nome, completo) => { const q = pedido.toLowerCase(), n = String(nome || "").toLowerCase(); if (!q) return false;
+        return n.includes(q) || q.includes(n.split(" ")[0]) || [nome, completo].some((x) => x && (mesmoNome(x, pedido) || daEquipe.some((e) => mesmoNome(x, e)))); };
       if (input.profissional) {
-        const f = lista.filter((p) => bate(p.nome) && p.horarios.length);
+        const f = lista.filter((p) => bate(p.nome, p.completo) && p.horarios.length);
         if (f.length) lista = f;
         else {
           // Ele faz esse serviço? Então está com a agenda completa nesse dia: procura o próximo dia com horário dele (até 6 dias).
-          const faz = (await ab.profissionais(input.servico).catch(() => [])).some((p) => bate(p.nome)) || lista.some((p) => bate(p.nome));
+          const faz = (await ab.profissionais(input.servico).catch(() => [])).some((p) => bate(p.nome, p.completo)) || lista.some((p) => bate(p.nome, p.completo));
           if (!faz) return { aviso: `${input.profissional} não faz esse serviço (ou não foi encontrado)`, outros_com_horario: lista.filter((p) => p.horarios.length).map((p) => p.nome) };
           let proximo = null;
           for (let i = 1; i <= 6 && !proximo; i++) {
             const dd = new Date(input.data + "T12:00:00Z"); dd.setUTCDate(dd.getUTCDate() + i); const iso = dd.toISOString().slice(0, 10);
-            const p = (await ab.horarios(iso, input.servico).catch(() => [])).find((x) => bate(x.nome) && x.horarios.length);
+            const p = (await ab.horarios(iso, input.servico).catch(() => [])).find((x) => bate(x.nome, x.completo) && x.horarios.length);
             if (p) proximo = { dia: `${DIAS[dd.getUTCDay()]}, ${iso.split("-").reverse().join("/")}`, data: iso, primeiros: p.horarios.slice(0, 4), valor_com_ele_nesse_dia: reais(((p.precos || {})[p.horarios[0]] || [])[0]) || "confira com ver_horarios" };
           }
           // Nenhum horário nos próximos dias e fora da equipe cadastrada no sistema: saiu da equipe (a AppBarber pode
