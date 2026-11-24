@@ -4100,6 +4100,7 @@ ${rows.length ? '' : emptyBarbers()}
     ['totem', 'Totem de autoatendimento', 'monitor', 'Check-in e agendamento num tablet na recepção', () => ttCard(), 'recepcao', it => intSt(it.tt_on, it.tt_status)],
     ['ofertas', 'Ofertas no final do agendamento', 'gift', 'Adicionais oferecidos pelo totem e pela Sofia', () => upCard(), 'recepcao', it => { const n = (it.upsell || []).length; return n ? [`${n} oferta${n > 1 ? 's' : ''}`, 'chip-ok'] : ['Nenhuma', '']; }],
     ['retorno', 'Retorno no tempo certo', 'clock', 'Convite no ritmo de cada cliente', () => rtCard(), 'mkt', it => intSt(it.rt_on, it.rt_status)],
+    ['vagas', 'Preencher vagas', 'bolt', 'Horário cancelado vira convite na hora', () => fvCard(), 'mkt', it => intSt(it.fv_on, it.fv_status)],
     ['reconquista', 'Reconquista de sumidos', 'rocket', 'Presente de retorno para quem não vem há meses', () => wbCard(), 'mkt', it => intSt(it.wb_on, it.wb_status)],
     ['aniversario', 'Parabéns aos aniversariantes', 'sparkle', 'Mensagem no dia do aniversário', () => bdCard(), 'mkt', it => intSt(it.bd_on, it.bd_status)],
     ['feedback', 'Pedido de feedback', 'vote', 'Opinião dos clientes novos depois do atendimento', () => fbCard(), 'mkt', it => intSt(it.fb_on, it.fb_status)],
@@ -4386,6 +4387,42 @@ Content-Type: application/json</pre>
   const RT_TEXT = ['{Saudacao}, {cliente}! 😊 Sua próxima visita está chegando. Separei *{dia} às {hora}* com {profissional}, do jeito que você costuma vir.\nQuer que eu reserve pra você?',
     '{Saudacao}, {cliente}! Tudo bem? 😊 Já está chegando a hora de dar aquele trato no visual ✂️\n{profissional} tem horário *{dia} às {hora}*, como você costuma vir. Posso reservar pra você?',
     '{Saudacao}, {cliente}! 💈 Pensando na sua próxima visita, separei um horário com {profissional}: *{dia} às {hora}*, como de costume.\nQuer que eu deixe reservado pra você?'].join('\n---\n');
+  // Preencher vagas: cancelamento de hoje/amanhã vira convite na hora para clientes do mesmo profissional no prazo de voltar.
+  const FV_TEXT = ['{Saudacao}, {cliente}! Tudo bem? 😊\nAcabou de abrir um horário *{dia} às {hora}* com {profissional} aqui na {barbearia}, e lembrei de você.\nQuer que eu reserve pra você?',
+    '{Saudacao}, {cliente}! 😊\nVagou um horário *{dia} às {hora}* com {profissional}. Como já está chegando a hora do seu próximo atendimento, separei pra você primeiro.\nPosso reservar?'].join('\n---\n');
+  function fvCard() {
+    if (!isGestor(currentUser())) return '';
+    const it = Cloud.enabled ? ui.integ : (state.integ || {});
+    if (!it || it.erro) return '';
+    const st = String(it.fv_status || ''), on = !!it.fv_on, noAb = !it.est_code, bad = /^erro/.test(st), semIa = !it.ia_on;
+    const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const h = new Date().getHours(), sd = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+    const prev = (it.fv_text || FV_TEXT).split(/\n\s*-{3,}\s*\n/)[0].replace(/\{Saudacao\}/g, sd).replace(/\{cliente\}/g, 'João').replace(/\{dias\}/g, '19')
+      .replace(/\{profissional\}/g, 'Lucas').replace(/\{dia\}/g, 'hoje').replace(/\{hora\}/g, '18h20').replace(/\{servico\}/g, 'Corte').replace(/\{barbearia\}/g, state.company.name || '');
+    const per = it.fv_per || 2, daily = it.fv_daily || 8, lead = it.fv_lead || 90, days = it.fv_days === 1 ? 1 : 2;
+    return `<section class="section card as-card">
+      <h2 class="section-title">${icon('bolt')} Preencher vagas</h2>
+      <p class="section-note">Quando um cliente <b>cancela</b> um horário de hoje${days === 2 ? ' ou de amanhã' : ''} e ele continua livre, o sistema convida na hora clientes que <b>costumam ser atendidos por esse profissional</b>, que <b>já estão no prazo de voltar</b> e que costumam vir <b>perto desse horário</b>. Quem responder conversa com a ${iaNome()}, que confere a agenda e marca; o primeiro que confirmar fica com a vaga.</p>
+      <p class="section-note">Fica de fora quem já tem horário marcado, quem veio há pouco, quem pediu SAIR, quem recebeu convite de vaga na última semana, de retorno nos últimos 3 dias ou a reconquista no último mês. Usa o mesmo histórico do Retorno no tempo certo (só clientes com pelo menos 3 atendimentos).</p>
+      <p class="section-note">${icon('alert')} Os cancelamentos são conferidos a cada 15 minutos, no horário de funcionamento (cerca de 40 consultas da API da AppBarber por dia, mais 2 a 3 por vaga encontrada). Sai pelo ${it.cl_numero === 'principal' ? '<b>WhatsApp principal</b>' : '<b>2º chip</b> (troque para o principal no lembrete de agendamento, para receber as respostas)'}.</p>
+      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}
+      ${semIa ? `<p class="section-note">${icon('alert')} A <b>Atendente IA</b> está desligada: os convites saem, mas as respostas ficam para a recepção.</p>` : ''}
+      <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.fv_status_at ? 'Atualizado ' + when(it.fv_status_at) + ' · ' : ''}${esc(st.replace(/^(ok|erro): /, ''))}</small>` : '<span class="chip">Aguardando o servidor</span>'}</div>
+      <form class="form" data-form="fvSave" novalidate>
+        <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''} ${noAb ? 'disabled' : ''}><span><b>Preencher vagas ligado</b><small>Convite na hora em que o horário é cancelado.</small></span></label>
+        <div class="grid-2">
+          <label class="field"><span>Convites por vaga</span><input class="input num" type="number" name="per" min="1" max="3" step="1" value="${per}"><small class="muted">Enviados juntos; o primeiro que confirmar fica com a vaga.</small></label>
+          <label class="field"><span>Convites por dia (máximo)</span><input class="input num" type="number" name="daily" min="1" max="30" step="1" value="${daily}"></label>
+          <label class="field"><span>Antecedência mínima (minutos)</span><input class="input num" type="number" name="lead" min="30" max="240" step="10" value="${lead}"><small class="muted">Vaga que começa antes disso não é oferecida.</small></label>
+          <label class="field"><span>Vagas de</span><select class="input" name="days"><option value="2" ${days === 2 ? 'selected' : ''}>Hoje e amanhã</option><option value="1" ${days === 1 ? 'selected' : ''}>Só hoje</option></select></label>
+        </div>
+        <label class="field"><span>Mensagem</span><textarea class="input" name="text" rows="8" maxlength="2000">${esc(it.fv_text || FV_TEXT)}</textarea>
+          <small class="muted">Use {Saudacao}, {cliente}, {profissional}, {dia} (hoje / amanhã), {hora}, {servico} e {barbearia}. As versões separadas por uma linha com <b>---</b> são sorteadas a cada envio. Links são retirados.</small></label>
+        <details class="wa-prev"><summary>Ver como chega para o cliente</summary><p class="wa-bubble">${esc(prev).replace(/\n/g, '<br>')}</p></details>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
+      </form></section>`;
+  }
   function rtCard() {
     if (!isGestor(currentUser())) return '';
     const it = Cloud.enabled ? ui.integ : (state.integ || {});
@@ -4419,7 +4456,7 @@ Content-Type: application/json</pre>
   // check-in do horário ("No local" na AppBarber) ou agenda na hora. O link tem um código secreto (só o hash fica salvo).
   // Resultado da atendente IA e do totem: o servidor grava cada agendamento, adicional, convite, conversa e o custo
   // (tabela ia_eventos) e no dia seguinte confere na AppBarber quem compareceu. Aqui vira R$ e retorno sobre o custo.
-  const RES_ORIG = { whatsapp: ['WhatsApp (o cliente chamou)', 'chat'], retorno: ['Retorno no tempo certo', 'clock'], reconquista: ['Reconquista de sumidos', 'rocket'], feedback: ['Pedido de feedback', 'vote'], totem: ['Totem da recepção', 'monitor'] };
+  const RES_ORIG = { whatsapp: ['WhatsApp (o cliente chamou)', 'chat'], retorno: ['Retorno no tempo certo', 'clock'], reconquista: ['Reconquista de sumidos', 'rocket'], feedback: ['Pedido de feedback', 'vote'], totem: ['Totem da recepção', 'monitor'], vaga: ['Vagas preenchidas (cancelamento)', 'bolt'] };
   const RES_DOLAR = 5.4; // custo da IA vem em US$; conversão aproximada só para comparar
   function resPeriodo(p) {
     const h = new Date(), d0 = x => new Date(x.getFullYear(), x.getMonth(), x.getDate());
@@ -4432,7 +4469,7 @@ Content-Type: application/json</pre>
     let s = 7; const rnd = () => (s = (s * 9301 + 49297) % 233280) / 233280;
     const pro = state.barbers.filter(b => b.active !== false).map(b => b.name); if (!pro.length) pro.push('Profissional');
     const out = [], ini = de.getTime(), dias = Math.max(1, Math.round((Math.min(ate.getTime(), Date.now()) - ini) / 86400000));
-    for (let i = 0; i < dias; i++) for (const [o, n] of [['whatsapp', 6], ['retorno', 3], ['reconquista', 1], ['feedback', 0.4], ['totem', 2]]) {
+    for (let i = 0; i < dias; i++) for (const [o, n] of [['whatsapp', 6], ['retorno', 3], ['reconquista', 1], ['feedback', 0.4], ['totem', 2], ['vaga', 0.8]]) {
       const qtd = Math.round(n * (0.6 + rnd() * 0.8));
       for (let k = 0; k < qtd; k++) {
         const em = new Date(ini + i * 86400000 + (9 + rnd() * 10) * 3600000).toISOString(), passou = i < dias - 2;
@@ -9154,6 +9191,19 @@ Content-Type: application/json</pre>
       setMsg(f, 'Salvando…', true);
       Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(row.bd_on ? 'Parabéns automático ligado.' : 'Parabéns automático desligado.'); render(); })
         .catch(e => { const m = Cloud.message(e); setMsg(f, /bd_|column|schema cache/i.test(m) ? 'O parabéns automático ainda está sendo ativado no servidor.' : m); });
+    },
+    fvSave(f) {
+      const per = Math.round(Number(f.elements.per.value) || 0), daily = Math.round(Number(f.elements.daily.value) || 0), lead = Math.round(Number(f.elements.lead.value) || 0);
+      if (per < 1 || per > 3) return setMsg(f, 'Convites por vaga: de 1 a 3.');
+      if (daily < 1 || daily > 30) return setMsg(f, 'Convites por dia: de 1 a 30.');
+      if (lead < 30 || lead > 240) return setMsg(f, 'Antecedência: de 30 a 240 minutos.');
+      const row = { fv_on: !!f.elements.on.checked, fv_per: per, fv_daily: daily, fv_lead: lead, fv_days: f.elements.days.value === '1' ? 1 : 2, fv_text: (f.elements.text.value || '').trim().slice(0, 2000) };
+      if (row.fv_text === FV_TEXT) row.fv_text = '';
+      const cur = (Cloud.enabled ? ui.integ : state.integ) || {};
+      if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Preencher vagas salvo.'); return render(); }
+      setMsg(f, 'Salvando…', true);
+      Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(row.fv_on ? 'Preencher vagas ligado.' : 'Preencher vagas desligado.'); render(); })
+        .catch(e => { const m = Cloud.message(e); setMsg(f, /fv_|column|schema cache/i.test(m) ? 'O preenchimento de vagas ainda está sendo ativado no servidor.' : m); });
     },
     rtRemind(f) {
       const daily = Math.round(Number(f.elements.daily.value) || 0), lead = Math.round(Number(f.elements.lead.value));

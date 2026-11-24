@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "6.6";
+export const SOFIA_VERSAO = "6.7";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -1437,6 +1437,31 @@ export function textoRetorno(modelo, { nome, dias, profissional, data, hora, ser
     .replace(/\{profissional\}/g, profissional).replace(/\{dia\}/g, dia).replace(/\{hora\}/g, horaTexto(hora)).replace(/\{servico\}/g, servico || "")
     .replace(/\{barbearia\}/g, barbearia || "").replace(/https?:\/\/\S+/gi, "").replace(/ !/g, "!").trim();
 }
+// Histórico de visitas de cada cliente (agenda da AppBarber), usado pelo retorno e pelo preenchimento de vagas.
+// Na 1ª vez, 12 meses de atendimentos realizados (12 créditos); depois, 1 vez por dia, os últimos dias (1 crédito).
+// Quem já tem horário marcado (de hoje a 30 dias) é conferido a cada 1h30 (2 créditos).
+export async function historicoClientes({ ab, dir, cid, hoje, log = () => {}, aoAtualizar = null, marcadosMin = 90 }) {
+  const HIST = join(dir, "retorno-historico.json");
+  const ler = (f, pad) => { try { return JSON.parse(readFileSync(f, "utf8")); } catch { return pad; } };
+  const gravar = (v) => { try { writeFileSync(HIST, JSON.stringify(v), { mode: 0o600 }); } catch (e) { log("Histórico de clientes: não gravei: " + e.message); } };
+  let h = ler(HIST, null);
+  if (!h || h.cid !== cid) h = { cid, ate: null, cli: {} };
+  if (h.ate !== hoje) {
+    const ini = h.ate ? somaDias(h.ate, -3) : somaDias(hoje, -365), linhas = [];
+    for (let fim = somaDias(hoje, -1), i = 0; fim >= ini && i < 13; i++) { const de = somaDias(fim, -30) < ini ? ini : somaDias(fim, -30); linhas.push(...await ab.agenda(de, fim, "2")); fim = somaDias(de, -1); }
+    juntarVisitas(h.cli, linhas);
+    h.ate = hoje; h.marcadosEm = 0; gravar(h);
+    if (aoAtualizar) aoAtualizar(h);
+    log(`Histórico de clientes atualizado (${Object.keys(h.cli).length} clientes).`);
+  }
+  if (!h.marcadosEm || Date.now() - h.marcadosEm > marcadosMin * 60000) {
+    // Inclui quem já foi atendido hoje (ainda não está no histórico, que vai até ontem).
+    const ag = [...await ab.agenda(hoje, somaDias(hoje, 30), "1"), ...await ab.agenda(hoje, hoje, "2")];
+    h.marcados = [...new Set(ag.map((x) => so(x.client_phone)).filter((f) => f.length >= 10).map(chaveFone))];
+    h.marcadosEm = Date.now(); gravar(h);
+  }
+  return h;
+}
 export function criarRetorno({ dir, log = () => {}, api = async () => ({}), sock = () => null, sofia = () => null, req = null, pode = () => true, esperaDigitando = 3000, relogio = agoraSP }) {
   const HIST = join(dir, "retorno-historico.json"), ENV = join(dir, "retorno-enviados.json");
   const ler = (f, pad) => { try { return JSON.parse(readFileSync(f, "utf8")); } catch { return pad; } };
@@ -1470,26 +1495,12 @@ export function criarRetorno({ dir, log = () => {}, api = async () => ({}), sock
     if (fechados.includes(diaDaSemana(hoje)) || agora < 10 * 60 || agora > 19 * 60) return; // envia entre 10h e 19h, em dia aberto
     const k = `${c.codigo_estabelecimento}|${c.appbarber_api_key}`;
     if (!ab || abChave !== k) { abChave = k; ab = ferramentasAppBarber({ cfg: c, ...(req ? { req } : {}), creditos: (n, zero) => api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: n, ...(zero ? { sem_saldo: true } : {}) }).catch(() => {}) }); }
-    let h = ler(HIST, null);
-    if (!h || h.cid !== e.company_id) h = { cid: e.company_id, ate: null, cli: {} };
     const env = ler(ENV, {});
-    // Histórico: na 1ª vez, 12 meses de atendimentos realizados (12 créditos); depois, 1 vez por dia, os últimos dias (1 crédito).
-    if (h.ate !== hoje) {
-      const ini = h.ate ? somaDias(h.ate, -3) : somaDias(hoje, -365), linhas = [];
-      for (let fim = somaDias(hoje, -1), i = 0; fim >= ini && i < 13; i++) { const de = somaDias(fim, -30) < ini ? ini : somaDias(fim, -30); linhas.push(...await ab.agenda(de, fim, "2")); fim = somaDias(de, -1); }
-      juntarVisitas(h.cli, linhas);
+    const h = await historicoClientes({ ab, dir, cid: e.company_id, hoje, log, aoAtualizar: (h2) => {
       // Quem recebeu o convite e veio depois: "voltou".
-      for (const [kf, x] of Object.entries(env)) if (x.enviado && !x.voltou && h.cli[kf]) { const v = h.cli[kf].v.find((y) => y[0] >= x.em); if (v) x.voltou = v[0]; }
-      h.ate = hoje; h.marcadosEm = 0; gravar(HIST, h); gravar(ENV, env);
-      log(`Retorno: histórico atualizado (${Object.keys(h.cli).length} clientes).`);
-    }
-    // Quem já tem horário marcado (de hoje a 30 dias) não recebe. Conferido a cada 1h30 (2 créditos).
-    if (!h.marcadosEm || Date.now() - h.marcadosEm > 90 * 60000) {
-      // Inclui quem já foi atendido hoje (ainda não está no histórico, que vai até ontem).
-      const ag = [...await ab.agenda(hoje, somaDias(hoje, 30), "1"), ...await ab.agenda(hoje, hoje, "2")];
-      h.marcados = [...new Set(ag.map((x) => so(x.client_phone)).filter((f) => f.length >= 10).map(chaveFone))];
-      h.marcadosEm = Date.now(); gravar(HIST, h);
-    }
+      for (const [kf, x] of Object.entries(env)) if (x.enviado && !x.voltou && h2.cli[kf]) { const v = h2.cli[kf].v.find((y) => y[0] >= x.em); if (v) x.voltou = v[0]; }
+      gravar(ENV, env);
+    } });
     const marc = new Set(h.marcados || []), sair = new Set(ler(join(dir, "reconquista-sair.json"), [])), wb = ler(join(dir, "reconquista-enviados.json"), {});
     const fila = [];
     for (const [kf, cl] of Object.entries(h.cli)) {
@@ -1536,6 +1547,106 @@ export function criarRetorno({ dir, log = () => {}, api = async () => ({}), sock
   }
   async function rodar(e, hoje = hojeSP()) {
     if (ocupado || !e || !e.retorno) return; ocupado = true;
+    try { await passo(e, hoje); } finally { ocupado = false; }
+  }
+  return { rodar };
+}
+
+// ---------- preencher vagas ----------
+// Quando um horário de hoje (ou amanhã) é cancelado e continua livre, convida na hora clientes do mesmo profissional que
+// já estão no prazo de voltar e costumam vir perto desse horário. O primeiro que confirmar fica com ele (a atendente IA
+// confere a agenda e marca). Cancelamentos conferidos a cada 15 minutos, no horário de funcionamento.
+export const TEXTOS_FV = [
+  "{Saudacao}, {cliente}! Tudo bem? 😊\nAcabou de abrir um horário *{dia} às {hora}* com {profissional} aqui na {barbearia}, e lembrei de você.\nQuer que eu reserve pra você?",
+  "{Saudacao}, {cliente}! 😊\nVagou um horário *{dia} às {hora}* com {profissional}. Como já está chegando a hora do seu próximo atendimento, separei pra você primeiro.\nPosso reservar?",
+];
+export function criarVagas({ dir, log = () => {}, api = async () => ({}), sock = () => null, sofia = () => null, req = null, pode = () => true, esperaDigitando = 3000, relogio = agoraSP, intervaloMin = 15 }) {
+  const EST = join(dir, "vagas-estado.json");
+  const ler = (f, pad) => { try { return JSON.parse(readFileSync(f, "utf8")); } catch { return pad; } };
+  const gravar = (v) => { try { writeFileSync(EST, JSON.stringify(v), { mode: 0o600 }); } catch (e) { log("Vagas: não gravei o arquivo: " + e.message); } };
+  let ab = null, abChave = "", ocupado = false, conferidoEm = 0, statusEm = 0;
+  const mesmoProf = (p, nome) => { const a = semAcento(nome), b = semAcento(p.completo || p.nome), c = semAcento(p.nome); return !!a && (a === b || a === c || a.split(" ")[0] === c.split(" ")[0] || a.split(" ")[0] === b.split(" ")[0]); };
+
+  async function passo(e, hoje) {
+    const c = e.vagas, agora = relogio(), fechados = ((e.horario && e.horario.fechados) || []).map(Number);
+    const abre = mins((e.horario && e.horario.abertura) || "09:00"), fecha = mins((e.horario && e.horario.fechamento) || "20:00");
+    if (fechados.includes(diaDaSemana(hoje)) || agora < abre || agora > fecha - 30) return;
+    if (Date.now() - conferidoEm < intervaloMin * 60000) return; conferidoEm = Date.now();
+    const k = `${c.codigo_estabelecimento}|${c.appbarber_api_key}`;
+    if (!ab || abChave !== k) { abChave = k; ab = ferramentasAppBarber({ cfg: c, ...(req ? { req } : {}), creditos: (n, zero) => api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: n, ...(zero ? { sem_saldo: true } : {}) }).catch(() => {}) }); }
+    const st = ler(EST, {}); if (st.cid !== e.company_id) { st.cid = e.company_id; st.vistos = {}; st.env = {}; }
+    st.vistos = st.vistos || {}; st.env = st.env || {};
+    if (st.dia !== hoje) { st.dia = hoje; st.hoje = { vagas: 0, convites: 0, semCandidato: 0 }; for (const [x, d] of Object.entries(st.vistos)) if (d < somaDias(hoje, -2)) delete st.vistos[x]; }
+    const ate = c.dias >= 2 ? somaDias(hoje, 1) : hoje;
+    // Cancelados → vagas (um horário por profissional e início)
+    const vagas = new Map();
+    for (const a of await ab.agenda(hoje, ate, "3")) {
+      const cod = String(a.appointment_code || a.scheduling_code || ""); if (!cod || st.vistos[cod]) continue;
+      st.vistos[cod] = hoje;
+      const m = String(a.scheduling_start || "").match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})/); if (!m) continue;
+      const data = `${m[3]}-${m[2]}-${m[1]}`, hora = `${m[4]}:${m[5]}`, prof = String(a.employee_name || "").trim();
+      if (!prof || data < hoje || data > ate || (data === hoje && mins(hora) < agora + c.antecedencia)) continue;
+      const g = `${semAcento(prof)}|${data}|${hora}`;
+      if (!vagas.has(g)) vagas.set(g, { data, hora, prof, servico: String(a.service_description || "").trim(), fone: chaveFone(a.client_phone) });
+    }
+    gravar(st);
+    if (!vagas.size) return status(e, st);
+    const servs = await ab.servicos(), porNome = (n) => servs.find((x) => semAcento(x.nome) === semAcento(String(n || "").split(" + ")[0]));
+    const h = await historicoClientes({ ab, dir, cid: e.company_id, hoje, log, marcadosMin: 30 });
+    const marc = new Set(h.marcados || []), sair = new Set(ler(join(dir, "reconquista-sair.json"), [])), wb = ler(join(dir, "reconquista-enviados.json"), {}), rt = ler(join(dir, "retorno-enviados.json"), {});
+    const livres = new Map(); // data|servico → lista de horários por profissional
+    const livresDe = async (data, s) => { const k2 = `${data}|${s.codigo}`; if (!livres.has(k2)) livres.set(k2, await ab.horarios(data, s.codigo).catch(() => [])); return livres.get(k2); };
+    for (const v of vagas.values()) {
+      if (st.hoje.convites >= c.porDia) break;
+      const sV = porNome(v.servico) || servs[0]; if (!sV) continue;
+      const pV = (await livresDe(v.data, sV)).find((p) => mesmoProf(p, v.prof));
+      if (!pV || !pV.horarios.includes(v.hora)) continue; // já foi preenchida (ou o profissional saiu da agenda)
+      st.hoje.vagas++;
+      const slot = mins(v.hora), cand = [];
+      for (const [kf, cl] of Object.entries(h.cli)) {
+        if (kf === v.fone || marc.has(kf) || sair.has(kf)) continue;
+        const a = analisarCliente(cl.v, hoje); if (!a || !a.prof || !a.serv || !mesmoProf(pV, a.prof)) continue;
+        const atraso = a.dias - a.media; if (atraso < -7 || atraso > 45) continue; // perto do prazo de voltar (até 1 semana antes)
+        const x = st.env[kf]; if (x && diasEntre(x, hoje) < 7) continue;
+        if (rt[kf] && rt[kf].em && rt[kf].enviado && diasEntre(rt[kf].em, hoje) < 3) continue;
+        if (wb[kf] && wb[kf].em && diasEntre(wb[kf].em, hoje) < 30) continue;
+        const dif = a.hora == null ? 120 : Math.abs(a.hora - slot); if (dif > 150) continue;
+        cand.push({ kf, cl, a, dif, atraso });
+      }
+      cand.sort((p, q) => Math.floor(p.dif / 30) - Math.floor(q.dif / 30) || q.atraso - p.atraso || q.a.visitas - p.a.visitas);
+      const s = sock(); let enviados = 0;
+      for (const x of cand) {
+        if (!s || !pode() || enviados >= c.porVaga || st.hoje.convites >= c.porDia) break;
+        // O serviço de costume dele cabe nesse horário?
+        const sC = porNome(x.a.serv) || sV;
+        if (sC.codigo !== sV.codigo) { const pC = (await livresDe(v.data, sC)).find((p) => mesmoProf(p, v.prof)); if (!pC || !pC.horarios.includes(v.hora)) continue; }
+        const d = so(x.cl.f), numero = d.length <= 11 ? "55" + d : d;
+        const [w] = await s.onWhatsApp(numero).catch(() => []); if (!w || !w.exists) continue;
+        const nome = primeiroNome(x.cl.n), profissional = primeiroNome(pV.nome);
+        const texto = textoRetorno(c.texto || TEXTOS_FV.join("\n---\n"), { nome, dias: x.a.dias, profissional, data: v.data, hora: v.hora, servico: x.a.serv, barbearia: e.nome }, hoje, relogio());
+        st.env[x.kf] = hoje; st.hoje.convites++; enviados++; gravar(st);
+        try {
+          await s.presenceSubscribe(w.jid).catch(() => {}); await s.sendPresenceUpdate("composing", w.jid).catch(() => {});
+          await espera(esperaDigitando + Math.random() * esperaDigitando); await s.sendPresenceUpdate("paused", w.jid).catch(() => {});
+          const r = await s.sendMessage(w.jid, { text: texto });
+          const so2 = sofia(); if (so2 && so2.conviteEnviado) so2.conviteEnviado(w.jid, r && r.key && r.key.id, { fone: normFone(d), nome, texto, horas: 6, origem: "vaga",
+            tipo: "vaga: horário que acabou de abrir (cancelamento)",
+            detalhe: `[horário oferecido: ${v.data} ${v.hora}, profissional código ${pV.codigo} (${pV.nome}), serviço código ${sC.codigo} (${sC.nome}); de costume o cliente faz: ${x.a.serv}. Esta vaga foi oferecida a até ${c.porVaga} cliente(s) ao mesmo tempo: o primeiro que confirmar fica com ela. Se ele aceitar, confira com ver_horarios e agende na hora; se já tiver sido preenchida, peça desculpas e ofereça o horário livre mais perto com o mesmo profissional.]` });
+          log(`Vagas: convite enviado (${nome || "cliente"} → ${v.data} ${v.hora} com ${profissional}).`);
+        } catch (err) { log("Vagas: convite não enviado: " + err.message); }
+      }
+      if (!enviados) st.hoje.semCandidato++;
+      gravar(st);
+    }
+    return status(e, st, true);
+  }
+  async function status(e, st, forcar = false) {
+    if (!forcar && Date.now() - statusEm < 1800000) return; statusEm = Date.now();
+    const quando = new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }), x = st.hoje || {};
+    await api("POST", { company_id: e.company_id, acao: "fv_status", status: `ok: ${quando} · hoje: ${x.vagas || 0} vaga(s) aberta(s) por cancelamento, ${x.convites || 0} convite(s) enviado(s)${x.semCandidato ? `, ${x.semCandidato} sem cliente no perfil` : ""}` }).catch(() => {});
+  }
+  async function rodar(e, hoje = hojeSP()) {
+    if (ocupado || !e || !e.vagas) return; ocupado = true;
     try { await passo(e, hoje); } finally { ocupado = false; }
   }
   return { rodar };

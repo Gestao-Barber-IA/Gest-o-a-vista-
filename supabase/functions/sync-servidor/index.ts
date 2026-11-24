@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
   if (req.method === "GET" && url.searchParams.get("acao") === "lembretes") {
     const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
     const { data: ints, error } = await db.from("integrations")
-      .select("company_id, est_code, api_key, branch_code, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, fb_reply, fb_pro_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, wb_gift, wb_gift_done, cl_status, cl_status_at, rt_on, rt_daily, rt_lead, rt_text, tt_on, tt_notify, tt_days, upsell, bd_on, bd_text, ia_on, ia_name, ia_model, ia_hours, ia_pause, ia_notes, ia_report_phone, ia_alert_phone, ia_arts, names").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,rt_on.eq.true,tt_on.eq.true,bd_on.eq.true,ia_on.eq.true");
+      .select("company_id, est_code, api_key, branch_code, fv_on, fv_per, fv_daily, fv_lead, fv_days, fv_text, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, fb_reply, fb_pro_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, wb_gift, wb_gift_done, cl_status, cl_status_at, rt_on, rt_daily, rt_lead, rt_text, tt_on, tt_notify, tt_days, upsell, bd_on, bd_text, ia_on, ia_name, ia_model, ia_hours, ia_pause, ia_notes, ia_report_phone, ia_alert_phone, ia_arts, names").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,rt_on.eq.true,tt_on.eq.true,bd_on.eq.true,ia_on.eq.true");
     if (error) return json({ erro: error.message }, 500);
     const empresas = [];
     for (const i of ints || []) {
@@ -106,11 +106,15 @@ Deno.serve(async (req) => {
         // Reconquista de clientes sumidos (lista de clientes da AppBarber, 1 crédito por página).
         reconquista: i.wb_on && i.est_code && i.api_key ? { porDia: Math.max(1, Math.min(40, Number(i.wb_daily) || 15)), minDias: Math.max(30, Number(i.wb_min_days) || 90), maxDias: Math.max(60, Number(i.wb_max_days) || 365), texto: i.wb_text || "", presente: String(i.wb_gift || "").slice(0, 1500), presenteFinal: String(i.wb_gift_done || "").slice(0, 1000), codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
         // Retorno no tempo certo: convite N dias antes do prazo de costume de cada cliente (agenda da AppBarber).
+        // Preencher vagas: cancelamento de hoje/amanhã vira convite para clientes do mesmo profissional no prazo de voltar.
+        vagas: i.fv_on && i.est_code && i.api_key ? { porVaga: Math.max(1, Math.min(3, Number(i.fv_per) || 2)), porDia: Math.max(1, Math.min(30, Number(i.fv_daily) || 8)),
+          antecedencia: Math.max(30, Math.min(240, Number(i.fv_lead) || 90)), dias: Number(i.fv_days) === 1 ? 1 : 2, texto: String(i.fv_text || "").slice(0, 2000),
+          codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
         retorno: i.rt_on && i.est_code && i.api_key ? { porDia: Math.max(1, Math.min(30, Number(i.rt_daily) || 10)), antes: i.rt_lead == null || !Number.isFinite(Number(i.rt_lead)) ? 2 : Math.max(-3, Math.min(7, Math.round(Number(i.rt_lead)))), texto: i.rt_text || "", codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
         // Totem de autoatendimento na recepção (check-in e agendamento na hora).
         totem: i.tt_on && i.est_code && i.api_key ? { avisar: i.tt_notify !== false, dias: Math.max(1, Math.min(30, Number(i.tt_days) || 7)), upsell: upsellCfg(i) } : null,
         // Estado do número dos clientes: o programa da equipe (outro número) avisa quando ele desconecta.
-        wa_clientes: i.cl_on || i.ia_on || i.wb_on || i.bd_on || i.fb_on || i.rt_on ? { status: i.cl_status || "", em: i.cl_status_at, numero: i.cl_numero === "principal" ? "principal" : "chip", sofia: !!i.ia_on, alerta: String(i.ia_alert_phone || i.ia_report_phone || "").replace(/\D/g, "") } : null,
+        wa_clientes: i.cl_on || i.ia_on || i.wb_on || i.bd_on || i.fb_on || i.rt_on || i.fv_on ? { status: i.cl_status || "", em: i.cl_status_at, numero: i.cl_numero === "principal" ? "principal" : "chip", sofia: !!i.ia_on, alerta: String(i.ia_alert_phone || i.ia_report_phone || "").replace(/\D/g, "") } : null,
         cfg: { ligado: !!i.wa_on, hora: i.wa_hour || "13:00", minimo: Number(i.wa_min) || 0, texto: i.wa_text || "" },
         // Lembrete de agendamento para os clientes (o servidor consulta a agenda da AppBarber).
         clientes: i.cl_on && i.est_code && i.api_key ? { numero: i.cl_numero === "principal" ? "principal" : "chip", antecedencia: Number(i.cl_lead) || 60, texto: i.cl_text || "", resposta: i.cl_reply || "", codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
@@ -203,7 +207,7 @@ Deno.serve(async (req) => {
       const { error } = await db.from("integrations").update({ ia_report: rel, ia_report_at: new Date().toISOString() }).eq("company_id", b.company_id);
       return error ? json({ erro: error.message }, 500) : json({ ok: true });
     }
-    if (["wa_status", "cl_status", "fb_status", "wb_status", "rt_status", "tt_status", "bd_status", "ia_status"].includes(b.acao)) {
+    if (["wa_status", "cl_status", "fb_status", "wb_status", "rt_status", "tt_status", "bd_status", "ia_status", "fv_status"].includes(b.acao)) {
       const k = String(b.acao).slice(0, 2);
       const { error } = await db.from("integrations").update({ [k + "_status"]: String(b.status || "").slice(0, 500), [k + "_status_at"]: new Date().toISOString() }).eq("company_id", b.company_id);
       return error ? json({ erro: error.message }, 500) : json({ ok: true });
