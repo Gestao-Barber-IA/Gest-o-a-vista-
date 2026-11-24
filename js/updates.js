@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-24-ia-volta-recepcao', date: '2026-11-24', title: 'Atendente IA: conversa da recepção não fica sem resposta', items: [
+    ['melhoria', 'Quando uma conversa foi passada para a recepção e a equipe não fala nela há 2 horas, se o cliente escrever de novo a atendente IA volta a atender (lendo o que a recepção já respondeu). Se a conversa foi parar na recepção por um erro da IA e ninguém respondeu, ela volta depois de 30 minutos.'],
+    ['correcao', 'A atendente IA encontra o barbeiro pelo nome do cadastro mesmo quando a agenda usa outro (ex.: Izaque e Izaquias).'],
+  ] },
   { id: '2026-11-24-ia-planos', date: '2026-11-24', title: 'Atendente IA: regra dos planos mensais', items: [
     ['melhoria', 'A atendente IA reconhece quem é assinante de plano (pela AppBarber) e só remarca horário do plano com o mesmo profissional, na mesma semana e nos dias que o plano permite. Se o cliente pedir outro profissional ou contar que trocou, ela explica a regra e chama a recepção, sem dizer que "não tem problema".'],
     ['correcao', 'Quando a recepção responde uma conversa pelo celular, a atendente IA fica quieta por 1 hora mesmo se o servidor reiniciar nesse tempo (antes, um reinício fazia ela voltar a responder).'],
