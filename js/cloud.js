@@ -234,7 +234,7 @@
   // Resultado da atendente IA e do totem (eventos gravados pelo servidor): só o gestor lê.
   Cloud.iaEventos = async (desde, ate) => {
     const out = []; let de = 0;
-    for (;;) { const { data, error } = await c.from('ia_eventos').select('em, tipo, origem, valor, compareceu, dados').eq('company_id', Cloud.companyId).gte('em', desde).lt('em', ate).order('em').range(de, de + 999); if (error) throw error; out.push(...(data || [])); if (!data || data.length < 1000) break; de += 1000; }
+    for (;;) { const { data, error } = await c.from('ia_eventos').select('em, tipo, origem, valor, ref, compareceu, dados').eq('company_id', Cloud.companyId).gte('em', desde).lt('em', ate).order('em').range(de, de + 999); if (error) throw error; out.push(...(data || [])); if (!data || data.length < 1000) break; de += 1000; }
     return out;
   };
   Cloud.rotateKey = async () => { const { data, error } = await c.rpc('rotate_api_key'); if (error) throw error; return data; };

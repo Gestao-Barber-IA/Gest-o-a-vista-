@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "6.3";
+export const SOFIA_VERSAO = "6.4";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -513,7 +513,7 @@ export async function executar(nomeTool, input, ctx) {
         const comandas = [...new Set(bloco.itens.map((i) => i.comanda).filter(Boolean))];
         if (comandas.length !== bloco.itens.length && comandas.length < 1) return { erro: "não consegui liberar o horário atual; peça para a recepção trocar" };
         for (const c of comandas) await ab.cancelarComanda(c, fone);
-        try { await ab.criar({ fone, nome: velho.nome || conv.nome || "Cliente", servicos: servs, profissional: input.profissional, quando: input.data_hora }); }
+        let novoR; try { novoR = await ab.criar({ fone, nome: velho.nome || conv.nome || "Cliente", servicos: servs, profissional: input.profissional, quando: input.data_hora }); }
         catch (e) {
           // Não deu: volta o horário antigo.
           const todos = await ab.servicos(), antigos = bloco.itens.map((i) => todos.find((x) => semAcentoP(x.nome) === semAcentoP(i.servico))).filter(Boolean);
@@ -522,16 +522,17 @@ export async function executar(nomeTool, input, ctx) {
           return { erro: `não consegui trocar (${e.message}); o horário antigo foi mantido` };
         }
         conv.agenda = null; ctx.stats.remarcados++; ctx.registro(`remarcou de ${velho.quando} para ${input.data_hora}`);
+        if (ctx.evento) ctx.evento({ tipo: "remarcacao", dados: { de: velho.quando, para: input.data_hora, antigos: bloco.itens.map((i) => i.codigo), codigos: (novoR && novoR.codigos) || [] } });
         return { ok: true };
       }
       const prob = await confere(servs, input.profissional, input.data_hora); if (prob) return { erro: prob };
       if (simular) { ctx.stats.remarcados++; return { ok: true, simulado: true }; }
-      await ab.criar({ fone, nome: velho.nome || conv.nome || "Cliente", servicos: servs, profissional: input.profissional, quando: input.data_hora });
+      const novoR = await ab.criar({ fone, nome: velho.nome || conv.nome || "Cliente", servicos: servs, profissional: input.profissional, quando: input.data_hora });
       // Marca o novo primeiro (para não perder a vaga) e só depois cancela o antigo.
       try { if (!velho.comanda) throw new Error("sem comanda"); await ab.cancelarComanda(velho.comanda, fone); }
       catch (e) { ctx.stats.remarcados++; ctx.pendencia(`remarcou para ${input.data_hora}, mas o horário antigo (${velho.quando}) não foi cancelado (${e.message}): cancele na agenda`); return { ok: true, aviso: "o novo horário foi marcado; o antigo a recepção vai liberar" }; }
       conv.agenda = null; ctx.stats.remarcados++; ctx.registro(`remarcou de ${velho.quando} para ${input.data_hora}`);
-      if (ctx.evento) ctx.evento({ tipo: "remarcacao", dados: { de: velho.quando, para: input.data_hora } });
+      if (ctx.evento) ctx.evento({ tipo: "remarcacao", dados: { de: velho.quando, para: input.data_hora, antigos: [velho.codigo], codigos: (novoR && novoR.codigos) || [] } });
       return { ok: true };
     }
     case "cancelar": {
@@ -745,6 +746,12 @@ export function resultadosDe(dir, api, log = () => {}, req = null) {
   function evento(cid, ev) {
     if (!cid || !ev || !ev.tipo) return;
     const fila = ler(FILA, []); fila.push({ cid, em: new Date().toISOString(), ...ev }); gravar(FILA, fila.slice(-2000));
+    // Remarcou: o comparecimento passa a ser conferido no horário novo (o antigo foi cancelado, não é falta).
+    if (ev.tipo === "remarcacao" && ev.dados && Array.isArray(ev.dados.antigos) && ev.dados.codigos && ev.dados.codigos.length) {
+      const ant = new Set(ev.dados.antigos.map(Number)), l = ler(AGS, []); let mudou = false;
+      for (const x of l) if (x.cid === cid && x.codigos.some((c) => ant.has(Number(c)))) { x.codigos = [...x.codigos.filter((c) => !ant.has(Number(c))), ...ev.dados.codigos]; x.data = String(ev.dados.para || "").slice(0, 10) || x.data; mudou = true; }
+      if (mudou) gravar(AGS, l);
+    }
     if (ev.tipo === "agendamento" && ev.ref && ev.dados && ev.dados.data) { const l = ler(AGS, []); l.push({ cid, ref: ev.ref, data: ev.dados.data, codigos: ev.dados.codigos || [] }); gravar(AGS, l.slice(-1000)); }
   }
   async function enviar() {
@@ -785,14 +792,14 @@ export function resultadosDe(dir, api, log = () => {}, req = null) {
   })();
   let historicoEm = 0;
   async function importarHistorico() {
-    if (!ab || !e0 || Date.now() - historicoEm < 3600000) return; const h = ler(HISTF, {}); if (h[e0.company_id]) return;
+    if (!ab || !e0 || Date.now() - historicoEm < 3600000) return; const h = ler(HISTF, {}); if (h[e0.company_id] && h[e0.company_id].v >= 2) return; // v2: remarcações
     historicoEm = Date.now();
     const evs = await historicoEventos({ ab, dir, inicio, hoje: hojeSP(), log });
     const cid = e0.company_id;
     for (let i = 0; i < evs.eventos.length; i += 200) await api("POST", { company_id: cid, acao: "ia_eventos", eventos: evs.eventos.slice(i, i + 200) });
     for (let i = 0; i < evs.compareceu.length; i += 300) await api("POST", { company_id: cid, acao: "ia_compareceu", itens: evs.compareceu.slice(i, i + 300) });
     if (evs.pendentes.length) { const l = ler(AGS, []); gravar(AGS, l.concat(evs.pendentes.map((x) => ({ cid, ...x }))).slice(-1000)); }
-    h[cid] = { em: new Date().toISOString(), eventos: evs.eventos.length }; gravar(HISTF, h);
+    h[cid] = { v: 2, em: new Date().toISOString(), eventos: evs.eventos.length }; gravar(HISTF, h);
     log(`Resultados: histórico importado (${evs.resumo}).`);
   }
   setInterval(() => { enviar().catch(() => {}); conferir().catch(() => {}); importarHistorico().catch((e) => log("Resultados: histórico adiado (" + e.message + ")")); }, 60000).unref();
@@ -806,7 +813,7 @@ const numBR = (v) => { const t = String(v ?? "").trim(); if (!t) return 0; const
 const hashCurto = (t) => createHash("sha256").update(String(t)).digest("hex").slice(0, 12);
 export async function historicoEventos({ ab, dir, inicio, hoje, log = () => {}, diasAtras = 92 }) {
   const ler = (f, pad) => { try { return JSON.parse(readFileSync(join(dir, f), "utf8")); } catch { return pad; } };
-  const eventos = [], compareceu = [], pendentes = [], cont = { ag: 0, ad: 0, conv: 0, convites: 0 };
+  const eventos = [], compareceu = [], pendentes = [], cont = { ag: 0, ad: 0, conv: 0, convites: 0, rem: 0 };
   const ini = somaDias(hoje, -diasAtras);
   // Convites (só a data; telefone vira chave curta para achar a origem do agendamento)
   const convites = []; // { k, dia, origem }
@@ -832,7 +839,11 @@ export async function historicoEventos({ ab, dir, inicio, hoje, log = () => {}, 
     if (totem && !o.extra) { const m = obs.match(/R\$\s*([\d.,]+)[^·]*comanda/i); if (m) o.extra = numBR(m[1]); }
     grupos.set(g, o);
   }
-  for (const o of grupos.values()) {
+  // Cancelado e marcado de novo pela Sofia (remarcação: ela marca o novo e cancela o antigo) não conta duas vezes nem como falta.
+  const todos = [...grupos.values()];
+  for (const o of todos) o.remarcado = o.st.size === 1 && o.st.has("3") && todos.some((x) => x !== o && x.sofia && chaveFone(x.fone) === chaveFone(o.fone) && x.em > o.em && x.em <= new Date(Date.parse(o.em) + 45 * 86400000).toISOString());
+  for (const o of todos) {
+    if (o.remarcado) { cont.rem++; eventos.push({ em: o.em, tipo: "remarcacao", origem: o.totem ? "totem" : "whatsapp", ref: `h:rm:${[...o.cods].sort((a, b) => a - b).join(",")}`, dados: { historico: true } }); continue; }
     const cods = [...o.cods].sort((a, b) => a - b), ref = `ag:${cods.join(",")}`;
     const origem = o.totem ? "totem" : origemDe(o.fone, o.em.slice(0, 10)) || "whatsapp";
     if (o.adicional) { eventos.push({ em: o.em, tipo: "adicional", origem, valor: o.valor, ref: "h:" + ref, dados: { profissional: o.prof, servicos: o.servs.join(" + "), historico: true } }); cont.ad++; continue; }
@@ -850,7 +861,7 @@ export async function historicoEventos({ ab, dir, inicio, hoje, log = () => {}, 
     if (r.custo > 0) eventos.push({ em, tipo: "uso", origem: "whatsapp", valor: r.custo, ref: `h:u:${r.id}` });
     if (r.resultado === "recepcao") eventos.push({ em, tipo: "recepcao", origem: "whatsapp", ref: `h:r:${r.id}` });
   }
-  return { eventos, compareceu, pendentes, resumo: `${cont.ag} agendamento(s), ${cont.ad} adicional(is), ${cont.conv} conversa(s), ${cont.convites} convite(s)` };
+  return { eventos, compareceu, pendentes, resumo: `${cont.ag} agendamento(s), ${cont.rem} remarcado(s), ${cont.ad} adicional(is), ${cont.conv} conversa(s), ${cont.convites} convite(s)` };
 }
 // Valor de um agendamento: preço do horário do 1º serviço na agenda (já com promoção e preço do profissional) + tabela dos outros.
 async function valorAgendamento(ab, servs, profissional, data, hora) {
