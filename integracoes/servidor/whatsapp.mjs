@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "8.7";
+const VERSAO = "8.8";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -51,7 +51,7 @@ async function carregarSofiaMod() {
   try { return await import("./sofia.mjs"); } catch (e) { console.log("Sofia indisponível: " + e.message); return null; }
 }
 const SOFIA = CLI ? await carregarSofiaMod() : null;
-let sofia = null, retorno = null, totem = null, vagas = null;
+let sofia = null, retorno = null, totem = null, vagas = null, confirmacao = null;
 
 // ---------- conexão ----------
 let sock = null, aberto = false, saiu = false, geracao = 0;
@@ -532,7 +532,7 @@ async function ciclo() {
   await atualizar();
   const { empresas = [], hoje } = await api("GET", null, "?acao=lembretes");
   // Cada número cuida só das empresas com o seu tipo de lembrete ligado.
-  const minhas = empresas.filter((e) => (CLI ? !!(e.clientes || e.feedback || e.reconquista || e.retorno || e.vagas || e.totem || e.aniversario || e.sofia) : e.cfg.ligado !== false));
+  const minhas = empresas.filter((e) => (CLI ? !!(e.clientes || e.feedback || e.reconquista || e.retorno || e.vagas || e.confirmacao || e.totem || e.aniversario || e.sofia) : e.cfg.ligado !== false));
   empresasConhecidas = minhas.map((e) => e.company_id);
   if (CLI) await escolherNumero(minhas);
   // Sofia: atende o número dos clientes da primeira barbearia com a atendente IA ligada.
@@ -557,6 +557,12 @@ async function ciclo() {
     if (eRt && SOFIA && SOFIA.criarRetorno) {
       if (!retorno) retorno = SOFIA.criarRetorno({ dir: DIR, log, api, sock: () => (aberto ? sock : null), sofia: () => sofia, pode: () => pausadoDia !== hoje });
       await retorno.rodar(eRt, hoje).catch((err) => { log(`${eRt.nome}: retorno: ${err.message}`); api("POST", { company_id: eRt.company_id, acao: "rt_status", status: "erro: " + err.message }).catch(() => {}); });
+    }
+    // Confirmação de presença: na véspera pede a confirmação; no dia, 2º aviso para quem não respondeu.
+    const eCf = minhas.find((e) => e.confirmacao);
+    if (eCf && SOFIA && SOFIA.criarConfirmacao) {
+      if (!confirmacao) confirmacao = SOFIA.criarConfirmacao({ dir: DIR, log, api, sock: () => (aberto ? sock : null), sofia: () => sofia, resultados: SOFIA.resultadosDe ? SOFIA.resultadosDe(DIR, api, log) : null, pode: () => pausadoDia !== hoje });
+      await confirmacao.rodar(eCf, hoje).catch((err) => { log(`${eCf.nome}: confirmação: ${err.message}`); api("POST", { company_id: eCf.company_id, acao: "cf_status", status: "erro: " + err.message }).catch(() => {}); });
     }
     // Preencher vagas: horário cancelado hoje/amanhã vira convite para clientes do mesmo profissional no prazo de voltar.
     const eFv = minhas.find((e) => e.vagas);
@@ -602,7 +608,7 @@ async function avisarDesconectado(empresas) {
     if (off && !x.avisado && Date.now() - x.desde >= 10 * 60000) {
       const qual = w.numero === "principal" ? "WhatsApp principal" : "2º chip (lembretes dos clientes)";
       const cmd = w.numero === "principal" ? "gbia-whatsapp-conectar-principal" : "gbia-whatsapp-conectar-clientes";
-      const parado = ["lembretes de agendamento", ...(w.sofia ? ["a Sofia"] : []), "parabéns", "reconquista", "retorno", "vagas"].join(", ");
+      const parado = ["lembretes de agendamento", ...(w.sofia ? ["a Sofia"] : []), "parabéns", "reconquista", "retorno", "vagas", "confirmação"].join(", ");
       const t = `⚠️ Gestão Barber IA: o ${qual} da ${e.nome} desconectou do servidor. Estão parados: ${parado}.\n\nPara reconectar: no console da Vultr, rode\n${cmd}\ne leia o QR code no celular desse número (WhatsApp › Aparelhos conectados › Conectar um aparelho).`;
       try { await enviar(w.alerta, t); x.avisado = Date.now(); mudou = true; log(`${e.nome}: avisei que o ${qual} desconectou.`); }
       catch (err) { log(`${e.nome}: não consegui avisar a desconexão (${err.message}).`); }
