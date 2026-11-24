@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "6.4";
+export const SOFIA_VERSAO = "6.5";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -286,7 +286,7 @@ Regras (muito importantes):
   • Cadastrado sem data de nascimento: depois de resolver o que ele pediu, pergunte uma vez a data de nascimento, para as promoções de aniversário, e salve com salvar_cadastro.
 - Agendamento para outra pessoa (ex.: filho, irmão): marque no nome do cliente que está falando (o titular do WhatsApp/cadastro) e escreva na observação para quem é, com idade se souber (ex.: "Corte do Brian, 3 anos (filho)").
 - Use a observação do agendamento para o que ajuda o barbeiro(a): se for a primeira vez do cliente na barbearia, escreva "Primeira vez na barbearia"; inclua também pedidos importantes do cliente (ex.: "quer manter o comprimento em cima").
-- Quando o cliente quiser um serviço e NÃO disser com quem: se ele é cadastrado, use ultimo_atendimento; se houver, ofereça o mesmo barbeiro(a) (ex.: "Quer marcar com o Well de novo, como da última vez? 😊"). Se não houver, ou se for cliente novo, pergunte se tem preferência de barbeiro(a) (ex.: "Você tem preferência de barbeiro(a)? 😊"). Se ele já disse o nome, não pergunte. Se ele não tiver preferência, ofereça quem tem horário mais perto do que ele pediu.
+- Quando o cliente quiser um serviço e NÃO disser com quem: se ele é cadastrado, use ultimo_atendimento; se houver, ofereça o mesmo barbeiro(a) (ex.: "Quer marcar com o Well de novo, como da última vez? 😊"). Se não houver, ou se for cliente novo, pergunte se tem preferência de barbeiro(a) (ex.: "Você tem preferência de barbeiro(a)? 😊"). Se ele já disse o nome, não pergunte. Se ele não tiver preferência ("tanto faz", "qualquer um", "quem tiver"), consulte ver_horarios sem profissional: a lista já vem na ordem de preferência da barbearia (campo ordem). Ofereça os horários do 1º da lista que sirvam para o dia e período que o cliente pediu; só passe para o 2º, 3º… se o anterior não tiver horário que sirva. Não explique ao cliente o motivo da escolha.
 - Lista de espera: se o cliente quer um dia e horário específicos que estão cheios e diz que não pode em outro dia ou horário, ofereça colocar na lista de espera daquele dia/faixa (com o barbeiro dele, se ele fizer questão). Se ele aceitar, use lista_de_espera. Quando a lista avisa de uma vaga, a mensagem aparece no contexto: se o cliente quiser, confira o horário (ver_horarios) e siga o resumo normal para agendar.
 - Depois de cancelar um horário, nunca termine com uma afirmação ("quando quiser, é só chamar"): termine sempre perguntando "Para quando você gostaria de reagendar, [primeiro nome]?".
 - Remarcar ou cancelar: só horários do próprio cliente (consultar_cliente). Confirme qual horário antes.
@@ -409,8 +409,19 @@ export async function executar(nomeTool, input, ctx) {
           return { agenda_completa: true, profissional: input.profissional, nota: `A agenda de ${input.profissional} está completa nesse dia (todos os horários já foram reservados). Diga isso com essas palavras, de forma profissional; nunca diga que ele não está disponível, não está na agenda ou não trabalha.`, proximo_dia_com_horario: proximo, outros_com_horario_nesse_dia: lista.filter((p) => p.horarios.length).map((p) => p.nome) };
         }
       }
+      // Sem preferência de profissional: primeiro quem tem menos atendimentos marcados no dia; empate → maior fidelização.
+      let ordenado = false;
+      if (!input.profissional && ctx.carga && lista.filter((p) => p.horarios.length).length > 1) {
+        try {
+          const carga = await ctx.carga(input.data), fid = (n) => { const v = ctx.fidelizacao ? ctx.fidelizacao(n) : null; return Number.isFinite(v) ? v : -1; };
+          const qtd = (n) => { let t = 0; for (const [k, v] of carga) if (mesmoNome(k, n)) t += v; return t; };
+          lista = lista.map((p) => ({ p, q: qtd(p.nome), f: fid(p.nome) })).sort((a, b) => (!a.p.horarios.length - !b.p.horarios.length) || (a.q - b.q) || (b.f - a.f)).map((x) => x.p);
+          ordenado = true;
+        } catch (e) { if (ctx.registro) ctx.registro("não consegui ver a carga do dia: " + e.message); }
+      }
       const d = new Date(input.data + "T12:00:00Z");
-      const out = { dia: `${DIAS[d.getUTCDay()]}, ${input.data.split("-").reverse().join("/")}`, profissionais: lista.map((p) => ({ codigo: p.codigo, nome: p.nome, ...precosDoDia(p) })) };
+      const out = { dia: `${DIAS[d.getUTCDay()]}, ${input.data.split("-").reverse().join("/")}`, profissionais: lista.map((p, i) => ({ ...(ordenado && p.horarios.length ? { ordem: i + 1 } : {}), codigo: p.codigo, nome: p.nome, ...precosDoDia(p) })) };
+      if (ordenado) out.nota_ordem = "Lista na ordem de preferência da barbearia para cliente sem preferência de profissional: ofereça primeiro os horários do ordem 1 que sirvam para o que o cliente pediu; só vá para o próximo se não houver. Não comente o motivo da ordem.";
       // O cliente já tem horário nesse dia (consultar_cliente): mostra também o que fica livre trocando o horário dele.
       if (conv.agenda && conv.agenda.some((a) => String(a.quando).startsWith(input.data))) {
         const serv = (await ab.servicos()).find((x) => Number(x.codigo) === Number(input.servico)), extra = [];
@@ -1020,6 +1031,23 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
   }
   // WhatsApp do profissional (cadastro do Gestão), pelo nome que vem da AppBarber.
   const normN = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+  function barbeiroDoAB(nomeAB) {
+    const eq = (cfg && cfg.equipe) || [], alvo = normN((cfg && cfg.nomesAB && cfg.nomesAB[nomeAB]) || nomeAB);
+    if (!alvo) return null;
+    let b = eq.find((x) => normN(x.name) === alvo);
+    if (!b) { const pn = alvo.split(" ")[0], achados = eq.filter((x) => normN(x.name).split(" ")[0] === pn); if (achados.length === 1) b = achados[0]; }
+    if (!b && alvo.includes(" ")) { const sn = alvo.split(" ").at(-1), achados = eq.filter((x) => normN(x.name).split(" ").at(-1) === sn); if (achados.length === 1) b = achados[0]; }
+    return b || null;
+  }
+  // Atendimentos marcados por profissional num dia (agendados + realizados), guardado por 5 minutos.
+  const cargaCache = new Map();
+  async function cargaDoDia(data) {
+    const c = cargaCache.get(data); if (c && Date.now() - c.em < 300000) return c.m;
+    const m = new Map();
+    for (const st of ["1", "2"]) for (const a of await ab.agenda(data, data, st)) { const n = a.employee_name || ""; if (n) m.set(n, (m.get(n) || 0) + 1); }
+    cargaCache.set(data, { em: Date.now(), m }); if (cargaCache.size > 20) cargaCache.delete(cargaCache.keys().next().value);
+    return m;
+  }
   function foneProfissional(nomeAB) {
     const eq = (cfg && cfg.equipe) || [], alvo = normN((cfg && cfg.nomesAB && cfg.nomesAB[nomeAB]) || nomeAB);
     if (!alvo) return null;
@@ -1222,7 +1250,7 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
           : novas.join("\n")) });
         if (!c.contada) { c.contada = true; zera(); stats.conversas++; if (resultados) resultados.evento(cfg.company_id, { tipo: "conversa", origem: c.origem || "whatsapp" }); }
         if (!c.artes) c.artes = cfg.artes; // congeladas junto com as instruções
-        const ctx = { ab, fone: c.fone, stats, simular: false, evento: (ev) => ev && resultados && cfg && resultados.evento(cfg.company_id, { origem: c.origem || "whatsapp", ...ev }), parabens: cfg.parabens || "", equipe: [...(cfg.equipe || []).map((b) => b.name), cfg.barbearia].filter(Boolean), // o dono costuma ter o nome da barbearia artes: c.artes, enviarArte: (a) => enviarArte(jid, a), registro: (t) => log(`Sofia: ${t}.`),
+        const ctx = { ab, fone: c.fone, stats, simular: false, evento: (ev) => ev && resultados && cfg && resultados.evento(cfg.company_id, { origem: c.origem || "whatsapp", ...ev }), carga: cargaDoDia, fidelizacao: (n) => { const b = barbeiroDoAB(n); return b && Number.isFinite(b.fid) ? b.fid : null; }, parabens: cfg.parabens || "", equipe: [...(cfg.equipe || []).map((b) => b.name), cfg.barbearia].filter(Boolean), // o dono costuma ter o nome da barbearia artes: c.artes, enviarArte: (a) => enviarArte(jid, a), registro: (t) => log(`Sofia: ${t}.`),
           falha: (t) => { log(`Sofia: (…${String(c.fone).slice(-4)}) ${t}`); pendencias.push(`(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); status().catch(() => {}); },
           listaEspera: (x) => listaEspera(jid, c, x), alertar: (t) => alertaEquipe(c, t), avisarProfissional: (nome, t) => avisarProfissional(c, nome, t), pendencia: (t) => { c.motivo = t; pendencias.push(`${c.nome ? c.nome.split(" ")[0] + " " : ""}(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); } };
         const antesStats = { agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados };

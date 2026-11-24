@@ -78,6 +78,19 @@ Deno.serve(async (req) => {
         db.from("pop_records").select("barber_id, day, data").eq("company_id", co.id).eq("day", hoje),
         db.from("entries").select("barber_id, date, source, data").eq("company_id", co.id).eq("date", hoje),
       ]);
+      // Taxa de fidelização de cada profissional (clientes novos que voltaram com ele em até 45 dias, últimos 90 dias):
+      // a atendente IA usa como desempate quando o cliente não tem preferência de profissional.
+      const fid = new Map<string, number>();
+      if (i.ia_on) {
+        const desde = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+        const { data: hist } = await db.from("entries").select("barber_id, data").eq("company_id", co.id).gte("date", desde).limit(20000);
+        const soma = new Map<string, { b: number; v: number; c: number; r: number }>();
+        for (const e of hist || []) {
+          const d: any = e.data || {}, x = soma.get(String(e.barber_id)) || { b: 0, v: 0, c: 0, r: 0 };
+          x.b += Number(d.fnB) || 0; x.v += Number(d.fnV) || 0; x.c += Number(d.cli) || 0; x.r += Number(d.ret) || 0; soma.set(String(e.barber_id), x);
+        }
+        for (const [k, x] of soma) { const t = x.b >= 5 ? x.v / x.b : x.c >= 20 && x.r > 0 ? x.r / x.c : null; if (t != null) fid.set(k, Math.round(t * 1000) / 10); }
+      }
       const fone = new Map((profs || []).filter((p) => p.barber_id && p.phone && p.status !== "bloqueado").map((p) => [String(p.barber_id), p.phone]));
       empresas.push({
         company_id: co.id, nome: co.name, hoje,
@@ -105,7 +118,7 @@ Deno.serve(async (req) => {
         // Horário de funcionamento (Configurações): fora dele e nos dias fechados não consulta a AppBarber nem manda lembrete.
         horario: (() => { const o = co.settings?.ocup || {}, ok = (v: unknown, d: string) => (typeof v === "string" && /^\d{2}:\d{2}$/.test(v) ? v : d);
           return { abertura: ok(o.open, "09:00"), fechamento: ok(o.close, "20:00"), fechados: Array.isArray(o.closed) ? o.closed.map(Number) : [] }; })(),
-        barbers: (barbers || []).filter((b) => b.active !== false).map((b) => ({ id: b.id, name: b.name, phone: fone.get(String(b.id)) || "" })),
+        barbers: (barbers || []).filter((b) => b.active !== false).map((b) => ({ id: b.id, name: b.name, phone: fone.get(String(b.id)) || "", ...(fid.has(String(b.id)) ? { fid: fid.get(String(b.id)) } : {}) })),
         pop: (pop || []).map((r) => ({ barberId: r.barber_id, day: r.day, ...(r.data || {}) })),
         entries: (entries || []).map((e) => ({ barberId: e.barber_id, date: e.date, source: e.source, ...(e.data || {}) })),
       });
