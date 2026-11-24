@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-24-ia-sem-preferencia', date: '2026-11-24', title: 'Atendente IA: quem atende o cliente sem preferência', items: [
+    ['melhoria', 'Quando o cliente não tem preferência de profissional, a atendente IA oferece primeiro os horários de quem tem menos atendimentos marcados no dia. Em caso de empate, vai para quem tem a maior taxa de fidelização (clientes novos que voltaram com o mesmo profissional, últimos 90 dias). Se esse profissional não tiver horário no período pedido, passa para o próximo.'],
+  ] },
   { id: '2026-11-24-resultado-historico', date: '2026-11-24', title: 'Resultado da atendente IA: histórico desde o início', items: [
     ['melhoria', 'A tela Resultado da atendente IA também mostra o que veio antes da atualização: os agendamentos feitos pela atendente e pelo totem (até 3 meses, com valor, profissional e se o cliente veio, direto da AppBarber), as conversas e o custo dos últimos 30 dias e os convites de retorno e reconquista.'],
   ] },
