@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "7.7";
+const VERSAO = "7.8";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -299,7 +299,7 @@ async function feedbacks(e, hoje) {
       const fb = e.feedback;
       if (fb.resposta && sofia && sofia.conviteEnviado && env1) {
         const resp = fb.resposta.replace(/\{cliente\}/g, x.nome || "").replace(/\{profissional\}/g, x.prof || "").replace(/\s+!/g, "!").replace(/\(\s*\)/g, "").trim();
-        sofia.conviteEnviado(env1.jid, env1.id, { fone: so(x.fone).length <= 11 ? "55" + so(x.fone) : so(x.fone), nome: x.nome || "", texto, horas: 24, tipo: `pedido de feedback do atendimento de ${x.prof || "um profissional"}`,
+        sofia.conviteEnviado(env1.jid, env1.id, { fone: so(x.fone).length <= 11 ? "55" + so(x.fone) : so(x.fone), nome: x.nome || "", texto, horas: 24, origem: "feedback", tipo: `pedido de feedback do atendimento de ${x.prof || "um profissional"}`,
           detalhe: `[Se o cliente responder com um elogio ou avaliação boa do atendimento (ex.: "muito boa", "excelente", "top", "gostei", 👍), responda exatamente com esta mensagem, sem mudar o conteúdo:\n${resp}\nE use parabenizar_profissional com o profissional "${x.prof || ""}" e as palavras do cliente. Se for crítica ou reclamação, agradeça a sinceridade, peça desculpas e use chamar_recepcao (não parabenize o profissional). Se for só uma resposta neutra, agradeça em uma frase.]` });
       }
     }
@@ -406,7 +406,7 @@ async function reconquista(e, hoje) {
         if (c.presente && sofia && sofia.conviteEnviado && env1) {
           const troca = (t) => String(t || "").replace(/\{cliente\}/g, nome || "").replace(/,\s*!/g, "!").replace(/\s+!/g, "!").trim();
           const presente = troca(c.presente), final = troca(c.presenteFinal);
-          sofia.conviteEnviado(env1.jid, env1.id, { fone: so(f).length <= 11 ? "55" + so(f) : so(f), nome, texto, tipo: "reconquista: convite com presente de retorno para quem não vem há meses", horas: 24,
+          sofia.conviteEnviado(env1.jid, env1.id, { fone: so(f).length <= 11 ? "55" + so(f) : so(f), nome, texto, tipo: "reconquista: convite com presente de retorno para quem não vem há meses", horas: 24, origem: "reconquista",
             detalhe: `[Se o cliente aceitar o presente (ex.: "sim", "pode", "quero"), responda com exatamente esta mensagem, sem mudar o conteúdo:\n${presente}\nDepois siga para agendar normalmente e coloque na observação do agendamento "Presente de retorno (reconquista)" e o presente em poucas palavras.${final ? ` Quando o horário for marcado, na mensagem que confirma o agendamento (dia, hora e profissional), inclua no final, separado por uma linha em branco, exatamente este texto:\n${final}\nNesse agendamento não ofereça adicional (upsell).` : ""} Se ele recusar ou disser SAIR, agradeça em uma frase e não insista.]` });
         }
       }
@@ -536,12 +536,14 @@ async function ciclo() {
   empresasConhecidas = minhas.map((e) => e.company_id);
   if (CLI) await escolherNumero(minhas);
   // Sofia: atende o número dos clientes da primeira barbearia com a atendente IA ligada.
-  if (CLI && SOFIA) { if (!sofia) sofia = SOFIA.criarSofia({ dir: DIR, log, api, sock: () => sock, conectado: () => aberto, cmdConectar: () => CMD,
+  if (CLI && SOFIA) { if (!sofia) sofia = SOFIA.criarSofia({ dir: DIR, log, api, sock: () => sock, resultados: SOFIA.resultadosDe ? SOFIA.resultadosDe(DIR, api, log) : null, conectado: () => aberto, cmdConectar: () => CMD,
     baixarMidia: (msg) => downloadMediaMessage(msg, "buffer", {}, { logger: pino({ level: "silent" }), reuploadRequest: sock.updateMediaMessage }) }); await sofia.configurar(minhas.find((e) => e.sofia)).catch((err) => log("Sofia: " + err.message)); }
   // Serviços da AppBarber para o app sugerir os nomes nas ofertas (upsell): 1 vez a cada 6 horas.
   if (CLI && SOFIA && SOFIA.publicarServicos) { const eA = minhas.find((e) => e.appbarber && (e.sofia || e.totem)); if (eA) SOFIA.publicarServicos(eA, api).catch((err) => log("Serviços da AppBarber: " + err.message)); }
+  // Resultado da atendente IA e do totem: confere o comparecimento na agenda da empresa.
+  if (CLI && SOFIA && SOFIA.resultadosDe) { const eR = minhas.find((e) => e.appbarber && (e.sofia || e.totem)); if (eR) SOFIA.resultadosDe(DIR, api, log).configurar(eR); }
   // Totem da recepção: funciona mesmo com o WhatsApp desconectado (só o aviso ao profissional usa o WhatsApp).
-  if (CLI && SOFIA && SOFIA.criarTotem) { if (!totem) totem = SOFIA.criarTotem({ dir: DIR, log, api, sock: () => (aberto ? sock : null) }); try { totem.configurar(minhas.find((e) => e.totem)); } catch (err) { log("Totem: " + err.message); } }
+  if (CLI && SOFIA && SOFIA.criarTotem) { if (!totem) totem = SOFIA.criarTotem({ dir: DIR, log, api, sock: () => (aberto ? sock : null), resultados: SOFIA.resultadosDe ? SOFIA.resultadosDe(DIR, api, log) : null }); try { totem.configurar(minhas.find((e) => e.totem)); } catch (err) { log("Totem: " + err.message); } }
   if (!aberto) { if (Date.now() - avisouOff > 3600000) { avisouOff = Date.now(); await status(`desconectado: conecte o número no servidor (${CMD}).`); } return; }
   if (avisarConectado) { avisarConectado = false; await status(CLI ? `ok: ${NUMERO === "principal" ? "WhatsApp principal" : "2º chip"} conectado, aguardando os horários.` : "conectado: aguardando o horário dos lembretes."); }
   if (CLI) {

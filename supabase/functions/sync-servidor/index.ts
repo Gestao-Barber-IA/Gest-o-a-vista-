@@ -159,6 +159,23 @@ Deno.serve(async (req) => {
       const { error } = await db.from("integrations").update({ ab_services: lista }).eq("company_id", b.company_id);
       return error ? json({ erro: error.message }, 500) : json({ ok: true });
     }
+    // Resultado da atendente IA e do totem: eventos (agendamentos, custo…) e o comparecimento conferido depois.
+    if (b.acao === "ia_eventos") {
+      const lista = (Array.isArray(b.eventos) ? b.eventos : []).slice(0, 200).map((x: any) => ({
+        company_id: b.company_id, em: typeof x.em === "string" ? x.em : new Date().toISOString(), tipo: String(x.tipo || "").slice(0, 20),
+        origem: x.origem ? String(x.origem).slice(0, 20) : null, valor: Number.isFinite(Number(x.valor)) ? Number(x.valor) : null,
+        ref: x.ref ? String(x.ref).slice(0, 80) : null, dados: x.dados && typeof x.dados === "object" ? x.dados : {} })).filter((x: any) => x.tipo);
+      if (!lista.length) return json({ ok: true });
+      const { error } = await db.from("ia_eventos").upsert(lista, { onConflict: "company_id,ref", ignoreDuplicates: true });
+      return error ? json({ erro: error.message }, 500) : json({ ok: true, n: lista.length });
+    }
+    if (b.acao === "ia_compareceu") {
+      for (const x of (Array.isArray(b.itens) ? b.itens : []).slice(0, 300)) {
+        if (!x || !x.ref) continue;
+        await db.from("ia_eventos").update({ compareceu: !!x.ok }).eq("company_id", b.company_id).eq("ref", String(x.ref).slice(0, 80));
+      }
+      return json({ ok: true });
+    }
     if (b.acao === "totem_resposta") {
       const resp = b.resposta && typeof b.resposta === "object" ? b.resposta : {};
       if (JSON.stringify(resp).length > 60000) return json({ erro: "Resposta grande demais." }, 400);

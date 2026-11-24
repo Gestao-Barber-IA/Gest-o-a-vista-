@@ -3103,3 +3103,18 @@ html.tv-lite .tv .tl-beam::before { -webkit-mask-image: linear-gradient(90deg, t
 @media (max-width: 520px) { .int-grid { grid-template-columns: 1fr; } }
 .rank-prop { color: var(--accent); white-space: nowrap; }
 .up-row .up-sem { grid-column: 1 / -1; }
+
+/* Resultado da Sophia e do totem */
+.res-card .seg { margin: 4px 0 6px; }
+.res-kpis .stat small { font-size: .78rem; line-height: 1.3; }
+.res-sub { font-size: 1rem; margin: 22px 0 8px; }
+.res-list { display: grid; gap: 8px; }
+.res-row { background: var(--surface-2); border-radius: var(--radius-sm); padding: 12px 14px; display: grid; gap: 10px; }
+.res-nome { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.res-nome svg { width: 18px; height: 18px; color: var(--accent); }
+.res-nome small { flex-basis: 100%; font-size: .8rem; }
+.res-met { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.res-met small { display: block; color: var(--muted); font-size: .74rem; }
+.res-met b { font-size: .98rem; }
+.res-met b small { display: inline; font-weight: 400; }
+@media (max-width: 420px) { .res-met { grid-template-columns: 1fr 1fr; } }
