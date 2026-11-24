@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "6.5";
+export const SOFIA_VERSAO = "6.6";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -1250,7 +1250,7 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
           : novas.join("\n")) });
         if (!c.contada) { c.contada = true; zera(); stats.conversas++; if (resultados) resultados.evento(cfg.company_id, { tipo: "conversa", origem: c.origem || "whatsapp" }); }
         if (!c.artes) c.artes = cfg.artes; // congeladas junto com as instruções
-        const ctx = { ab, fone: c.fone, stats, simular: false, evento: (ev) => ev && resultados && cfg && resultados.evento(cfg.company_id, { origem: c.origem || "whatsapp", ...ev }), carga: cargaDoDia, fidelizacao: (n) => { const b = barbeiroDoAB(n); return b && Number.isFinite(b.fid) ? b.fid : null; }, parabens: cfg.parabens || "", equipe: [...(cfg.equipe || []).map((b) => b.name), cfg.barbearia].filter(Boolean), // o dono costuma ter o nome da barbearia artes: c.artes, enviarArte: (a) => enviarArte(jid, a), registro: (t) => log(`Sofia: ${t}.`),
+        const ctx = { ab, fone: c.fone, stats, simular: false, evento: (ev) => ev && resultados && cfg && resultados.evento(cfg.company_id, { origem: c.origem || "whatsapp", ...ev }), carga: cargaDoDia, fidelizacao: (n) => { const b = barbeiroDoAB(n); return b && Number.isFinite(b.fid) ? b.fid : null; }, parabens: cfg.parabens || "", equipe: [...(cfg.equipe || []).map((b) => b.name), cfg.barbearia].filter(Boolean), /* o dono costuma ter o nome da barbearia */ artes: c.artes, enviarArte: (a) => enviarArte(jid, a), registro: (t) => log(`Sofia: ${t}.`),
           falha: (t) => { log(`Sofia: (…${String(c.fone).slice(-4)}) ${t}`); pendencias.push(`(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); status().catch(() => {}); },
           listaEspera: (x) => listaEspera(jid, c, x), alertar: (t) => alertaEquipe(c, t), avisarProfissional: (nome, t) => avisarProfissional(c, nome, t), pendencia: (t) => { c.motivo = t; pendencias.push(`${c.nome ? c.nome.split(" ")[0] + " " : ""}(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); } };
         const antesStats = { agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados };
