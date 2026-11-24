@@ -78,11 +78,11 @@ Deno.serve(async (req) => {
         db.from("pop_records").select("barber_id, day, data").eq("company_id", co.id).eq("day", hoje),
         db.from("entries").select("barber_id, date, source, data").eq("company_id", co.id).eq("date", hoje),
       ]);
-      // Taxa de fidelização de cada profissional (clientes novos que voltaram com ele em até 45 dias, últimos 90 dias):
+      // Taxa de fidelização de cada profissional (clientes novos que voltaram com ele em até 45 dias, últimos 180 dias):
       // a atendente IA usa como desempate quando o cliente não tem preferência de profissional.
       const fid = new Map<string, number>();
       if (i.ia_on) {
-        const desde = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+        const desde = new Date(Date.now() - 180 * 86400000).toISOString().slice(0, 10);
         const { data: hist } = await db.from("entries").select("barber_id, data").eq("company_id", co.id).gte("date", desde).limit(20000);
         const soma = new Map<string, { b: number; v: number; c: number; r: number }>();
         for (const e of hist || []) {
