@@ -3185,3 +3185,9 @@ html[data-theme="light"] .res-big { color: #1f9d55; }
 @media (max-width: 860px) { .res-tiles { grid-template-columns: 1fr 1fr; } .res-duo { grid-template-columns: 1fr; } }
 @media (max-width: 520px) { .res-hero { grid-template-columns: 1fr; } .res-roi { max-width: none; justify-items: start; text-align: left; grid-template-columns: auto 1fr; align-items: center; column-gap: 12px; } .res-tile > b { font-size: 1.35rem; } }
 .res-page .res-hero { margin-bottom: 16px; }
+
+.res-page .res-top .seg { display: flex; flex-wrap: wrap; }
+.res-datas { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin: -4px 0 16px; }
+.res-datas .field { margin: 0; min-width: 150px; flex: 1 1 150px; }
+.res-datas .btn { flex: 0 0 auto; }
+.res-datas .form-msg { flex-basis: 100%; margin: 0; }
