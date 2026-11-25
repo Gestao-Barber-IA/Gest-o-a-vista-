@@ -231,6 +231,11 @@
     get: async () => RES(await c.from('integrations').select('*').eq('company_id', Cloud.companyId).maybeSingle()),
     save: async row => RES(await c.from('integrations').upsert({ ...row, company_id: Cloud.companyId, updated_at: new Date().toISOString() }).select().single()),
   };
+  // Indicação premiada: quem indicou, quantos amigos vieram e prêmios entregues.
+  Cloud.indicacoes = {
+    list: async () => RES(await c.from('ia_indicacoes').select('*').eq('company_id', Cloud.companyId).order('atualizado', { ascending: false }).limit(1000)) || [],
+    entregar: async (codigo, entregues) => RES(await c.from('ia_indicacoes').update({ entregues }).eq('company_id', Cloud.companyId).eq('codigo', codigo).select().single()),
+  };
   // Relatório mensal com análise e plano de ação (gerado pelo servidor com IA).
   Cloud.iaRelatorio = async ym => RES(await c.from('ia_relatorios').select('ym, analise, dados, criado_em').eq('company_id', Cloud.companyId).eq('ym', ym).maybeSingle());
   // Memória dos clientes (atendente IA): o gestor vê, corrige e apaga (o servidor aplica a correção).

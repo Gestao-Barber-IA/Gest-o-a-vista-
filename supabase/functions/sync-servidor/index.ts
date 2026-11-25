@@ -181,7 +181,7 @@ Deno.serve(async (req) => {
   if (req.method === "GET" && url.searchParams.get("acao") === "lembretes") {
     const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
     const { data: ints, error } = await db.from("integrations")
-      .select("company_id, est_code, api_key, branch_code, ig_on, ig_token, rm_pedido, fc_agenda, srv_update_req, srv_update_done, bo_on, bo_hour, bo_phone, bo_sent_on, bo_force, ia_report_phone, ac_status, cf_status, ac_on, ac_limit, ac_daily, ac_days, ac_text, pl_on, pl_chat, pl_daily, pl_days, pl_plans, pl_text, cf_on, cf_hour, cf_second, cf_before, cf_text, cf_text2, fv_on, fv_per, fv_daily, fv_lead, fv_days, fv_text, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, fb_reply, fb_pro_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, wb_gift, wb_gift_done, cl_status, cl_status_at, rt_on, rt_daily, rt_lead, rt_text, tt_on, tt_notify, tt_days, upsell, bd_on, bd_text, ia_on, ia_name, ia_model, ia_hours, ia_pause, ia_notes, ia_report_phone, ia_alert_phone, ia_arts, names").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,rt_on.eq.true,tt_on.eq.true,bd_on.eq.true,ia_on.eq.true");
+      .select("company_id, est_code, api_key, branch_code, in_on, in_daily, in_min, in_beneficio, in_premio, in_text, ig_on, ig_token, rm_pedido, fc_agenda, srv_update_req, srv_update_done, bo_on, bo_hour, bo_phone, bo_sent_on, bo_force, ia_report_phone, ac_status, cf_status, ac_on, ac_limit, ac_daily, ac_days, ac_text, pl_on, pl_chat, pl_daily, pl_days, pl_plans, pl_text, cf_on, cf_hour, cf_second, cf_before, cf_text, cf_text2, fv_on, fv_per, fv_daily, fv_lead, fv_days, fv_text, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, fb_reply, fb_pro_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, wb_gift, wb_gift_done, cl_status, cl_status_at, rt_on, rt_daily, rt_lead, rt_text, tt_on, tt_notify, tt_days, upsell, bd_on, bd_text, ia_on, ia_name, ia_model, ia_hours, ia_pause, ia_notes, ia_report_phone, ia_alert_phone, ia_arts, names").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,rt_on.eq.true,tt_on.eq.true,bd_on.eq.true,ia_on.eq.true");
     if (error) return json({ erro: error.message }, 500);
     const empresas = [];
     for (const i of ints || []) {
@@ -229,6 +229,10 @@ Deno.serve(async (req) => {
         // Reconquista de clientes sumidos (lista de clientes da AppBarber, 1 crédito por página).
         reconquista: i.wb_on && i.est_code && i.api_key ? { porDia: Math.max(1, Math.min(40, Number(i.wb_daily) || 15)), minDias: Math.max(30, Number(i.wb_min_days) || 90), maxDias: Math.max(60, Number(i.wb_max_days) || 365), texto: i.wb_text || "", presente: String(i.wb_gift || "").slice(0, 1500), presenteFinal: String(i.wb_gift_done || "").slice(0, 1000), codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
         // Retorno no tempo certo: convite N dias antes do prazo de costume de cada cliente (agenda da AppBarber).
+        // Indicação premiada (a atendente IA confere o código do amigo).
+        indicacao: i.in_on && i.ia_on && i.est_code && i.api_key ? { porDia: Math.max(1, Math.min(20, Number(i.in_daily) || 3)), minVisitas: Math.max(2, Math.min(20, Number(i.in_min) || 4)),
+          beneficio: String(i.in_beneficio || "20% de desconto no primeiro atendimento").slice(0, 120), premio: String(i.in_premio || "um corte grátis").slice(0, 120), texto: String(i.in_text || "").slice(0, 2000),
+          codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
         // Previsão do mês: o servidor soma o valor marcado na agenda até o fim do mês.
         previsao: i.est_code && i.api_key ? { codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
         // Agenda cheia automática: convites para os clientes do profissional com pouca ocupação.
@@ -375,6 +379,13 @@ Deno.serve(async (req) => {
       }
       return json({ ok: true, mid: j.message_id });
     }
+    if (b.acao === "indicacao") {
+      const codigo = String(b.codigo || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20);
+      if (!codigo) return json({ erro: "Código inválido." }, 400);
+      const { error } = await db.from("ia_indicacoes").upsert({ company_id: b.company_id, codigo, nome: String(b.nome || "").slice(0, 60), fone4: String(b.fone4 || "").replace(/\D/g, "").slice(-4),
+        convidado_em: /^\d{4}-\d{2}-\d{2}$/.test(String(b.convidado_em || "")) ? b.convidado_em : null, agendados: Number(b.agendados) || 0, vieram: Number(b.vieram) || 0, atualizado: new Date().toISOString() }, { onConflict: "company_id,codigo" });
+      return error ? json({ erro: error.message }, 500) : json({ ok: true });
+    }
     if (b.acao === "previsao") {
       const ag: Record<string, number> = {};
       for (const [d, v] of Object.entries(b.agenda && typeof b.agenda === "object" ? b.agenda : {}).slice(0, 40)) if (/^\d{4}-\d{2}-\d{2}$/.test(d) && Number.isFinite(Number(v))) ag[d] = Number(v);
@@ -416,7 +427,7 @@ Deno.serve(async (req) => {
       const { error } = await db.from("integrations").update({ ia_report: rel, ia_report_at: new Date().toISOString() }).eq("company_id", b.company_id);
       return error ? json({ erro: error.message }, 500) : json({ ok: true });
     }
-    if (["wa_status", "cl_status", "fb_status", "wb_status", "rt_status", "tt_status", "bd_status", "ia_status", "fv_status", "cf_status", "pl_status", "ac_status", "ig_status"].includes(b.acao)) {
+    if (["wa_status", "cl_status", "fb_status", "wb_status", "rt_status", "tt_status", "bd_status", "ia_status", "fv_status", "cf_status", "pl_status", "ac_status", "ig_status", "in_status"].includes(b.acao)) {
       const k = String(b.acao).slice(0, 2);
       const { error } = await db.from("integrations").update({ [k + "_status"]: String(b.status || "").slice(0, 500), [k + "_status_at"]: new Date().toISOString() }).eq("company_id", b.company_id);
       return error ? json({ erro: error.message }, 500) : json({ ok: true });
