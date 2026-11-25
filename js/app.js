@@ -4109,6 +4109,7 @@ ${rows.length ? '' : emptyBarbers()}
     ['reconquista', 'Reconquista de sumidos', 'rocket', 'Presente de retorno para quem não vem há meses', () => wbCard(), 'mkt', it => intSt(it.wb_on, it.wb_status)],
     ['aniversario', 'Parabéns aos aniversariantes', 'sparkle', 'Mensagem no dia do aniversário', () => bdCard(), 'mkt', it => intSt(it.bd_on, it.bd_status)],
     ['feedback', 'Pedido de feedback', 'vote', 'Opinião dos clientes novos depois do atendimento', () => fbCard(), 'mkt', it => intSt(it.fb_on, it.fb_status)],
+    ['servidor', 'Servidor e atualizações', 'upload', 'Versão do servidor e o botão de atualizar', () => srvCard(), 'tec', it => it.srv_version ? ['Versão ' + it.srv_version.split(' ')[0], 'chip-ok'] : null],
     ['api', 'API e importação', 'file', 'Chave da API, envio de dados e planilha (CSV)', ex => apiRef(ex), 'tec'],
   ];
   function apiRef(ex) {
@@ -4392,6 +4393,24 @@ Content-Type: application/json</pre>
   const RT_TEXT = ['{Saudacao}, {cliente}! 😊 Sua próxima visita está chegando. Separei *{dia} às {hora}* com {profissional}, do jeito que você costuma vir.\nQuer que eu reserve pra você?',
     '{Saudacao}, {cliente}! Tudo bem? 😊 Já está chegando a hora de dar aquele trato no visual ✂️\n{profissional} tem horário *{dia} às {hora}*, como você costuma vir. Posso reservar pra você?',
     '{Saudacao}, {cliente}! 💈 Pensando na sua próxima visita, separei um horário com {profissional}: *{dia} às {hora}*, como de costume.\nQuer que eu deixe reservado pra você?'].join('\n---\n');
+  // Servidor: versão em uso e o botão "Atualizar servidor agora" (sem precisar do Termius).
+  function srvCard() {
+    if (!isGestor(currentUser())) return '';
+    const it = Cloud.enabled ? ui.integ : (state.integ || {});
+    if (!it || it.erro) return '';
+    const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const req = it.srv_update_req ? new Date(it.srv_update_req).getTime() : 0, done = it.srv_update_done ? new Date(it.srv_update_done).getTime() : 0;
+    const esperando = req && done < req && Date.now() - req < 30 * 60000, falhou = req && done < req && !esperando;
+    if (esperando && !ui.srvTimer) ui.srvTimer = setTimeout(() => { ui.srvTimer = null; Cloud.integ.get().then(r => { if (r) { ui.integ = r; render(); } }).catch(() => {}); }, 20000);
+    return `<section class="section card as-card">
+      <h2 class="section-title">${icon('upload')} Servidor e atualizações</h2>
+      <p class="section-note">O servidor (WhatsApp, ${iaNome()}, lembretes e convites) se atualiza sozinho a cada 6 horas. Quando sair uma melhoria e você quiser usar na hora, toque em <b>Atualizar servidor agora</b>: ele baixa a versão nova e reinicia em 1 a 2 minutos, sem precisar do Termius.</p>
+      <div class="as-status">${it.srv_version ? `<span class="chip chip-ok">Versão ${esc(it.srv_version)}</span> <small class="muted">informada ${when(it.srv_version_at)}${it.srv_msg ? ' · ' + esc(it.srv_msg) : ''}</small>` : '<span class="chip">Versão ainda não informada</span> <small class="muted">aparece depois da próxima atualização do servidor</small>'}</div>
+      ${esperando ? `<p class="section-note">${icon('clock')} Atualização pedida ${when(it.srv_update_req)}. Aguardando o servidor (até 2 minutos)…</p>` : ''}
+      ${falhou ? `<p class="section-note">${icon('alert')} O servidor não respondeu ao pedido de ${when(it.srv_update_req)}. Confira se ele está ligado (o status da ${iaNome()} deve estar recente) ou rode o instalador pelo Termius.</p>` : ''}
+      <div class="btn-row"><button class="btn btn-primary" type="button" data-action="srvAtualizar" ${esperando || !Cloud.enabled ? 'disabled' : ''}>${icon('upload')} Atualizar servidor agora</button></div>
+    </section>`;
+  }
   // Boletim do dono: resumo do dia no WhatsApp do dono, no horário escolhido (montado no Supabase, enviado pelo servidor).
   const BO_EXEMPLO = '📊 *Boletim de hoje* (quarta, 25/11) · {barbearia}\n💰 Faturamento: *R$ 2.080* · 31 clientes · ticket R$ 67\n🏆 Carlos R$ 850 · Igor R$ 640 · Lucas R$ 590\n🤖 *Atendente IA*: 34 conversas · 9 agendamentos (R$ 610) · 2 adicional(is) (R$ 30) · 3 para a recepção · custo ≈ R$ 2,10\n✅ *Confirmação de presença*: 18 pedidos · 11 confirmaram · 2 remarcaram · 1 cancelaram (vaga liberada)\n⚡ Vagas preenchidas: 3 convites, 1 agendado (R$ 50)\n📅 Agenda cheia: 6 convites, 2 agendados (R$ 95)\n💎 *Planos*: 2 convites · 1 fechado (R$ 270/mês)\n🔮 *Ocupação amanhã*: Carlos 45%, Igor 80%, Lucas 62%\n\nDetalhes no app: Resultado da atendente IA.';
   function boCard() {
@@ -8605,6 +8624,10 @@ Content-Type: application/json</pre>
     },
     hgEdit() { ui.hgEdit = !ui.hgEdit; ui.hgYm = null; render(); if (ui.hgEdit) setTimeout(() => { const f = $('#hg-fat'); if (f) { f.focus(); f.scrollIntoView({ block: 'center' }); } }, 50); },
     cfgTab(el) { ui.cfgTab = el.dataset.t; ui.intSec = ''; ui.confirm = null; render(); },
+    srvAtualizar() {
+      Cloud.integ.save({ srv_update_req: new Date().toISOString() }).then(r => { ui.integ = r || ui.integ; toast('Pedido enviado: o servidor atualiza em 1 a 2 minutos.'); render(); })
+        .catch(e => { const m = Cloud.message(e); toast(/srv_|column|schema cache/i.test(m) ? 'O botão ainda está sendo ativado no servidor.' : m); });
+    },
     boDeNovo() {
       Cloud.integ.save({ bo_force: true }).then(r => { ui.integ = r || ui.integ; toast('O boletim de agora sai em até 2 minutos.'); render(); }).catch(e => toast(Cloud.message(e)));
     },

@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-25-atualizar-servidor', date: '2026-11-25', title: 'Atualizar o servidor pelo app', items: [
+    ['novo', 'Em Integração & API › Servidor e atualizações: veja a versão em uso e toque em Atualizar servidor agora para receber a melhoria na hora, sem precisar do Termius.'],
+  ] },
   { id: '2026-11-25-boletim', date: '2026-11-25', title: 'Boletim do dono no WhatsApp', items: [
     ['novo', 'Em Integração & API › Boletim do dono: todo dia, no horário escolhido, você recebe no WhatsApp o resumo do dia: faturamento e por profissional, o que a atendente IA fez, confirmações de presença, vagas preenchidas, agenda cheia, planos e a ocupação de amanhã.'],
   ] },

@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "9.2";
+const VERSAO = "9.3";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -502,16 +502,18 @@ async function responder(m) {
 
 // Atualização automática: a cada 6 horas baixa a versão nova do site; se mudar, sai e o systemd reinicia.
 let atualizouEm = 0;
-async function atualizar() {
-  if (Date.now() - atualizouEm < 6 * 3600000) return; atualizouEm = Date.now();
+// Pedido do app (botão "Atualizar servidor agora"): atualiza na hora, sem esperar as 6 horas.
+async function atualizar(forcar = false, empresas = []) {
+  if (!forcar && Date.now() - atualizouEm < 6 * 3600000) return; atualizouEm = Date.now();
+  const jaEsta = async (msg) => { if (forcar && CLI) for (const e of empresas) await api("POST", { company_id: e.company_id, acao: "srv_versao", versao: VERSAO, sofia: sofiaVersao(), papel: PAPEL, msg }).catch(() => {}); };
   try {
-    const r = await fetch(`${SITE}/integracoes/servidor/whatsapp.mjs`, { cache: "no-store" }); if (!r.ok) return;
+    const r = await fetch(`${SITE}/integracoes/servidor/whatsapp.mjs?v=${Date.now()}`, { cache: "no-store" }); if (!r.ok) return jaEsta("não consegui baixar a versão nova (o site não respondeu)");
     const novo = await r.text(), v = (novo.match(/const VERSAO = "([^"]+)"/) || [])[1];
-    if (!v || v === VERSAO || novo.length < 1000) return;
+    if (!v || v === VERSAO || novo.length < 1000) return jaEsta("já estava na versão mais nova");
     const eu = fileURLToPath(import.meta.url), tmp = eu.replace(/\.mjs$/, ".novo.mjs");
     writeFileSync(tmp, novo); if (spawnSync(process.execPath, ["--check", tmp]).status !== 0) return;
     // A Sofia (sofia.mjs) atualiza junto.
-    const rs = await fetch(`${SITE}/integracoes/servidor/sofia.mjs`, { cache: "no-store" });
+    const rs = await fetch(`${SITE}/integracoes/servidor/sofia.mjs?v=${Date.now()}`, { cache: "no-store" });
     if (rs.ok) { const ns = await rs.text(), ts = join(DIR, "sofia.novo.mjs"); writeFileSync(ts, ns); if (ns.length > 1000 && spawnSync(process.execPath, ["--check", ts]).status === 0) renameSync(ts, join(DIR, "sofia.mjs")); else rmSync(ts, { force: true }); }
     renameSync(tmp, eu); log(`Atualizado para a versão ${v}. Reiniciando…`); if (sofia && sofia.salvar) sofia.salvar(); process.exit(0);
   } catch { /* sem internet: tenta depois */ }
@@ -529,9 +531,15 @@ async function escolherNumero(minhas) {
   if (!aberto && existsSync(join(AUTH, "creds.json"))) { await Promise.race([conectar(), espera(30000)]); if (aberto) avisarConectado = true; }
 }
 
+const sofiaVersao = () => (SOFIA && SOFIA.SOFIA_VERSAO) || "";
+let versaoAvisada = false;
 async function ciclo() {
   await atualizar();
   const { empresas = [], hoje } = await api("GET", null, "?acao=lembretes");
+  // Versão em uso (aparece no app); e o botão "Atualizar servidor agora" do app.
+  if (CLI && !versaoAvisada && empresas.length) { versaoAvisada = true; for (const e of empresas) await api("POST", { company_id: e.company_id, acao: "srv_versao", versao: VERSAO, sofia: sofiaVersao(), papel: PAPEL }).catch(() => {}); }
+  const pedidas = empresas.filter((e) => e.atualizar);
+  if (pedidas.length) { log("Atualização pedida pelo app."); await atualizar(true, pedidas); }
   // Cada número cuida só das empresas com o seu tipo de lembrete ligado.
   const minhas = empresas.filter((e) => (CLI ? !!(e.clientes || e.feedback || e.reconquista || e.retorno || e.vagas || e.confirmacao || e.planos || e.agendaCheia || e.totem || e.aniversario || e.sofia) : e.cfg.ligado !== false));
   empresasConhecidas = minhas.map((e) => e.company_id);
