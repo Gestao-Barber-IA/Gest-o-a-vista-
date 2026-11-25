@@ -231,6 +231,11 @@
     get: async () => RES(await c.from('integrations').select('*').eq('company_id', Cloud.companyId).maybeSingle()),
     save: async row => RES(await c.from('integrations').upsert({ ...row, company_id: Cloud.companyId, updated_at: new Date().toISOString() }).select().single()),
   };
+  // Memória dos clientes (atendente IA): o gestor vê, corrige e apaga (o servidor aplica a correção).
+  Cloud.memorias = {
+    list: async () => RES(await c.from('ia_memorias').select('chave, nome, fone4, notas, atualizado, app_em').eq('company_id', Cloud.companyId).order('atualizado', { ascending: false }).limit(1000)) || [],
+    save: async (chave, notas) => RES(await c.from('ia_memorias').update({ notas, app_em: new Date().toISOString(), atualizado: new Date().toISOString() }).eq('company_id', Cloud.companyId).eq('chave', chave).select().single()),
+  };
   // Resultado da atendente IA e do totem (eventos gravados pelo servidor): só o gestor lê.
   Cloud.iaEventos = async (desde, ate) => {
     const out = []; let de = 0;

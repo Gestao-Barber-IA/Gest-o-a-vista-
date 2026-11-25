@@ -4080,7 +4080,7 @@ ${rows.length ? '' : emptyBarbers()}
     const it = (Cloud.enabled ? ui.integ : state.integ) || {};
     const sec = INT_SECS.find(x => x[0] === ui.intSec);
     if (sec) return `<div class="int-back"><button type="button" class="btn btn-sm" data-action="intSec" data-s="">${icon('left')} Integrações</button></div>${sec[4](ex)}`;
-    const tiles = g => INT_SECS.filter(x => x[5] === g && (x[0] === 'api' || x[0] === 'passo' || x[4](ex))).map(([k, t, ic, d, , , stf]) => { const st = stf ? stf(it) : null;
+    const tiles = g => INT_SECS.filter(x => x[5] === g && (x[0] === 'api' || x[0] === 'passo' || (x[0] === 'memoria' ? isGestor(currentUser()) : x[4](ex)))).map(([k, t, ic, d, , , stf]) => { const st = stf ? stf(it) : null;
       return `<button type="button" class="int-tile" data-action="intSec" data-s="${k}"><span class="int-ic">${icon(ic)}</span><span class="int-tx"><b>${t.replace('Sofia', iaNome())}</b><small>${d.replace('Sofia', iaNome())}</small>${st ? `<span class="chip ${st[1]}">${st[0]}</span>` : ''}</span>${icon('right')}</button>`; }).join('');
     return `<p class="section-note int-intro">Escolha o que você quer configurar:</p>${INT_GRUPOS.map(([g, nome]) => { const h = tiles(g); return h ? `<h3 class="int-grp">${nome}</h3><div class="int-grid">${h}</div>` : ''; }).join('')}`;
   }
@@ -4097,6 +4097,7 @@ ${rows.length ? '' : emptyBarbers()}
     ['ia', 'Atendente IA (Sofia)', 'chat', 'Responde e agenda pelo WhatsApp da barbearia', () => iaCard(), 'whats', it => intSt(it.ia_on, it.ia_status)],
     ['clientes', 'Lembrete de agendamento', 'bell', 'Aviso do horário para o cliente no WhatsApp', () => clRemindCard(), 'whats', it => intSt(it.cl_on, it.cl_status)],
     ['confirmacao', 'Confirmação de presença', 'checksq', 'Pedido na véspera para evitar faltas', () => cfCard(), 'whats', it => intSt(it.cf_on, it.cf_status)],
+    ['memoria', 'Memória dos clientes', 'idcard', 'O de sempre e as preferências de cada cliente', () => memCard(), 'whats'],
     ['equipe', 'Lembretes para a equipe', 'users', 'Checklist do dia no WhatsApp de cada profissional', () => waRemindCard(), 'whats', it => intSt(it.wa_on, it.wa_status)],
     ['totem', 'Totem de autoatendimento', 'monitor', 'Check-in e agendamento num tablet na recepção', () => ttCard(), 'recepcao', it => intSt(it.tt_on, it.tt_status)],
     ['ofertas', 'Ofertas no final do agendamento', 'gift', 'Adicionais oferecidos pelo totem e pela Sofia', () => upCard(), 'recepcao', it => { const n = (it.upsell || []).length; return n ? [`${n} oferta${n > 1 ? 's' : ''}`, 'chip-ok'] : ['Nenhuma', '']; }],
@@ -4389,6 +4390,43 @@ Content-Type: application/json</pre>
   const RT_TEXT = ['{Saudacao}, {cliente}! 😊 Sua próxima visita está chegando. Separei *{dia} às {hora}* com {profissional}, do jeito que você costuma vir.\nQuer que eu reserve pra você?',
     '{Saudacao}, {cliente}! Tudo bem? 😊 Já está chegando a hora de dar aquele trato no visual ✂️\n{profissional} tem horário *{dia} às {hora}*, como você costuma vir. Posso reservar pra você?',
     '{Saudacao}, {cliente}! 💈 Pensando na sua próxima visita, separei um horário com {profissional}: *{dia} às {hora}*, como de costume.\nQuer que eu deixe reservado pra você?'].join('\n---\n');
+  // Memória dos clientes: o que cada cliente contou à atendente IA (preferências úteis). O gestor vê, corrige e apaga.
+  function memDemo() {
+    const n = [['Pedro', '0001', ['Prefere horários depois das 18h', 'Leva o filho junto (corte infantil)']], ['Rafael', '3321', ['Gosta do degradê bem baixo', 'Vai viajar em dezembro']], ['Lucas', '7788', ['Prefere ser atendido pelo mesmo barbeiro sempre']]];
+    return n.map(([nome, fone4, ns], i) => ({ chave: 'demo' + i, nome, fone4, notas: ns.map(t => ({ t, em: iso(new Date(Date.now() - (i + 1) * 3 * 86400000)) })), atualizado: new Date(Date.now() - i * 86400000).toISOString() }));
+  }
+  function memCard() {
+    if (!isGestor(currentUser())) return '';
+    const m = ui.mem = ui.mem || { q: '' };
+    if (!m.lista && !m.carregando) {
+      if (!Cloud.enabled) m.lista = memDemo();
+      else { m.carregando = true; Cloud.memorias.list().then(l => { m.lista = l; m.carregando = false; render(); }).catch(e => { m.erro = Cloud.message(e); m.lista = []; m.carregando = false; render(); }); }
+    }
+    const topo = `<section class="section card as-card"><h2 class="section-title">${icon('idcard')} Memória dos clientes</h2>
+      <p class="section-note">O que cada cliente contou à ${iaNome()} e vale para os próximos atendimentos (ex.: "prefere depois das 18h", "leva o filho"). Ela usa isso para atender como quem já conhece o cliente, junto com o <b>de sempre</b> (serviço, barbeiro, dia e horário de costume, que vêm da agenda). Ela não guarda saúde, religião, política, dinheiro nem documentos.</p>
+      <p class="section-note">Você pode corrigir (uma lembrança por linha) ou apagar tudo de um cliente, como pede a LGPD; a ${iaNome()} passa a usar a correção em alguns minutos. Aparece só o nome e o final do telefone.</p>`;
+    if (!m.lista) return topo + '<p class="muted">Carregando…</p></section>';
+    if (m.erro) return topo + `<p class="form-msg err">${/ia_memorias|relation|schema/i.test(m.erro) ? 'A memória ainda está sendo ativada no servidor.' : esc(m.erro)}</p></section>`;
+    const lista = m.lista.filter(x => (x.notas || []).length);
+    const quando = d => d ? new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '';
+    return topo + `<label class="field"><span>Buscar cliente</span><input class="input" type="search" id="mem-q" placeholder="Nome ou final do telefone" autocomplete="off"></label>
+      <p class="muted">${lista.length} cliente${lista.length === 1 ? '' : 's'} com memória</p>
+      <div class="mem-lista">${lista.slice(0, 200).map(x => `<form class="mem-item" data-form="memSave" data-chave="${esc(x.chave)}" data-busca="${esc(semAc(x.nome) + ' ' + (x.fone4 || ''))}" novalidate>
+        <div class="mem-h"><b>${esc(x.nome || 'Cliente')}</b><small class="muted">…${esc(x.fone4 || '')} · atualizado ${quando(x.app_em || x.atualizado)}</small></div>
+        <textarea class="input" name="notas" rows="${Math.min(6, Math.max(2, (x.notas || []).length))}" maxlength="1300">${esc((x.notas || []).map(n => n.t).join('\n'))}</textarea>
+        <p class="form-msg" data-msg></p>
+        <div class="btn-row"><button class="btn btn-sm btn-primary" type="submit">${icon('check')} Salvar</button><button class="btn btn-sm ${ui.confirm === 'mem:' + x.chave ? 'btn-danger' : ''}" type="button" data-action="memApagar" data-chave="${esc(x.chave)}">${ui.confirm === 'mem:' + x.chave ? 'Confirmar: apagar tudo deste cliente' : 'Apagar tudo'}</button></div>
+      </form>`).join('') || '<p class="muted">Nenhuma memória ainda. Ela aparece aqui conforme os clientes contam preferências para a atendente.</p>'}</div></section>`;
+  }
+  const semAc = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  function memGravar(chave, notas, f) {
+    const m = ui.mem || {}, x = (m.lista || []).find(y => y.chave === chave); if (!x) return;
+    const antes = x.notas; x.notas = notas; x.app_em = new Date().toISOString();
+    if (!Cloud.enabled) { toast(notas.length ? 'Memória salva.' : 'Memória apagada.'); return render(); }
+    if (f) setMsg(f, 'Salvando…', true);
+    Cloud.memorias.save(chave, notas).then(() => { toast(notas.length ? 'Memória salva. A atendente usa em alguns minutos.' : 'Memória apagada.'); render(); })
+      .catch(e => { x.notas = antes; if (f) setMsg(f, Cloud.message(e)); else toast(Cloud.message(e)); });
+  }
   // Venda de planos: oferta para clientes frequentes (a atendente IA oferece depois de agendar e/ou convite por dia).
   const PL_TEXT = '{Saudacao}, {cliente}! Tudo bem? 😊\nVi que você vem bem certinho aqui na {barbearia}, a cada {dias} dias mais ou menos. No *Plano {plano}* você paga R$ {preco} por mês{economia_txt} e já fica com seu horário garantido com {profissional}.\nQuer que eu te conte como funciona?';
   const PL_DIAS = [[1, 'Seg'], [2, 'Ter'], [3, 'Qua'], [4, 'Qui'], [5, 'Sex'], [6, 'Sáb'], [0, 'Dom']];
@@ -8504,6 +8542,11 @@ Content-Type: application/json</pre>
     },
     hgEdit() { ui.hgEdit = !ui.hgEdit; ui.hgYm = null; render(); if (ui.hgEdit) setTimeout(() => { const f = $('#hg-fat'); if (f) { f.focus(); f.scrollIntoView({ block: 'center' }); } }, 50); },
     cfgTab(el) { ui.cfgTab = el.dataset.t; ui.intSec = ''; ui.confirm = null; render(); },
+    memApagar(el) {
+      const k = el.dataset.chave;
+      if (ui.confirm !== 'mem:' + k) { ui.confirm = 'mem:' + k; return render(); }
+      ui.confirm = null; memGravar(k, []);
+    },
     resPer(el) {
       const ant = ui.iaRes || {}, h = new Date();
       ui.iaRes = el.dataset.p === 'per' ? { p: 'per', de: ant.de || iso(new Date(h.getFullYear(), h.getMonth(), 1)), ate: ant.ate || iso(h) } : { p: el.dataset.p, de: ant.de, ate: ant.ate };
@@ -9312,6 +9355,12 @@ Content-Type: application/json</pre>
       if ((fromIso(b) - fromIso(a)) / 86400000 > 366) return setMsg(f, 'Escolha um período de até 1 ano.');
       ui.iaRes = { p: 'per', de: a, ate: b }; render();
     },
+    memSave(f) {
+      const hoje = iso(new Date()), x = ((ui.mem || {}).lista || []).find(y => y.chave === f.dataset.chave) || { notas: [] };
+      const notas = (f.elements.notas.value || '').split('\n').map(t => t.replace(/\s+/g, ' ').trim().slice(0, 120)).filter(Boolean).slice(0, 10)
+        .map(t => ({ t, em: ((x.notas || []).find(n => n.t === t) || {}).em || hoje }));
+      memGravar(f.dataset.chave, notas, f);
+    },
     plSave(f) {
       const E = f.elements, planos = [];
       for (let i = 0; i < 6 && E['nome' + i]; i++) {
@@ -9738,6 +9787,11 @@ Content-Type: application/json</pre>
       const q = e.target.value.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); let n = 0;
       document.querySelectorAll('.hp-item').forEach(d => { const ok = !q || q.split(/\s+/).every(w => d.dataset.txt.includes(w)); d.hidden = !ok; if (ok) n++; if (q && ok && n <= 1) d.open = true; });
       const none = $('.hp-none'); if (none) none.hidden = n > 0;
+      return;
+    }
+    if (e.target.id === 'mem-q') {
+      const q = e.target.value.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      document.querySelectorAll('.mem-item').forEach(f => { f.hidden = !!q && !f.dataset.busca.includes(q); });
       return;
     }
     if (e.target.id === 'pops-q') {
