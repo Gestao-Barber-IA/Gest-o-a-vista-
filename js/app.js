@@ -4128,6 +4128,7 @@ ${rows.length ? '' : emptyBarbers()}
     ['retorno', 'Retorno no tempo certo', 'clock', 'Convite no ritmo de cada cliente', () => rtCard(), 'mkt', it => intSt(it.rt_on, it.rt_status)],
     ['planos', 'Venda de planos', 'diamond', 'Plano mensal para quem vem com frequência', () => plCard(), 'mkt', it => intSt(it.pl_on, it.pl_status)],
     ['agendacheia', 'Agenda cheia automática', 'gauge', 'Horário ocioso vira convite para os clientes do barbeiro', () => acCard(), 'mkt', it => intSt(it.ac_on, it.ac_status)],
+    ['indicacao', 'Indicação premiada', 'gift', 'Cliente fiel indica amigos e ganha prêmio', () => inCard(), 'mkt', it => intSt(it.in_on, it.in_status)],
     ['vagas', 'Preencher vagas', 'bolt', 'Horário cancelado vira convite na hora', () => fvCard(), 'mkt', it => intSt(it.fv_on, it.fv_status)],
     ['reconquista', 'Reconquista de sumidos', 'rocket', 'Presente de retorno para quem não vem há meses', () => wbCard(), 'mkt', it => intSt(it.wb_on, it.wb_status)],
     ['aniversario', 'Parabéns aos aniversariantes', 'sparkle', 'Mensagem no dia do aniversário', () => bdCard(), 'mkt', it => intSt(it.bd_on, it.bd_status)],
@@ -4416,6 +4417,43 @@ Content-Type: application/json</pre>
   const RT_TEXT = ['{Saudacao}, {cliente}! 😊 Sua próxima visita está chegando. Separei *{dia} às {hora}* com {profissional}, do jeito que você costuma vir.\nQuer que eu reserve pra você?',
     '{Saudacao}, {cliente}! Tudo bem? 😊 Já está chegando a hora de dar aquele trato no visual ✂️\n{profissional} tem horário *{dia} às {hora}*, como você costuma vir. Posso reservar pra você?',
     '{Saudacao}, {cliente}! 💈 Pensando na sua próxima visita, separei um horário com {profissional}: *{dia} às {hora}*, como de costume.\nQuer que eu deixe reservado pra você?'].join('\n---\n');
+  // Indicação premiada: código para clientes fiéis; prêmio quando o amigo indicado vem.
+  const IN_TEXT = '{Saudacao}, {cliente}! Que bom ter você sempre com a gente aqui na {barbearia} 😊\nQuer presentear um amigo? Ele ganha *{beneficio}* na primeira visita, é só falar o código *{codigo}* quando for agendar.\nE quando ele vier, você ganha *{premio}*! 🎁';
+  function inCard() {
+    if (!isGestor(currentUser())) return '';
+    const it = Cloud.enabled ? ui.integ : (state.integ || {});
+    if (!it || it.erro) return '';
+    const st = String(it.in_status || ''), on = !!it.in_on, noAb = !it.est_code, semIa = !it.ia_on;
+    const L = ui.ind = ui.ind || {};
+    if (!L.lista && !L.carregando) {
+      if (!Cloud.enabled) L.lista = [{ codigo: 'PEDRO975', nome: 'Pedro', fone4: '0001', agendados: 2, vieram: 2, entregues: 1 }, { codigo: 'RAFAELK3M', nome: 'Rafael', fone4: '3321', agendados: 1, vieram: 0, entregues: 0 }];
+      else { L.carregando = true; Cloud.indicacoes.list().then(l => { L.lista = l; L.carregando = false; render(); }).catch(() => { L.lista = []; L.carregando = false; render(); }); }
+    }
+    const lista = L.lista || [], pend = lista.filter(x => x.vieram > x.entregues);
+    const tot = lista.reduce((a, x) => ({ conv: a.conv + 1, ag: a.ag + (x.agendados || 0), vi: a.vi + (x.vieram || 0) }), { conv: 0, ag: 0, vi: 0 });
+    const h = new Date().getHours(), sd = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+    const prev = (it.in_text || IN_TEXT).replace(/\{Saudacao\}/g, sd).replace(/\{cliente\}/g, 'Pedro').replace(/\{barbearia\}/g, state.company.name || '').replace(/\{beneficio\}/g, it.in_beneficio || '20% de desconto no primeiro atendimento').replace(/\{premio\}/g, it.in_premio || 'um corte grátis').replace(/\{codigo\}/g, 'PEDRO975');
+    return `<section class="section card as-card">
+      <h2 class="section-title">${icon('gift')} Indicação premiada</h2>
+      <p class="section-note">No dia seguinte a uma visita, o cliente <b>fiel</b> (com pelo menos ${it.in_min || 4} atendimentos) recebe um <b>código próprio</b> para indicar amigos. O amigo que ainda não é cliente fala o código com a ${iaNome()}, ganha o <b>benefício</b> na primeira visita, e ela anota na observação do agendamento. Quando o amigo vem (conferido na agenda), quem indicou recebe uma mensagem com o <b>prêmio</b>, que aparece abaixo para a recepção entregar.</p>
+      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}${semIa ? `<p class="section-note">${icon('alert')} Ligue a <b>Atendente IA</b>: é ela quem confere o código do amigo.</p>` : ''}
+      <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : `<span class="chip chip-ok">Ligado</span>`} <small class="muted">${tot.conv} código(s) enviados · ${tot.ag} amigo(s) agendaram · ${tot.vi} vieram${st && /^erro/.test(st) ? ' · ' + esc(st) : ''}</small></div>
+      ${pend.length ? `<div class="in-pend"><b>${icon('gift')} Prêmios a entregar</b>${pend.map(x => `<div class="in-item"><span><b>${esc(x.nome || 'Cliente')}</b> <small class="muted">…${esc(x.fone4 || '')} · código ${esc(x.codigo)}</small><small>${x.vieram - x.entregues} prêmio(s): ${esc(it.in_premio || 'um corte grátis')}</small></span><button class="btn btn-sm" type="button" data-action="inEntregue" data-c="${esc(x.codigo)}">${icon('check')} Entregue</button></div>`).join('')}</div>` : ''}
+      <form class="form" data-form="inSave" novalidate>
+        <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''} ${noAb || semIa ? 'disabled' : ''}><span><b>Indicação premiada ligada</b><small>Convites espalhados das 10h às 19h.</small></span></label>
+        <div class="grid-2">
+          <label class="field"><span>O amigo ganha</span><input class="input" name="beneficio" maxlength="120" value="${esc(it.in_beneficio || '20% de desconto no primeiro atendimento')}"></label>
+          <label class="field"><span>Quem indicou ganha</span><input class="input" name="premio" maxlength="120" value="${esc(it.in_premio || 'um corte grátis')}"></label>
+          <label class="field"><span>Convites por dia</span><input class="input num" type="number" name="daily" min="1" max="20" value="${it.in_daily || 3}"></label>
+          <label class="field"><span>Visitas mínimas para receber o código</span><input class="input num" type="number" name="min" min="2" max="20" value="${it.in_min || 4}"></label>
+        </div>
+        <label class="field"><span>Mensagem</span><textarea class="input" name="text" rows="6" maxlength="2000">${esc(it.in_text || IN_TEXT)}</textarea>
+          <small class="muted">Use {Saudacao}, {cliente}, {beneficio}, {premio}, {codigo} e {barbearia}.</small></label>
+        <details class="wa-prev"><summary>Ver como chega para o cliente</summary><p class="wa-bubble">${esc(prev).replace(/\n/g, '<br>')}</p></details>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
+      </form></section>`;
+  }
   // Instagram (Direct): a atendente IA responde as mensagens do Instagram (API da Meta, com o app da própria barbearia).
   function igCard() {
     if (!isGestor(currentUser())) return '';
@@ -4751,6 +4789,7 @@ Content-Type: application/json</pre>
         out.push({ em, tipo: 'agendamento', origem: o, valor: [45, 60, 95, 110][Math.floor(rnd() * 4)], compareceu: passou ? rnd() < 0.88 : null, dados: { profissional: pro[Math.floor(rnd() * pro.length)] } });
         if (rnd() < 0.18) out.push({ em, tipo: 'adicional', origem: o, valor: [15, 25, 30][Math.floor(rnd() * 3)] });
       }
+      if (o === 'whatsapp' && i % 3 === 0) { const em = new Date(ini + i * 86400000 + 12 * 3600000).toISOString(); out.push({ em, tipo: 'convite', origem: 'indicacao' }); if (rnd() < 0.5) { out.push({ em, tipo: 'agendamento', origem: 'indicacao', valor: 45, compareceu: true, dados: { profissional: pro[0] } }); out.push({ em, tipo: 'indicacao_veio', origem: 'indicacao' }); } }
       if (o === 'whatsapp' && i % 2 === 0) { const em = new Date(ini + i * 86400000 + 11 * 3600000).toISOString(); out.push({ em, tipo: 'convite', origem: 'plano' }); if (rnd() < 0.4) out.push({ em, tipo: 'recepcao', origem: 'plano', dados: { motivo: 'quer assinar o plano' } }); if (rnd() < 0.2) out.push({ em, tipo: 'plano_fechado', origem: 'plano', valor: [144, 270][Math.floor(rnd() * 2)] }); }
       if (o === 'whatsapp') { const em = new Date(ini + i * 86400000 + 17 * 3600000).toISOString(), q = 8 + Math.floor(rnd() * 5);
         for (let k = 0; k < q; k++) { out.push({ em, tipo: 'confirmacao', origem: 'confirmacao' }); const x = rnd(); if (x < 0.62) out.push({ em, tipo: 'confirmado', origem: 'confirmacao' }); else if (x < 0.72) out.push({ em, tipo: 'remarcacao', origem: 'confirmacao' }); else if (x < 0.8) out.push({ em, tipo: 'cancelamento', origem: 'confirmacao' }); } }
@@ -4760,7 +4799,7 @@ Content-Type: application/json</pre>
   }
   function resResumo(ev) {
     const z = () => ({ conv: 0, conversas: 0, ag: 0, valor: 0, ok: 0, falta: 0, real: 0, add: 0, addValor: 0, rec: 0, custo: 0 });
-    const tot = z(), porO = {}, porP = {}, porD = {}, cf = { env: 0, ok: 0, rem: 0, canc: 0 }, pl = { conv: 0, int: 0, fech: 0, valor: 0 }; let canc = 0, rem = 0;
+    const tot = z(), porO = {}, porP = {}, porD = {}, cf = { env: 0, ok: 0, rem: 0, canc: 0 }, pl = { conv: 0, int: 0, fech: 0, valor: 0 }, ind = { veio: 0 }; let canc = 0, rem = 0;
     // Remarcação importada do histórico: o agendamento antigo (cancelado) não conta duas vezes nem como falta.
     const remRefs = new Set(ev.filter(e => e.tipo === 'remarcacao' && /^h:rm:/.test(e.ref || '')).map(e => 'ag:' + e.ref.slice(5)));
     for (const e of ev) {
@@ -4772,6 +4811,7 @@ Content-Type: application/json</pre>
       else if (e.tipo === 'recepcao') { soma('rec'); if (e.origem === 'plano' || /plano|assin/i.test(String((e.dados || {}).motivo || ''))) pl.int++; }
       else if (e.tipo === 'uso') soma('custo', v);
       else if (e.tipo === 'plano_fechado') { pl.fech++; pl.valor += v; }
+      else if (e.tipo === 'indicacao_veio') ind.veio++;
       else if (e.tipo === 'confirmacao') cf.env++;
       else if (e.tipo === 'confirmado') cf.ok++;
       else if (e.tipo === 'cancelamento') { canc++; if (e.origem === 'confirmacao') cf.canc++; }
@@ -4785,7 +4825,7 @@ Content-Type: application/json</pre>
         if (e.compareceu === true) { soma('ok'); soma('real', v); p.ok++; p.real += v; } else if (e.compareceu === false) { soma('falta'); p.falta++; }
       }
     }
-    return { tot, porO, porP, porD, canc, rem, cf, pl };
+    return { tot, porO, porP, porD, canc, rem, cf, pl, ind };
   }
   function pageResultadoIa() {
     autoSyncCard(); // carrega o nome da atendente (Integração)
@@ -4804,7 +4844,7 @@ Content-Type: application/json</pre>
       <button class="btn btn-primary" type="submit">${icon('check')} Ver resultados</button><p class="form-msg" data-msg></p></form>` : ''}`;
     if (!r.ev) return topo + '<section class="section card"><p class="muted">Carregando…</p></section>';
     if (r.erro) return topo + `<section class="section card"><p class="form-msg err">Não consegui carregar os resultados (${esc(r.erro.slice(0, 120))}). ${/ia_eventos|relation|schema/i.test(r.erro) ? 'Falta criar a tabela no Supabase (arquivo supabase/ia-resultados.sql).' : 'Tente de novo em instantes.'}</p></section>`;
-    const { tot: t, porO, porP, porD, canc, rem, cf, pl } = resResumo(r.ev);
+    const { tot: t, porO, porP, porD, canc, rem, cf, pl, ind } = resResumo(r.ev);
     if (!t.ag && !t.conversas && !t.conv && !t.add) return topo + `<section class="section card res-vazio">${icon('chart')}<h2>${rot}: ainda sem resultados</h2><p class="muted">Os números começam a aparecer com os atendimentos feitos pela ${nome} e pelo totem depois da atualização do servidor (versão 7.8). Quem veio de fato é conferido na AppBarber no dia seguinte.</p></section>`;
     const custoR = t.custo * RES_DOLAR, conf = t.ok + t.falta, txC = conf ? Math.round(t.ok / conf * 100) : null;
     const ganho = t.real + t.addValor, roi = custoR > 0.5 ? Math.round(ganho / custoR) : null;
@@ -4845,6 +4885,11 @@ Content-Type: application/json</pre>
     const planosV = pl.conv || pl.int || pl.fech ? `<section class="section card"><h2 class="section-title">${icon('diamond')} Venda de planos</h2>
       <div class="res-cf">${[['rem', 'Convites de plano', pl.conv], ['canc', 'Interessados (foram para a recepção)', pl.int], ['ok', 'Planos fechados', pl.fech]].map(([k, n, v]) => `<div class="res-cf-i res-cf-${k}"><b class="num">${v}</b><span>${n}</span></div>`).join('')}<div class="res-cf-i res-cf-ok"><b class="num">${money0(pl.valor)}</b><span>por mês em planos novos</span></div></div>
       <p class="section-note">Plano fechado = cliente que virou assinante em até 45 dias depois da oferta (na conversa ou no convite). Interessados contam as conversas passadas para a recepção falando de plano.</p></section>` : '';
+    // Indicação premiada
+    const oI = porO.indicacao || { conv: 0, ag: 0, valor: 0, addValor: 0, real: 0 };
+    const indV = oI.conv || oI.ag || ind.veio ? `<section class="section card"><h2 class="section-title">${icon('gift')} Indicação premiada</h2>
+      <div class="res-cf">${[['rem', 'Códigos enviados', oI.conv], ['canc', 'Amigos que agendaram', oI.ag], ['ok', 'Amigos que vieram', ind.veio]].map(([k, n, v]) => `<div class="res-cf-i res-cf-${k}"><b class="num">${v}</b><span>${n}</span></div>`).join('')}<div class="res-cf-i res-cf-ok"><b class="num">${money0(oI.valor + oI.addValor)}</b><span>agendado pelos amigos</span></div></div>
+      <p class="section-note">Cada amigo que vem é um cliente novo que já chega confiando na barbearia. Os prêmios a entregar ficam em Integração &amp; API › Indicação premiada.</p></section>` : '';
     // 4. Agendamentos por dia
     const dias = []; for (let d = new Date(de); d < ate && d <= new Date(); d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) dias.push(iso(d));
     const dMax = Math.max(1, ...dias.map(d => (porD[d] || {}).ag || 0)), passo = dias.length > 16 ? 5 : dias.length > 8 ? 2 : 1;
@@ -4875,7 +4920,7 @@ Content-Type: application/json</pre>
           <span class="res-o-bar res-p-bar"><i class="ag" style="width:${p.valor / pMax * 100}%"></i><i class="re" style="width:${p.real / pMax * 100}%"></i></span>
           <small>${p.ag} agendamento${p.ag === 1 ? '' : 's'} · ${money0(p.valor)} agendados${cf ? ` · ${Math.round(p.ok / cf * 100)}% vieram` : ''}</small></div></div>`; }).join('')}</div></section>` : '';
 
-    return '<div class="res-page">' + topo + hero + tiles + `<div class="res-duo">${funil}${porDia}</div>` + confirma + planosV + origens + profs +
+    return '<div class="res-page">' + topo + hero + tiles + `<div class="res-duo">${funil}${porDia}</div>` + confirma + planosV + indV + origens + profs +
       `<p class="section-note res-pe">"Realizado" conta só quem compareceu: a conferência na AppBarber roda todo dia de manhã, sobre a agenda do dia anterior. O custo da IA vem em dólar e é convertido a R$ ${nf2.format(RES_DOLAR)} só como referência. Para ligar ou ajustar a ${nome}, o totem e as mensagens, vá em <a href="#configuracoes" data-action="cfgTab" data-t="integracao">Configurações › Integração &amp; API</a>.</p></div>`;
   }
   function ttCard() {
@@ -8725,6 +8770,11 @@ Content-Type: application/json</pre>
         confere(0); })
         .catch(e => { const m = Cloud.message(e); toast(/rm_|column|schema cache/i.test(m) ? 'A análise ainda está sendo ativada no servidor.' : m); });
     },
+    inEntregue(el) {
+      const L = ui.ind || {}, x = (L.lista || []).find(y => y.codigo === el.dataset.c); if (!x) return;
+      x.entregues = (x.entregues || 0) + 1; render();
+      if (Cloud.enabled) Cloud.indicacoes.entregar(x.codigo, x.entregues).then(() => toast('Prêmio marcado como entregue.')).catch(e => { x.entregues--; render(); toast(Cloud.message(e)); }); else toast('Prêmio marcado como entregue.');
+    },
     igCopiar(el) { const t = ($(el.dataset.q) || {}).textContent || ''; navigator.clipboard.writeText(t.trim()).then(() => toast('Copiado.')).catch(() => toast('Não consegui copiar; selecione e copie.')); },
     srvAtualizar() {
       Cloud.integ.save({ srv_update_req: new Date().toISOString() }).then(r => { ui.integ = r || ui.integ; toast('Pedido enviado: o servidor atualiza em 1 a 2 minutos.'); render(); })
@@ -9545,6 +9595,19 @@ Content-Type: application/json</pre>
       const [a, b] = [de, ate].sort();
       if ((fromIso(b) - fromIso(a)) / 86400000 > 366) return setMsg(f, 'Escolha um período de até 1 ano.');
       ui.iaRes = { p: 'per', de: a, ate: b }; render();
+    },
+    inSave(f) {
+      const E = f.elements, daily = Math.round(Number(E.daily.value) || 0), min = Math.round(Number(E.min.value) || 0);
+      const ben = (E.beneficio.value || '').trim(), pre = (E.premio.value || '').trim();
+      if (!ben || !pre) return setMsg(f, 'Preencha o que o amigo ganha e o que quem indicou ganha.');
+      if (daily < 1 || daily > 20) return setMsg(f, 'Convites por dia: de 1 a 20.'); if (min < 2 || min > 20) return setMsg(f, 'Visitas mínimas: de 2 a 20.');
+      const row = { in_on: !!E.on.checked, in_beneficio: ben.slice(0, 120), in_premio: pre.slice(0, 120), in_daily: daily, in_min: min, in_text: (E.text.value || '').trim().slice(0, 2000) };
+      if (row.in_text === IN_TEXT) row.in_text = '';
+      const cur = (Cloud.enabled ? ui.integ : state.integ) || {};
+      if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Indicação premiada salva.'); return render(); }
+      setMsg(f, 'Salvando…', true);
+      Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(row.in_on ? 'Indicação premiada ligada.' : 'Indicação premiada desligada.'); render(); })
+        .catch(e => { const m = Cloud.message(e); setMsg(f, /in_|column|schema cache/i.test(m) ? 'A indicação premiada ainda está sendo ativada no servidor.' : m); });
     },
     igSave(f) {
       const E = f.elements, cur = (Cloud.enabled ? ui.integ : state.integ) || {};

@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "7.8";
+export const SOFIA_VERSAO = "7.9";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -242,6 +242,8 @@ export const TOOLS = [
     input_schema: obj({ servicos: { type: "array", items: { type: "integer" }, description: "Códigos dos serviços, na ordem" }, profissional: { type: "integer", description: "Código do profissional (de ver_horarios)" }, data_hora: { type: "string", description: "AAAA-MM-DD HH:MM" }, nome_cliente: { type: "string", description: "Nome completo do cliente" }, observacao: { type: ["string", "null"], description: "Recado curto para o barbeiro(a), ex.: Primeira vez na barbearia; ou null" } }, ["servicos", "profissional", "data_hora", "nome_cliente", "observacao"]) },
   { name: "remarcar", description: "Troca um horário já marcado por outro: marca o novo e depois cancela o antigo. SÓ use depois que o cliente confirmou o novo horário.", strict: true,
     input_schema: obj({ codigo_agendamento: { type: "integer", description: "Código do horário atual (de consultar_cliente)" }, servicos: { type: "array", items: { type: "integer" } }, profissional: { type: "integer" }, data_hora: { type: "string", description: "AAAA-MM-DD HH:MM" } }, ["codigo_agendamento", "servicos", "profissional", "data_hora"]) },
+  { name: "validar_indicacao", description: "Confere o código de indicação que um cliente NOVO informou (ex.: PEDRO7K2). Se for válido, o cliente ganha o benefício de indicação na primeira visita; registre isso ao agendar.", strict: true,
+    input_schema: obj({ codigo: { type: "string", description: "Código como o cliente escreveu" } }, ["codigo"]) },
   { name: "informar_celular", description: "Registra o celular (com DDD) que o cliente informou, quando você ainda não tem o número dele (ex.: conversa pelo Instagram). Depois disso as outras ferramentas (consultar_cliente, agendar…) passam a usar esse número.", strict: true,
     input_schema: obj({ celular: { type: "string", description: "Celular com DDD, só números ou como o cliente escreveu" } }, ["celular"]) },
   { name: "lembrar", description: "Guarda na memória do cliente uma preferência ou informação útil para os PRÓXIMOS atendimentos, que ele contou (ex.: prefere horários depois das 18h; leva o filho junto; gosta do degradê mais baixo; vai viajar em dezembro). Uma frase curta por vez. NUNCA guarde saúde, religião, política, dinheiro, documentos ou senhas, nem o que já está no de sempre.", strict: true,
@@ -287,6 +289,7 @@ Jeito de falar:
 - Erros de digitação: clientes escrevem rápido e o corretor do celular troca palavras. Entenda pelo contexto, como uma recepcionista experiente: "Caleb e barba", "cabeli e barba", "cabelo barba" = corte e barba; "cabelo" = corte; "barva" = barba; "sombrancelha" = sobrancelha; "pesinho"/"pezim" = pezinho; "navalado" = navalhado; "amanha"/"amnh" = amanhã; "sabado" = sábado. Antes de tratar uma palavra como nome de barbeiro, confira se ele existe${equipe.length ? ` (barbeiros da equipe: ${equipe.join(", ")}; na agenda pode aparecer apelido)` : " (ver_horarios mostra quem atende)"}; se não existir e a palavra parecer um serviço escrito errado, entenda como o serviço. Se ficar em dúvida de verdade, confirme de leve, sem corrigir o cliente: "Corte e barba, certo? 😊". Nunca repita o erro dele como se fosse um nome.
 - Chame o cliente pelo primeiro nome quando souber. Não se apresente como robô nem fale de "sistema", "ferramenta" ou "IA", a não ser que perguntem; se perguntarem, diga com naturalidade que é a assistente virtual da ${barbearia}.
 - Sem listas longas nem markdown (nada de **negrito** ou #). Ao oferecer horários, sugira 2 ou 3 opções próximas do que o cliente pediu.
+- Indicação: se um cliente novo falar que foi indicado ou mandar um código de indicação, use validar_indicacao antes de agendar. O benefício vale só na primeira visita de quem ainda não é cliente. Se a ferramenta disser que não vale, explique com gentileza e siga o atendimento normal.
 - Memória: quando a mensagem trouxer "O de sempre deste cliente" ou "Memória do cliente", use para atender como quem já conhece o cliente (proponha o de sempre, lembre das preferências), sem soar invasiva e sem listar o que você sabe. Quando o cliente contar algo útil para os próximos atendimentos, use lembrar (sem avisar). Se ele pedir para apagar os dados dele, use esquecer.
 - Ofertas depois de marcar: o adicional (Oferta no final) vem SEMPRE na mensagem que confirma o horário, mesmo para quem pediu "o de sempre" (só não ofereça o que ele já vai fazer). Se também houver dica de Venda de plano, ofereça o plano só depois, numa próxima mensagem (quando o cliente responder sobre o adicional), nunca as duas ofertas juntas.
 - Brincadeira: se o cliente brincar (risadas, 🤣, "me passa o pix que é presente de aniversário", "aniversariante não tem desconto?"), entre na brincadeira com leveza, numa frase curta, e volte ao agendamento na mesma mensagem. Brincadeira não é pedido sério: nunca chame a recepção por causa dela.
@@ -538,6 +541,7 @@ export async function executar(nomeTool, input, ctx) {
         conv.jaAgendou = true; }
       if (ctx.listaEspera) ctx.listaEspera({ sair: true, data: diaA });
       if (emCima && ctx.avisarProfissional) await ctx.avisarProfissional(nomeProf, `✂️ Novo cliente hoje às ${horaA.replace(":", "h")}: ${input.nome_cliente} (${servs.map((s) => s.nome).join(" + ")})${input.observacao ? ` · ${String(input.observacao).slice(0, 150)}` : ""}`);
+      if (conv.indicacao && !simular && ctx.dir) registrarUsoIndicacao(ctx.dir, { codigo: conv.indicacao.codigo, fone, nome: input.nome_cliente || conv.nome, codigos: r.codigos || [], data: String(input.data_hora).slice(0, 10) });
       return { ok: true, codigos: r.codigos };
     }
     case "remarcar": {
@@ -586,6 +590,14 @@ export async function executar(nomeTool, input, ctx) {
       conv.agenda = null; ctx.stats.remarcados++; ctx.registro(`remarcou de ${velho.quando} para ${input.data_hora}`);
       if (ctx.evento) ctx.evento({ tipo: "remarcacao", dados: { de: velho.quando, para: input.data_hora, antigos: [velho.codigo], codigos: (novoR && novoR.codigos) || [] } });
       return { ok: true };
+    }
+    case "validar_indicacao": {
+      if (!ctx.indicacao) return { erro: "a barbearia não está com a indicação premiada ligada" };
+      const jaCliente = !!(conv.cadastro && conv.cadastro.codigo && conv.cadastro.visitas !== 0) && !!ctx.jaVeio;
+      const r = validarIndicacao(ctx.dir, input.codigo, fone, jaCliente);
+      if (!r.valido) return { valido: false, motivo: r.motivo, nota: "Explique com gentileza; se for erro de digitação, peça o código de novo." };
+      conv.indicacao = { codigo: r.codigo, indicador: r.indicador }; conv.origem = "indicacao";
+      return { valido: true, indicador: r.indicador, beneficio: ctx.indicacao.beneficio, nota: `Código válido (indicação de ${r.indicador}). Conte o benefício com alegria e siga para agendar; ao agendar, coloque na observação "Indicação de ${r.indicador} (código ${r.codigo}): ${ctx.indicacao.beneficio}".` };
     }
     case "informar_celular": {
       const cel = normFone(input.celular || "");
@@ -1079,7 +1091,7 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
   async function configurar(e) {
     if (!e || !e.sofia || !e.appbarber) { cfg = null; return; }
     const novo = { company_id: e.company_id, barbearia: e.nome, brand: e.brand, nome: e.sofia.nome || "Sofia", modelo: MODELOS.includes(e.sofia.modelo) ? e.sofia.modelo : MODELO_PADRAO,
-      janelas: e.sofia.janelas || JANELAS_PADRAO, horario: e.horario || null, artes: Array.isArray(e.sofia.artes) ? e.sofia.artes.filter((a) => a && a.url && a.nome) : [], avisar: so(e.sofia.avisar || ""), alerta: so(e.sofia.alerta || ""), equipe: Array.isArray(e.barbers) ? e.barbers : [], nomesAB: (e.sofia && e.sofia.nomes) || {}, pausaMin: Math.max(15, Math.min(1440, Number(e.sofia.pausa) || 60)), parabens: (e.feedback && e.feedback.parabens) || "", aniversario: (e.aniversario && e.aniversario.texto) || "", mensalPedido: e.mensal_pedido || null, mensalPedidoEm: e.mensal_pedido_em || "", planos: e.planos || null, notas: e.sofia.notas || "", upsell: Array.isArray(e.sofia.upsell) ? e.sofia.upsell : [], ab: e.appbarber };
+      janelas: e.sofia.janelas || JANELAS_PADRAO, horario: e.horario || null, artes: Array.isArray(e.sofia.artes) ? e.sofia.artes.filter((a) => a && a.url && a.nome) : [], avisar: so(e.sofia.avisar || ""), alerta: so(e.sofia.alerta || ""), equipe: Array.isArray(e.barbers) ? e.barbers : [], nomesAB: (e.sofia && e.sofia.nomes) || {}, pausaMin: Math.max(15, Math.min(1440, Number(e.sofia.pausa) || 60)), parabens: (e.feedback && e.feedback.parabens) || "", aniversario: (e.aniversario && e.aniversario.texto) || "", indicacao: e.indicacao ? { beneficio: e.indicacao.beneficio, premio: e.indicacao.premio } : null, mensalPedido: e.mensal_pedido || null, mensalPedidoEm: e.mensal_pedido_em || "", planos: e.planos || null, notas: e.sofia.notas || "", upsell: Array.isArray(e.sofia.upsell) ? e.sofia.upsell : [], ab: e.appbarber };
     cfg = novo;
     aplicarMemoriasDoApp(e.memorias);
     if (abKey !== e.appbarber.appbarber_api_key + e.appbarber.codigo_estabelecimento) {
@@ -1218,6 +1230,8 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
     }
     if (mudou) gravarMemorias(dir, todas);
   }
+  // Já foi atendido alguma vez (histórico da agenda do último ano)?
+  const jaVeioAntes = (fone) => { try { const h = JSON.parse(readFileSync(join(dir, "retorno-historico.json"), "utf8")); return !!(h && h.cli && h.cli[chaveFone(fone)]); } catch { return false; } };
   function barbeiroDoAB(nomeAB) {
     const eq = (cfg && cfg.equipe) || [], alvo = normN((cfg && cfg.nomesAB && cfg.nomesAB[nomeAB]) || nomeAB);
     if (!alvo) return null;
@@ -1438,7 +1452,7 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
           : novas.join("\n")) });
         if (!c.contada) { c.contada = true; zera(); stats.conversas++; if (resultados) resultados.evento(cfg.company_id, { tipo: "conversa", origem: c.origem || "whatsapp" }); }
         if (!c.artes) c.artes = cfg.artes; // congeladas junto com as instruções
-        const ctx = { ab, fone: c.fone, stats, simular: false, evento: (ev) => ev && resultados && cfg && resultados.evento(cfg.company_id, { origem: c.origem || "whatsapp", ...ev }), lembrar: (t) => guardarMemoria(c, t), esquecer: () => apagarMemoria(c), carga: cargaDoDia, fidelizacao: (n) => { const b = barbeiroDoAB(n); return b && Number.isFinite(b.fid) ? b.fid : null; }, parabens: cfg.parabens || "", equipe: [...(cfg.equipe || []).map((b) => b.name), cfg.barbearia].filter(Boolean), /* o dono costuma ter o nome da barbearia */ artes: c.artes, enviarArte: (a) => enviarArte(jid, a), registro: (t) => log(`Sofia: ${t}.`),
+        const ctx = { ab, fone: c.fone, stats, simular: false, evento: (ev) => ev && resultados && cfg && resultados.evento(cfg.company_id, { origem: c.origem || "whatsapp", ...ev }), dir, indicacao: cfg.indicacao || null, jaVeio: !!(c.fone && jaVeioAntes(c.fone)), lembrar: (t) => guardarMemoria(c, t), esquecer: () => apagarMemoria(c), carga: cargaDoDia, fidelizacao: (n) => { const b = barbeiroDoAB(n); return b && Number.isFinite(b.fid) ? b.fid : null; }, parabens: cfg.parabens || "", equipe: [...(cfg.equipe || []).map((b) => b.name), cfg.barbearia].filter(Boolean), /* o dono costuma ter o nome da barbearia */ artes: c.artes, enviarArte: (a) => enviarArte(jid, a), registro: (t) => log(`Sofia: ${t}.`),
           falha: (t) => { log(`Sofia: (…${String(c.fone).slice(-4)}) ${t}`); pendencias.push(`(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); status().catch(() => {}); },
           listaEspera: (x) => listaEspera(jid, c, x), alertar: (t) => alertaEquipe(c, t), avisarProfissional: (nome, t) => avisarProfissional(c, nome, t), pendencia: (t) => { c.motivo = t; pendencias.push(`${c.nome ? c.nome.split(" ")[0] + " " : ""}(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); } };
         const antesStats = { agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados };
@@ -2223,6 +2237,110 @@ export function criarPrevisao({ log = () => {}, api = async () => ({}), req = nu
       await api("POST", { company_id: e.company_id, acao: "previsao", agenda: porDia, de: hoje });
     } catch (err) { log("Previsão: " + err.message); feitoEm = Date.now() - 2.5 * 3600000; /* tenta de novo em meia hora */ }
     finally { ocupado = false; }
+  }
+  return { rodar };
+}
+
+// ---------- indicação premiada ----------
+// Cliente fiel recebe (no dia seguinte a uma visita) um código próprio para indicar amigos. O amigo novo fala o
+// código com a atendente IA, que confere (validar_indicacao) e agenda com o benefício na observação. Quando o amigo
+// vem (conferido na agenda), quem indicou ganha o prêmio: aviso no WhatsApp, lembrete na memória e na lista do app.
+export const TEXTOS_IN = [
+  "{Saudacao}, {cliente}! Que bom ter você sempre com a gente aqui na {barbearia} 😊\nQuer presentear um amigo? Ele ganha *{beneficio}* na primeira visita, é só falar o código *{codigo}* quando for agendar.\nE quando ele vier, você ganha *{premio}*! 🎁",
+];
+const IND = "indicacoes.json";
+const lerInd = (dir) => { try { return JSON.parse(readFileSync(join(dir, IND), "utf8")); } catch { return {}; } };
+const gravarInd = (dir, v) => { try { writeFileSync(join(dir, IND), JSON.stringify(v), { mode: 0o600 }); } catch { /* tenta na próxima */ } };
+export function codigoIndicacao(nome, fone) {
+  const base = semAcento(String(nome || "").split(/\s+/)[0] || "AMIGO").replace(/[^a-z]/g, "").toUpperCase().slice(0, 8) || "AMIGO";
+  const h = createHash("sha256").update("ind:" + chaveFone(fone)).digest("hex").toUpperCase().replace(/[^A-Z1-9]/g, "").replace(/[IO]/g, "");
+  return base + h.slice(0, 3);
+}
+function garantirCodigo(dir, cid, kf, f, nome) {
+  const st = lerInd(dir); if (st.cid !== cid) { st.cid = cid; st.codigos = {}; st.porCliente = {}; st.usos = []; }
+  st.codigos = st.codigos || {}; st.porCliente = st.porCliente || {}; st.usos = st.usos || [];
+  let cod = st.porCliente[kf];
+  if (!cod) { cod = codigoIndicacao(nome, f); for (let i = 2; st.codigos[cod] && st.codigos[cod].kf !== kf; i++) cod = codigoIndicacao(nome, f + i); st.codigos[cod] = { kf, f, nome: primeiroNome(nome), criado: hojeSP() }; st.porCliente[kf] = cod; gravarInd(dir, st); }
+  return { st, cod };
+}
+// Atendente: confere o código que o cliente novo informou.
+export function validarIndicacao(dir, codigo, fone, jaCliente) {
+  const st = lerInd(dir), c = String(codigo || "").toUpperCase().replace(/[^A-Z0-9]/g, ""), x = (st.codigos || {})[c];
+  if (!x) return { valido: false, motivo: "código não encontrado (confira se foi digitado certo)" };
+  if (fone && x.kf === chaveFone(fone)) return { valido: false, motivo: "é o código do próprio cliente: ele serve para indicar amigos" };
+  if (jaCliente) return { valido: false, motivo: "o benefício de indicação é só para quem ainda não é cliente da barbearia" };
+  if (fone && (st.usos || []).some((u) => u.amigoK === chaveFone(fone))) return { valido: false, motivo: "este cliente já usou um código de indicação" };
+  return { valido: true, codigo: c, indicador: x.nome };
+}
+export function registrarUsoIndicacao(dir, { codigo, fone, nome, codigos, data }) {
+  const st = lerInd(dir); if (!st.codigos || !st.codigos[codigo]) return;
+  st.usos = st.usos || []; if (st.usos.some((u) => u.amigoK === chaveFone(fone))) return;
+  st.usos.push({ codigo, amigoK: chaveFone(fone), amigo: primeiroNome(nome), fone4: String(fone).slice(-4), codigos, data, status: "agendado", em: hojeSP() }); gravarInd(dir, st);
+}
+export function criarIndicacao({ dir, log = () => {}, api = async () => ({}), sock = () => null, sofia = () => null, resultados = null, req = null, pode = () => true, relogio = agoraSP }) {
+  let ab = null, abChave = "", ocupado = false, feitoEm = 0, ultimoEnvio = 0;
+  const linha = (st, cod) => { const x = st.codigos[cod], us = (st.usos || []).filter((u) => u.codigo === cod);
+    return { codigo: cod, nome: x.nome, fone4: String(x.f).slice(-4), convidado_em: x.convidadoEm || null, agendados: us.length, vieram: us.filter((u) => u.status === "veio").length }; };
+  const publicar = (cid, st, cod) => api("POST", { company_id: cid, acao: "indicacao", ...linha(st, cod) }).catch(() => {});
+  async function mandarTexto(s, f, texto) {
+    const d = so(f), numero = d.length <= 11 ? "55" + d : d; const [w] = await s.onWhatsApp(numero).catch(() => []); if (!w || !w.exists) return null;
+    await s.presenceSubscribe(w.jid).catch(() => {}); await s.sendPresenceUpdate("composing", w.jid).catch(() => {}); await espera(1500 + Math.random() * 1500); await s.sendPresenceUpdate("paused", w.jid).catch(() => {});
+    const r = await s.sendMessage(w.jid, { text: texto }); return { jid: w.jid, id: r && r.key && r.key.id };
+  }
+  async function passo(e, hoje) {
+    const c = e.indicacao, agora = relogio(), fechados = ((e.horario && e.horario.fechados) || []).map(Number);
+    if (fechados.includes(diaDaSemana(hoje)) || agora < 10 * 60 || agora > 19 * 60) return;
+    const k = `${c.codigo_estabelecimento}|${c.appbarber_api_key}`;
+    if (!ab || abChave !== k) { abChave = k; ab = ferramentasAppBarber({ cfg: c, ...(req ? { req } : {}), creditos: (n, zero) => api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: n, ...(zero ? { sem_saldo: true } : {}) }).catch(() => {}) }); }
+    const s = sock();
+    // 1) Amigos indicados: veio? (1 vez por dia, para os horários que já passaram)
+    if (feitoEm !== hoje) {
+      feitoEm = hoje; const st = lerInd(dir);
+      for (const u of (st.usos || []).filter((x) => x.status === "agendado" && x.data < hoje)) {
+        const feitos = new Set((await ab.agenda(u.data, u.data, "2").catch(() => [])).map((a) => Number(a.appointment_code || a.scheduling_code)));
+        if ((u.codigos || []).some((x) => feitos.has(Number(x)))) {
+          u.status = "veio"; u.veioEm = hoje; const ind = st.codigos[u.codigo];
+          log(`Indicação: ${u.amigo || "o amigo"} veio (indicação de ${ind.nome}).`);
+          if (resultados) resultados.evento(e.company_id, { tipo: "indicacao_veio", origem: "indicacao", ref: `ind:${u.codigo}:${u.amigoK}`, dados: { indicador: ind.nome } });
+          // Memória do indicador: a atendente e a recepção lembram do prêmio na próxima visita.
+          const mem = lerMemorias(dir), km = chaveMemoria(ind.f), m = mem[km] || { notas: [] };
+          m.notas.push({ t: `Ganhou ${c.premio} por indicação (${u.amigo || "um amigo"} veio em ${u.data.split("-").reverse().slice(0, 2).join("/")}): entregar na próxima visita`.slice(0, 120), em: hoje });
+          m.notas = m.notas.slice(-10); m.nome = m.nome || ind.nome; m.fone4 = String(ind.f).slice(-4); mem[km] = m; gravarMemorias(dir, mem);
+          api("POST", { company_id: e.company_id, acao: "ia_memoria", chave: km, nome: m.nome, fone4: m.fone4, notas: m.notas }).catch(() => {});
+          if (s && pode()) await mandarTexto(s, ind.f, `${primeiroNome(ind.nome)}, ${u.amigo ? `o ${u.amigo}` : "seu amigo"} veio com a sua indicação! 🎉 Obrigado por indicar a ${e.nome}.\nSeu presente: *${c.premio}*. É só avisar na recepção na sua próxima visita 😊`).catch(() => {});
+          publicar(e.company_id, st, u.codigo);
+        } else if (u.data < somaDias(hoje, -1)) u.status = "nao_veio";
+      }
+      gravarInd(dir, st);
+    }
+    // 2) Convites: clientes fiéis atendidos ontem, um por vez, espalhados no dia.
+    const st0 = lerInd(dir), hojeN = Object.values(st0.codigos || {}).filter((x) => x.convidadoEm === hoje).length;
+    if (!s || !pode() || hojeN >= c.porDia || Date.now() - ultimoEnvio < Math.max(20, Math.floor(9 * 60 / c.porDia)) * 60000) return;
+    let ontem = somaDias(hoje, -1); for (let i = 0; i < 3 && fechados.includes(diaDaSemana(ontem)); i++) ontem = somaDias(ontem, -1);
+    const h = await historicoClientes({ ab, dir, cid: e.company_id, hoje, log });
+    const sair = new Set(lerJ(join(dir, "reconquista-sair.json"), []));
+    const vieram = new Map(); for (const a of await ab.agenda(ontem, ontem, "2")) { const f = so(a.client_phone); if (f.length >= 10) vieram.set(chaveFone(f), { f, nome: String(a.client_name || "").trim() }); }
+    for (const [kf, v] of vieram) {
+      if (sair.has(kf)) continue;
+      const cl = h.cli[kf], a = cl && analisarCliente(cl.v, hoje); if (!a || a.visitas < c.minVisitas) continue;
+      const { st, cod } = garantirCodigo(dir, e.company_id, kf, v.f, v.nome || (cl && cl.n));
+      const x = st.codigos[cod]; if (x.convidadoEm && diasEntre(x.convidadoEm, hoje) < 90) continue;
+      const nome = primeiroNome(v.nome || (cl && cl.n)), agoraM = relogio(), sd = agoraM < 12 * 60 ? "Bom dia" : agoraM < 18 * 60 ? "Boa tarde" : "Boa noite";
+      const txt = String(c.texto || TEXTOS_IN[0]).replace(/\{Saudacao\}/g, sd).replace(/\{cliente\}/g, nome || "tudo bem").replace(/\{barbearia\}/g, e.nome).replace(/\{beneficio\}/g, c.beneficio).replace(/\{premio\}/g, c.premio).replace(/\{codigo\}/g, cod).replace(/https?:\/\/\S+/gi, "").trim();
+      x.convidadoEm = hoje; gravarInd(dir, st); ultimoEnvio = Date.now();
+      try {
+        const env = await mandarTexto(s, v.f, txt);
+        if (env) { const so2 = sofia(); if (so2 && so2.conviteEnviado) so2.conviteEnviado(env.jid, env.id, { fone: normFone(v.f), nome, texto: txt, horas: 24, origem: "indicacao", tipo: "convite da indicação premiada (código do próprio cliente)",
+          detalhe: `[o código ${cod} é deste cliente, para ele passar a amigos que ainda não são clientes. O amigo ganha ${c.beneficio} na primeira visita; quando o amigo vier, este cliente ganha ${c.premio}. Tire dúvidas e, se ele quiser, ajude a escrever uma mensagem curta para mandar ao amigo.]` });
+          log(`Indicação: convite enviado (${nome || "cliente"}, código ${cod}).`); publicar(e.company_id, lerInd(dir), cod); }
+      } catch (err) { log("Indicação: convite não enviado: " + err.message); }
+      break; // um por vez
+    }
+  }
+  const lerJ = (f, pad) => { try { return JSON.parse(readFileSync(f, "utf8")); } catch { return pad; } };
+  async function rodar(e, hoje = hojeSP()) {
+    if (ocupado || !e || !e.indicacao) return; ocupado = true;
+    try { await passo(e, hoje); } finally { ocupado = false; }
   }
   return { rodar };
 }
