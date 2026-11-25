@@ -3564,6 +3564,26 @@
     return Object.fromEntries(Object.entries(g).filter(([k, v]) => HG_KEYS.includes(k) && vis(k) && isNum(v) && v > 0));
   }
   // Totais do mês: soma de todos os profissionais (inclusive desligados com resultados no mês).
+  // Previsão do faturamento do mês (mesma regra do boletim): realizado + para cada dia aberto que falta, o maior entre
+  // o valor marcado na agenda (enviado pelo servidor) e a média daquele dia da semana nas últimas 4 semanas.
+  function previsaoFat(ym) {
+    const it = (Cloud.enabled ? ui.integ : state.integ) || {}, agenda = it.fc_agenda || {}, hoje = iso(new Date());
+    if (ym !== hoje.slice(0, 7)) return null;
+    const fpd = {}; for (const e of state.entries) if (isNum(e.fat)) fpd[e.date] = (fpd[e.date] || 0) + Number(e.fat);
+    const add = (d, n) => { const x = fromIso(d); x.setDate(x.getDate() + n); return iso(x); }, dow = d => fromIso(d).getDay();
+    const fech = (GB.ocupCfgOf(state).closed || [0]).map(Number), soma = {}, cont = {};
+    for (let i = 1; i <= 28; i++) { const d = add(hoje, -i), v = fpd[d] || 0; if (v > 0) { soma[dow(d)] = (soma[dow(d)] || 0) + v; cont[dow(d)] = (cont[dow(d)] || 0) + 1; } }
+    const media = w => cont[w] ? soma[w] / cont[w] : 0, fim = new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0).getDate();
+    let real = 0, resto = 0;
+    for (let dd = 1; dd <= fim; dd++) {
+      const d = ym + '-' + String(dd).padStart(2, '0');
+      if (d < hoje) { real += fpd[d] || 0; continue; }
+      if (fech.includes(dow(d))) continue;
+      const md = media(dow(d));
+      if (d === hoje) { const v = fpd[d] || 0; real += v; resto += Math.max(0, Math.max(md, agenda[d] || 0) - v); } else resto += Math.max(md, agenda[d] || 0);
+    }
+    return real > 0 ? { prev: real + resto, agenda: Object.keys(agenda).some(d => d >= hoje) } : null;
+  }
   function houseTotals(ym, scope) {
     const R = monthR(ym);
     const vis = k => GB.visibleInds(state).some(i => i.key === k);
@@ -3749,13 +3769,15 @@
       const pct = (raw / g) * 100, done = raw >= g;
       const gap = k === 'ocup' || k === 'fid' ? nf1.format(Math.abs(g - raw)) + ' p.p.' : fmtG(k, Math.abs(g - raw));
       const perDay = cur && !done && SUMK.includes(k) && restDays > 0 ? (k === 'fat' ? (g - raw) / restDays : Math.ceil((g - raw) / restDays)) : null;
-      const proj = cur && frac < 1 && SUMK.includes(k) && raw > 0 ? raw / frac : null;
+      // Faturamento: previsão por dia da semana + agenda marcada (servidor); os outros, no ritmo atual.
+      const pvF = k === 'fat' && cur && !scope ? previsaoFat(ym) : null;
+      const proj = pvF ? pvF.prev : cur && frac < 1 && SUMK.includes(k) && raw > 0 ? raw / frac : null;
       return `<div class="pc-stat has-goal ${done ? 'done' : ''}"><span>${label}</span><b class="num">${value}</b>
         <div class="pc-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(Math.min(pct, 100))}" aria-label="${esc(label)}: ${nf0.format(pct)}% da meta"><i style="width:${Math.min(100, pct).toFixed(1)}%"></i></div>
         <div class="pc-goal num"><span>Meta ${fmtG(k, g)}</span><em>${nf0.format(pct)}%</em></div>
         <small class="pc-left num">${done ? `${icon('check')} Meta batida${raw > g ? ` · ${gap} acima` : ''}` : `Faltam <b>${gap}</b>`}</small>
         ${perDay != null ? `<small class="pc-day num">Para bater: <b>${fmtG(k, perDay)} por dia</b> ${restDays === 1 ? 'hoje, último dia útil' : `nos ${restDays} dias úteis que faltam`}</small>` : ''}
-        ${proj != null && !done ? `<small class="pc-proj num ${proj >= g ? 'ok' : 'low'}">No ritmo atual: ${fmtG(k, proj)} no fim do mês</small>` : ''}
+        ${proj != null && !done ? `<small class="pc-proj num ${proj >= g ? 'ok' : 'low'}" ${pvF ? 'title="Média de cada dia da semana nas últimas 4 semanas, ou o valor já marcado na agenda quando for maior"' : ''}>${pvF ? 'Previsão' : 'No ritmo atual'}: ${fmtG(k, proj)} no fim do mês${pvF && pvF.agenda ? ' (com a agenda marcada)' : ''}</small>` : ''}
       </div>`;
     };
     // Sugestão: soma das metas individuais dos profissionais ativos.

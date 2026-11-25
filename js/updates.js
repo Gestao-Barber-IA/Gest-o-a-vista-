@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-25-previsao', date: '2026-11-25', title: 'Previsão do faturamento do mês e alerta de meta', items: [
+    ['melhoria', 'Em Performance da empresa, a previsão do faturamento do mês passa a considerar a média de cada dia da semana nas últimas 4 semanas e o valor que já está marcado na agenda da AppBarber (em vez de só o ritmo médio).'],
+    ['novo', 'O Boletim do dono traz a meta do mês, o realizado e a previsão; se a previsão estiver abaixo da meta, avisa quanto falta por dia e sugere ações.'],
+  ] },
   { id: '2026-11-25-atualizar-servidor', date: '2026-11-25', title: 'Atualizar o servidor pelo app', items: [
     ['novo', 'Em Integração & API › Servidor e atualizações: veja a versão em uso e toque em Atualizar servidor agora para receber a melhoria na hora, sem precisar do Termius.'],
   ] },
