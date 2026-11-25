@@ -4297,7 +4297,11 @@ Content-Type: application/json</pre>
           <label class="check"><input type="radio" name="num" value="chip" ${it.cl_numero !== 'principal' ? 'checked' : ''}><span><b>2º chip</b><small>Conectado no servidor com <code>gbia-whatsapp-conectar-clientes</code>. Se for bloqueado, só esse chip é perdido.</small></span></label>
           <label class="check"><input type="radio" name="num" value="principal" ${it.cl_numero === 'principal' ? 'checked' : ''}><span><b>WhatsApp principal da barbearia</b><small>O cliente reconhece o número e as respostas caem direto na recepção. Conectado com <code>gbia-whatsapp-conectar-principal</code>. Proteções: textos sorteados, ritmo mais lento (40 a 90 s entre envios, até 20 por hora e 150 por dia), sem links e pausa automática se 3 envios seguidos falharem. O risco de bloqueio diminui, mas não some.</small></span></label>
         </fieldset>
-        <label class="field"><span>Quanto tempo antes do horário</span><select class="input" name="lead">${[[30, '30 minutos'], [60, '1 hora'], [90, '1 hora e meia'], [120, '2 horas'], [180, '3 horas']].map(([v, l]) => `<option value="${v}" ${Number(it.cl_lead || 60) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        <div class="grid-2">
+          <label class="field"><span>Quanto tempo antes (horários até ${esc(it.cl_pm_from || '13:00')})</span><select class="input" name="lead">${[[30, '30 minutos'], [60, '1 hora'], [90, '1 hora e meia'], [120, '2 horas'], [180, '3 horas']].map(([v, l]) => `<option value="${v}" ${Number(it.cl_lead || 60) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+          <label class="field"><span>Horários a partir de</span><input class="input" type="time" name="pmFrom" value="${esc(it.cl_pm_from || '13:00')}"></label>
+          <label class="field"><span>Quanto tempo antes (a partir desse horário)</span><select class="input" name="leadPm"><option value="" ${!it.cl_lead_pm ? 'selected' : ''}>O mesmo da manhã</option>${[[30, '30 minutos'], [60, '1 hora'], [90, '1 hora e meia'], [120, '2 horas'], [180, '3 horas']].map(([v, l]) => `<option value="${v}" ${Number(it.cl_lead_pm) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        </div>
         <label class="field"><span>Mensagem</span><textarea class="input" name="text" rows="6" maxlength="1000">${esc(it.cl_text || CL_TEXT)}</textarea>
           <small class="muted">Use {cliente}, {hora}, {profissional}, {servico} e {barbearia}: o sistema troca pelos dados de cada agendamento. Para ter versões diferentes sorteadas a cada envio, separe cada versão com uma linha só com <b>---</b>. Com o texto padrão, o sistema já sorteia entre 4 versões.</small></label>
         <details class="wa-prev"><summary>Ver como chega para o cliente</summary><p class="wa-bubble">${esc(prev).replace(/\n/g, '<br>')}</p></details>
@@ -9767,7 +9771,7 @@ Content-Type: application/json</pre>
         .catch(e => { const m = Cloud.message(e); setMsg(f, /ab_|column|schema cache/i.test(m) ? 'O contador de créditos ainda está sendo ativado no servidor.' : m); });
     },
     clRemind(f) {
-      const row = { cl_on: !!f.elements.on.checked, cl_numero: f.elements.num.value === 'principal' ? 'principal' : 'chip', cl_lead: Number(f.elements.lead.value) || 60, cl_text: (f.elements.text.value || '').trim().slice(0, 1000), cl_reply: (f.elements.reply.value || '').trim().slice(0, 500) };
+      const row = { cl_on: !!f.elements.on.checked, cl_numero: f.elements.num.value === 'principal' ? 'principal' : 'chip', cl_lead: Number(f.elements.lead.value) || 60, cl_lead_pm: Number(f.elements.leadPm.value) || null, cl_pm_from: /^\d{2}:\d{2}$/.test(f.elements.pmFrom.value) ? f.elements.pmFrom.value : '13:00', cl_text: (f.elements.text.value || '').trim().slice(0, 1000), cl_reply: (f.elements.reply.value || '').trim().slice(0, 500) };
       if (row.cl_text === CL_TEXT) row.cl_text = '';
       const cur = (Cloud.enabled ? ui.integ : state.integ) || {};
       if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Lembretes de clientes salvos.'); return render(); }
