@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "9.3";
+const VERSAO = "9.4";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -52,7 +52,7 @@ async function carregarSofiaMod() {
 }
 const SOFIA = CLI ? await carregarSofiaMod() : null;
 const boletimEm = {};
-let sofia = null, retorno = null, totem = null, vagas = null, confirmacao = null, planos = null, agendaCheia = null;
+let sofia = null, retorno = null, totem = null, vagas = null, confirmacao = null, planos = null, agendaCheia = null, previsao = null;
 
 // ---------- conexão ----------
 let sock = null, aberto = false, saiu = false, geracao = 0;
@@ -579,6 +579,9 @@ async function ciclo() {
       if (!planos) planos = SOFIA.criarPlanos({ dir: DIR, log, api, sock: () => (aberto ? sock : null), sofia: () => sofia, resultados: SOFIA.resultadosDe ? SOFIA.resultadosDe(DIR, api, log) : null, pode: () => pausadoDia !== hoje });
       await planos.rodar(ePl, hoje).catch((err) => { log(`${ePl.nome}: planos: ${err.message}`); api("POST", { company_id: ePl.company_id, acao: "pl_status", status: "erro: " + err.message }).catch(() => {}); });
     }
+    // Previsão do mês: valor marcado na agenda até o fim do mês (a cada 3 horas).
+    const ePv = minhas.find((e) => e.previsao);
+    if (ePv && SOFIA && SOFIA.criarPrevisao) { if (!previsao) previsao = SOFIA.criarPrevisao({ log, api }); await previsao.rodar(ePv, hoje).catch(() => {}); }
     // Boletim do dono: a função manda o texto pronto a partir do horário escolhido; envia uma vez e avisa.
     for (const e of minhas) if (e.boletim && aberto && Date.now() - (boletimEm[e.company_id] || 0) > 5 * 60000) {
       boletimEm[e.company_id] = Date.now(); // a função só manda de novo depois de bo_enviado (ou do "mandar agora")

@@ -2131,6 +2131,32 @@ export function criarAgendaCheia({ dir, log = () => {}, api = async () => ({}), 
   return { rodar };
 }
 
+// ---------- previsão do mês ----------
+// A cada 3 horas soma o valor dos horários marcados (AppBarber) de hoje até o fim do mês, por dia, e manda para o
+// Supabase: a previsão de faturamento usa isso junto com a média de cada dia da semana (no app e no boletim).
+export function criarPrevisao({ log = () => {}, api = async () => ({}), req = null, relogio = agoraSP }) {
+  let ab = null, abChave = "", feitoEm = 0, ocupado = false;
+  async function rodar(e, hoje = hojeSP()) {
+    if (ocupado || !e || !e.previsao) return;
+    const agora = relogio(); if (agora < 8 * 60 || agora > 21 * 60 || Date.now() - feitoEm < 3 * 3600000) return;
+    ocupado = true; feitoEm = Date.now();
+    try {
+      const c = e.previsao, k = `${c.codigo_estabelecimento}|${c.appbarber_api_key}`;
+      if (!ab || abChave !== k) { abChave = k; ab = ferramentasAppBarber({ cfg: c, ...(req ? { req } : {}), creditos: (n, zero) => api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: n, ...(zero ? { sem_saldo: true } : {}) }).catch(() => {}) }); }
+      const [y, m] = hoje.split("-").map(Number), fim = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+      const porDia = {};
+      for (const a of await ab.agenda(hoje, fim, "1")) {
+        const x = String(a.scheduling_start || "").match(/^(\d{2})\/(\d{2})\/(\d{4})/); if (!x) continue;
+        const d = `${x[3]}-${x[2]}-${x[1]}`, v = Number(String(a.service_value ?? "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".")) || 0;
+        porDia[d] = Math.round(((porDia[d] || 0) + v) * 100) / 100;
+      }
+      await api("POST", { company_id: e.company_id, acao: "previsao", agenda: porDia, de: hoje });
+    } catch (err) { log("Previsão: " + err.message); feitoEm = Date.now() - 2.5 * 3600000; /* tenta de novo em meia hora */ }
+    finally { ocupado = false; }
+  }
+  return { rodar };
+}
+
 // ---------- ofertas no final do agendamento (upsell) ----------
 // "Oferecer quando": condições separadas por vírgula. "corte" = tem corte; "corte + barba" = tem os dois;
 // "sem barba" = não tem barba. Ex.: "corte, sem barba" = tem corte e não tem barba. Vazio = sempre.

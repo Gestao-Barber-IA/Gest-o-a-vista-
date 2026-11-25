@@ -32,9 +32,30 @@ const sofiaCfg = (i: any) => ({ nome: String(i.ia_name || "Sofia").slice(0, 40),
   artes: (Array.isArray(i.ia_arts) ? i.ia_arts : []).filter((a: any) => a && a.url && a.nome).slice(0, 6)
     .map((a: any) => ({ nome: String(a.nome).slice(0, 60), url: String(a.url), quando: String(a.quando || "").slice(0, 200), pergunta: String(a.pergunta || "").slice(0, 300), retorno: String(a.retorno || "").slice(0, 300) })) });
 
+// Previsão do faturamento do mês: realizado + para cada dia aberto que falta, o maior entre o valor já marcado na
+// agenda e a média daquele dia da semana nas últimas 4 semanas (hoje: o maior entre o que já entrou e a média).
+function previsaoMes(fatPorDia: Record<string, number>, agenda: Record<string, number>, hoje: string, fechados: number[]) {
+  const [y, m] = hoje.split("-").map(Number), fim = new Date(Date.UTC(y, m, 0)).getUTCDate(), dow = (d: string) => new Date(d + "T12:00:00Z").getUTCDay();
+  const add = (d: string, n: number) => { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+  const media: Record<number, number> = {}, cont: Record<number, number> = {};
+  for (let i = 1; i <= 28; i++) { const d = add(hoje, -i), v = fatPorDia[d] || 0; if (v > 0) { media[dow(d)] = (media[dow(d)] || 0) + v; cont[dow(d)] = (cont[dow(d)] || 0) + 1; } }
+  for (const k of Object.keys(media)) media[Number(k)] = media[Number(k)] / cont[Number(k)];
+  let real = 0, resto = 0, diasAbertos = 0;
+  for (let dd = 1; dd <= fim; dd++) {
+    const d = `${hoje.slice(0, 8)}${String(dd).padStart(2, "0")}`;
+    if (d < hoje) { real += fatPorDia[d] || 0; continue; }
+    if (fechados.includes(dow(d))) continue;
+    diasAbertos++;
+    const md = media[dow(d)] || 0;
+    if (d === hoje) { const v = fatPorDia[d] || 0; real += v; resto += Math.max(0, Math.max(md, agenda[d] || 0) - v); }
+    else resto += Math.max(md, agenda[d] || 0);
+  }
+  return { real, prev: real + resto, diasAbertos };
+}
 // Boletim do dono: texto do resumo do dia (faturamento lançado, atendente IA, confirmações, vagas, agenda cheia, planos).
 const brl = (v: number) => "R$ " + Math.round(v || 0).toLocaleString("pt-BR");
 async function boletimTexto(db: any, i: any, co: any, hoje: string, barbers: any[], entries: any[]) {
+  // (i traz fc_agenda; co traz settings com as metas da casa)
   const nomeB = new Map((barbers || []).map((b: any) => [String(b.id), String(b.name || "").split(" ")[0]]));
   const porB = new Map<string, number>(); let fat = 0, cli = 0;
   for (const e of entries || []) { const d = e.data || {}; const f = Number(d.fat) || 0; fat += f; cli += Number(d.cli) || 0; if (f) porB.set(String(e.barber_id), (porB.get(String(e.barber_id)) || 0) + f); }
@@ -61,6 +82,17 @@ async function boletimTexto(db: any, i: any, co: any, hoje: string, barbers: any
   const oc = (String(i.ac_status || "").match(/ocupação (.*?) · \d+ convite/) || [])[1];
   const am = oc ? oc.split(" · ").find((b) => !b.startsWith("hoje")) : "";
   if (am) L.push(`🔮 *Ocupação ${am.split(": ")[0]}*: ${am.split(": ")[1] || ""}`);
+  // Meta do mês e previsão.
+  const ym = hoje.slice(0, 7), st = co.settings || {}, metaM = ((st.houseGoalsM || {})[ym] || {}).fat, meta = Number(metaM > 1000 ? metaM : (st.houseGoals || {}).fat) || 0;
+  if (meta > 0) {
+    const ini = new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)) - 1, 1)); ini.setUTCDate(ini.getUTCDate() - 28);
+    const { data: ent } = await db.from("entries").select("date, data").eq("company_id", i.company_id).gte("date", ini.toISOString().slice(0, 10)).lte("date", hoje).limit(20000);
+    const fpd: Record<string, number> = {}; for (const e of ent || []) fpd[e.date] = (fpd[e.date] || 0) + (Number((e.data || {}).fat) || 0);
+    const fech = Array.isArray((st.ocup || {}).closed) ? st.ocup.closed.map(Number) : [0];
+    const pv = previsaoMes(fpd, i.fc_agenda || {}, hoje, fech), pct = Math.round(pv.prev / meta * 100), falta = meta - pv.real;
+    L.push(`🎯 *Meta do mês*: ${brl(pv.real)} de ${brl(meta)} (${Math.round(pv.real / meta * 100)}%) · previsão *${brl(pv.prev)}* (${pct}%)`);
+    if (pv.prev < meta * 0.97 && falta > 0 && pv.diasAbertos > 0) L.push(`⚠️ Pela previsão faltam uns ${brl(meta - pv.prev)}. Para bater, são ${brl(falta / pv.diasAbertos)} por dia nos ${pv.diasAbertos} dia(s) que restam. Ideias: subir o limite da Agenda cheia automática, ligar mais convites de Retorno ou fazer uma campanha.`);
+  }
   if (L.length === 1) L.push("Sem movimento registrado hoje.");
   L.push("", "Detalhes no app: Resultado da atendente IA.");
   return L.join("\n");
@@ -97,7 +129,7 @@ Deno.serve(async (req) => {
   if (req.method === "GET" && url.searchParams.get("acao") === "lembretes") {
     const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
     const { data: ints, error } = await db.from("integrations")
-      .select("company_id, est_code, api_key, branch_code, srv_update_req, srv_update_done, bo_on, bo_hour, bo_phone, bo_sent_on, bo_force, ia_report_phone, ac_status, cf_status, ac_on, ac_limit, ac_daily, ac_days, ac_text, pl_on, pl_chat, pl_daily, pl_days, pl_plans, pl_text, cf_on, cf_hour, cf_second, cf_before, cf_text, cf_text2, fv_on, fv_per, fv_daily, fv_lead, fv_days, fv_text, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, fb_reply, fb_pro_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, wb_gift, wb_gift_done, cl_status, cl_status_at, rt_on, rt_daily, rt_lead, rt_text, tt_on, tt_notify, tt_days, upsell, bd_on, bd_text, ia_on, ia_name, ia_model, ia_hours, ia_pause, ia_notes, ia_report_phone, ia_alert_phone, ia_arts, names").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,rt_on.eq.true,tt_on.eq.true,bd_on.eq.true,ia_on.eq.true");
+      .select("company_id, est_code, api_key, branch_code, fc_agenda, srv_update_req, srv_update_done, bo_on, bo_hour, bo_phone, bo_sent_on, bo_force, ia_report_phone, ac_status, cf_status, ac_on, ac_limit, ac_daily, ac_days, ac_text, pl_on, pl_chat, pl_daily, pl_days, pl_plans, pl_text, cf_on, cf_hour, cf_second, cf_before, cf_text, cf_text2, fv_on, fv_per, fv_daily, fv_lead, fv_days, fv_text, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, fb_reply, fb_pro_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, wb_gift, wb_gift_done, cl_status, cl_status_at, rt_on, rt_daily, rt_lead, rt_text, tt_on, tt_notify, tt_days, upsell, bd_on, bd_text, ia_on, ia_name, ia_model, ia_hours, ia_pause, ia_notes, ia_report_phone, ia_alert_phone, ia_arts, names").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,rt_on.eq.true,tt_on.eq.true,bd_on.eq.true,ia_on.eq.true");
     if (error) return json({ erro: error.message }, 500);
     const empresas = [];
     for (const i of ints || []) {
@@ -145,6 +177,8 @@ Deno.serve(async (req) => {
         // Reconquista de clientes sumidos (lista de clientes da AppBarber, 1 crédito por página).
         reconquista: i.wb_on && i.est_code && i.api_key ? { porDia: Math.max(1, Math.min(40, Number(i.wb_daily) || 15)), minDias: Math.max(30, Number(i.wb_min_days) || 90), maxDias: Math.max(60, Number(i.wb_max_days) || 365), texto: i.wb_text || "", presente: String(i.wb_gift || "").slice(0, 1500), presenteFinal: String(i.wb_gift_done || "").slice(0, 1000), codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
         // Retorno no tempo certo: convite N dias antes do prazo de costume de cada cliente (agenda da AppBarber).
+        // Previsão do mês: o servidor soma o valor marcado na agenda até o fim do mês.
+        previsao: i.est_code && i.api_key ? { codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
         // Agenda cheia automática: convites para os clientes do profissional com pouca ocupação.
         agendaCheia: i.ac_on && i.est_code && i.api_key ? { limite: Math.max(20, Math.min(95, Number(i.ac_limit) || 60)), porDia: Math.max(1, Math.min(40, Number(i.ac_daily) || 10)), dias: Number(i.ac_days) === 2 ? 2 : 1,
           texto: String(i.ac_text || "").slice(0, 2000), codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
@@ -254,6 +288,12 @@ Deno.serve(async (req) => {
       if (!chave) return json({ erro: "Chave inválida." }, 400);
       const notas = (Array.isArray(b.notas) ? b.notas : []).slice(-10).map((n: any) => ({ t: String(n && n.t || "").slice(0, 120), em: String(n && n.em || "").slice(0, 10) })).filter((n: any) => n.t);
       const { error } = await db.from("ia_memorias").upsert({ company_id: b.company_id, chave, nome: String(b.nome || "").slice(0, 60), fone4: String(b.fone4 || "").replace(/\D/g, "").slice(-4), notas, atualizado: new Date().toISOString() }, { onConflict: "company_id,chave" });
+      return error ? json({ erro: error.message }, 500) : json({ ok: true });
+    }
+    if (b.acao === "previsao") {
+      const ag: Record<string, number> = {};
+      for (const [d, v] of Object.entries(b.agenda && typeof b.agenda === "object" ? b.agenda : {}).slice(0, 40)) if (/^\d{4}-\d{2}-\d{2}$/.test(d) && Number.isFinite(Number(v))) ag[d] = Number(v);
+      const { error } = await db.from("integrations").update({ fc_agenda: ag, fc_at: new Date().toISOString() }).eq("company_id", b.company_id);
       return error ? json({ erro: error.message }, 500) : json({ ok: true });
     }
     if (b.acao === "srv_versao") {
