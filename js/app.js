@@ -4120,6 +4120,7 @@ ${rows.length ? '' : emptyBarbers()}
     ['clientes', 'Lembrete de agendamento', 'bell', 'Aviso do horário para o cliente no WhatsApp', () => clRemindCard(), 'whats', it => intSt(it.cl_on, it.cl_status)],
     ['confirmacao', 'Confirmação de presença', 'checksq', 'Pedido na véspera para evitar faltas', () => cfCard(), 'whats', it => intSt(it.cf_on, it.cf_status)],
     ['boletim', 'Boletim do dono', 'chart', 'Resumo do dia no seu WhatsApp', () => boCard(), 'whats', it => it.bo_on ? (/^erro/.test(String(it.bo_status || '')) ? ['Com erro', 'chip-bad'] : ['Ligado', 'chip-ok']) : ['Desligado', '']],
+    ['instagram', 'Instagram (Direct)', 'chat', 'A atendente IA responde o Direct do Instagram', () => igCard(), 'whats', it => intSt(it.ig_on, it.ig_status)],
     ['memoria', 'Memória dos clientes', 'idcard', 'O de sempre e as preferências de cada cliente', () => memCard(), 'whats'],
     ['equipe', 'Lembretes para a equipe', 'users', 'Checklist do dia no WhatsApp de cada profissional', () => waRemindCard(), 'whats', it => intSt(it.wa_on, it.wa_status)],
     ['totem', 'Totem de autoatendimento', 'monitor', 'Check-in e agendamento num tablet na recepção', () => ttCard(), 'recepcao', it => intSt(it.tt_on, it.tt_status)],
@@ -4415,6 +4416,46 @@ Content-Type: application/json</pre>
   const RT_TEXT = ['{Saudacao}, {cliente}! 😊 Sua próxima visita está chegando. Separei *{dia} às {hora}* com {profissional}, do jeito que você costuma vir.\nQuer que eu reserve pra você?',
     '{Saudacao}, {cliente}! Tudo bem? 😊 Já está chegando a hora de dar aquele trato no visual ✂️\n{profissional} tem horário *{dia} às {hora}*, como você costuma vir. Posso reservar pra você?',
     '{Saudacao}, {cliente}! 💈 Pensando na sua próxima visita, separei um horário com {profissional}: *{dia} às {hora}*, como de costume.\nQuer que eu deixe reservado pra você?'].join('\n---\n');
+  // Instagram (Direct): a atendente IA responde as mensagens do Instagram (API da Meta, com o app da própria barbearia).
+  function igCard() {
+    if (!isGestor(currentUser())) return '';
+    const it = Cloud.enabled ? ui.integ : (state.integ || {});
+    if (!it || it.erro) return '';
+    const st = String(it.ig_status || ''), on = !!it.ig_on, bad = /^erro/.test(st), semIa = !it.ia_on;
+    const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const hook = Cloud.enabled ? Cloud.apiUrl.replace(/\/lancamentos$/, '/instagram') + '?empresa=' + Cloud.companyId : 'https://…/functions/v1/instagram?empresa=…';
+    const verif = it.ig_verify || '';
+    const pronto = it.ig_user_id && it.ig_token && it.ig_app_secret && verif;
+    const visto = it.ig_seen_at && Date.now() - new Date(it.ig_seen_at).getTime() < 120000;
+    return `<section class="section card as-card">
+      <h2 class="section-title">${icon('chat')} Instagram (Direct)</h2>
+      <p class="section-note">A ${iaNome()} responde as mensagens do <b>Direct do Instagram</b> da barbearia como no WhatsApp: tira dúvidas, mostra horários e agenda. Como o Instagram não mostra o celular, ela pede o número com DDD na hora de agendar. Quando alguém da equipe responde pelo app do Instagram, ela fica quieta por 1 hora, como no WhatsApp.</p>
+      ${semIa ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Atendente IA</b>: o Instagram usa a mesma atendente.</p>` : ''}
+      <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : `<span class="chip ${bad ? 'chip-bad' : visto ? 'chip-ok' : ''}">${bad ? 'Com erro' : visto ? 'Funcionando' : 'Aguardando o servidor'}</span>`} ${st ? `<small class="muted">${it.ig_status_at ? when(it.ig_status_at) + ' · ' : ''}${esc(st.replace(/^(ok|erro): /, ''))}</small>` : ''}</div>
+      <details class="tut" ${pronto ? '' : 'open'}><summary><b>Passo a passo (uma vez só, cerca de 20 minutos)</b></summary>
+        <ol class="ig-passos">
+          <li>O Instagram da barbearia precisa ser uma <b>conta profissional</b> (Comercial ou Criador de conteúdo): no app do Instagram, Configurações › Tipo de conta e ferramentas.</li>
+          <li>Entre em <b>developers.facebook.com</b> com o seu Facebook, toque em <b>Meus apps › Criar app</b>, escolha o caso de uso <b>"Gerenciar mensagens e conteúdo no Instagram"</b> e crie o app.</li>
+          <li>No painel do app, em <b>Instagram › Configuração da API com login do Instagram</b>: em "Gerar tokens de acesso", <b>adicione a conta</b> do Instagram da barbearia e toque em <b>Gerar token</b>. Copie o <b>token</b> e o <b>ID da conta</b> (número que aparece junto) e cole abaixo.</li>
+          <li>Na mesma tela, em <b>Configurar webhooks</b>: cole a <b>URL de retorno</b> e o <b>token de verificação</b> que aparecem abaixo, toque em <b>Verificar e salvar</b> e depois ative a assinatura do campo <b>messages</b>.</li>
+          <li>Em <b>Configurações do app › Básico</b>, copie a <b>Chave secreta do app</b> e cole abaixo.</li>
+          <li>Coloque o app no modo <b>Ao vivo</b> (publicado). Enquanto estiver em desenvolvimento, só as contas de teste recebem resposta.</li>
+          <li>Marque <b>Instagram ligado</b> e salve. Mande um "oi" de outra conta para o Direct da barbearia para testar.</li>
+        </ol></details>
+      <div class="field"><span>URL de retorno (webhook)</span><div class="invite-link" id="ig-hook">${esc(hook)}</div></div>
+      <div class="field"><span>Token de verificação</span><div class="invite-link" id="ig-verif">${esc(verif || 'salve uma vez para gerar')}</div></div>
+      <div class="btn-row"><button class="btn btn-sm" type="button" data-action="igCopiar" data-q="#ig-hook">${icon('copy')} Copiar URL</button>${verif ? `<button class="btn btn-sm" type="button" data-action="igCopiar" data-q="#ig-verif">${icon('copy')} Copiar token de verificação</button>` : ''}</div>
+      <form class="form" data-form="igSave" novalidate>
+        <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''} ${semIa ? 'disabled' : ''}><span><b>Instagram ligado</b><small>A ${iaNome()} responde o Direct.</small></span></label>
+        <div class="grid-2">
+          <label class="field"><span>ID da conta do Instagram</span><input class="input" name="uid" inputmode="numeric" value="${esc(it.ig_user_id || '')}" placeholder="Ex.: 17841400000000000"></label>
+          <label class="field"><span>Token de acesso</span><input class="input" name="token" type="password" autocomplete="off" placeholder="${it.ig_token ? 'Salvo (cole outro para trocar)' : 'Cole o token gerado'}"></label>
+          <label class="field"><span>Chave secreta do app</span><input class="input" name="secret" type="password" autocomplete="off" placeholder="${it.ig_app_secret ? 'Salva (cole outra para trocar)' : 'Configurações do app › Básico'}"></label>
+        </div>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
+      </form></section>`;
+  }
   // Servidor: versão em uso e o botão "Atualizar servidor agora" (sem precisar do Termius).
   function srvCard() {
     if (!isGestor(currentUser())) return '';
@@ -4684,7 +4725,7 @@ Content-Type: application/json</pre>
   // check-in do horário ("No local" na AppBarber) ou agenda na hora. O link tem um código secreto (só o hash fica salvo).
   // Resultado da atendente IA e do totem: o servidor grava cada agendamento, adicional, convite, conversa e o custo
   // (tabela ia_eventos) e no dia seguinte confere na AppBarber quem compareceu. Aqui vira R$ e retorno sobre o custo.
-  const RES_ORIG = { whatsapp: ['WhatsApp (o cliente chamou)', 'chat'], retorno: ['Retorno no tempo certo', 'clock'], reconquista: ['Reconquista de sumidos', 'rocket'], feedback: ['Pedido de feedback', 'vote'], totem: ['Totem da recepção', 'monitor'], vaga: ['Vagas preenchidas (cancelamento)', 'bolt'], agenda: ['Agenda cheia (horários ociosos)', 'gauge'] };
+  const RES_ORIG = { whatsapp: ['WhatsApp (o cliente chamou)', 'chat'], retorno: ['Retorno no tempo certo', 'clock'], reconquista: ['Reconquista de sumidos', 'rocket'], feedback: ['Pedido de feedback', 'vote'], totem: ['Totem da recepção', 'monitor'], vaga: ['Vagas preenchidas (cancelamento)', 'bolt'], agenda: ['Agenda cheia (horários ociosos)', 'gauge'], instagram: ['Instagram (Direct)', 'chat'] };
   const RES_DOLAR = 5.4; // custo da IA vem em US$; conversão aproximada só para comparar
   function resPeriodo(p) {
     const h = new Date(), d0 = x => new Date(x.getFullYear(), x.getMonth(), x.getDate());
@@ -8684,6 +8725,7 @@ Content-Type: application/json</pre>
         confere(0); })
         .catch(e => { const m = Cloud.message(e); toast(/rm_|column|schema cache/i.test(m) ? 'A análise ainda está sendo ativada no servidor.' : m); });
     },
+    igCopiar(el) { const t = ($(el.dataset.q) || {}).textContent || ''; navigator.clipboard.writeText(t.trim()).then(() => toast('Copiado.')).catch(() => toast('Não consegui copiar; selecione e copie.')); },
     srvAtualizar() {
       Cloud.integ.save({ srv_update_req: new Date().toISOString() }).then(r => { ui.integ = r || ui.integ; toast('Pedido enviado: o servidor atualiza em 1 a 2 minutos.'); render(); })
         .catch(e => { const m = Cloud.message(e); toast(/srv_|column|schema cache/i.test(m) ? 'O botão ainda está sendo ativado no servidor.' : m); });
@@ -9503,6 +9545,19 @@ Content-Type: application/json</pre>
       const [a, b] = [de, ate].sort();
       if ((fromIso(b) - fromIso(a)) / 86400000 > 366) return setMsg(f, 'Escolha um período de até 1 ano.');
       ui.iaRes = { p: 'per', de: a, ate: b }; render();
+    },
+    igSave(f) {
+      const E = f.elements, cur = (Cloud.enabled ? ui.integ : state.integ) || {};
+      const row = { ig_on: !!E.on.checked, ig_user_id: (E.uid.value || '').replace(/\D/g, '').slice(0, 30) };
+      const tok = (E.token.value || '').trim(), sec = (E.secret.value || '').trim();
+      if (tok) { row.ig_token = tok.slice(0, 600); row.ig_token_at = new Date().toISOString(); }
+      if (sec) row.ig_app_secret = sec.slice(0, 100);
+      if (!cur.ig_verify) row.ig_verify = 'gbia_' + Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, '0')).join('');
+      if (row.ig_on && (!row.ig_user_id || !(tok || cur.ig_token) || !(sec || cur.ig_app_secret))) return setMsg(f, 'Para ligar, preencha o ID da conta, o token de acesso e a chave secreta do app.');
+      if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Instagram salvo.'); return render(); }
+      setMsg(f, 'Salvando…', true);
+      Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(row.ig_on ? 'Instagram ligado: a atendente responde o Direct.' : 'Instagram salvo.'); render(); })
+        .catch(e => { const m = Cloud.message(e); setMsg(f, /ig_|column|schema cache/i.test(m) ? 'O Instagram ainda está sendo ativado no servidor.' : m); });
     },
     boSave(f) {
       const E = f.elements, hora = E.hora.value || '20:30', fone = (E.fone.value || '').replace(/\D/g, '');

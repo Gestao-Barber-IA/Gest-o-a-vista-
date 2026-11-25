@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "9.5";
+const VERSAO = "9.6";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -52,6 +52,43 @@ async function carregarSofiaMod() {
 }
 const SOFIA = CLI ? await carregarSofiaMod() : null;
 const boletimEm = {};
+// Instagram (Direct): conversas "ig_<id>@instagram" passam pela mesma atendente; o envio sai pela API do Instagram
+// (sync-servidor › ig_enviar). sockMisto() é o WhatsApp de sempre, mas manda as conversas do Instagram para lá.
+let igEmpresa = null, igRodando = false;
+const ehIg = (jid) => /@instagram$/.test(String(jid || ""));
+async function igEnviar(jid, m) {
+  if (!igEmpresa) throw new Error("Instagram desligado");
+  const para = String(jid).split("@")[0].replace(/^ig_/, "");
+  const r = await api("POST", { company_id: igEmpresa, acao: "ig_enviar", para, texto: m && m.image ? "" : (m && (m.text || m.caption)) || "", imagem: (m && m.image && m.image.url) || "" });
+  if (m && m.image && m.caption) await api("POST", { company_id: igEmpresa, acao: "ig_enviar", para, texto: m.caption }).catch(() => {});
+  return { key: { id: r && r.mid, remoteJid: jid, fromMe: true } };
+}
+function sockMisto() {
+  const s = aberto ? sock : null;
+  if (!s && !igEmpresa) return null;
+  return new Proxy(s || {}, { get(alvo, k) {
+    if (k === "sendMessage") return (jid, m, o) => (ehIg(jid) ? igEnviar(jid, m) : s ? alvo.sendMessage(jid, m, o) : Promise.reject(new Error("WhatsApp desconectado")));
+    if (k === "presenceSubscribe") return (jid) => (ehIg(jid) || !s ? Promise.resolve() : alvo.presenceSubscribe(jid));
+    if (k === "sendPresenceUpdate") return (tipo, jid) => (ehIg(jid) || !s ? Promise.resolve() : alvo.sendPresenceUpdate(tipo, jid));
+    if (k === "chatModify") return (mod, jid) => (ehIg(jid) || !s ? Promise.resolve() : alvo.chatModify(mod, jid));
+    if (k === "onWhatsApp") return (...a) => (s ? alvo.onWhatsApp(...a) : Promise.resolve([]));
+    const v = s ? alvo[k] : undefined; return typeof v === "function" ? v.bind(alvo) : v;
+  } });
+}
+async function igLaco() {
+  igRodando = true; log("Instagram: atendente ligada no Direct.");
+  while (igEmpresa) {
+    try {
+      const r = await api("GET", null, `?acao=ig_espera&empresas=${encodeURIComponent(igEmpresa)}`);
+      for (const x of r.mensagens || []) {
+        if (!sofia) continue;
+        const ts = Math.floor(new Date(x.criado_em).getTime() / 1000) || Math.floor(Date.now() / 1000);
+        await sofia.aoReceber({ type: "notify", messages: [{ key: { remoteJid: `ig_${x.sid}@instagram`, fromMe: x.tipo === "eco", id: x.mid || `ig${x.id}` }, messageTimestamp: ts, message: { conversation: x.texto } }] });
+      }
+    } catch (err) { log("Instagram: " + err.message); await espera(15000); }
+  }
+  igRodando = false;
+}
 let sofia = null, retorno = null, totem = null, vagas = null, confirmacao = null, planos = null, agendaCheia = null, previsao = null;
 
 // ---------- conexão ----------
@@ -545,8 +582,10 @@ async function ciclo() {
   empresasConhecidas = minhas.map((e) => e.company_id);
   if (CLI) await escolherNumero(minhas);
   // Sofia: atende o número dos clientes da primeira barbearia com a atendente IA ligada.
-  if (CLI && SOFIA) { if (!sofia) sofia = SOFIA.criarSofia({ dir: DIR, log, api, sock: () => sock, resultados: SOFIA.resultadosDe ? SOFIA.resultadosDe(DIR, api, log) : null, conectado: () => aberto, cmdConectar: () => CMD,
+  if (CLI && SOFIA) { if (!sofia) sofia = SOFIA.criarSofia({ dir: DIR, log, api, sock: () => sockMisto(), resultados: SOFIA.resultadosDe ? SOFIA.resultadosDe(DIR, api, log) : null, conectado: () => aberto, cmdConectar: () => CMD,
     baixarMidia: (msg) => downloadMediaMessage(msg, "buffer", {}, { logger: pino({ level: "silent" }), reuploadRequest: sock.updateMediaMessage }) }); await sofia.configurar(minhas.find((e) => e.sofia)).catch((err) => log("Sofia: " + err.message)); }
+  // Instagram (Direct) com a atendente IA: funciona mesmo com o WhatsApp desconectado.
+  if (CLI && sofia) { const eIg = minhas.find((e) => e.instagram && e.sofia); igEmpresa = eIg ? eIg.company_id : null; if (igEmpresa && !igRodando) igLaco(); }
   // Serviços da AppBarber para o app sugerir os nomes nas ofertas (upsell): 1 vez a cada 6 horas.
   if (CLI && SOFIA && SOFIA.publicarServicos) { const eA = minhas.find((e) => e.appbarber && (e.sofia || e.totem)); if (eA) SOFIA.publicarServicos(eA, api).catch((err) => log("Serviços da AppBarber: " + err.message)); }
   // Resultado da atendente IA e do totem: confere o comparecimento na agenda da empresa.

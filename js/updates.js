@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-25-instagram', date: '2026-11-25', title: 'Atendente IA no Instagram (Direct)', items: [
+    ['novo', 'Em Integração & API › Instagram (Direct): a atendente IA responde as mensagens do Direct como no WhatsApp (dúvidas, horários e agendamento; ela pede o celular para agendar). O cartão traz o passo a passo para ligar o app da Meta. No Resultado da atendente IA aparece a nova origem "Instagram".'],
+  ] },
   { id: '2026-11-25-analise-mensal', date: '2026-11-25', title: 'Análise do mês e plano de ação com IA', items: [
     ['novo', 'No dia 1º de cada mês, a IA analisa o mês anterior (faturamento, clientes, equipe, atendente IA e automações, comparando com o mês anterior e a meta) e manda no seu WhatsApp o resumo, o que melhorou, o que preocupa e 3 ações concretas para o mês. Também fica em Relatórios mensais, no mês escolhido, com o botão Gerar a análise agora.'],
   ] },

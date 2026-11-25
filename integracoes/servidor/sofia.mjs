@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "7.6";
+export const SOFIA_VERSAO = "7.7";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -242,6 +242,8 @@ export const TOOLS = [
     input_schema: obj({ servicos: { type: "array", items: { type: "integer" }, description: "Códigos dos serviços, na ordem" }, profissional: { type: "integer", description: "Código do profissional (de ver_horarios)" }, data_hora: { type: "string", description: "AAAA-MM-DD HH:MM" }, nome_cliente: { type: "string", description: "Nome completo do cliente" }, observacao: { type: ["string", "null"], description: "Recado curto para o barbeiro(a), ex.: Primeira vez na barbearia; ou null" } }, ["servicos", "profissional", "data_hora", "nome_cliente", "observacao"]) },
   { name: "remarcar", description: "Troca um horário já marcado por outro: marca o novo e depois cancela o antigo. SÓ use depois que o cliente confirmou o novo horário.", strict: true,
     input_schema: obj({ codigo_agendamento: { type: "integer", description: "Código do horário atual (de consultar_cliente)" }, servicos: { type: "array", items: { type: "integer" } }, profissional: { type: "integer" }, data_hora: { type: "string", description: "AAAA-MM-DD HH:MM" } }, ["codigo_agendamento", "servicos", "profissional", "data_hora"]) },
+  { name: "informar_celular", description: "Registra o celular (com DDD) que o cliente informou, quando você ainda não tem o número dele (ex.: conversa pelo Instagram). Depois disso as outras ferramentas (consultar_cliente, agendar…) passam a usar esse número.", strict: true,
+    input_schema: obj({ celular: { type: "string", description: "Celular com DDD, só números ou como o cliente escreveu" } }, ["celular"]) },
   { name: "lembrar", description: "Guarda na memória do cliente uma preferência ou informação útil para os PRÓXIMOS atendimentos, que ele contou (ex.: prefere horários depois das 18h; leva o filho junto; gosta do degradê mais baixo; vai viajar em dezembro). Uma frase curta por vez. NUNCA guarde saúde, religião, política, dinheiro, documentos ou senhas, nem o que já está no de sempre.", strict: true,
     input_schema: obj({ nota: { type: "string", description: "Frase curta (até 120 caracteres), em terceira pessoa" } }, ["nota"]) },
   { name: "esquecer", description: "Apaga TODA a memória guardada deste cliente. Use quando ele pedir para esquecer ou apagar os dados dele.", strict: true, input_schema: obj({}, []) },
@@ -584,6 +586,13 @@ export async function executar(nomeTool, input, ctx) {
       conv.agenda = null; ctx.stats.remarcados++; ctx.registro(`remarcou de ${velho.quando} para ${input.data_hora}`);
       if (ctx.evento) ctx.evento({ tipo: "remarcacao", dados: { de: velho.quando, para: input.data_hora, antigos: [velho.codigo], codigos: (novoR && novoR.codigos) || [] } });
       return { ok: true };
+    }
+    case "informar_celular": {
+      const cel = normFone(input.celular || "");
+      if (chaveFone(cel).length < 10) return { erro: "celular inválido; peça com DDD" };
+      conv.fone = cel; ctx.fone = cel; conv.verificado = true;
+      const cad = await verificarCadastro(ab, cel, conv);
+      return { ok: true, cadastro: cad, nota: "Celular registrado. Siga o atendimento usando esse número." };
     }
     case "lembrar": {
       const t = String(input.nota || "").replace(/\s+/g, " ").trim().slice(0, 120);
@@ -1418,7 +1427,7 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
           c.noturna = 0; c.pendTipo = null;
         }
         const antes = c.contexto.splice(0).sort((a, b) => a.ts - b.ts).map((x) => x.linha);
-        const cadLinha = c.verificado ? "" : (c.verificado = true, (await verificarCadastro(ab, c.fone, c)) + "\n" + (c.fone ? costumeLinha(dir, c.fone) + memoriaLinha(dir, c.fone) : "") + (c.plano ? "" : dicaPlano({ dir, fone: c.fone, planosCfg: cfg.planos })) + (jaApresentou(c.fone)
+        const cadLinha = c.verificado ? "" : (c.verificado = true, (/@instagram$/.test(jid) && !c.fone ? "[Canal: Instagram Direct. Você não tem o celular deste cliente. Para consultar horários marcados ou agendar, peça o celular com DDD (uma vez) e use informar_celular; para tirar dúvidas, não precisa.]\n" : "") + (await verificarCadastro(ab, c.fone, c)) + "\n" + (c.fone ? costumeLinha(dir, c.fone) + memoriaLinha(dir, c.fone) : "") + (c.plano ? "" : dicaPlano({ dir, fone: c.fone, planosCfg: cfg.planos })) + (jaApresentou(c.fone)
           ? "[Apresentação: você já se apresentou a este cliente em outra conversa; não se apresente de novo]\n"
           : `[Apresentação: é a primeira vez que você fala com este cliente; na sua resposta, apresente-se em uma frase curta e simpática (ex.: "Eu sou a ${cfg.nome}, atendente da ${cfg.barbearia} 😊")]\n`));
         const naoEnviada = c.naoEnviada ? "[Sua resposta anterior NÃO foi enviada, porque o cliente mandou mais mensagens enquanto você respondia. Responda agora considerando tudo.]\n" : ""; c.naoEnviada = false;
@@ -1484,7 +1493,7 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
       const jid = msg.key && msg.key.remoteJid;
       const idv = msg.key && msg.key.id && `${jid}|${msg.key.id}`;
       if (idv) { if (vistas.has(idv)) continue; vistas.add(idv); if (vistas.size > 5000) vistas.delete(vistas.values().next().value); }
-      if (!jid || !/@(s\.whatsapp\.net|lid)$/.test(jid)) continue; // ignora grupos, status e canais
+      if (!jid || !/@(s\.whatsapp\.net|lid|instagram)$/.test(jid)) continue; // ignora grupos, status e canais (Instagram: "ig_<id>@instagram")
       const ts = Number(msg.messageTimestamp && msg.messageTimestamp.low !== undefined ? msg.messageTimestamp.low : msg.messageTimestamp) || 0;
       if (ts && Date.now() / 1000 - ts > 600) continue; // mensagens antigas (reconexão, histórico) não contam
       const t = texto(msg), md = midia(msg), conteudo = t || (md ? `[mandou um(a) ${md}]` : "");
@@ -1505,6 +1514,7 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
       }
       if (m.type !== "notify" || !conteudo) continue;
       const c = obter(jid, msg); c.ultima = Date.now(); c.ultimaMsg = msg; c.ultimaCliente = Date.now();
+      if (/@instagram$/.test(jid) && !c.origem) c.origem = "instagram";
       if (msg.pushName && !c.pushName) c.pushName = msg.pushName;
       // Sem atender agora (desligada, recepção na conversa ou fora do horário): guarda para contexto.
       // Conversa nova só começa dentro do horário; a que a Sofia está atendendo continua até ficar 20 min parada.
