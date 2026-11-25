@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "7.7";
+export const SOFIA_VERSAO = "7.8";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -1020,6 +1020,7 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
   const CAMPOS = ["recepcaoEm", "parabenizou", "origem", "jaAgendou", "mensagens", "inicio", "ultima", "ultimaSofia", "humanoEm", "contexto", "contada", "nome", "recepcao", "fone", "cadastro", "verificado", "sistema", "artes", "feitos", "gasto", "motivo", "pushName", "esperaAte", "esperaDe", "registrada", "regId", "fila", "noturna", "pendTipo", "ultimaCliente"];
   // Mensagens esperando resposta (fila) também ficam salvas: um reinício não faz ninguém ficar sem resposta.
   // Áudio não dá para guardar (o arquivo fica no WhatsApp): vira um aviso para a Sofia pedir de novo.
+  let avisouSemAudio = false;
   const AUDIO_PERDIDO = "[o cliente mandou um áudio que não deu para ouvir; peça, com gentileza, para ele mandar de novo ou escrever]";
   const guardavel = (c, j) => Date.now() - (c.ultima || 0) < 6 * 3600000 || (c.noturna && c.fila && c.fila.length && Date.now() - c.noturna < 36 * 3600000);
   try {
@@ -1405,7 +1406,8 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
         const novas = await Promise.all(c.fila.splice(0).map(async (f) => {
           if (typeof f === "string") return f;
           const seg = Number((f.audio.message.audioMessage || {}).seconds) || 0;
-          if (!process.env.OPENAI_API_KEY || !baixarMidia) return "[o cliente mandou um(a) áudio]";
+          if (!process.env.OPENAI_API_KEY || !baixarMidia) { if (!avisouSemAudio) { avisouSemAudio = true; log("Sofia: chegou áudio, mas falta a chave de transcrição (no servidor: gbia-sofia-chave-audio)."); pendencias.push("áudios de clientes não estão sendo ouvidos: falta a chave de transcrição no servidor (gbia-sofia-chave-audio)"); }
+            return "[o cliente mandou um áudio, mas por aqui você não consegue ouvir áudios: diga com simpatia que não consegue ouvir áudio pelo WhatsApp agora e peça para ele escrever; não diga que o áudio chegou com problema]"; }
           if (seg > 300) return "[o cliente mandou um áudio longo (mais de 5 min), que não foi transcrito: peça um resumo por escrito]";
           try {
             const tx = await transcrever(await baixarMidia(f.audio));
