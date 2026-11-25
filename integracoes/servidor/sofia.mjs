@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "8.1";
+export const SOFIA_VERSAO = "8.2";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -659,7 +659,12 @@ export async function executar(nomeTool, input, ctx) {
       if (ctx.evento) ctx.evento({ tipo: "cancelamento", dados: { quando: a.quando, profissional: a.profissional } });
       if (String(a.quando).slice(0, 10) === hojeSP() && ctx.avisarProfissional) await ctx.avisarProfissional(a.profissional, `❌ ${a.nome || conv.nome || "O cliente"} cancelou o horário de hoje às ${String(a.quando).slice(11, 16).replace(":", "h")} (${[a.servico, ...juntos.map((x) => x.servico)].filter(Boolean).join(" + ")}). Seu horário ficou livre.`);
       const pn = primeiroNome(conv.nome || a.nome || conv.pushName);
-      return { ok: true, ...(juntos.length ? { tambem_cancelados: juntos.map((x) => `${x.servico} ${x.quando}`) } : {}), nota: `Confirme o cancelamento em uma frase e TERMINE a mensagem com esta pergunta: "Para quando você gostaria de reagendar${pn ? ", " + pn : ""}?"` };
+      // Já tem outro horário marcado (ex.: o da próxima semana)? Então não pergunta de reagendar.
+      const cancelados = new Set([a.codigo, ...juntos.map((x) => x.codigo)]), outros = ag.filter((x) => !cancelados.has(x.codigo) && String(x.quando) > String(a.quando).slice(0, 10));
+      const prox = outros.sort((x, y) => String(x.quando).localeCompare(String(y.quando)))[0];
+      return { ok: true, ...(juntos.length ? { tambem_cancelados: juntos.map((x) => `${x.servico} ${x.quando}`) } : {}),
+        nota: prox ? `Confirme o cancelamento em uma frase e lembre que o próximo horário dele (${prox.quando} com ${prox.profissional}) continua marcado. NÃO pergunte se ele quer reagendar: ele já tem horário. Pode terminar com algo leve como "Te esperamos lá!".`
+          : `Confirme o cancelamento em uma frase e TERMINE a mensagem com esta pergunta: "Para quando você gostaria de reagendar${pn ? ", " + pn : ""}?"` };
     }
     case "enviar_arte": {
       const lista = ctx.artes || [], q = String(input.arte || "").toLowerCase().trim();
