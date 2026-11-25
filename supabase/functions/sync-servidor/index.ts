@@ -52,6 +52,36 @@ function previsaoMes(fatPorDia: Record<string, number>, agenda: Record<string, n
   }
   return { real, prev: real + resto, diasAbertos };
 }
+// Relatório mensal: números do mês (e do anterior) para a análise com IA que o servidor faz.
+async function dadosDoMes(db: any, cid: string, ym: string) {
+  const prim = (m: string) => m + "-01", ult = (m: string) => { const [y, mm] = m.split("-").map(Number); return new Date(Date.UTC(y, mm, 0)).toISOString().slice(0, 10); };
+  const ant = (() => { const [y, mm] = ym.split("-").map(Number); const d = new Date(Date.UTC(y, mm - 2, 1)); return d.toISOString().slice(0, 7); })();
+  const [{ data: co }, { data: bs }, { data: ent }, { data: ev }] = await Promise.all([
+    db.from("companies").select("name, settings").eq("id", cid).maybeSingle(),
+    db.from("barbers").select("id, name, active").eq("company_id", cid),
+    db.from("entries").select("barber_id, date, data").eq("company_id", cid).gte("date", prim(ant)).lte("date", ult(ym)).limit(50000),
+    db.from("ia_eventos").select("em, tipo, origem, valor, compareceu").eq("company_id", cid).gte("em", prim(ant) + "T00:00:00-03:00").lte("em", ult(ym) + "T23:59:59-03:00").limit(50000),
+  ]);
+  const nome = new Map((bs || []).map((b: any) => [String(b.id), b.name]));
+  const resumo = (m: string) => {
+    const t: any = { faturamento: 0, clientes: 0, planos: 0, produtos: 0, dias_com_movimento: 0 }, porB: Record<string, any> = {}, dias = new Set();
+    for (const e of ent || []) { if (String(e.date).slice(0, 7) !== m) continue; const d = e.data || {}, f = Number(d.fat) || 0, c = Number(d.cli) || 0;
+      t.faturamento += f; t.clientes += c; t.planos += Number(d.planos) || 0; t.produtos += Number(d.prod) || 0; if (f) dias.add(e.date);
+      const k = nome.get(String(e.barber_id)) || "?"; porB[k] = porB[k] || { faturamento: 0, clientes: 0 }; porB[k].faturamento += f; porB[k].clientes += c; }
+    t.dias_com_movimento = dias.size; t.ticket = t.clientes ? Math.round(t.faturamento / t.clientes * 100) / 100 : 0; t.faturamento = Math.round(t.faturamento);
+    const evm = (ev || []).filter((x: any) => new Date(x.em).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }).slice(0, 7) === m);
+    const n = (f: (x: any) => boolean) => evm.filter(f).length, v = (f: (x: any) => boolean) => Math.round(evm.filter(f).reduce((a: number, x: any) => a + (Number(x.valor) || 0), 0));
+    const ag = evm.filter((x: any) => x.tipo === "agendamento"), conf = ag.filter((x: any) => x.compareceu !== null && x.compareceu !== undefined);
+    const porO: Record<string, any> = {}; for (const x of ag) { const o = x.origem || "whatsapp"; porO[o] = porO[o] || { agendamentos: 0, valor: 0 }; porO[o].agendamentos++; porO[o].valor += Number(x.valor) || 0; }
+    const atendente = { conversas: n((x) => x.tipo === "conversa"), agendamentos: ag.length, valor_agendado: v((x) => x.tipo === "agendamento"), compareceram_pct: conf.length ? Math.round(conf.filter((x: any) => x.compareceu).length / conf.length * 100) : null,
+      adicionais: n((x) => x.tipo === "adicional"), para_recepcao: n((x) => x.tipo === "recepcao"), custo_usd: Math.round(evm.filter((x: any) => x.tipo === "uso").reduce((a: number, x: any) => a + (Number(x.valor) || 0), 0) * 100) / 100,
+      por_origem: porO, confirmacao: { pedidos: n((x) => x.tipo === "confirmacao"), confirmaram: n((x) => x.tipo === "confirmado") }, planos_fechados: n((x) => x.tipo === "plano_fechado") };
+    return { total: t, por_profissional: porB, atendente };
+  };
+  const st = co?.settings || {}, metaM = ((st.houseGoalsM || {})[ym] || {}).fat, meta = Number(metaM > 1000 ? metaM : (st.houseGoals || {}).fat) || null;
+  return { barbearia: co?.name || "", mes: ym, mes_anterior: ant, meta_faturamento: meta, atual: resumo(ym), anterior: resumo(ant),
+    equipe_ativa: (bs || []).filter((b: any) => b.active !== false).map((b: any) => b.name) };
+}
 // Boletim do dono: texto do resumo do dia (faturamento lançado, atendente IA, confirmações, vagas, agenda cheia, planos).
 const brl = (v: number) => "R$ " + Math.round(v || 0).toLocaleString("pt-BR");
 async function boletimTexto(db: any, i: any, co: any, hoje: string, barbers: any[], entries: any[]) {
@@ -126,10 +156,15 @@ Deno.serve(async (req) => {
     return json({ pedidos: [] });
   }
   // Lembretes no WhatsApp: dados do dia de quem ligou os lembretes (checklist, agenda e telefones).
+  if (req.method === "GET" && url.searchParams.get("acao") === "mensal") {
+    const cid = String(url.searchParams.get("empresa") || ""), ym = String(url.searchParams.get("ym") || "");
+    if (!/^[0-9a-f-]{36}$/i.test(cid) || !/^\d{4}-\d{2}$/.test(ym)) return json({ erro: "Pedido inválido." }, 400);
+    return json({ ok: true, dados: await dadosDoMes(db, cid, ym) });
+  }
   if (req.method === "GET" && url.searchParams.get("acao") === "lembretes") {
     const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
     const { data: ints, error } = await db.from("integrations")
-      .select("company_id, est_code, api_key, branch_code, fc_agenda, srv_update_req, srv_update_done, bo_on, bo_hour, bo_phone, bo_sent_on, bo_force, ia_report_phone, ac_status, cf_status, ac_on, ac_limit, ac_daily, ac_days, ac_text, pl_on, pl_chat, pl_daily, pl_days, pl_plans, pl_text, cf_on, cf_hour, cf_second, cf_before, cf_text, cf_text2, fv_on, fv_per, fv_daily, fv_lead, fv_days, fv_text, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, fb_reply, fb_pro_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, wb_gift, wb_gift_done, cl_status, cl_status_at, rt_on, rt_daily, rt_lead, rt_text, tt_on, tt_notify, tt_days, upsell, bd_on, bd_text, ia_on, ia_name, ia_model, ia_hours, ia_pause, ia_notes, ia_report_phone, ia_alert_phone, ia_arts, names").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,rt_on.eq.true,tt_on.eq.true,bd_on.eq.true,ia_on.eq.true");
+      .select("company_id, est_code, api_key, branch_code, rm_pedido, fc_agenda, srv_update_req, srv_update_done, bo_on, bo_hour, bo_phone, bo_sent_on, bo_force, ia_report_phone, ac_status, cf_status, ac_on, ac_limit, ac_daily, ac_days, ac_text, pl_on, pl_chat, pl_daily, pl_days, pl_plans, pl_text, cf_on, cf_hour, cf_second, cf_before, cf_text, cf_text2, fv_on, fv_per, fv_daily, fv_lead, fv_days, fv_text, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, fb_reply, fb_pro_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, wb_gift, wb_gift_done, cl_status, cl_status_at, rt_on, rt_daily, rt_lead, rt_text, tt_on, tt_notify, tt_days, upsell, bd_on, bd_text, ia_on, ia_name, ia_model, ia_hours, ia_pause, ia_notes, ia_report_phone, ia_alert_phone, ia_arts, names").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,rt_on.eq.true,tt_on.eq.true,bd_on.eq.true,ia_on.eq.true");
     if (error) return json({ erro: error.message }, 500);
     const empresas = [];
     for (const i of ints || []) {
@@ -211,6 +246,8 @@ Deno.serve(async (req) => {
         pop: (pop || []).map((r) => ({ barberId: r.barber_id, day: r.day, ...(r.data || {}) })),
         entries: (entries || []).map((e) => ({ barberId: e.barber_id, date: e.date, source: e.source, ...(e.data || {}) })),
         memorias,
+        // "Gerar a análise agora" pelo app: rm_pedido = "AAAA-MM@quando" (o "quando" separa um pedido do outro).
+        mensal_pedido: /^\d{4}-\d{2}(@|$)/.test(String(i.rm_pedido || "")) ? String(i.rm_pedido).slice(0, 7) : null, mensal_pedido_em: String(i.rm_pedido || ""),
         // Botão "Atualizar servidor agora" do app (até o servidor responder com a versão).
         atualizar: !!(i.srv_update_req && (!i.srv_update_done || i.srv_update_done < i.srv_update_req) && Date.now() - new Date(i.srv_update_req).getTime() < 30 * 60000),
         // Boletim do dono: pronto a partir do horário escolhido, uma vez por dia (o servidor manda e avisa bo_enviado).
@@ -288,6 +325,15 @@ Deno.serve(async (req) => {
       if (!chave) return json({ erro: "Chave inválida." }, 400);
       const notas = (Array.isArray(b.notas) ? b.notas : []).slice(-10).map((n: any) => ({ t: String(n && n.t || "").slice(0, 120), em: String(n && n.em || "").slice(0, 10) })).filter((n: any) => n.t);
       const { error } = await db.from("ia_memorias").upsert({ company_id: b.company_id, chave, nome: String(b.nome || "").slice(0, 60), fone4: String(b.fone4 || "").replace(/\D/g, "").slice(-4), notas, atualizado: new Date().toISOString() }, { onConflict: "company_id,chave" });
+      return error ? json({ erro: error.message }, 500) : json({ ok: true });
+    }
+    if (b.acao === "relatorio_mensal") {
+      const ym = String(b.ym || "");
+      if (!/^\d{4}-\d{2}$/.test(ym)) return json({ erro: "Mês inválido." }, 400);
+      if (b.erro) { await db.from("integrations").update({ rm_pedido: null, rm_status: "erro: " + String(b.erro).slice(0, 200), rm_status_at: new Date().toISOString() }).eq("company_id", b.company_id); return json({ ok: true }); }
+      if (JSON.stringify(b.analise || {}).length > 40000) return json({ erro: "Relatório grande demais." }, 400);
+      const { error } = await db.from("ia_relatorios").upsert({ company_id: b.company_id, ym, dados: b.dados || {}, analise: b.analise || {}, criado_em: new Date().toISOString() }, { onConflict: "company_id,ym" });
+      await db.from("integrations").update({ rm_pedido: null, rm_status: "ok: análise de " + ym + " pronta", rm_status_at: new Date().toISOString() }).eq("company_id", b.company_id);
       return error ? json({ erro: error.message }, 500) : json({ ok: true });
     }
     if (b.acao === "previsao") {

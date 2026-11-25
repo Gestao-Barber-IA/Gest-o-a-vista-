@@ -3232,3 +3232,18 @@ html[data-theme="light"] .res-page { --cf-ok: #1f9d55; --cf-rem: #2a78d6; --cf-c
 .ac-p i { display: block; height: 8px; border-radius: 99px; background: linear-gradient(90deg, var(--money, #52d37e) var(--p), var(--surface-2) var(--p)); }
 .ac-p.baixa i { background: linear-gradient(90deg, #e58a3a var(--p), var(--surface-2) var(--p)); }
 .ac-p small { text-align: right; color: var(--muted); }
+
+/* Relatório mensal: análise e plano de ação */
+.rm-resumo { font-size: 1.02rem; line-height: 1.55; margin: 4px 0 14px; }
+.rm-duo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.rm-box { border-radius: var(--radius-sm); padding: 12px 14px; background: var(--surface-2); border-top: 3px solid var(--c); }
+.rm-box.ok { --c: var(--money, #52d37e); } .rm-box.at { --c: #e58a3a; }
+.rm-box h3 { display: flex; align-items: center; gap: 6px; font-size: .95rem; margin: 0 0 6px; } .rm-box h3 svg { width: 16px; height: 16px; color: var(--c); }
+.rm-box ul, .rm-equipe { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: .9rem; }
+.rm-acoes { margin: 0; padding-left: 22px; display: grid; gap: 10px; }
+.rm-acoes li { display: grid; gap: 2px; } .rm-acoes small { color: var(--muted); } .rm-acoes small span { font-weight: 600; color: var(--fg); }
+.rm-card .res-sub svg { width: 16px; height: 16px; vertical-align: -3px; color: var(--accent); }
+@media (max-width: 640px) { .rm-duo { grid-template-columns: 1fr; } }
+@media print { .rm-card .btn-row { display: none; } }
+.rm-acoes { list-style: decimal; } .rm-acoes li::marker { font-weight: 700; color: var(--accent); }
+.rm-equipe { list-style: disc; }

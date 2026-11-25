@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "7.5";
+export const SOFIA_VERSAO = "7.6";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -760,6 +760,34 @@ export async function rodada({ client, modelo, sistema, conv, ctx, maxPassos = 8
   return { texto: "Deixa eu chamar alguém da equipe pra te ajudar melhor, só um instante 😊", gasto };
 }
 
+// ---------- relatório mensal (análise e plano de ação) ----------
+const MENSAL_SCHEMA = { type: "object", additionalProperties: false, required: ["resumo", "melhorou", "atencao", "acoes", "profissionais"], properties: {
+  resumo: { type: "string", description: "3 a 5 frases: como foi o mês, com os números principais e a comparação com o mês anterior e a meta" },
+  melhorou: { type: "array", description: "Até 4 pontos que melhoraram (com número)", items: { type: "string" } },
+  atencao: { type: "array", description: "Até 4 pontos que pioraram ou preocupam (com número)", items: { type: "string" } },
+  acoes: { type: "array", description: "Exatamente 3 ações concretas para o mês que começa, da mais importante para a menos", items: { type: "object", additionalProperties: false, required: ["acao", "porque", "como"],
+    properties: { acao: { type: "string", description: "Uma frase no imperativo" }, porque: { type: "string", description: "O número que justifica" }, como: { type: "string", description: "Como fazer no dia a dia ou no sistema (qual recurso usar)" } } } },
+  profissionais: { type: "array", description: "Uma linha por profissional com movimento: destaque ou ponto de atenção", items: { type: "object", additionalProperties: false, required: ["nome", "comentario"], properties: { nome: { type: "string" }, comentario: { type: "string" } } } } } };
+export async function gerarRelatorioMensal({ client, modelo, dados, sumidos = [], nome = "Sofia" }) {
+  const r = await client.messages.create({
+    model: modelo, max_tokens: 16000, output_config: { effort: "medium", format: { type: "json_schema", schema: MENSAL_SCHEMA } },
+    system: `Você é um consultor de gestão de barbearias. Escreva em português do Brasil, simples e direto, para o dono da ${dados.barbearia}, a análise do mês ${dados.mes} e um plano de ação.
+- Use só os números recebidos; não invente dado. Compare com o mês anterior (${dados.mes_anterior}) e com a meta, quando houver. Valores em reais sem centavos.
+- Faturamento e clientes vêm dos lançamentos do sistema; "atendente" são os números da atendente IA (${nome}) e das automações (convites de retorno, reconquista, vagas, agenda cheia, confirmação de presença, totem, planos).
+- As 3 ações precisam ser práticas e ligadas aos números (ex.: profissional com ticket baixo → oferecer adicionais; muitos clientes sumidos → reforçar o Retorno no tempo certo e a Reconquista; ocupação baixa → Agenda cheia automática; faltas → Confirmação de presença; poucos planos → Venda de planos).
+- Profissionais: seja justo e construtivo, um comentário curto por pessoa; não exponha ninguém de forma humilhante.`,
+    messages: [{ role: "user", content: `Números do mês e do anterior:\n${JSON.stringify(dados)}\n\nClientes frequentes que sumiram (passaram muito do ritmo de costume): ${sumidos.length} no total. Exemplos: ${JSON.stringify(sumidos.slice(0, 8))}` }],
+  });
+  if (r.stop_reason === "refusal") throw new Error("a IA recusou gerar o relatório");
+  return JSON.parse(r.content.filter((b) => b.type === "text").map((b) => b.text).join(""));
+}
+export function clientesSumidos(dir, hoje = hojeSP()) {
+  let h; try { h = JSON.parse(readFileSync(join(dir, "retorno-historico.json"), "utf8")); } catch { return []; }
+  const out = [];
+  for (const cl of Object.values((h && h.cli) || {})) { const a = analisarCliente(cl.v, hoje); if (!a) continue;
+    if (a.dias > Math.max(2 * a.media, a.media + 21) && a.dias <= 150) out.push({ cliente: primeiroNome(cl.n), profissional: primeiroNome(a.prof), vinha_a_cada_dias: a.media, sem_vir_ha_dias: a.dias, visitas: a.visitas }); }
+  return out.sort((x, y) => y.visitas - x.visitas);
+}
 // ---------- relatório semanal ----------
 const RELATORIO_SCHEMA = { type: "object", additionalProperties: false, required: ["resumo", "motivos", "sugestoes"], properties: {
   resumo: { type: "string", description: "2 a 4 frases sobre como foi a semana da atendente, para o dono da barbearia" },
@@ -1041,7 +1069,7 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
   async function configurar(e) {
     if (!e || !e.sofia || !e.appbarber) { cfg = null; return; }
     const novo = { company_id: e.company_id, barbearia: e.nome, brand: e.brand, nome: e.sofia.nome || "Sofia", modelo: MODELOS.includes(e.sofia.modelo) ? e.sofia.modelo : MODELO_PADRAO,
-      janelas: e.sofia.janelas || JANELAS_PADRAO, horario: e.horario || null, artes: Array.isArray(e.sofia.artes) ? e.sofia.artes.filter((a) => a && a.url && a.nome) : [], avisar: so(e.sofia.avisar || ""), alerta: so(e.sofia.alerta || ""), equipe: Array.isArray(e.barbers) ? e.barbers : [], nomesAB: (e.sofia && e.sofia.nomes) || {}, pausaMin: Math.max(15, Math.min(1440, Number(e.sofia.pausa) || 60)), parabens: (e.feedback && e.feedback.parabens) || "", aniversario: (e.aniversario && e.aniversario.texto) || "", planos: e.planos || null, notas: e.sofia.notas || "", upsell: Array.isArray(e.sofia.upsell) ? e.sofia.upsell : [], ab: e.appbarber };
+      janelas: e.sofia.janelas || JANELAS_PADRAO, horario: e.horario || null, artes: Array.isArray(e.sofia.artes) ? e.sofia.artes.filter((a) => a && a.url && a.nome) : [], avisar: so(e.sofia.avisar || ""), alerta: so(e.sofia.alerta || ""), equipe: Array.isArray(e.barbers) ? e.barbers : [], nomesAB: (e.sofia && e.sofia.nomes) || {}, pausaMin: Math.max(15, Math.min(1440, Number(e.sofia.pausa) || 60)), parabens: (e.feedback && e.feedback.parabens) || "", aniversario: (e.aniversario && e.aniversario.texto) || "", mensalPedido: e.mensal_pedido || null, mensalPedidoEm: e.mensal_pedido_em || "", planos: e.planos || null, notas: e.sofia.notas || "", upsell: Array.isArray(e.sofia.upsell) ? e.sofia.upsell : [], ab: e.appbarber };
     cfg = novo;
     aplicarMemoriasDoApp(e.memorias);
     if (abKey !== e.appbarber.appbarber_api_key + e.appbarber.codigo_estabelecimento) {
@@ -1059,6 +1087,7 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
       if (Date.now() - c.ultima > 6 * 3600000 && !c.ocupado && !c.noturna) conversas.delete(j);
     }
     await relatorioDaSemana().catch((err) => log("Sofia: relatório semanal: " + err.message));
+    await relatorioDoMes().catch((err) => { log("Sofia: relatório mensal: " + err.message); });
     for (const [j, t] of pausas) if (t < Date.now()) pausas.delete(j);
     // Conexão caiu ou voltou: atualiza o status na hora; senão, a cada 30 minutos.
     const con = !!conectado(); if (con !== ultimaCon) { ultimaCon = con; statusEm = 0; }
@@ -1083,6 +1112,35 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
     const lista = lerJ(REG, []).filter((r) => r.em >= lim && r.id !== c.regId);
     lista.push({ id: c.regId, em: carimbo(c.inicio || c.ultima), fone4: c.fone ? c.fone.slice(-4) : "", resultado, motivo: c.motivo || "", feitos, semVaga, custo: Math.round((c.gasto || 0) * 10000) / 10000, texto: resultado === "resolvida" && !semVaga ? "" : texto });
     try { writeFileSync(REG, JSON.stringify(lista)); } catch (e) { log("Sofia: não gravei o registro: " + e.message); }
+  }
+  // Relatório mensal: no dia 1º (a partir das 9h, até o dia 3) analisa o mês anterior; ou na hora, pelo botão do app.
+  const MENSAL = join(dir, "sofia-mensal.json");
+  async function relatorioDoMes() {
+    if (!cfg || !client) return;
+    const hoje = hojeSP(), est = lerJ(MENSAL, {}), [y, m] = hoje.split("-").map(Number);
+    const anterior = new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 7);
+    let ym = null;
+    if (cfg.mensalPedido && est.pedido !== cfg.mensalPedido + "|" + (cfg.mensalPedidoEm || "")) ym = cfg.mensalPedido;
+    else if (Number(hoje.slice(8, 10)) <= 3 && agoraSP() >= 9 * 60 && est.ultimo !== anterior) ym = anterior;
+    if (!ym) return;
+    if (ym === cfg.mensalPedido) est.pedido = cfg.mensalPedido + "|" + (cfg.mensalPedidoEm || ""); else est.ultimo = ym;
+    writeFileSync(MENSAL, JSON.stringify(est));
+    try {
+      const { dados } = await api("GET", null, `?acao=mensal&empresa=${encodeURIComponent(cfg.company_id)}&ym=${ym}`);
+      const sumidos = clientesSumidos(dir, hoje);
+      const analise = await gerarRelatorioMensal({ client, modelo: cfg.modelo, dados, sumidos, nome: cfg.nome });
+      analise.sumidos = sumidos.length;
+      await api("POST", { company_id: cfg.company_id, acao: "relatorio_mensal", ym, dados, analise });
+      log(`Sofia: análise do mês ${ym} pronta.`);
+      if (cfg.avisar && sock()) {
+        const mes = new Date(ym + "-15T12:00:00Z").toLocaleDateString("pt-BR", { month: "long", timeZone: "UTC" });
+        const msg = [`🧭 *Análise de ${mes}* · ${cfg.barbearia}`, "", analise.resumo, ...(analise.melhorou.length ? ["", "✅ *Melhorou*", ...analise.melhorou.map((x) => "• " + x)] : []),
+          ...(analise.atencao.length ? ["", "⚠️ *Atenção*", ...analise.atencao.map((x) => "• " + x)] : []), "", "🎯 *3 ações para este mês*", ...analise.acoes.slice(0, 3).map((a, i) => `${i + 1}. *${a.acao}* — ${a.como}`), "", "Completo no app: Relatórios mensais."].join("\n");
+        const d = so(cfg.avisar), cand = d.length <= 11 ? "55" + d : d;
+        try { const [w] = await sock().onWhatsApp(cand); if (!w || !w.exists) throw new Error("número sem WhatsApp"); const r = await sock().sendMessage(w.jid, { text: msg }); marcarMinha(r && r.key && r.key.id); }
+        catch (e) { log("Sofia: não mandei a análise do mês no WhatsApp: " + e.message); }
+      }
+    } catch (err) { await api("POST", { company_id: cfg.company_id, acao: "relatorio_mensal", ym, erro: err.message }).catch(() => {}); throw err; }
   }
   async function relatorioDaSemana(forcar = false) {
     const hoje = hojeSP(), est = lerJ(REL, {});

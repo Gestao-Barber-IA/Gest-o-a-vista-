@@ -6947,6 +6947,36 @@ Content-Type: application/json</pre>
       <div class="cd-list">${cardsFor(sel)}</div>
     </section>`;
   }
+  // Relatório mensal: análise com IA e plano de ação (o servidor gera no dia 1º; o dono também pode pedir na hora).
+  function rmDemo(ym) {
+    return { ym, criado_em: new Date().toISOString(), analise: { resumo: 'O mês fechou com faturamento 5% maior que o anterior e ticket médio subindo para R$ 71. A meta da casa ainda ficou 12% abaixo, puxada pela queda de clientes no começo do mês. A atendente IA e as automações trouxeram 214 agendamentos (R$ 15,8 mil), com 86% de comparecimento.',
+      melhorou: ['Ticket médio subiu de R$ 68 para R$ 71', 'Agenda cheia automática preencheu 23 horários ociosos (R$ 1.380)', 'Faltas caíram: 70% dos pedidos de confirmação foram confirmados'],
+      atencao: ['Clientes atendidos caíram 4% (810 contra 845)', '38 clientes frequentes passaram muito do ritmo de costume', 'Terças e quartas seguem com ocupação abaixo de 50%'],
+      acoes: [{ acao: 'Reconquiste os 38 clientes frequentes que sumiram', porque: 'são clientes de alto valor, vinham a cada 2 a 3 semanas', como: 'Ligue a Reconquista com 10 convites por dia e confira a lista em Retorno no tempo certo.' },
+        { acao: 'Encha as terças e quartas', porque: 'ocupação média de 46% nesses dias', como: 'Suba o limite da Agenda cheia automática para 70% e divulgue a promoção de segunda a quarta.' },
+        { acao: 'Venda mais adicionais no balcão e na atendente', porque: 'só 6% dos agendamentos tiveram adicional', como: 'Revise as Ofertas no final do agendamento e combine com a equipe oferecer hidratação na barba.' }],
+      profissionais: (state.barbers || []).filter(b => b.active !== false).slice(0, 4).map((b, i) => ({ nome: b.name, comentario: ['Maior faturamento do mês e ticket acima da média.', 'Cresceu 12% em clientes; bom momento para oferecer planos.', 'Ocupação abaixo da equipe nas terças: priorizar convites para ele.', 'Ótima fidelização de clientes novos.'][i] })), sumidos: 38 } };
+  }
+  function rmSecao(ym) {
+    if (!isGestor(currentUser())) return '';
+    const r = ui.rm = ui.rm || {};
+    if (!(ym in r)) {
+      r[ym] = null;
+      if (!Cloud.enabled) r[ym] = ym < curYm() ? rmDemo(ym) : false;
+      else Cloud.iaRelatorio(ym).then(x => { r[ym] = x || false; render(); }).catch(() => { r[ym] = false; render(); });
+    }
+    const it = (Cloud.enabled ? ui.integ : state.integ) || {}, x = r[ym], pedido = String(it.rm_pedido || '').startsWith(ym);
+    const botao = ym < curYm() && Cloud.enabled ? `<button type="button" class="btn btn-sm" data-action="rmGerar" data-ym="${ym}" ${pedido ? 'disabled' : ''}>${icon('sparkle')} ${pedido ? 'Gerando… (1 a 3 minutos)' : x ? 'Gerar de novo' : 'Gerar a análise agora'}</button>` : '';
+    const topo = `<section class="section card rm-card"><h2 class="section-title">${icon('sparkle')} Análise do mês e plano de ação</h2>`;
+    if (x === null) return topo + '<p class="muted">Carregando…</p></section>';
+    if (!x) return topo + `<p class="section-note">${ym >= curYm() ? 'A análise deste mês sai no dia 1º do mês que vem, no seu WhatsApp e aqui.' : `Ainda não há análise de ${esc(monthRange(ym).label)}.`} Ela é feita pela IA com os números do mês (faturamento, clientes, equipe, atendente IA e automações) e traz 3 ações concretas para o mês seguinte.</p>${/^erro/.test(String(it.rm_status || '')) ? `<p class="form-msg err">${esc(String(it.rm_status).replace(/^erro: /, 'Não deu certo da última vez: '))}</p>` : ''}<div class="btn-row">${botao}</div></section>`;
+    const a = x.analise || {}, li = l => (l || []).map(t => `<li>${esc(t)}</li>`).join('');
+    return topo + `<p class="rm-resumo">${esc(a.resumo || '')}</p>
+      <div class="rm-duo">${(a.melhorou || []).length ? `<div class="rm-box ok"><h3>${icon('check')} Melhorou</h3><ul>${li(a.melhorou)}</ul></div>` : ''}${(a.atencao || []).length ? `<div class="rm-box at"><h3>${icon('alert')} Atenção</h3><ul>${li(a.atencao)}</ul></div>` : ''}</div>
+      ${(a.acoes || []).length ? `<h3 class="res-sub">${icon('target')} 3 ações para o mês seguinte</h3><ol class="rm-acoes">${a.acoes.slice(0, 3).map(c => `<li><b>${esc(c.acao)}</b><small><span>Por quê:</span> ${esc(c.porque)}</small><small><span>Como:</span> ${esc(c.como)}</small></li>`).join('')}</ol>` : ''}
+      ${(a.profissionais || []).length ? `<h3 class="res-sub">${icon('users')} Equipe</h3><ul class="rm-equipe">${a.profissionais.map(p => `<li><b>${esc(p.nome)}</b> ${esc(p.comentario)}</li>`).join('')}</ul>` : ''}
+      <p class="section-note">Gerada ${new Date(x.criado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} pela IA, com os números do sistema.${Cloud.enabled ? '' : ' <b>Demonstração:</b> exemplo.'}</p><div class="btn-row">${botao}</div></section>`;
+  }
   function pageRelatorios(user) {
     if (!isGestor(user)) return pageMeusCards(user);
     if (ui.repYm) {
@@ -6957,6 +6987,7 @@ Content-Type: application/json</pre>
           <button class="btn btn-sm btn-primary" data-action="repPrint">${icon('download')} Baixar PDF</button>
           ${state.company.logo ? '' : `<p class="rp-hint">${icon('upload')}<span>Para o painel sair com o logo da sua empresa, envie o logo em <a href="#empresa">Configurações → Empresa</a>.</span></p>`}
         </div>
+        ${rmSecao(ym)}
         ${(() => { const R = monthR(ym), t = R.title, w = t.barberId && R.rows.find(r => r.barber.id === t.barberId);
           if (!R.rows.some(r => Object.keys(r.sums.n).length)) return '';
           const nm = t.type === 'mvp' ? 'MVP do mês' : 'Destaque do mês';
@@ -8646,6 +8677,13 @@ Content-Type: application/json</pre>
     },
     hgEdit() { ui.hgEdit = !ui.hgEdit; ui.hgYm = null; render(); if (ui.hgEdit) setTimeout(() => { const f = $('#hg-fat'); if (f) { f.focus(); f.scrollIntoView({ block: 'center' }); } }, 50); },
     cfgTab(el) { ui.cfgTab = el.dataset.t; ui.intSec = ''; ui.confirm = null; render(); },
+    rmGerar(el) {
+      const ym = el.dataset.ym;
+      Cloud.integ.save({ rm_pedido: ym + '@' + new Date().toISOString() }).then(r => { ui.integ = r || ui.integ; toast('A análise sai em 1 a 3 minutos, aqui e no seu WhatsApp.'); render();
+        const confere = (n) => setTimeout(() => Promise.all([Cloud.integ.get(), Cloud.iaRelatorio(ym)]).then(([i, x]) => { ui.integ = i || ui.integ; if (x) (ui.rm = ui.rm || {})[ym] = x; render(); if (String((i || {}).rm_pedido || '').startsWith(ym) && n < 12) confere(n + 1); }).catch(() => {}), 20000);
+        confere(0); })
+        .catch(e => { const m = Cloud.message(e); toast(/rm_|column|schema cache/i.test(m) ? 'A análise ainda está sendo ativada no servidor.' : m); });
+    },
     srvAtualizar() {
       Cloud.integ.save({ srv_update_req: new Date().toISOString() }).then(r => { ui.integ = r || ui.integ; toast('Pedido enviado: o servidor atualiza em 1 a 2 minutos.'); render(); })
         .catch(e => { const m = Cloud.message(e); toast(/srv_|column|schema cache/i.test(m) ? 'O botão ainda está sendo ativado no servidor.' : m); });
