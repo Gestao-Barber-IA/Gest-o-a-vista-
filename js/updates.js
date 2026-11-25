@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-25-feedback-novo-profissional', date: '2026-11-25', title: 'Pedido de feedback também na 1ª vez com o profissional', items: [
+    ['melhoria', 'O pedido de feedback agora vai também para o cliente da casa que foi atendido pela primeira vez por aquele profissional (nos últimos 6 meses), além dos clientes novos na barbearia. A pergunta é sobre o atendimento desse profissional.'],
+  ] },
   { id: '2026-11-25-indicacao', date: '2026-11-25', title: 'Indicação premiada', items: [
     ['novo', 'Em Integração & API › Indicação premiada: no dia seguinte a uma visita, o cliente fiel recebe um código próprio para indicar amigos. O amigo novo fala o código com a atendente IA e ganha o benefício na primeira visita; quando ele vem, quem indicou recebe o prêmio no WhatsApp e aparece na lista de prêmios a entregar. No Resultado da atendente IA aparece a nova seção Indicação premiada.'],
   ] },

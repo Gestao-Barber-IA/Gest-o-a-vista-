@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSAO = "3.3";
+const VERSAO = "3.4";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const TESTE = process.argv.includes("--teste");
 const CARGA = process.argv.includes("--carga"); // carga inicial: lê todas as comandas no ritmo máximo permitido
@@ -485,7 +485,8 @@ async function main() {
   }
   if (CARGA) { try { writeFileSync(LOCK, "0"); } catch { /* opcional */ } }
   if (lidas) salvarCache(cache);
-  // Pedido de feedback (WhatsApp): comanda PAGA hoje de cliente NOVO (sem visita nos 180 dias anteriores) entra na fila,
+  // Pedido de feedback (WhatsApp): comanda PAGA hoje de cliente NOVO (sem visita nos 180 dias anteriores) ou de cliente da
+  // casa atendido pela 1ª vez por esse profissional (nos 180 dias) entra na fila,
   // que o serviço de WhatsApp lê. Fica só neste servidor, com o primeiro nome e o telefone, e sai em 2 dias.
   if (cfg.feedback && !TESTE) {
     const FILA = join(DIR, "feedback-fila.json"), hj = iso(hoje), desde = somaDias(hj, -RET_LB);
@@ -497,14 +498,16 @@ async function main() {
       const inv = Number(a.invoice_code) > 0 ? String(a.invoice_code) : "", c = idCli(a), fone = String(a.client_phone || "").replace(/\D/g, "");
       if (!inv || dia(a.scheduling_start) !== hj || !cache[inv] || !cache[inv].pago || cache[inv].pl || fila.vistos.includes(inv) || fone.length < 10 || !c) continue;
       fila.vistos.push(inv);
-      const jaVeio = Object.entries(vis.v).some(([d, l]) => d < hj && d >= desde && l.some((e) => e[1] === c));
-      if (jaVeio) continue;
+      const prof = String(a.employee_name || "").trim().toLowerCase();
+      let jaVeio = false, jaComEle = false;
+      for (const [d, l] of Object.entries(vis.v)) { if (d >= hj || d < desde) continue; for (const e of l) if (e[1] === c) { jaVeio = true; if (String(e[0] || "").trim().toLowerCase() === prof) jaComEle = true; } }
+      if (jaComEle) continue; // já tinha sido atendido por esse profissional
       const prim = (n) => { const w = String(n || "").trim().split(/\s+/)[0] || ""; return w ? w[0].toUpperCase() + w.slice(1).toLowerCase() : ""; };
-      fila.itens.push({ cod: inv, fone, nome: prim(a.client_name), prof: prim(NOMES[String(a.employee_name || "").trim()] || a.employee_name), em: Date.now(), dia: hj });
+      fila.itens.push({ cod: inv, fone, nome: prim(a.client_name), prof: prim(NOMES[String(a.employee_name || "").trim()] || a.employee_name), em: Date.now(), dia: hj, tipo: jaVeio ? "novo_profissional" : "novo" });
       novos++;
     }
     try { writeFileSync(FILA, JSON.stringify(fila), { mode: 0o600 }); } catch { /* opcional */ }
-    if (novos) log(`Feedback: ${novos} cliente(s) novo(s) com comanda paga entraram na fila do WhatsApp.`);
+    if (novos) log(`Feedback: ${novos} cliente(s) novo(s) (na casa ou com o profissional) com comanda paga entraram na fila do WhatsApp.`);
   }
   const pend = faltam.length - lidas;
   if (lidas || pend) log(`Comandas: ${lidas} lidas agora${pend > 0 ? `, ${pend} ficam para as próximas sincronizações` : ""}${parou ? ` (parou: ${parou})` : ""}.`);

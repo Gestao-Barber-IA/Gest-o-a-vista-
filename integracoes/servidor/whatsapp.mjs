@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "9.8";
+const VERSAO = "9.9";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -337,7 +337,7 @@ async function feedbacks(e, hoje) {
       const fb = e.feedback;
       if (fb.resposta && sofia && sofia.conviteEnviado && env1) {
         const resp = fb.resposta.replace(/\{cliente\}/g, x.nome || "").replace(/\{profissional\}/g, x.prof || "").replace(/\s+!/g, "!").replace(/\(\s*\)/g, "").trim();
-        sofia.conviteEnviado(env1.jid, env1.id, { fone: so(x.fone).length <= 11 ? "55" + so(x.fone) : so(x.fone), nome: x.nome || "", texto, horas: 24, origem: "feedback", tipo: `pedido de feedback do atendimento de ${x.prof || "um profissional"}`,
+        sofia.conviteEnviado(env1.jid, env1.id, { fone: so(x.fone).length <= 11 ? "55" + so(x.fone) : so(x.fone), nome: x.nome || "", texto, horas: 24, origem: "feedback", tipo: `pedido de feedback do atendimento de ${x.prof || "um profissional"}${x.tipo === "novo_profissional" ? " (o cliente já é da casa, mas foi a 1ª vez com esse profissional)" : " (cliente novo na barbearia)"}`,
           detalhe: `[Se o cliente responder com um elogio ou avaliação boa do atendimento (ex.: "muito boa", "excelente", "top", "gostei", 👍), responda exatamente com esta mensagem, sem mudar o conteúdo:\n${resp}\nE use parabenizar_profissional com o profissional "${x.prof || ""}" e as palavras do cliente. Se for crítica ou reclamação, agradeça a sinceridade, peça desculpas e use chamar_recepcao (não parabenize o profissional). Se for só uma resposta neutra, agradeça em uma frase.]` });
       }
     }
