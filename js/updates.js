@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-25-boletim', date: '2026-11-25', title: 'Boletim do dono no WhatsApp', items: [
+    ['novo', 'Em Integração & API › Boletim do dono: todo dia, no horário escolhido, você recebe no WhatsApp o resumo do dia: faturamento e por profissional, o que a atendente IA fez, confirmações de presença, vagas preenchidas, agenda cheia, planos e a ocupação de amanhã.'],
+  ] },
   { id: '2026-11-25-agenda-cheia', date: '2026-11-25', title: 'Agenda cheia automática', items: [
     ['novo', 'Em Integração & API › Agenda cheia automática: todo dia o sistema mede a ocupação de cada profissional no próximo dia aberto. Quem estiver abaixo do limite (padrão 60%) recebe convites para os clientes dele que estão perto do prazo de voltar, no horário livre mais perto do que cada um costuma vir. A atendente IA responde e marca.'],
     ['novo', 'O cartão mostra a ocupação de cada profissional, e no Resultado da atendente IA aparece a nova origem "Agenda cheia".'],

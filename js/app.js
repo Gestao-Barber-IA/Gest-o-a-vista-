@@ -4097,6 +4097,7 @@ ${rows.length ? '' : emptyBarbers()}
     ['ia', 'Atendente IA (Sofia)', 'chat', 'Responde e agenda pelo WhatsApp da barbearia', () => iaCard(), 'whats', it => intSt(it.ia_on, it.ia_status)],
     ['clientes', 'Lembrete de agendamento', 'bell', 'Aviso do horário para o cliente no WhatsApp', () => clRemindCard(), 'whats', it => intSt(it.cl_on, it.cl_status)],
     ['confirmacao', 'Confirmação de presença', 'checksq', 'Pedido na véspera para evitar faltas', () => cfCard(), 'whats', it => intSt(it.cf_on, it.cf_status)],
+    ['boletim', 'Boletim do dono', 'chart', 'Resumo do dia no seu WhatsApp', () => boCard(), 'whats', it => it.bo_on ? (/^erro/.test(String(it.bo_status || '')) ? ['Com erro', 'chip-bad'] : ['Ligado', 'chip-ok']) : ['Desligado', '']],
     ['memoria', 'Memória dos clientes', 'idcard', 'O de sempre e as preferências de cada cliente', () => memCard(), 'whats'],
     ['equipe', 'Lembretes para a equipe', 'users', 'Checklist do dia no WhatsApp de cada profissional', () => waRemindCard(), 'whats', it => intSt(it.wa_on, it.wa_status)],
     ['totem', 'Totem de autoatendimento', 'monitor', 'Check-in e agendamento num tablet na recepção', () => ttCard(), 'recepcao', it => intSt(it.tt_on, it.tt_status)],
@@ -4391,6 +4392,32 @@ Content-Type: application/json</pre>
   const RT_TEXT = ['{Saudacao}, {cliente}! 😊 Sua próxima visita está chegando. Separei *{dia} às {hora}* com {profissional}, do jeito que você costuma vir.\nQuer que eu reserve pra você?',
     '{Saudacao}, {cliente}! Tudo bem? 😊 Já está chegando a hora de dar aquele trato no visual ✂️\n{profissional} tem horário *{dia} às {hora}*, como você costuma vir. Posso reservar pra você?',
     '{Saudacao}, {cliente}! 💈 Pensando na sua próxima visita, separei um horário com {profissional}: *{dia} às {hora}*, como de costume.\nQuer que eu deixe reservado pra você?'].join('\n---\n');
+  // Boletim do dono: resumo do dia no WhatsApp do dono, no horário escolhido (montado no Supabase, enviado pelo servidor).
+  const BO_EXEMPLO = '📊 *Boletim de hoje* (quarta, 25/11) · {barbearia}\n💰 Faturamento: *R$ 2.080* · 31 clientes · ticket R$ 67\n🏆 Carlos R$ 850 · Igor R$ 640 · Lucas R$ 590\n🤖 *Atendente IA*: 34 conversas · 9 agendamentos (R$ 610) · 2 adicional(is) (R$ 30) · 3 para a recepção · custo ≈ R$ 2,10\n✅ *Confirmação de presença*: 18 pedidos · 11 confirmaram · 2 remarcaram · 1 cancelaram (vaga liberada)\n⚡ Vagas preenchidas: 3 convites, 1 agendado (R$ 50)\n📅 Agenda cheia: 6 convites, 2 agendados (R$ 95)\n💎 *Planos*: 2 convites · 1 fechado (R$ 270/mês)\n🔮 *Ocupação amanhã*: Carlos 45%, Igor 80%, Lucas 62%\n\nDetalhes no app: Resultado da atendente IA.';
+  function boCard() {
+    if (!isGestor(currentUser())) return '';
+    const it = Cloud.enabled ? ui.integ : (state.integ || {});
+    if (!it || it.erro) return '';
+    const st = String(it.bo_status || ''), on = !!it.bo_on, bad = /^erro/.test(st), hora = /^\d{2}:\d{2}$/.test(it.bo_hour || '') ? it.bo_hour : '20:30';
+    const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const semZap = !it.cl_on && !it.ia_on && !it.rt_on && !it.fv_on && !it.cf_on;
+    return `<section class="section card as-card">
+      <h2 class="section-title">${icon('chart')} Boletim do dono</h2>
+      <p class="section-note">Todo dia, no horário escolhido, você recebe no WhatsApp um resumo curto: o <b>faturamento</b> lançado no dia e por profissional, o que a ${iaNome()} fez (conversas, agendamentos, adicionais, custo), as <b>confirmações de presença</b>, as <b>vagas preenchidas</b>, a <b>agenda cheia</b>, os <b>planos</b> e a <b>ocupação de amanhã</b>. Só aparecem as linhas que tiveram movimento.</p>
+      <p class="section-note">${icon('alert')} Sai pelo WhatsApp que fala com os clientes (o servidor precisa estar conectado). O faturamento é o que já entrou no sistema até o horário do envio (sincronização da AppBarber ou lançamentos).</p>
+      ${semZap ? `<p class="section-note">${icon('alert')} Ligue antes a atendente IA ou algum lembrete para clientes: o boletim sai pelo mesmo WhatsApp.</p>` : ''}
+      <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.bo_status_at ? when(it.bo_status_at) + ' · ' : ''}${esc(st.replace(/^(ok|erro): /, ''))}</small>` : `<span class="chip">Ligado</span> <small class="muted">o primeiro sai hoje às ${esc(hora)}</small>`}</div>
+      <form class="form" data-form="boSave" novalidate>
+        <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''}><span><b>Boletim do dono ligado</b><small>Uma mensagem por dia.</small></span></label>
+        <div class="grid-2">
+          <label class="field"><span>Horário do envio</span><input class="input" type="time" name="hora" value="${esc(hora)}"></label>
+          <label class="field"><span>WhatsApp do dono (com DDD)</span><input class="input" type="tel" name="fone" value="${esc(it.bo_phone || '')}" placeholder="${esc(it.ia_report_phone ? 'Vazio = ' + it.ia_report_phone : 'Ex.: 19 99999-9999')}"></label>
+        </div>
+        <details class="wa-prev"><summary>Ver um exemplo</summary><p class="wa-bubble">${esc(BO_EXEMPLO.replace('{barbearia}', state.company.name || '')).replace(/\n/g, '<br>')}</p></details>
+        <p class="form-msg" data-msg></p>
+        <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button>${on && Cloud.enabled ? `<button class="btn" type="button" data-action="boDeNovo">${icon('upload')} Mandar o de hoje agora</button>` : ''}</div>
+      </form></section>`;
+  }
   // Agenda cheia automática: horário ocioso de amanhã vira convite para os clientes do profissional.
   const AC_TEXT = ['{Saudacao}, {cliente}! Tudo bem? 😊\n{profissional} tem um horário *{dia} às {hora}*, bem no seu jeito de vir. Já está chegando a hora do seu próximo {servico}.\nQuer que eu reserve pra você?',
     '{Saudacao}, {cliente}! 😊\nSeparei um horário com {profissional} *{dia} às {hora}*, perto do horário que você costuma vir.\nPosso deixar reservado pra você?'].join('\n---\n');
@@ -8578,6 +8605,9 @@ Content-Type: application/json</pre>
     },
     hgEdit() { ui.hgEdit = !ui.hgEdit; ui.hgYm = null; render(); if (ui.hgEdit) setTimeout(() => { const f = $('#hg-fat'); if (f) { f.focus(); f.scrollIntoView({ block: 'center' }); } }, 50); },
     cfgTab(el) { ui.cfgTab = el.dataset.t; ui.intSec = ''; ui.confirm = null; render(); },
+    boDeNovo() {
+      Cloud.integ.save({ bo_force: true }).then(r => { ui.integ = r || ui.integ; toast('O boletim de agora sai em até 2 minutos.'); render(); }).catch(e => toast(Cloud.message(e)));
+    },
     memApagar(el) {
       const k = el.dataset.chave;
       if (ui.confirm !== 'mem:' + k) { ui.confirm = 'mem:' + k; return render(); }
@@ -9390,6 +9420,18 @@ Content-Type: application/json</pre>
       const [a, b] = [de, ate].sort();
       if ((fromIso(b) - fromIso(a)) / 86400000 > 366) return setMsg(f, 'Escolha um período de até 1 ano.');
       ui.iaRes = { p: 'per', de: a, ate: b }; render();
+    },
+    boSave(f) {
+      const E = f.elements, hora = E.hora.value || '20:30', fone = (E.fone.value || '').replace(/\D/g, '');
+      if (!/^\d{2}:\d{2}$/.test(hora)) return setMsg(f, 'Escolha o horário do envio.');
+      if (fone && (fone.length < 10 || fone.length > 13)) return setMsg(f, 'WhatsApp do dono: DDD + número.');
+      const cur = (Cloud.enabled ? ui.integ : state.integ) || {};
+      if (E.on.checked && !fone && !String(cur.ia_report_phone || '').replace(/\D/g, '')) return setMsg(f, 'Informe o WhatsApp do dono.');
+      const row = { bo_on: !!E.on.checked, bo_hour: hora, bo_phone: fone };
+      if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Boletim do dono salvo.'); return render(); }
+      setMsg(f, 'Salvando…', true);
+      Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(row.bo_on ? `Boletim ligado: todo dia às ${hora}.` : 'Boletim desligado.'); render(); })
+        .catch(e => { const m = Cloud.message(e); setMsg(f, /bo_|column|schema cache/i.test(m) ? 'O boletim ainda está sendo ativado no servidor.' : m); });
     },
     acSave(f) {
       const E = f.elements, lim = Math.round(Number(E.limite.value) || 0), daily = Math.round(Number(E.daily.value) || 0);

@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "9.1";
+const VERSAO = "9.2";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -51,6 +51,7 @@ async function carregarSofiaMod() {
   try { return await import("./sofia.mjs"); } catch (e) { console.log("Sofia indisponível: " + e.message); return null; }
 }
 const SOFIA = CLI ? await carregarSofiaMod() : null;
+const boletimEm = {};
 let sofia = null, retorno = null, totem = null, vagas = null, confirmacao = null, planos = null, agendaCheia = null;
 
 // ---------- conexão ----------
@@ -569,6 +570,12 @@ async function ciclo() {
     if (ePl && SOFIA && SOFIA.criarPlanos) {
       if (!planos) planos = SOFIA.criarPlanos({ dir: DIR, log, api, sock: () => (aberto ? sock : null), sofia: () => sofia, resultados: SOFIA.resultadosDe ? SOFIA.resultadosDe(DIR, api, log) : null, pode: () => pausadoDia !== hoje });
       await planos.rodar(ePl, hoje).catch((err) => { log(`${ePl.nome}: planos: ${err.message}`); api("POST", { company_id: ePl.company_id, acao: "pl_status", status: "erro: " + err.message }).catch(() => {}); });
+    }
+    // Boletim do dono: a função manda o texto pronto a partir do horário escolhido; envia uma vez e avisa.
+    for (const e of minhas) if (e.boletim && aberto && Date.now() - (boletimEm[e.company_id] || 0) > 5 * 60000) {
+      boletimEm[e.company_id] = Date.now(); // a função só manda de novo depois de bo_enviado (ou do "mandar agora")
+      try { await enviar(e.boletim.fone, e.boletim.texto); await api("POST", { company_id: e.company_id, acao: "bo_enviado", ok: true }); log(`${e.nome}: boletim do dono enviado.`); }
+      catch (err) { log(`${e.nome}: boletim não enviado (${err.message}).`); await api("POST", { company_id: e.company_id, acao: "bo_enviado", ok: false, erro: err.message }).catch(() => {}); }
     }
     // Agenda cheia automática: profissional com pouca ocupação amanhã → convites para os clientes dele no prazo.
     const eAc = minhas.find((e) => e.agendaCheia);
