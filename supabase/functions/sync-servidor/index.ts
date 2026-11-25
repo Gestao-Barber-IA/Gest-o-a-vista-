@@ -32,6 +32,39 @@ const sofiaCfg = (i: any) => ({ nome: String(i.ia_name || "Sofia").slice(0, 40),
   artes: (Array.isArray(i.ia_arts) ? i.ia_arts : []).filter((a: any) => a && a.url && a.nome).slice(0, 6)
     .map((a: any) => ({ nome: String(a.nome).slice(0, 60), url: String(a.url), quando: String(a.quando || "").slice(0, 200), pergunta: String(a.pergunta || "").slice(0, 300), retorno: String(a.retorno || "").slice(0, 300) })) });
 
+// Boletim do dono: texto do resumo do dia (faturamento lançado, atendente IA, confirmações, vagas, agenda cheia, planos).
+const brl = (v: number) => "R$ " + Math.round(v || 0).toLocaleString("pt-BR");
+async function boletimTexto(db: any, i: any, co: any, hoje: string, barbers: any[], entries: any[]) {
+  const nomeB = new Map((barbers || []).map((b: any) => [String(b.id), String(b.name || "").split(" ")[0]]));
+  const porB = new Map<string, number>(); let fat = 0, cli = 0;
+  for (const e of entries || []) { const d = e.data || {}; const f = Number(d.fat) || 0; fat += f; cli += Number(d.cli) || 0; if (f) porB.set(String(e.barber_id), (porB.get(String(e.barber_id)) || 0) + f); }
+  const { data: ev } = await db.from("ia_eventos").select("tipo, origem, valor, dados").eq("company_id", i.company_id).gte("em", hoje + "T00:00:00-03:00").lt("em", hoje + "T23:59:59.999-03:00").limit(5000);
+  const n = (f: (x: any) => boolean) => (ev || []).filter(f).length, soma = (f: (x: any) => boolean) => (ev || []).filter(f).reduce((t: number, x: any) => t + (Number(x.valor) || 0), 0);
+  const ag = (o?: string) => (x: any) => x.tipo === "agendamento" && (!o || x.origem === o);
+  const dt = new Date(hoje + "T12:00:00Z"), dia = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"][dt.getUTCDay()] + ", " + hoje.slice(8, 10) + "/" + hoje.slice(5, 7);
+  const L: string[] = [`📊 *Boletim de hoje* (${dia}) · ${co.name}`];
+  if (fat || cli) L.push(`💰 Faturamento: *${brl(fat)}*${cli ? ` · ${cli} cliente${cli > 1 ? "s" : ""} · ticket ${brl(fat / cli)}` : ""}`);
+  const top = [...porB.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([b, v]) => `${nomeB.get(b) || "?"} ${brl(v)}`);
+  if (top.length) L.push(`🏆 ${top.join(" · ")}`);
+  const conv = n((x) => x.tipo === "conversa"), nAg = n(ag()), custo = soma((x) => x.tipo === "uso") * 5.4;
+  if (conv || nAg) L.push(`🤖 *Atendente IA*: ${conv} conversa${conv === 1 ? "" : "s"} · ${nAg} agendamento${nAg === 1 ? "" : "s"} (${brl(soma(ag()))})${n((x) => x.tipo === "adicional") ? ` · ${n((x) => x.tipo === "adicional")} adicional(is) (${brl(soma((x) => x.tipo === "adicional"))})` : ""}${n((x) => x.tipo === "recepcao") ? ` · ${n((x) => x.tipo === "recepcao")} para a recepção` : ""}${custo >= 0.01 ? ` · custo ≈ R$ ${custo.toFixed(2).replace(".", ",")}` : ""}`);
+  const cfE = n((x) => x.tipo === "confirmacao"), cfOk = n((x) => x.tipo === "confirmado"), cfR = n((x) => x.tipo === "remarcacao" && x.origem === "confirmacao"), cfC = n((x) => x.tipo === "cancelamento" && x.origem === "confirmacao");
+  if (cfE || cfOk) L.push(`✅ *Confirmação de presença*: ${cfE} pedido${cfE === 1 ? "" : "s"} · ${cfOk} confirmaram${cfR ? ` · ${cfR} remarcaram` : ""}${cfC ? ` · ${cfC} cancelaram (vaga liberada)` : ""}`);
+  const extra: string[] = [];
+  for (const [o, nome] of [["vaga", "⚡ Vagas preenchidas"], ["agenda", "📅 Agenda cheia"], ["retorno", "🔁 Retorno"], ["reconquista", "🎁 Reconquista"], ["totem", "🖥️ Totem"]]) {
+    const c = n((x) => x.tipo === "convite" && x.origem === o), a = n(ag(o));
+    if (c || a) extra.push(`${nome}: ${c ? `${c} convite${c === 1 ? "" : "s"}, ` : ""}${a} agendado${a === 1 ? "" : "s"}${a ? ` (${brl(soma(ag(o)))})` : ""}`);
+  }
+  L.push(...extra);
+  const plC = n((x) => x.tipo === "convite" && x.origem === "plano"), plF = n((x) => x.tipo === "plano_fechado");
+  if (plC || plF) L.push(`💎 *Planos*: ${plC} convite${plC === 1 ? "" : "s"}${plF ? ` · ${plF} fechado${plF === 1 ? "" : "s"} (${brl(soma((x) => x.tipo === "plano_fechado"))}/mês)` : ""}`);
+  const oc = (String(i.ac_status || "").match(/ocupação (.*?) · \d+ convite/) || [])[1];
+  const am = oc ? oc.split(" · ").find((b) => !b.startsWith("hoje")) : "";
+  if (am) L.push(`🔮 *Ocupação ${am.split(": ")[0]}*: ${am.split(": ")[1] || ""}`);
+  if (L.length === 1) L.push("Sem movimento registrado hoje.");
+  L.push("", "Detalhes no app: Resultado da atendente IA.");
+  return L.join("\n");
+}
 Deno.serve(async (req) => {
   const token = Deno.env.get("SYNC_TOKEN") || "";
   const enviado = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
@@ -64,7 +97,7 @@ Deno.serve(async (req) => {
   if (req.method === "GET" && url.searchParams.get("acao") === "lembretes") {
     const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
     const { data: ints, error } = await db.from("integrations")
-      .select("company_id, est_code, api_key, branch_code, ac_on, ac_limit, ac_daily, ac_days, ac_text, pl_on, pl_chat, pl_daily, pl_days, pl_plans, pl_text, cf_on, cf_hour, cf_second, cf_before, cf_text, cf_text2, fv_on, fv_per, fv_daily, fv_lead, fv_days, fv_text, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, fb_reply, fb_pro_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, wb_gift, wb_gift_done, cl_status, cl_status_at, rt_on, rt_daily, rt_lead, rt_text, tt_on, tt_notify, tt_days, upsell, bd_on, bd_text, ia_on, ia_name, ia_model, ia_hours, ia_pause, ia_notes, ia_report_phone, ia_alert_phone, ia_arts, names").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,rt_on.eq.true,tt_on.eq.true,bd_on.eq.true,ia_on.eq.true");
+      .select("company_id, est_code, api_key, branch_code, bo_on, bo_hour, bo_phone, bo_sent_on, bo_force, ia_report_phone, ac_status, cf_status, ac_on, ac_limit, ac_daily, ac_days, ac_text, pl_on, pl_chat, pl_daily, pl_days, pl_plans, pl_text, cf_on, cf_hour, cf_second, cf_before, cf_text, cf_text2, fv_on, fv_per, fv_daily, fv_lead, fv_days, fv_text, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, fb_reply, fb_pro_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, wb_gift, wb_gift_done, cl_status, cl_status_at, rt_on, rt_daily, rt_lead, rt_text, tt_on, tt_notify, tt_days, upsell, bd_on, bd_text, ia_on, ia_name, ia_model, ia_hours, ia_pause, ia_notes, ia_report_phone, ia_alert_phone, ia_arts, names").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,rt_on.eq.true,tt_on.eq.true,bd_on.eq.true,ia_on.eq.true");
     if (error) return json({ erro: error.message }, 500);
     const empresas = [];
     for (const i of ints || []) {
@@ -144,6 +177,14 @@ Deno.serve(async (req) => {
         pop: (pop || []).map((r) => ({ barberId: r.barber_id, day: r.day, ...(r.data || {}) })),
         entries: (entries || []).map((e) => ({ barberId: e.barber_id, date: e.date, source: e.source, ...(e.data || {}) })),
         memorias,
+        // Boletim do dono: pronto a partir do horário escolhido, uma vez por dia (o servidor manda e avisa bo_enviado).
+        boletim: await (async () => {
+          if (!i.bo_on || (i.bo_sent_on === hoje && !i.bo_force)) return null;
+          const agora = new Intl.DateTimeFormat("en-GB", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
+          if (!i.bo_force && agora < (/^\d{2}:\d{2}$/.test(String(i.bo_hour || "")) ? i.bo_hour : "20:30")) return null;
+          const fone = String(i.bo_phone || i.ia_report_phone || "").replace(/\D/g, "").slice(0, 15); if (fone.length < 10) return null;
+          return { fone, texto: await boletimTexto(db, i, co, hoje, barbers || [], entries || []) };
+        })(),
       });
     }
     return json({ hoje, empresas });
@@ -211,6 +252,12 @@ Deno.serve(async (req) => {
       if (!chave) return json({ erro: "Chave inválida." }, 400);
       const notas = (Array.isArray(b.notas) ? b.notas : []).slice(-10).map((n: any) => ({ t: String(n && n.t || "").slice(0, 120), em: String(n && n.em || "").slice(0, 10) })).filter((n: any) => n.t);
       const { error } = await db.from("ia_memorias").upsert({ company_id: b.company_id, chave, nome: String(b.nome || "").slice(0, 60), fone4: String(b.fone4 || "").replace(/\D/g, "").slice(-4), notas, atualizado: new Date().toISOString() }, { onConflict: "company_id,chave" });
+      return error ? json({ erro: error.message }, 500) : json({ ok: true });
+    }
+    if (b.acao === "bo_enviado") {
+      const hojeSP = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+      const { error } = await db.from("integrations").update(b.ok ? { bo_sent_on: hojeSP, bo_force: false, bo_status: "ok: enviado às " + new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }).format(new Date()), bo_status_at: new Date().toISOString() }
+        : { bo_sent_on: hojeSP, bo_force: false, bo_status: "erro: " + String(b.erro || "não enviado").slice(0, 200), bo_status_at: new Date().toISOString() }).eq("company_id", b.company_id);
       return error ? json({ erro: error.message }, 500) : json({ ok: true });
     }
     if (b.acao === "ia_compareceu") {
