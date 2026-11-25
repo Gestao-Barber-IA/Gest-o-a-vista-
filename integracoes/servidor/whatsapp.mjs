@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "10.1";
+const VERSAO = "10.2";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -89,7 +89,7 @@ async function igLaco() {
   }
   igRodando = false;
 }
-let sofia = null, retorno = null, totem = null, vagas = null, confirmacao = null, planos = null, agendaCheia = null, previsao = null, indicacao = null;
+let sofia = null, retorno = null, totem = null, vagas = null, confirmacao = null, planos = null, agendaCheia = null, previsao = null, indicacao = null, otimizar = null;
 
 // ---------- conexão ----------
 let sock = null, aberto = false, saiu = false, geracao = 0;
@@ -581,7 +581,7 @@ async function ciclo() {
   const pedidas = empresas.filter((e) => e.atualizar);
   if (pedidas.length) { log("Atualização pedida pelo app."); await atualizar(true, pedidas); }
   // Cada número cuida só das empresas com o seu tipo de lembrete ligado.
-  const minhas = empresas.filter((e) => (CLI ? !!(e.clientes || e.feedback || e.reconquista || e.retorno || e.vagas || e.confirmacao || e.planos || e.agendaCheia || e.indicacao || e.totem || e.aniversario || e.sofia) : e.cfg.ligado !== false));
+  const minhas = empresas.filter((e) => (CLI ? !!(e.clientes || e.feedback || e.reconquista || e.retorno || e.vagas || e.confirmacao || e.planos || e.agendaCheia || e.indicacao || e.otimizar || e.totem || e.aniversario || e.sofia) : e.cfg.ligado !== false));
   empresasConhecidas = minhas.map((e) => e.company_id);
   if (CLI) await escolherNumero(minhas);
   // Sofia: atende o número dos clientes da primeira barbearia com a atendente IA ligada.
@@ -626,6 +626,12 @@ async function ciclo() {
     if (eIn && SOFIA && SOFIA.criarIndicacao) {
       if (!indicacao) indicacao = SOFIA.criarIndicacao({ dir: DIR, log, api, sock: () => (aberto ? sock : null), sofia: () => sofia, resultados: SOFIA.resultadosDe ? SOFIA.resultadosDe(DIR, api, log) : null, pode: () => pausadoDia !== hoje });
       await indicacao.rodar(eIn, hoje).catch((err) => { log(`${eIn.nome}: indicação: ${err.message}`); api("POST", { company_id: eIn.company_id, acao: "in_status", status: "erro: " + err.message }).catch(() => {}); });
+    }
+    // Agenda sem buracos: sugere ao cliente vir um pouco antes/depois quando o horário dele deixou buraco na agenda.
+    const eOa = minhas.find((e) => e.otimizar);
+    if (eOa && SOFIA && SOFIA.criarOtimizar) {
+      if (!otimizar) otimizar = SOFIA.criarOtimizar({ dir: DIR, log, api, sock: () => (aberto ? sock : null), sofia: () => sofia, pode: () => pausadoDia !== hoje });
+      await otimizar.rodar(eOa, hoje).catch((err) => { log(`${eOa.nome}: agenda sem buracos: ${err.message}`); api("POST", { company_id: eOa.company_id, acao: "oa_status", status: "erro: " + err.message }).catch(() => {}); });
     }
     // Previsão do mês: valor marcado na agenda até o fim do mês (a cada 3 horas).
     const ePv = minhas.find((e) => e.previsao);

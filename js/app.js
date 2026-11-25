@@ -4128,6 +4128,7 @@ ${rows.length ? '' : emptyBarbers()}
     ['retorno', 'Retorno no tempo certo', 'clock', 'Convite no ritmo de cada cliente', () => rtCard(), 'mkt', it => intSt(it.rt_on, it.rt_status)],
     ['planos', 'Venda de planos', 'diamond', 'Plano mensal para quem vem com frequência', () => plCard(), 'mkt', it => intSt(it.pl_on, it.pl_status)],
     ['agendacheia', 'Agenda cheia automática', 'gauge', 'Horário ocioso vira convite para os clientes do barbeiro', () => acCard(), 'mkt', it => intSt(it.ac_on, it.ac_status)],
+    ['semburacos', 'Agenda sem buracos', 'clock', 'Pede ao cliente para vir um pouco antes ou depois', () => oaCard(), 'recepcao', it => intSt(it.oa_on, it.oa_status)],
     ['indicacao', 'Indicação premiada', 'gift', 'Cliente fiel indica amigos e ganha prêmio', () => inCard(), 'mkt', it => intSt(it.in_on, it.in_status)],
     ['vagas', 'Preencher vagas', 'bolt', 'Horário cancelado vira convite na hora', () => fvCard(), 'mkt', it => intSt(it.fv_on, it.fv_status)],
     ['reconquista', 'Reconquista de sumidos', 'rocket', 'Presente de retorno para quem não vem há meses', () => wbCard(), 'mkt', it => intSt(it.wb_on, it.wb_status)],
@@ -4421,6 +4422,32 @@ Content-Type: application/json</pre>
   const RT_TEXT = ['{Saudacao}, {cliente}! 😊 Sua próxima visita está chegando. Separei *{dia} às {hora}* com {profissional}, do jeito que você costuma vir.\nQuer que eu reserve pra você?',
     '{Saudacao}, {cliente}! Tudo bem? 😊 Já está chegando a hora de dar aquele trato no visual ✂️\n{profissional} tem horário *{dia} às {hora}*, como você costuma vir. Posso reservar pra você?',
     '{Saudacao}, {cliente}! 💈 Pensando na sua próxima visita, separei um horário com {profissional}: *{dia} às {hora}*, como de costume.\nQuer que eu deixe reservado pra você?'].join('\n---\n');
+  // Agenda sem buracos: pede ao cliente para vir um pouco antes/depois quando o horário dele deixou buraco na agenda.
+  const OA_TEXT = '{Saudacao}, {cliente}! Tudo bem? 😊\nSeu horário {dia} às {hora} com {profissional} está garantido. Para a agenda dele ficar certinha, você conseguiria vir às {sugestao}?\nSe não der, sem problema nenhum: seu horário continua o mesmo.';
+  function oaCard() {
+    if (!isGestor(currentUser())) return '';
+    const it = Cloud.enabled ? ui.integ : (state.integ || {});
+    if (!it || it.erro) return '';
+    const st = String(it.oa_status || ''), on = !!it.oa_on, noAb = !it.est_code, semIa = !it.ia_on, bad = /^erro/.test(st);
+    const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const h = new Date().getHours(), sd = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+    const prev = (it.oa_text || OA_TEXT).replace(/\{Saudacao\}/g, sd).replace(/\{cliente\}/g, 'Enzo').replace(/\{dia\}/g, 'amanhã').replace(/\{hora\}/g, '15h').replace(/\{profissional\}/g, 'Larissa').replace(/\{sugestao\}/g, '14h40 ou às 15h20').replace(/\{barbearia\}/g, state.company.name || '');
+    return `<section class="section card as-card">
+      <h2 class="section-title">${icon('clock')} Agenda sem buracos</h2>
+      <p class="section-note">De hora em hora (9h às 19h), o sistema olha os horários marcados de hoje (com pelo menos 3 horas de folga) e do próximo dia aberto. Quando um horário deixou um <b>buraco menor que 40 minutos</b> antes ou depois na agenda do profissional, o cliente recebe uma mensagem gentil perguntando se ele consegue vir um pouco antes ou depois, num horário que <b>fecha o buraco</b> ou deixa espaço para mais um atendimento. Se ele aceitar, a ${iaNome()} remarca; se não puder, o horário dele continua o mesmo.</p>
+      <p class="section-note">Cada horário recebe no máximo um pedido. As sugestões só são horários realmente livres (contando o próprio horário dele) e que não criam outro buraco.</p>
+      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}${semIa ? `<p class="section-note">${icon('alert')} Ligue a <b>Atendente IA</b>: é ela quem remarca quando o cliente aceita.</p>` : ''}
+      <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.oa_status_at ? 'Atualizado ' + when(it.oa_status_at) + ' · ' : ''}${esc(st.replace(/^(ok|erro): /, ''))}</small>` : '<span class="chip">Aguardando o servidor</span>'}</div>
+      <form class="form" data-form="oaSave" novalidate>
+        <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''} ${noAb || semIa ? 'disabled' : ''}><span><b>Agenda sem buracos ligada</b><small>Pedido gentil de troca, só quando ajuda a agenda.</small></span></label>
+        <div class="grid-2"><label class="field"><span>Pedidos por dia (máximo)</span><input class="input num" type="number" name="daily" min="1" max="30" value="${it.oa_daily || 6}"></label></div>
+        <label class="field"><span>Mensagem</span><textarea class="input" name="text" rows="5" maxlength="1500">${esc(it.oa_text || OA_TEXT)}</textarea>
+          <small class="muted">Use {Saudacao}, {cliente}, {dia}, {hora} (horário atual), {profissional}, {sugestao} (um ou dois horários) e {barbearia}.</small></label>
+        <details class="wa-prev"><summary>Ver como chega para o cliente</summary><p class="wa-bubble">${esc(prev).replace(/\n/g, '<br>')}</p></details>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
+      </form></section>`;
+  }
   // Indicação premiada: código para clientes fiéis; prêmio quando o amigo indicado vem.
   const IN_TEXT = '{Saudacao}, {cliente}! Que bom ter você sempre com a gente aqui na {barbearia} 😊\nQuer presentear um amigo? Ele ganha *{beneficio}* na primeira visita, é só falar o código *{codigo}* quando for agendar.\nE quando ele vier, você ganha *{premio}*! 🎁';
   function inCard() {
@@ -4889,6 +4916,11 @@ Content-Type: application/json</pre>
     const planosV = pl.conv || pl.int || pl.fech ? `<section class="section card"><h2 class="section-title">${icon('diamond')} Venda de planos</h2>
       <div class="res-cf">${[['rem', 'Convites de plano', pl.conv], ['canc', 'Interessados (foram para a recepção)', pl.int], ['ok', 'Planos fechados', pl.fech]].map(([k, n, v]) => `<div class="res-cf-i res-cf-${k}"><b class="num">${v}</b><span>${n}</span></div>`).join('')}<div class="res-cf-i res-cf-ok"><b class="num">${money0(pl.valor)}</b><span>por mês em planos novos</span></div></div>
       <p class="section-note">Plano fechado = cliente que virou assinante em até 45 dias depois da oferta (na conversa ou no convite). Interessados contam as conversas passadas para a recepção falando de plano.</p></section>` : '';
+    // Agenda sem buracos
+    const oO = porO.otimizar || { conv: 0 }, oaAceitos = (r.ev || []).filter(e => e.tipo === 'remarcacao' && e.origem === 'otimizar').length;
+    const oaV = oO.conv ? `<section class="section card"><h2 class="section-title">${icon('clock')} Agenda sem buracos</h2>
+      <div class="res-cf">${[['rem', 'Pedidos de troca enviados', oO.conv], ['ok', 'Clientes que aceitaram', oaAceitos]].map(([k, n, v]) => `<div class="res-cf-i res-cf-${k}"><b class="num">${v}</b><span>${n}</span><small>${k === 'ok' && oO.conv ? Math.round(v / oO.conv * 100) + '%' : ''}</small></div>`).join('')}</div>
+      <p class="section-note">Cada troca aceita fecha um buraco de 20 minutos na agenda e abre espaço para mais um atendimento.</p></section>` : '';
     // Indicação premiada
     const oI = porO.indicacao || { conv: 0, ag: 0, valor: 0, addValor: 0, real: 0 };
     const indV = oI.conv || oI.ag || ind.veio ? `<section class="section card"><h2 class="section-title">${icon('gift')} Indicação premiada</h2>
@@ -4924,7 +4956,7 @@ Content-Type: application/json</pre>
           <span class="res-o-bar res-p-bar"><i class="ag" style="width:${p.valor / pMax * 100}%"></i><i class="re" style="width:${p.real / pMax * 100}%"></i></span>
           <small>${p.ag} agendamento${p.ag === 1 ? '' : 's'} · ${money0(p.valor)} agendados${cf ? ` · ${Math.round(p.ok / cf * 100)}% vieram` : ''}</small></div></div>`; }).join('')}</div></section>` : '';
 
-    return '<div class="res-page">' + topo + hero + tiles + `<div class="res-duo">${funil}${porDia}</div>` + confirma + planosV + indV + origens + profs +
+    return '<div class="res-page">' + topo + hero + tiles + `<div class="res-duo">${funil}${porDia}</div>` + confirma + planosV + indV + oaV + origens + profs +
       `<p class="section-note res-pe">"Realizado" conta só quem compareceu: a conferência na AppBarber roda todo dia de manhã, sobre a agenda do dia anterior. O custo da IA vem em dólar e é convertido a R$ ${nf2.format(RES_DOLAR)} só como referência. Para ligar ou ajustar a ${nome}, o totem e as mensagens, vá em <a href="#configuracoes" data-action="cfgTab" data-t="integracao">Configurações › Integração &amp; API</a>.</p></div>`;
   }
   function ttCard() {
@@ -9599,6 +9631,17 @@ Content-Type: application/json</pre>
       const [a, b] = [de, ate].sort();
       if ((fromIso(b) - fromIso(a)) / 86400000 > 366) return setMsg(f, 'Escolha um período de até 1 ano.');
       ui.iaRes = { p: 'per', de: a, ate: b }; render();
+    },
+    oaSave(f) {
+      const E = f.elements, daily = Math.round(Number(E.daily.value) || 0);
+      if (daily < 1 || daily > 30) return setMsg(f, 'Pedidos por dia: de 1 a 30.');
+      const row = { oa_on: !!E.on.checked, oa_daily: daily, oa_text: (E.text.value || '').trim().slice(0, 1500) };
+      if (row.oa_text === OA_TEXT) row.oa_text = '';
+      const cur = (Cloud.enabled ? ui.integ : state.integ) || {};
+      if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Agenda sem buracos salva.'); return render(); }
+      setMsg(f, 'Salvando…', true);
+      Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(row.oa_on ? 'Agenda sem buracos ligada.' : 'Agenda sem buracos desligada.'); render(); })
+        .catch(e => { const m = Cloud.message(e); setMsg(f, /oa_|column|schema cache/i.test(m) ? 'A agenda sem buracos ainda está sendo ativada no servidor.' : m); });
     },
     inSave(f) {
       const E = f.elements, daily = Math.round(Number(E.daily.value) || 0), min = Math.round(Number(E.min.value) || 0);
