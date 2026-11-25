@@ -4101,6 +4101,7 @@ ${rows.length ? '' : emptyBarbers()}
     ['totem', 'Totem de autoatendimento', 'monitor', 'Check-in e agendamento num tablet na recepção', () => ttCard(), 'recepcao', it => intSt(it.tt_on, it.tt_status)],
     ['ofertas', 'Ofertas no final do agendamento', 'gift', 'Adicionais oferecidos pelo totem e pela Sofia', () => upCard(), 'recepcao', it => { const n = (it.upsell || []).length; return n ? [`${n} oferta${n > 1 ? 's' : ''}`, 'chip-ok'] : ['Nenhuma', '']; }],
     ['retorno', 'Retorno no tempo certo', 'clock', 'Convite no ritmo de cada cliente', () => rtCard(), 'mkt', it => intSt(it.rt_on, it.rt_status)],
+    ['planos', 'Venda de planos', 'diamond', 'Plano mensal para quem vem com frequência', () => plCard(), 'mkt', it => intSt(it.pl_on, it.pl_status)],
     ['vagas', 'Preencher vagas', 'bolt', 'Horário cancelado vira convite na hora', () => fvCard(), 'mkt', it => intSt(it.fv_on, it.fv_status)],
     ['reconquista', 'Reconquista de sumidos', 'rocket', 'Presente de retorno para quem não vem há meses', () => wbCard(), 'mkt', it => intSt(it.wb_on, it.wb_status)],
     ['aniversario', 'Parabéns aos aniversariantes', 'sparkle', 'Mensagem no dia do aniversário', () => bdCard(), 'mkt', it => intSt(it.bd_on, it.bd_status)],
@@ -4388,6 +4389,51 @@ Content-Type: application/json</pre>
   const RT_TEXT = ['{Saudacao}, {cliente}! 😊 Sua próxima visita está chegando. Separei *{dia} às {hora}* com {profissional}, do jeito que você costuma vir.\nQuer que eu reserve pra você?',
     '{Saudacao}, {cliente}! Tudo bem? 😊 Já está chegando a hora de dar aquele trato no visual ✂️\n{profissional} tem horário *{dia} às {hora}*, como você costuma vir. Posso reservar pra você?',
     '{Saudacao}, {cliente}! 💈 Pensando na sua próxima visita, separei um horário com {profissional}: *{dia} às {hora}*, como de costume.\nQuer que eu deixe reservado pra você?'].join('\n---\n');
+  // Venda de planos: oferta para clientes frequentes (a atendente IA oferece depois de agendar e/ou convite por dia).
+  const PL_TEXT = '{Saudacao}, {cliente}! Tudo bem? 😊\nVi que você vem bem certinho aqui na {barbearia}, a cada {dias} dias mais ou menos. No *Plano {plano}* você paga R$ {preco} por mês{economia_txt} e já fica com seu horário garantido com {profissional}.\nQuer que eu te conte como funciona?';
+  const PL_DIAS = [[1, 'Seg'], [2, 'Ter'], [3, 'Qua'], [4, 'Qui'], [5, 'Sex'], [6, 'Sáb'], [0, 'Dom']];
+  function plLista(it) {
+    const l = Array.isArray(it.pl_plans) ? it.pl_plans : [];
+    if (l.length) return l;
+    // Primeira vez: começa com os planos da Tabela de Preços e Planos (nome e preço).
+    return planCat().filter(x => x && x.n).slice(0, 6).map(x => ({ nome: x.n, preco: x.v, avulso: '', visitas: 4, quando: '' }));
+  }
+  function plCard() {
+    if (!isGestor(currentUser())) return '';
+    const it = Cloud.enabled ? ui.integ : (state.integ || {});
+    if (!it || it.erro) return '';
+    const st = String(it.pl_status || ''), on = !!it.pl_on, noAb = !it.est_code, bad = /^erro/.test(st), semIa = !it.ia_on;
+    const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const lista = plLista(it), dias = Array.isArray(it.pl_days) ? it.pl_days.map(Number) : [1, 2, 3, 4], chat = it.pl_chat !== false, daily = it.pl_daily == null ? 2 : it.pl_daily;
+    const linha = (p, i) => `<div class="pl-row">
+        <label class="field"><span>Plano</span><input class="input" name="nome${i}" maxlength="40" value="${esc(p.nome || '')}" placeholder="Ex.: Premium"></label>
+        <label class="field"><span>Preço por mês (R$)</span><input class="input num" type="number" min="0" step="0.01" name="preco${i}" value="${p.preco || ''}"></label>
+        <label class="field"><span>Valor avulso do pacote (R$)</span><input class="input num" type="number" min="0" step="0.01" name="avulso${i}" value="${p.avulso || ''}" placeholder="Ex.: 340"></label>
+        <label class="field"><span>Visitas no mês</span><input class="input num" type="number" min="1" max="8" step="1" name="visitas${i}" value="${p.visitas || 4}"></label>
+        <label class="field pl-quando"><span>Para quem faz</span><input class="input" name="quando${i}" maxlength="80" value="${esc(p.quando || '')}" placeholder="Ex.: corte + barba"></label>
+      </div>`;
+    const rows = [...lista, ...Array(lista.length ? 1 : 2).fill({})].slice(0, 6).map(linha).join(''); // uma linha vazia para o próximo (salve para abrir outra)
+    return `<section class="section card as-card">
+      <h2 class="section-title">${icon('diamond')} Venda de planos</h2>
+      <p class="section-note">O sistema olha a frequência de cada cliente na AppBarber e calcula <b>quanto ele gasta por mês pagando avulso</b>. Quem vem pelo menos umas 3 vezes no mês, <b>não é assinante</b> e costuma vir num dia que o plano aceita recebe a oferta do plano que combina com o serviço dele, mostrando a <b>economia</b>.</p>
+      <p class="section-note"><b>Na conversa:</b> depois de agendar, a ${iaNome()} oferece o plano uma vez (no máximo a cada 30 dias por cliente). <b>Convite:</b> se quiser, ela também manda por dia uma mensagem aos melhores candidatos. Quem se interessar vai para a recepção fechar (pagamento e contrato ficam com vocês). Quando a pessoa vira assinante em até 45 dias depois da oferta, conta como plano vendido no Resultado.</p>
+      <p class="section-note">${icon('alert')} "Valor avulso do pacote" é quanto o cliente pagaria pelos mesmos serviços sem o plano (ex.: 4 cortes + 4 barbas = R$ 340). "Para quem faz": palavras do serviço de costume, separadas por vírgula (<i>corte + barba</i> = os dois; <i>sem navalhado</i> = não faz). Os detalhes e regras de cada plano continuam nas Informações da casa da ${iaNome()}.</p>
+      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}
+      ${semIa ? `<p class="section-note">${icon('alert')} A <b>Atendente IA</b> está desligada: as ofertas dependem dela.</p>` : ''}
+      <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.pl_status_at ? 'Atualizado ' + when(it.pl_status_at) + ' · ' : ''}${esc(st.replace(/^(ok|erro): /, ''))}</small>` : '<span class="chip">Aguardando o servidor</span>'}</div>
+      <form class="form" data-form="plSave" novalidate>
+        <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''} ${noAb ? 'disabled' : ''}><span><b>Venda de planos ligada</b><small>Oferta só para quem já vem com frequência.</small></span></label>
+        <label class="check"><input type="checkbox" name="chat" ${chat ? 'checked' : ''}><span><b>Oferecer na conversa</b><small>Depois que o cliente agenda pelo WhatsApp.</small></span></label>
+        <div class="grid-2"><label class="field"><span>Convites por dia (0 = só na conversa)</span><input class="input num" type="number" name="daily" min="0" max="10" step="1" value="${daily}"></label></div>
+        <div class="field"><span>Dias em que o plano pode ser usado</span><div class="pl-dias">${PL_DIAS.map(([d, n]) => `<label class="chip-check"><input type="checkbox" name="dia${d}" ${dias.includes(d) ? 'checked' : ''}><span>${n}</span></label>`).join('')}</div></div>
+        <h3 class="res-sub">Planos (até 6; salve para abrir mais uma linha)</h3>
+        <div class="pl-rows">${rows}</div>
+        <label class="field"><span>Mensagem do convite</span><textarea class="input" name="text" rows="6" maxlength="2000">${esc(it.pl_text || PL_TEXT)}</textarea>
+          <small class="muted">Use {Saudacao}, {cliente}, {dias} (de quantos em quantos dias ele vem), {plano}, {preco}, {economia_txt} (", uma economia de uns R$ X por mês"), {visitas}, {profissional} e {barbearia}.</small></label>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
+      </form></section>`;
+  }
   // Confirmação de presença (evitar faltas): pedido na véspera; a atendente IA confirma na agenda, remarca ou cancela.
   const CF_TEXT = ['{Saudacao}, {cliente}! 😊\nPassando para confirmar seu horário de *{dia} às {hora}* com {profissional} ({servico}) aqui na {barbearia}.\nVocê confirma sua presença? Se não puder vir, me avise que eu remarco pra você.',
     '{Saudacao}, {cliente}! Tudo bem? 😊\nSeu horário está marcado para *{dia} às {hora}* com {profissional}. Posso confirmar sua presença?\nSe tiver algum imprevisto, me fala que a gente encontra outro horário.'].join('\n---\n');
@@ -4522,6 +4568,7 @@ Content-Type: application/json</pre>
         out.push({ em, tipo: 'agendamento', origem: o, valor: [45, 60, 95, 110][Math.floor(rnd() * 4)], compareceu: passou ? rnd() < 0.88 : null, dados: { profissional: pro[Math.floor(rnd() * pro.length)] } });
         if (rnd() < 0.18) out.push({ em, tipo: 'adicional', origem: o, valor: [15, 25, 30][Math.floor(rnd() * 3)] });
       }
+      if (o === 'whatsapp' && i % 2 === 0) { const em = new Date(ini + i * 86400000 + 11 * 3600000).toISOString(); out.push({ em, tipo: 'convite', origem: 'plano' }); if (rnd() < 0.4) out.push({ em, tipo: 'recepcao', origem: 'plano', dados: { motivo: 'quer assinar o plano' } }); if (rnd() < 0.2) out.push({ em, tipo: 'plano_fechado', origem: 'plano', valor: [144, 270][Math.floor(rnd() * 2)] }); }
       if (o === 'whatsapp') { const em = new Date(ini + i * 86400000 + 17 * 3600000).toISOString(), q = 8 + Math.floor(rnd() * 5);
         for (let k = 0; k < q; k++) { out.push({ em, tipo: 'confirmacao', origem: 'confirmacao' }); const x = rnd(); if (x < 0.62) out.push({ em, tipo: 'confirmado', origem: 'confirmacao' }); else if (x < 0.72) out.push({ em, tipo: 'remarcacao', origem: 'confirmacao' }); else if (x < 0.8) out.push({ em, tipo: 'cancelamento', origem: 'confirmacao' }); } }
       if (o !== 'whatsapp' && o !== 'totem') for (let k = 0; k < Math.round(n * 2.5); k++) out.push({ em: new Date(ini + i * 86400000 + 9 * 3600000).toISOString(), tipo: 'convite', origem: o });
@@ -4530,17 +4577,18 @@ Content-Type: application/json</pre>
   }
   function resResumo(ev) {
     const z = () => ({ conv: 0, conversas: 0, ag: 0, valor: 0, ok: 0, falta: 0, real: 0, add: 0, addValor: 0, rec: 0, custo: 0 });
-    const tot = z(), porO = {}, porP = {}, porD = {}, cf = { env: 0, ok: 0, rem: 0, canc: 0 }; let canc = 0, rem = 0;
+    const tot = z(), porO = {}, porP = {}, porD = {}, cf = { env: 0, ok: 0, rem: 0, canc: 0 }, pl = { conv: 0, int: 0, fech: 0, valor: 0 }; let canc = 0, rem = 0;
     // Remarcação importada do histórico: o agendamento antigo (cancelado) não conta duas vezes nem como falta.
     const remRefs = new Set(ev.filter(e => e.tipo === 'remarcacao' && /^h:rm:/.test(e.ref || '')).map(e => 'ag:' + e.ref.slice(5)));
     for (const e of ev) {
       if (e.tipo === 'agendamento' && remRefs.has(e.ref)) continue;
       const o = porO[e.origem || 'whatsapp'] = porO[e.origem || 'whatsapp'] || z(), v = Number(e.valor) || 0;
       const soma = (k, x = 1) => { tot[k] += x; o[k] += x; };
-      if (e.tipo === 'convite') soma('conv');
+      if (e.tipo === 'convite') { soma('conv'); if (e.origem === 'plano') pl.conv++; }
       else if (e.tipo === 'conversa') soma('conversas');
-      else if (e.tipo === 'recepcao') soma('rec');
+      else if (e.tipo === 'recepcao') { soma('rec'); if (e.origem === 'plano' || /plano|assin/i.test(String((e.dados || {}).motivo || ''))) pl.int++; }
       else if (e.tipo === 'uso') soma('custo', v);
+      else if (e.tipo === 'plano_fechado') { pl.fech++; pl.valor += v; }
       else if (e.tipo === 'confirmacao') cf.env++;
       else if (e.tipo === 'confirmado') cf.ok++;
       else if (e.tipo === 'cancelamento') { canc++; if (e.origem === 'confirmacao') cf.canc++; }
@@ -4554,7 +4602,7 @@ Content-Type: application/json</pre>
         if (e.compareceu === true) { soma('ok'); soma('real', v); p.ok++; p.real += v; } else if (e.compareceu === false) { soma('falta'); p.falta++; }
       }
     }
-    return { tot, porO, porP, porD, canc, rem, cf };
+    return { tot, porO, porP, porD, canc, rem, cf, pl };
   }
   function pageResultadoIa() {
     autoSyncCard(); // carrega o nome da atendente (Integração)
@@ -4573,7 +4621,7 @@ Content-Type: application/json</pre>
       <button class="btn btn-primary" type="submit">${icon('check')} Ver resultados</button><p class="form-msg" data-msg></p></form>` : ''}`;
     if (!r.ev) return topo + '<section class="section card"><p class="muted">Carregando…</p></section>';
     if (r.erro) return topo + `<section class="section card"><p class="form-msg err">Não consegui carregar os resultados (${esc(r.erro.slice(0, 120))}). ${/ia_eventos|relation|schema/i.test(r.erro) ? 'Falta criar a tabela no Supabase (arquivo supabase/ia-resultados.sql).' : 'Tente de novo em instantes.'}</p></section>`;
-    const { tot: t, porO, porP, porD, canc, rem, cf } = resResumo(r.ev);
+    const { tot: t, porO, porP, porD, canc, rem, cf, pl } = resResumo(r.ev);
     if (!t.ag && !t.conversas && !t.conv && !t.add) return topo + `<section class="section card res-vazio">${icon('chart')}<h2>${rot}: ainda sem resultados</h2><p class="muted">Os números começam a aparecer com os atendimentos feitos pela ${nome} e pelo totem depois da atualização do servidor (versão 7.8). Quem veio de fato é conferido na AppBarber no dia seguinte.</p></section>`;
     const custoR = t.custo * RES_DOLAR, conf = t.ok + t.falta, txC = conf ? Math.round(t.ok / conf * 100) : null;
     const ganho = t.real + t.addValor, roi = custoR > 0.5 ? Math.round(ganho / custoR) : null;
@@ -4610,6 +4658,10 @@ Content-Type: application/json</pre>
       <div class="res-cf">${[['ok', 'Confirmaram', cf.ok], ['rem', 'Remarcaram', cf.rem], ['canc', 'Cancelaram (vaga liberada)', cf.canc], ['sem', 'Não responderam', semResp]].map(([k, n, v]) => `<div class="res-cf-i res-cf-${k}"><b class="num">${v}</b><span>${n}</span><small>${pc(v, cf.env)}%</small></div>`).join('')}</div>
       <span class="res-cf-bar" role="img" aria-label="Confirmaram ${pc(cf.ok, cf.env)}%, remarcaram ${pc(cf.rem, cf.env)}%, cancelaram ${pc(cf.canc, cf.env)}%, não responderam ${pc(semResp, cf.env)}%">${[['ok', cf.ok], ['rem', cf.rem], ['canc', cf.canc], ['sem', semResp]].map(([k, v]) => v ? `<i class="res-cf-${k}" style="width:${v / cf.env * 100}%"></i>` : '').join('')}</span>
       <p class="section-note">${cf.env} pedido${cf.env > 1 ? 's' : ''} de confirmação enviado${cf.env > 1 ? 's' : ''}. Cada remarcação ou cancelamento avisado é uma falta evitada: o horário volta para a agenda a tempo de outro cliente.</p></section>` : '';
+    // Venda de planos
+    const planosV = pl.conv || pl.int || pl.fech ? `<section class="section card"><h2 class="section-title">${icon('diamond')} Venda de planos</h2>
+      <div class="res-cf">${[['rem', 'Convites de plano', pl.conv], ['canc', 'Interessados (foram para a recepção)', pl.int], ['ok', 'Planos fechados', pl.fech]].map(([k, n, v]) => `<div class="res-cf-i res-cf-${k}"><b class="num">${v}</b><span>${n}</span></div>`).join('')}<div class="res-cf-i res-cf-ok"><b class="num">${money0(pl.valor)}</b><span>por mês em planos novos</span></div></div>
+      <p class="section-note">Plano fechado = cliente que virou assinante em até 45 dias depois da oferta (na conversa ou no convite). Interessados contam as conversas passadas para a recepção falando de plano.</p></section>` : '';
     // 4. Agendamentos por dia
     const dias = []; for (let d = new Date(de); d < ate && d <= new Date(); d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) dias.push(iso(d));
     const dMax = Math.max(1, ...dias.map(d => (porD[d] || {}).ag || 0)), passo = dias.length > 16 ? 5 : dias.length > 8 ? 2 : 1;
@@ -4640,7 +4692,7 @@ Content-Type: application/json</pre>
           <span class="res-o-bar res-p-bar"><i class="ag" style="width:${p.valor / pMax * 100}%"></i><i class="re" style="width:${p.real / pMax * 100}%"></i></span>
           <small>${p.ag} agendamento${p.ag === 1 ? '' : 's'} · ${money0(p.valor)} agendados${cf ? ` · ${Math.round(p.ok / cf * 100)}% vieram` : ''}</small></div></div>`; }).join('')}</div></section>` : '';
 
-    return '<div class="res-page">' + topo + hero + tiles + `<div class="res-duo">${funil}${porDia}</div>` + confirma + origens + profs +
+    return '<div class="res-page">' + topo + hero + tiles + `<div class="res-duo">${funil}${porDia}</div>` + confirma + planosV + origens + profs +
       `<p class="section-note res-pe">"Realizado" conta só quem compareceu: a conferência na AppBarber roda todo dia de manhã, sobre a agenda do dia anterior. O custo da IA vem em dólar e é convertido a R$ ${nf2.format(RES_DOLAR)} só como referência. Para ligar ou ajustar a ${nome}, o totem e as mensagens, vá em <a href="#configuracoes" data-action="cfgTab" data-t="integracao">Configurações › Integração &amp; API</a>.</p></div>`;
   }
   function ttCard() {
@@ -9259,6 +9311,26 @@ Content-Type: application/json</pre>
       const [a, b] = [de, ate].sort();
       if ((fromIso(b) - fromIso(a)) / 86400000 > 366) return setMsg(f, 'Escolha um período de até 1 ano.');
       ui.iaRes = { p: 'per', de: a, ate: b }; render();
+    },
+    plSave(f) {
+      const E = f.elements, planos = [];
+      for (let i = 0; i < 6 && E['nome' + i]; i++) {
+        const nome = (E['nome' + i].value || '').trim(); if (!nome) continue;
+        const preco = Number(E['preco' + i].value) || 0, avulso = Number(E['avulso' + i].value) || 0, visitas = Math.round(Number(E['visitas' + i].value) || 4);
+        if (!preco || !avulso) return setMsg(f, `Plano ${nome}: preencha o preço e o valor avulso do pacote.`);
+        if (avulso <= preco) return setMsg(f, `Plano ${nome}: o valor avulso precisa ser maior que o preço do plano.`);
+        planos.push({ nome: nome.slice(0, 40), preco, avulso, visitas: Math.max(1, Math.min(8, visitas)), quando: (E['quando' + i].value || '').trim().slice(0, 80) });
+      }
+      const daily = Math.round(Number(E.daily.value) || 0); if (daily < 0 || daily > 10) return setMsg(f, 'Convites por dia: de 0 a 10.');
+      const dias = PL_DIAS.map(([d]) => d).filter(d => E['dia' + d].checked); if (!dias.length) return setMsg(f, 'Marque pelo menos um dia.');
+      if (E.on.checked && !planos.length) return setMsg(f, 'Cadastre pelo menos um plano.');
+      const row = { pl_on: !!E.on.checked, pl_chat: !!E.chat.checked, pl_daily: daily, pl_days: dias, pl_plans: planos, pl_text: (E.text.value || '').trim().slice(0, 2000) };
+      if (row.pl_text === PL_TEXT) row.pl_text = '';
+      const cur = (Cloud.enabled ? ui.integ : state.integ) || {};
+      if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Venda de planos salva.'); return render(); }
+      setMsg(f, 'Salvando…', true);
+      Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(row.pl_on ? 'Venda de planos ligada.' : 'Venda de planos desligada.'); render(); })
+        .catch(e => { const m = Cloud.message(e); setMsg(f, /pl_|column|schema cache/i.test(m) ? 'A venda de planos ainda está sendo ativada no servidor.' : m); });
     },
     cfSave(f) {
       const hora = f.elements.hora.value || '17:00', antes = Math.round(Number(f.elements.antes.value) || 180);

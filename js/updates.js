@@ -2,6 +2,10 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-25-venda-planos', date: '2026-11-25', title: 'Venda de planos para clientes frequentes', items: [
+    ['novo', 'Em Integração & API › Venda de planos: o sistema calcula, pela frequência de cada cliente na AppBarber, quanto ele gasta por mês pagando avulso. Quem vem pelo menos umas 3 vezes no mês e não é assinante recebe a oferta do plano que combina com o serviço dele, mostrando a economia: pela atendente IA depois de agendar e, se quiser, num convite por dia.'],
+    ['novo', 'Quem se interessa vai para a recepção fechar. No Resultado da atendente IA aparecem os convites, os interessados e os planos fechados (cliente que virou assinante até 45 dias depois da oferta), com o valor por mês.'],
+  ] },
   { id: '2026-11-24-confirmacao', date: '2026-11-24', title: 'Confirmação de presença: menos faltas', items: [
     ['novo', 'Em Integração & API › Confirmação de presença: na véspera, cada cliente com horário recebe um pedido para confirmar. A atendente IA lê a resposta: confirma o horário na AppBarber (status Confirmado), remarca ou cancela, e o horário liberado entra no Preencher vagas.'],
     ['novo', 'No dia, quem não respondeu recebe um 2º aviso algumas horas antes; quem não responde nenhum aparece como risco de falta no cartão, para a recepção ligar. No Resultado da atendente IA, a nova seção mostra quantos confirmaram, remarcaram, cancelaram e não responderam.'],

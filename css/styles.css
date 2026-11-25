@@ -3206,3 +3206,14 @@ html[data-theme="light"] .res-page { --cf-ok: #1f9d55; --cf-rem: #2a78d6; --cf-c
 .res-cf-bar i { display: block; height: 100%; }
 .res-cf-bar i.res-cf-ok { background: var(--cf-ok); } .res-cf-bar i.res-cf-rem { background: var(--cf-rem); } .res-cf-bar i.res-cf-canc { background: var(--cf-canc); } .res-cf-bar i.res-cf-sem { background: var(--cf-sem); }
 @media (max-width: 560px) { .res-cf { grid-template-columns: 1fr 1fr; } }
+
+/* Venda de planos */
+.pl-rows { display: grid; gap: 10px; }
+.pl-row { display: grid; grid-template-columns: 1.3fr 1fr 1fr .8fr 1.6fr; gap: 8px; padding: 10px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.pl-row .field { margin: 0; } .pl-row .field span { font-size: .78rem; }
+@media (max-width: 760px) { .pl-row { grid-template-columns: 1fr 1fr; } .pl-row .pl-quando, .pl-row .field:first-child { grid-column: 1 / -1; } }
+.pl-dias { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-check { position: relative; } .chip-check input { position: absolute; opacity: 0; inset: 0; }
+.chip-check span { display: inline-block; padding: 7px 12px; border-radius: 99px; border: 1px solid var(--line); font-weight: 600; font-size: .85rem; cursor: pointer; }
+.chip-check input:checked + span { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.chip-check input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
