@@ -4103,6 +4103,7 @@ ${rows.length ? '' : emptyBarbers()}
     ['ofertas', 'Ofertas no final do agendamento', 'gift', 'Adicionais oferecidos pelo totem e pela Sofia', () => upCard(), 'recepcao', it => { const n = (it.upsell || []).length; return n ? [`${n} oferta${n > 1 ? 's' : ''}`, 'chip-ok'] : ['Nenhuma', '']; }],
     ['retorno', 'Retorno no tempo certo', 'clock', 'Convite no ritmo de cada cliente', () => rtCard(), 'mkt', it => intSt(it.rt_on, it.rt_status)],
     ['planos', 'Venda de planos', 'diamond', 'Plano mensal para quem vem com frequência', () => plCard(), 'mkt', it => intSt(it.pl_on, it.pl_status)],
+    ['agendacheia', 'Agenda cheia automática', 'gauge', 'Horário ocioso vira convite para os clientes do barbeiro', () => acCard(), 'mkt', it => intSt(it.ac_on, it.ac_status)],
     ['vagas', 'Preencher vagas', 'bolt', 'Horário cancelado vira convite na hora', () => fvCard(), 'mkt', it => intSt(it.fv_on, it.fv_status)],
     ['reconquista', 'Reconquista de sumidos', 'rocket', 'Presente de retorno para quem não vem há meses', () => wbCard(), 'mkt', it => intSt(it.wb_on, it.wb_status)],
     ['aniversario', 'Parabéns aos aniversariantes', 'sparkle', 'Mensagem no dia do aniversário', () => bdCard(), 'mkt', it => intSt(it.bd_on, it.bd_status)],
@@ -4390,6 +4391,41 @@ Content-Type: application/json</pre>
   const RT_TEXT = ['{Saudacao}, {cliente}! 😊 Sua próxima visita está chegando. Separei *{dia} às {hora}* com {profissional}, do jeito que você costuma vir.\nQuer que eu reserve pra você?',
     '{Saudacao}, {cliente}! Tudo bem? 😊 Já está chegando a hora de dar aquele trato no visual ✂️\n{profissional} tem horário *{dia} às {hora}*, como você costuma vir. Posso reservar pra você?',
     '{Saudacao}, {cliente}! 💈 Pensando na sua próxima visita, separei um horário com {profissional}: *{dia} às {hora}*, como de costume.\nQuer que eu deixe reservado pra você?'].join('\n---\n');
+  // Agenda cheia automática: horário ocioso de amanhã vira convite para os clientes do profissional.
+  const AC_TEXT = ['{Saudacao}, {cliente}! Tudo bem? 😊\n{profissional} tem um horário *{dia} às {hora}*, bem no seu jeito de vir. Já está chegando a hora do seu próximo {servico}.\nQuer que eu reserve pra você?',
+    '{Saudacao}, {cliente}! 😊\nSeparei um horário com {profissional} *{dia} às {hora}*, perto do horário que você costuma vir.\nPosso deixar reservado pra você?'].join('\n---\n');
+  function acCard() {
+    if (!isGestor(currentUser())) return '';
+    const it = Cloud.enabled ? ui.integ : (state.integ || {});
+    if (!it || it.erro) return '';
+    const st = String(it.ac_status || ''), on = !!it.ac_on, noAb = !it.est_code, bad = /^erro/.test(st), semIa = !it.ia_on;
+    const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const h = new Date().getHours(), sd = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+    const prev = (it.ac_text || AC_TEXT).split(/\n\s*-{3,}\s*\n/)[0].replace(/\{Saudacao\}/g, sd).replace(/\{cliente\}/g, 'João').replace(/\{profissional\}/g, 'Carlos').replace(/\{dia\}/g, 'amanhã (quinta, 26/11)').replace(/\{hora\}/g, '15h').replace(/\{servico\}/g, 'corte').replace(/\{dias\}/g, '20').replace(/\{barbearia\}/g, state.company.name || '');
+    const lim = it.ac_limit || 60, daily = it.ac_daily || 10, dias = it.ac_days === 2 ? 2 : 1;
+    const ocup = (st.match(/ocupação (.*?) · \d+ convite/) || [])[1];
+    return `<section class="section card as-card">
+      <h2 class="section-title">${icon('gauge')} Agenda cheia automática</h2>
+      <p class="section-note">Todo dia, das 10h às 19h, o sistema mede a <b>ocupação de cada profissional</b> no próximo dia aberto na AppBarber (minutos marcados ÷ marcados + livres). Quem estiver <b>abaixo do limite</b> recebe convites para os <b>clientes dele</b> que estão perto do prazo de voltar, no horário livre mais perto do que cada um costuma vir. A ${iaNome()} responde e marca.</p>
+      <p class="section-note">Cada horário é oferecido a no máximo 2 clientes; cada cliente recebe no máximo 1 convite a cada 10 dias. Fica de fora quem já tem horário, pediu SAIR ou recebeu convite de retorno, de vaga ou a reconquista há pouco. Profissional sem nenhum horário livre (cheio ou de folga) não é medido.</p>
+      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}
+      ${semIa ? `<p class="section-note">${icon('alert')} A <b>Atendente IA</b> está desligada: os convites saem, mas as respostas ficam para a recepção.</p>` : ''}
+      <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.ac_status_at ? 'Atualizado ' + when(it.ac_status_at) + ' · ' : ''}${esc(st.replace(/^(ok|erro): /, '').replace(/ocupação .*? · (\d+ convite)/, '$1'))}</small>` : '<span class="chip">Aguardando o servidor</span>'}</div>
+      ${on && ocup ? `<div class="ac-ocup">${ocup.split(' · ').map(bloco => { const [dia, resto] = bloco.split(': '); return `<div><b>${esc(dia)}</b>${(resto || '').split(', ').filter(x => /\d+%$/.test(x)).map(x => { const pct = Number(x.match(/(\d+)%$/)[1]), nome = x.replace(/\s*\d+%$/, ''); return `<span class="ac-p ${pct < lim ? 'baixa' : ''}" title="${esc(nome)}: ${pct}% ocupado"><span>${esc(nome)}</span><i style="--p:${pct}%"></i><small class="num">${pct}%</small></span>`; }).join('') || '<small class="muted">sem dados</small>'}</div>`; }).join('')}</div>` : ''}
+      <form class="form" data-form="acSave" novalidate>
+        <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''} ${noAb ? 'disabled' : ''}><span><b>Agenda cheia automática ligada</b><small>Convites só para profissional abaixo do limite.</small></span></label>
+        <div class="grid-2">
+          <label class="field"><span>Convidar quando a ocupação estiver abaixo de (%)</span><input class="input num" type="number" name="limite" min="20" max="95" step="5" value="${lim}"></label>
+          <label class="field"><span>Convites por dia (máximo)</span><input class="input num" type="number" name="daily" min="1" max="40" step="1" value="${daily}"></label>
+          <label class="field"><span>Olhar a agenda de</span><select class="input" name="dias"><option value="1" ${dias === 1 ? 'selected' : ''}>Amanhã (próximo dia aberto)</option><option value="2" ${dias === 2 ? 'selected' : ''}>Amanhã e o resto de hoje</option></select></label>
+        </div>
+        <label class="field"><span>Mensagem</span><textarea class="input" name="text" rows="7" maxlength="2000">${esc(it.ac_text || AC_TEXT)}</textarea>
+          <small class="muted">Use {Saudacao}, {cliente}, {profissional}, {dia}, {hora}, {servico} e {barbearia}. As versões separadas por uma linha com <b>---</b> são sorteadas a cada envio.</small></label>
+        <details class="wa-prev"><summary>Ver como chega para o cliente</summary><p class="wa-bubble">${esc(prev).replace(/\n/g, '<br>')}</p></details>
+        <p class="form-msg" data-msg></p>
+        <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
+      </form></section>`;
+  }
   // Memória dos clientes: o que cada cliente contou à atendente IA (preferências úteis). O gestor vê, corrige e apaga.
   function memDemo() {
     const n = [['Pedro', '0001', ['Prefere horários depois das 18h', 'Leva o filho junto (corte infantil)']], ['Rafael', '3321', ['Gosta do degradê bem baixo', 'Vai viajar em dezembro']], ['Lucas', '7788', ['Prefere ser atendido pelo mesmo barbeiro sempre']]];
@@ -4580,7 +4616,7 @@ Content-Type: application/json</pre>
   // check-in do horário ("No local" na AppBarber) ou agenda na hora. O link tem um código secreto (só o hash fica salvo).
   // Resultado da atendente IA e do totem: o servidor grava cada agendamento, adicional, convite, conversa e o custo
   // (tabela ia_eventos) e no dia seguinte confere na AppBarber quem compareceu. Aqui vira R$ e retorno sobre o custo.
-  const RES_ORIG = { whatsapp: ['WhatsApp (o cliente chamou)', 'chat'], retorno: ['Retorno no tempo certo', 'clock'], reconquista: ['Reconquista de sumidos', 'rocket'], feedback: ['Pedido de feedback', 'vote'], totem: ['Totem da recepção', 'monitor'], vaga: ['Vagas preenchidas (cancelamento)', 'bolt'] };
+  const RES_ORIG = { whatsapp: ['WhatsApp (o cliente chamou)', 'chat'], retorno: ['Retorno no tempo certo', 'clock'], reconquista: ['Reconquista de sumidos', 'rocket'], feedback: ['Pedido de feedback', 'vote'], totem: ['Totem da recepção', 'monitor'], vaga: ['Vagas preenchidas (cancelamento)', 'bolt'], agenda: ['Agenda cheia (horários ociosos)', 'gauge'] };
   const RES_DOLAR = 5.4; // custo da IA vem em US$; conversão aproximada só para comparar
   function resPeriodo(p) {
     const h = new Date(), d0 = x => new Date(x.getFullYear(), x.getMonth(), x.getDate());
@@ -4597,7 +4633,7 @@ Content-Type: application/json</pre>
     let s = 7; const rnd = () => (s = (s * 9301 + 49297) % 233280) / 233280;
     const pro = state.barbers.filter(b => b.active !== false).map(b => b.name); if (!pro.length) pro.push('Profissional');
     const out = [], ini = de.getTime(), dias = Math.max(1, Math.round((Math.min(ate.getTime(), Date.now()) - ini) / 86400000));
-    for (let i = 0; i < dias; i++) for (const [o, n] of [['whatsapp', 6], ['retorno', 3], ['reconquista', 1], ['feedback', 0.4], ['totem', 2], ['vaga', 0.8]]) {
+    for (let i = 0; i < dias; i++) for (const [o, n] of [['whatsapp', 6], ['retorno', 3], ['reconquista', 1], ['feedback', 0.4], ['totem', 2], ['vaga', 0.8], ['agenda', 1.2]]) {
       const qtd = Math.round(n * (0.6 + rnd() * 0.8));
       for (let k = 0; k < qtd; k++) {
         const em = new Date(ini + i * 86400000 + (9 + rnd() * 10) * 3600000).toISOString(), passou = i < dias - 2;
@@ -9354,6 +9390,18 @@ Content-Type: application/json</pre>
       const [a, b] = [de, ate].sort();
       if ((fromIso(b) - fromIso(a)) / 86400000 > 366) return setMsg(f, 'Escolha um período de até 1 ano.');
       ui.iaRes = { p: 'per', de: a, ate: b }; render();
+    },
+    acSave(f) {
+      const E = f.elements, lim = Math.round(Number(E.limite.value) || 0), daily = Math.round(Number(E.daily.value) || 0);
+      if (lim < 20 || lim > 95) return setMsg(f, 'Limite de ocupação: de 20% a 95%.');
+      if (daily < 1 || daily > 40) return setMsg(f, 'Convites por dia: de 1 a 40.');
+      const row = { ac_on: !!E.on.checked, ac_limit: lim, ac_daily: daily, ac_days: E.dias.value === '2' ? 2 : 1, ac_text: (E.text.value || '').trim().slice(0, 2000) };
+      if (row.ac_text === AC_TEXT) row.ac_text = '';
+      const cur = (Cloud.enabled ? ui.integ : state.integ) || {};
+      if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Agenda cheia automática salva.'); return render(); }
+      setMsg(f, 'Salvando…', true);
+      Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(row.ac_on ? 'Agenda cheia automática ligada.' : 'Agenda cheia automática desligada.'); render(); })
+        .catch(e => { const m = Cloud.message(e); setMsg(f, /ac_|column|schema cache/i.test(m) ? 'A agenda cheia automática ainda está sendo ativada no servidor.' : m); });
     },
     memSave(f) {
       const hoje = iso(new Date()), x = ((ui.mem || {}).lista || []).find(y => y.chave === f.dataset.chave) || { notas: [] };
