@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "8.0";
+export const SOFIA_VERSAO = "8.1";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -2360,6 +2360,98 @@ export function criarIndicacao({ dir, log = () => {}, api = async () => ({}), so
   const lerJ = (f, pad) => { try { return JSON.parse(readFileSync(f, "utf8")); } catch { return pad; } };
   async function rodar(e, hoje = hojeSP()) {
     if (ocupado || !e || !e.indicacao) return; ocupado = true;
+    try { await passo(e, hoje); } finally { ocupado = false; }
+  }
+  return { rodar };
+}
+
+// ---------- agenda sem buracos ----------
+// Procura horários marcados (hoje, com folga, e no próximo dia aberto) que deixaram um buraco menor que 40 minutos antes ou
+// depois, na agenda do profissional. Sugere ao cliente vir um pouco antes ou depois (horário que fecha o buraco ou deixa
+// espaço para outro serviço); se ele aceitar, a atendente IA remarca. Se não puder, o horário dele continua garantido.
+export const TEXTO_OA = "{Saudacao}, {cliente}! Tudo bem? 😊\nSeu horário {dia} às {hora} com {profissional} está garantido. Para a agenda dele ficar certinha, você conseguiria vir às {sugestao}?\nSe não der, sem problema nenhum: seu horário continua o mesmo.";
+// Sugestões para um bloco [ini, fim) do cliente: livre(t) diz se o minuto t está livre (sem contar o próprio bloco).
+export function sugestoesSemBuraco(ini, fim, livre, { minimo = 40, desde = 0 } = {}) {
+  const dur = fim - ini, ok = (t0, t1) => { for (let t = t0; t < t1; t += 5) if (!(livre(t) || (t >= ini && t < fim))) return false; return true; };
+  const corre = (t, passo, ignorar) => { let n = 0; for (let x = passo < 0 ? t - 5 : t; n < 600; x += passo) { if (x >= ignorar[0] && x < ignorar[1]) break; if (!(livre(x) || (x >= ini && x < fim))) break; n += 5; } return n; };
+  const antes = corre(ini, -5, [ini, fim]), depois = corre(fim, 5, [ini, fim]);
+  const ruim = (g) => g > 0 && g < minimo;
+  if (!ruim(antes) && !ruim(depois)) return { antes, depois, sugestoes: [] };
+  const cands = new Set();
+  if (ruim(antes)) { cands.add(ini - antes); cands.add(ini + (minimo - antes)); }
+  if (ruim(depois)) { cands.add(ini + depois); cands.add(ini - (minimo - depois)); }
+  const boas = [];
+  for (const n of cands) {
+    if (n === ini || n < desde || n % 5) continue;
+    if (!ok(n, n + dur)) continue;
+    // Depois de mudar, os espaços em volta do novo horário precisam ser 0 ou de pelo menos `minimo` minutos.
+    const a = corre(n, -5, [n, n + dur]), d = corre(n + dur, 5, [n, n + dur]);
+    if (!ruim(a) && !ruim(d)) boas.push(n);
+  }
+  boas.sort((x, y) => Math.abs(x - ini) - Math.abs(y - ini));
+  return { antes, depois, sugestoes: boas.slice(0, 2) };
+}
+export function criarOtimizar({ dir, log = () => {}, api = async () => ({}), sock = () => null, sofia = () => null, req = null, pode = () => true, relogio = agoraSP, intervaloMin = 60 }) {
+  const EST = join(dir, "otimizar-estado.json");
+  const ler = () => { try { return JSON.parse(readFileSync(EST, "utf8")); } catch { return {}; } };
+  const gravar = (v) => { try { writeFileSync(EST, JSON.stringify(v), { mode: 0o600 }); } catch { /* tenta depois */ } };
+  let ab = null, abChave = "", ocupado = false, rodouEm = 0;
+  const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  async function passo(e, hoje) {
+    const c = e.otimizar, agora = relogio(), fechados = ((e.horario && e.horario.fechados) || []).map(Number);
+    if (fechados.includes(diaDaSemana(hoje)) || agora < 9 * 60 || agora > 19 * 60 || Date.now() - rodouEm < intervaloMin * 60000) return; rodouEm = Date.now();
+    const k = `${c.codigo_estabelecimento}|${c.appbarber_api_key}`;
+    if (!ab || abChave !== k) { abChave = k; ab = ferramentasAppBarber({ cfg: c, ...(req ? { req } : {}), creditos: (n, zero) => api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: n, ...(zero ? { sem_saldo: true } : {}) }).catch(() => {}) }); }
+    const st = ler(); if (st.dia !== hoje) { st.dia = hoje; st.hoje = 0; } st.feitos = st.feitos || {};
+    for (const [kk, d] of Object.entries(st.feitos)) if (d < somaDias(hoje, -3)) delete st.feitos[kk];
+    let alvo = somaDias(hoje, 1); for (let i = 0; i < 3 && fechados.includes(diaDaSemana(alvo)); i++) alvo = somaDias(alvo, 1);
+    const servs = await ab.servicos(), curtos = servs.filter((x) => x.tipo === 1 && Number(x.minutos) > 0).sort((a, b) => a.minutos - b.minutos);
+    const curto = curtos[0]; if (!curto) return;
+    const durDe = (n) => Number((servs.find((x) => semAcento(x.nome) === semAcento(n)) || {}).minutos) || 30;
+    const s = sock(); let achados = 0;
+    for (const [dia, desde] of [[hoje, agora + 180], [alvo, 0]]) {
+      if (!s || !pode() || st.hoje >= c.porDia) break;
+      const disp = await ab.horarios(dia, curto.codigo).catch(() => []);
+      const blocos = new Map(); // cliente+profissional → blocos seguidos
+      for (const a of await ab.agenda(dia, dia, "1")) {
+        const m = String(a.scheduling_start || "").match(/ (\d{2}):(\d{2})/), f = so(a.client_phone); if (!m || f.length < 10) continue;
+        const ini = +m[1] * 60 + +m[2], prof = String(a.employee_name || "").trim(), kb = chaveFone(f) + "|" + semAcento(prof);
+        const l = blocos.get(kb) || []; l.push({ ini, fim: ini + durDe(a.service_description), cod: Number(a.appointment_code || a.scheduling_code), serv: String(a.service_description || "").trim(), f, nome: String(a.client_name || "").trim(), prof }); blocos.set(kb, l);
+      }
+      for (const l of blocos.values()) {
+        if (st.hoje >= c.porDia) break;
+        l.sort((x, y) => x.ini - y.ini);
+        const b = { ini: l[0].ini, fim: Math.max(...l.map((x) => x.fim)), cods: l.map((x) => x.cod), servs: [...new Set(l.map((x) => x.serv))], f: l[0].f, nome: l[0].nome, prof: l[0].prof };
+        const kf = b.cods.join(","); if (st.feitos[kf] || b.ini < desde) continue;
+        const p = disp.find((x) => mesmoNome(x.completo || x.nome, b.prof) || mesmoNome(x.nome, b.prof)); if (!p) continue;
+        const livres = (p.horarios || []).map(mins), livre = (t) => livres.some((h) => t >= h && t < h + curto.minutos);
+        const r = sugestoesSemBuraco(b.ini, b.fim, livre, { desde: dia === hoje ? agora + 120 : 0 });
+        if (!r.sugestoes.length) { if (r.antes || r.depois) st.feitos[kf] = hoje; continue; }
+        st.feitos[kf] = hoje; achados++;
+        const d = so(b.f), numero = d.length <= 11 ? "55" + d : d;
+        const [w] = await s.onWhatsApp(numero).catch(() => []); if (!w || !w.exists) continue;
+        const nome = primeiroNome(b.nome), profissional = primeiroNome(b.prof), sug = r.sugestoes.map((x) => horaTexto(hhmm(x)));
+        const ds = DIAS[diaDaSemana(dia)].replace("-feira", ""), diaTxt = dia === hoje ? "hoje" : dia === somaDias(hoje, 1) ? "amanhã" : `${ds} (${dia.split("-").reverse().slice(0, 2).join("/")})`;
+        const sd = relogio() < 12 * 60 ? "Bom dia" : relogio() < 18 * 60 ? "Boa tarde" : "Boa noite";
+        const txt = String(c.texto || TEXTO_OA).replace(/\{Saudacao\}/g, sd).replace(/\{cliente\}/g, nome || "tudo bem").replace(/\{dia\}/g, diaTxt).replace(/\{hora\}/g, horaTexto(hhmm(b.ini)))
+          .replace(/\{profissional\}/g, profissional || "o profissional").replace(/\{sugestao\}/g, sug.join(" ou às ")).replace(/\{barbearia\}/g, e.nome || "").replace(/https?:\/\/\S+/gi, "").trim();
+        st.hoje++; gravar(st);
+        try {
+          await s.presenceSubscribe(w.jid).catch(() => {}); await s.sendPresenceUpdate("composing", w.jid).catch(() => {}); await espera(1500 + Math.random() * 1500); await s.sendPresenceUpdate("paused", w.jid).catch(() => {});
+          const rr = await s.sendMessage(w.jid, { text: txt });
+          const so2 = sofia(); if (so2 && so2.conviteEnviado) so2.conviteEnviado(w.jid, rr && rr.key && rr.key.id, { fone: normFone(d), nome, texto: txt, horas: dia === hoje ? 6 : 24, origem: "otimizar", tipo: "pedido de troca de horário para não deixar buraco na agenda",
+            detalhe: `[horário atual: ${dia} ${hhmm(b.ini)} com ${b.prof} (${b.servs.join(" + ")}), códigos ${b.cods.join(", ")}. Sugestões: ${r.sugestoes.map(hhmm).join(" ou ")}. Se o cliente aceitar uma, use consultar_cliente e remarcar para o mesmo dia, profissional e serviços no horário escolhido, e confirme. Se ele não puder, agradeça e diga que o horário dele continua o mesmo; não insista.]` });
+          log(`Agenda sem buracos: sugestão enviada (${nome || "cliente"} ${dia} ${hhmm(b.ini)} → ${r.sugestoes.map(hhmm).join(" / ")}).`);
+        } catch (err) { log("Agenda sem buracos: não enviada: " + err.message); }
+        gravar(st);
+      }
+    }
+    gravar(st);
+    const quando = new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+    await api("POST", { company_id: e.company_id, acao: "oa_status", status: `ok: ${quando} · hoje: ${st.hoje} pedido(s) de troca de horário enviado(s) (limite ${c.porDia})` }).catch(() => {});
+  }
+  async function rodar(e, hoje = hojeSP()) {
+    if (ocupado || !e || !e.otimizar) return; ocupado = true;
     try { await passo(e, hoje); } finally { ocupado = false; }
   }
   return { rodar };

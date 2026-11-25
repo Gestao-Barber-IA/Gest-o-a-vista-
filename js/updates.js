@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-25-sem-buracos', date: '2026-11-25', title: 'Agenda sem buracos', items: [
+    ['novo', 'Em Integração & API › Agenda sem buracos: quando um horário marcado deixou um buraco menor que 40 minutos na agenda do profissional, o cliente recebe um pedido gentil para vir um pouco antes ou depois (ex.: 14h40 ou 15h20 em vez de 15h). Se ele aceitar, a atendente IA remarca; se não, o horário continua o mesmo.'],
+  ] },
   { id: '2026-11-25-encaixe', date: '2026-11-25', title: 'Atendente IA: horários sem buraco na agenda', items: [
     ['melhoria', 'A atendente IA oferece primeiro os horários que encostam num atendimento (ou deixam espaço para outro serviço), para não sobrar buraco de 20 minutos na agenda do profissional. Ex.: se o anterior termina 14h40, ela oferece 14h40 ou 15h20, não 15h. Vale também para os convites de Retorno e da Agenda cheia.'],
   ] },
