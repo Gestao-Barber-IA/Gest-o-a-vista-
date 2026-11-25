@@ -2,6 +2,11 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-25-memoria', date: '2026-11-25', title: 'Atendente IA com memória do cliente', items: [
+    ['novo', 'A atendente IA conhece o "de sempre" de cada cliente (serviço, barbeiro, dia e horário de costume, pela agenda) e propõe isso numa pergunta só, em vez de perguntar tudo de novo. Se o cliente passou do ritmo dele, ela comenta com leveza.'],
+    ['novo', 'Ela também guarda o que o cliente conta de útil para os próximos atendimentos (ex.: prefere depois das 18h, leva o filho). Em Integração & API › Memória dos clientes você vê, corrige ou apaga (LGPD). Saúde, religião, política, dinheiro e documentos não são guardados.'],
+    ['melhoria', 'A oferta do adicional continua sempre na confirmação do horário; a do plano vem só depois, nunca as duas juntas.'],
+  ] },
   { id: '2026-11-25-venda-planos', date: '2026-11-25', title: 'Venda de planos para clientes frequentes', items: [
     ['novo', 'Em Integração & API › Venda de planos: o sistema calcula, pela frequência de cada cliente na AppBarber, quanto ele gasta por mês pagando avulso. Quem vem pelo menos umas 3 vezes no mês e não é assinante recebe a oferta do plano que combina com o serviço dele, mostrando a economia: pela atendente IA depois de agendar e, se quiser, num convite por dia.'],
     ['novo', 'Quem se interessa vai para a recepção fechar. No Resultado da atendente IA aparecem os convites, os interessados e os planos fechados (cliente que virou assinante até 45 dias depois da oferta), com o valor por mês.'],

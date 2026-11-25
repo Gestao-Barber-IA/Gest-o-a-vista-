@@ -91,6 +91,12 @@ Deno.serve(async (req) => {
         }
         for (const [k, x] of soma) { const t = x.b >= 5 ? x.v / x.b : x.c >= 20 && x.r > 0 ? x.r / x.c : null; if (t != null) fid.set(k, Math.round(t * 1000) / 10); }
       }
+      // Correções de memória feitas no app nos últimos 7 dias (o servidor aplica sobre o arquivo dele).
+      let memorias: unknown[] = [];
+      if (i.ia_on) {
+        const { data: mem } = await db.from("ia_memorias").select("chave, notas, app_em").eq("company_id", co.id).gte("app_em", new Date(Date.now() - 7 * 86400000).toISOString()).limit(500);
+        memorias = (mem || []).map((m: any) => ({ chave: m.chave, em: m.app_em, notas: m.notas || [] }));
+      }
       const fone = new Map((profs || []).filter((p) => p.barber_id && p.phone && p.status !== "bloqueado").map((p) => [String(p.barber_id), p.phone]));
       empresas.push({
         company_id: co.id, nome: co.name, hoje,
@@ -134,6 +140,7 @@ Deno.serve(async (req) => {
         barbers: (barbers || []).filter((b) => b.active !== false).map((b) => ({ id: b.id, name: b.name, phone: fone.get(String(b.id)) || "", ...(fid.has(String(b.id)) ? { fid: fid.get(String(b.id)) } : {}) })),
         pop: (pop || []).map((r) => ({ barberId: r.barber_id, day: r.day, ...(r.data || {}) })),
         entries: (entries || []).map((e) => ({ barberId: e.barber_id, date: e.date, source: e.source, ...(e.data || {}) })),
+        memorias,
       });
     }
     return json({ hoje, empresas });
@@ -194,6 +201,14 @@ Deno.serve(async (req) => {
       if (!lista.length) return json({ ok: true });
       const { error } = await db.from("ia_eventos").upsert(lista, { onConflict: "company_id,ref", ignoreDuplicates: true });
       return error ? json({ erro: error.message }, 500) : json({ ok: true, n: lista.length });
+    }
+    // Memória do cliente (atendente IA): a cópia do servidor, para a equipe ver no app. Não mexe em app_em.
+    if (b.acao === "ia_memoria") {
+      const chave = String(b.chave || "").replace(/[^a-f0-9]/g, "").slice(0, 32);
+      if (!chave) return json({ erro: "Chave inválida." }, 400);
+      const notas = (Array.isArray(b.notas) ? b.notas : []).slice(-10).map((n: any) => ({ t: String(n && n.t || "").slice(0, 120), em: String(n && n.em || "").slice(0, 10) })).filter((n: any) => n.t);
+      const { error } = await db.from("ia_memorias").upsert({ company_id: b.company_id, chave, nome: String(b.nome || "").slice(0, 60), fone4: String(b.fone4 || "").replace(/\D/g, "").slice(-4), notas, atualizado: new Date().toISOString() }, { onConflict: "company_id,chave" });
+      return error ? json({ erro: error.message }, 500) : json({ ok: true });
     }
     if (b.acao === "ia_compareceu") {
       for (const x of (Array.isArray(b.itens) ? b.itens : []).slice(0, 300)) {

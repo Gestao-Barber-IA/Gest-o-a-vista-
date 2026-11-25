@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "7.3";
+export const SOFIA_VERSAO = "7.4";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -242,6 +242,9 @@ export const TOOLS = [
     input_schema: obj({ servicos: { type: "array", items: { type: "integer" }, description: "Códigos dos serviços, na ordem" }, profissional: { type: "integer", description: "Código do profissional (de ver_horarios)" }, data_hora: { type: "string", description: "AAAA-MM-DD HH:MM" }, nome_cliente: { type: "string", description: "Nome completo do cliente" }, observacao: { type: ["string", "null"], description: "Recado curto para o barbeiro(a), ex.: Primeira vez na barbearia; ou null" } }, ["servicos", "profissional", "data_hora", "nome_cliente", "observacao"]) },
   { name: "remarcar", description: "Troca um horário já marcado por outro: marca o novo e depois cancela o antigo. SÓ use depois que o cliente confirmou o novo horário.", strict: true,
     input_schema: obj({ codigo_agendamento: { type: "integer", description: "Código do horário atual (de consultar_cliente)" }, servicos: { type: "array", items: { type: "integer" } }, profissional: { type: "integer" }, data_hora: { type: "string", description: "AAAA-MM-DD HH:MM" } }, ["codigo_agendamento", "servicos", "profissional", "data_hora"]) },
+  { name: "lembrar", description: "Guarda na memória do cliente uma preferência ou informação útil para os PRÓXIMOS atendimentos, que ele contou (ex.: prefere horários depois das 18h; leva o filho junto; gosta do degradê mais baixo; vai viajar em dezembro). Uma frase curta por vez. NUNCA guarde saúde, religião, política, dinheiro, documentos ou senhas, nem o que já está no de sempre.", strict: true,
+    input_schema: obj({ nota: { type: "string", description: "Frase curta (até 120 caracteres), em terceira pessoa" } }, ["nota"]) },
+  { name: "esquecer", description: "Apaga TODA a memória guardada deste cliente. Use quando ele pedir para esquecer ou apagar os dados dele.", strict: true, input_schema: obj({}, []) },
   { name: "confirmar_presenca", description: "Marca como CONFIRMADO na agenda o(s) horário(s) do cliente, quando ele responde a confirmação de presença dizendo que vem (sim, confirmo, 👍, estarei aí). Use os códigos da mensagem de confirmação ou de consultar_cliente.", strict: true,
     input_schema: obj({ codigos: { type: "array", items: { type: "integer" }, description: "Códigos dos horários a confirmar" } }, ["codigos"]) },
   { name: "cancelar", description: "Cancela um horário marcado do cliente. SÓ use depois que o cliente confirmou que quer cancelar aquele horário.", strict: true,
@@ -282,6 +285,8 @@ Jeito de falar:
 - Erros de digitação: clientes escrevem rápido e o corretor do celular troca palavras. Entenda pelo contexto, como uma recepcionista experiente: "Caleb e barba", "cabeli e barba", "cabelo barba" = corte e barba; "cabelo" = corte; "barva" = barba; "sombrancelha" = sobrancelha; "pesinho"/"pezim" = pezinho; "navalado" = navalhado; "amanha"/"amnh" = amanhã; "sabado" = sábado. Antes de tratar uma palavra como nome de barbeiro, confira se ele existe${equipe.length ? ` (barbeiros da equipe: ${equipe.join(", ")}; na agenda pode aparecer apelido)` : " (ver_horarios mostra quem atende)"}; se não existir e a palavra parecer um serviço escrito errado, entenda como o serviço. Se ficar em dúvida de verdade, confirme de leve, sem corrigir o cliente: "Corte e barba, certo? 😊". Nunca repita o erro dele como se fosse um nome.
 - Chame o cliente pelo primeiro nome quando souber. Não se apresente como robô nem fale de "sistema", "ferramenta" ou "IA", a não ser que perguntem; se perguntarem, diga com naturalidade que é a assistente virtual da ${barbearia}.
 - Sem listas longas nem markdown (nada de **negrito** ou #). Ao oferecer horários, sugira 2 ou 3 opções próximas do que o cliente pediu.
+- Memória: quando a mensagem trouxer "O de sempre deste cliente" ou "Memória do cliente", use para atender como quem já conhece o cliente (proponha o de sempre, lembre das preferências), sem soar invasiva e sem listar o que você sabe. Quando o cliente contar algo útil para os próximos atendimentos, use lembrar (sem avisar). Se ele pedir para apagar os dados dele, use esquecer.
+- Ofertas depois de marcar: o adicional (Oferta no final) vem SEMPRE na mensagem que confirma o horário, mesmo para quem pediu "o de sempre" (só não ofereça o que ele já vai fazer). Se também houver dica de Venda de plano, ofereça o plano só depois, numa próxima mensagem (quando o cliente responder sobre o adicional), nunca as duas ofertas juntas.
 - Brincadeira: se o cliente brincar (risadas, 🤣, "me passa o pix que é presente de aniversário", "aniversariante não tem desconto?"), entre na brincadeira com leveza, numa frase curta, e volte ao agendamento na mesma mensagem. Brincadeira não é pedido sério: nunca chame a recepção por causa dela.
 - Pagamento (Pix, cartão, dinheiro): é feito na barbearia, no dia do atendimento, a não ser que as Informações da casa digam outra coisa. Pergunta de pagamento no meio de um agendamento não é motivo para chamar a recepção: responda isso e continue. Nunca deixe um agendamento pela metade para chamar a recepção quando o assunto não impede marcar; termine o agendamento primeiro.
 - Nome para o cadastro: peça só depois que o cliente escolher o horário, numa mensagem só para isso (nunca junto com outra pergunta).
@@ -580,6 +585,17 @@ export async function executar(nomeTool, input, ctx) {
       if (ctx.evento) ctx.evento({ tipo: "remarcacao", dados: { de: velho.quando, para: input.data_hora, antigos: [velho.codigo], codigos: (novoR && novoR.codigos) || [] } });
       return { ok: true };
     }
+    case "lembrar": {
+      const t = String(input.nota || "").replace(/\s+/g, " ").trim().slice(0, 120);
+      if (!t) return { erro: "nota vazia" };
+      if (SENSIVEL.test(t)) return { erro: "isso é dado sensível: não guarde" };
+      if (simular || !ctx.lembrar) return { ok: true, simulado: true };
+      ctx.lembrar(t); return { ok: true, nota: "Guardado. Não precisa avisar o cliente." };
+    }
+    case "esquecer": {
+      if (simular || !ctx.esquecer) return { ok: true, simulado: true };
+      ctx.esquecer(); return { ok: true, nota: "Memória apagada. Confirme ao cliente em uma frase." };
+    }
     case "confirmar_presenca": {
       if (!fone) return { erro: "telefone do cliente desconhecido" };
       const ag = await ab.agendamentosDe(fone), pedidos = (input.codigos || []).map(Number);
@@ -658,6 +674,35 @@ export async function executar(nomeTool, input, ctx) {
 }
 
 // No começo de cada conversa: o cliente tem cadastro? (1 consulta à AppBarber, pelo celular do WhatsApp)
+// ---------- memória do cliente ----------
+// O "de sempre" vem do histórico da AppBarber (serviço, barbeiro, dia e horário de costume). O que o cliente conta
+// (preferências úteis para o atendimento) a atendente guarda com a ferramenta lembrar: arquivo no servidor e cópia no
+// Supabase (tabela ia_memorias, pela chave do telefone, sem o número), para a equipe ver, corrigir ou apagar no app.
+const MEM = "memoria-clientes.json";
+export const chaveMemoria = (fone) => hashCurto("mem:" + chaveFone(fone));
+export function lerMemorias(dir) { try { return JSON.parse(readFileSync(join(dir, MEM), "utf8")); } catch { return {}; } }
+export function gravarMemorias(dir, m) { try { writeFileSync(join(dir, MEM), JSON.stringify(m), { mode: 0o600 }); } catch { /* tenta na próxima */ } }
+// Dado sensível não entra (saúde, religião, política, dinheiro, documentos, senhas).
+const SENSIVEL = /\b(doen[cç]a|diabet|c[aâ]ncer|hiv|depress|ansiedade|rem[eé]dio|gr[aá]vid|religi|igreja|evang[eé]l|cat[oó]lic|pol[ií]tic|partido|vot[oa]|sal[aá]rio|d[ií]vida|empr[eé]stimo|cpf|rg\b|senha|cart[aã]o de cr[eé]dito|conta banc)/i;
+export function costumeLinha(dir, fone, hoje = hojeSP()) {
+  let h; try { h = JSON.parse(readFileSync(join(dir, "retorno-historico.json"), "utf8")); } catch { return ""; }
+  const cl = h && h.cli && h.cli[chaveFone(fone)]; if (!cl) return "";
+  const a = analisarCliente(cl.v, hoje);
+  const v = (cl.v || []).slice().sort((x, y) => String(x[0]).localeCompare(String(y[0]))), ult = v[v.length - 1];
+  if (!a) {
+    if (!ult) return "";
+    return `[Histórico do cliente: última visita em ${ult[0].split("-").reverse().join("/")} (há ${diasEntre(ult[0], hoje)} dias)${ult[3] ? `, fez ${ult[3]}` : ""}${ult[2] ? ` com ${ult[2]}` : ""}. ${v.length} visita(s) no último ano.]\n`;
+  }
+  const hora = a.hora != null ? `${String(Math.floor(a.hora / 60)).padStart(2, "0")}h${String(a.hora % 60).padStart(2, "0")}`.replace(/h00$/, "h") : "";
+  const periodo = a.hora == null ? "" : a.hora < 12 * 60 ? "de manhã" : a.hora < 18 * 60 ? "à tarde" : "no fim da tarde/noite";
+  const atraso = a.dias - a.media;
+  return `[O de sempre deste cliente (histórico da agenda): ${a.serv} com ${a.prof}, costuma vir ${DIAS[a.dia]}${hora ? ` por volta das ${hora} (${periodo})` : ""}, a cada ~${a.media} dias; última visita há ${a.dias} dias${atraso > 5 ? ` (já passou uns ${atraso} dias do ritmo dele: pode comentar com leveza, ex.: "Faz um tempinho, hein! 😄")` : ""}. Se ele quiser agendar sem dar detalhes, proponha o de sempre numa pergunta só (ex.: "O de sempre, ${a.serv.split(" + ")[0].replace(/^\d+(\.\d+)?\s*/, "")} com o ${primeiroNome(a.prof)} na ${DIAS[a.dia].replace("-feira", "")} ${periodo || ""}?"); se ele disser sim, siga direto para ver_horarios. Se ele pedir outra coisa, siga o que ele pedir.]\n`;
+}
+export function memoriaLinha(dir, fone) {
+  const m = lerMemorias(dir)[chaveMemoria(fone)];
+  if (!m || !Array.isArray(m.notas) || !m.notas.length) return "";
+  return `[Memória do cliente (o que ele já contou em outras conversas; use com naturalidade quando ajudar, sem repetir tudo):\n${m.notas.map((n) => `- ${n.t}${n.em ? ` (${n.em.split("-").reverse().slice(0, 2).join("/")})` : ""}`).join("\n")}]\n`;
+}
 export async function verificarCadastro(ab, fone, conv) {
   if (!fone) return "[Cadastro: WhatsApp do cliente desconhecido; se for agendar, peça o celular com DDD]";
   try {
@@ -998,6 +1043,7 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
     const novo = { company_id: e.company_id, barbearia: e.nome, brand: e.brand, nome: e.sofia.nome || "Sofia", modelo: MODELOS.includes(e.sofia.modelo) ? e.sofia.modelo : MODELO_PADRAO,
       janelas: e.sofia.janelas || JANELAS_PADRAO, horario: e.horario || null, artes: Array.isArray(e.sofia.artes) ? e.sofia.artes.filter((a) => a && a.url && a.nome) : [], avisar: so(e.sofia.avisar || ""), alerta: so(e.sofia.alerta || ""), equipe: Array.isArray(e.barbers) ? e.barbers : [], nomesAB: (e.sofia && e.sofia.nomes) || {}, pausaMin: Math.max(15, Math.min(1440, Number(e.sofia.pausa) || 60)), parabens: (e.feedback && e.feedback.parabens) || "", aniversario: (e.aniversario && e.aniversario.texto) || "", planos: e.planos || null, notas: e.sofia.notas || "", upsell: Array.isArray(e.sofia.upsell) ? e.sofia.upsell : [], ab: e.appbarber };
     cfg = novo;
+    aplicarMemoriasDoApp(e.memorias);
     if (abKey !== e.appbarber.appbarber_api_key + e.appbarber.codigo_estabelecimento) {
       abKey = e.appbarber.appbarber_api_key + e.appbarber.codigo_estabelecimento;
       ab = ferramentasAppBarber({ cfg: e.appbarber, ...(abReq ? { req: abReq } : {}), creditos: (n, zero) => api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: n, ...(zero ? { sem_saldo: true } : {}) }).catch(() => {}) });
@@ -1081,6 +1127,29 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
   }
   // WhatsApp do profissional (cadastro do Gestão), pelo nome que vem da AppBarber.
   const normN = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+  // Memória do cliente: grava no servidor e manda uma cópia para o app (sem o telefone).
+  function enviarMemoria(k, m) { if (!cfg || !api) return; api("POST", { company_id: cfg.company_id, acao: "ia_memoria", chave: k, nome: m.nome || "", fone4: m.fone4 || "", notas: m.notas || [] }).catch((e) => log("Memória: não enviei ao app (" + e.message + ")")); }
+  function guardarMemoria(c, t) {
+    if (!c.fone) return; const k = chaveMemoria(c.fone), todas = lerMemorias(dir), m = todas[k] || { notas: [] };
+    if (m.notas.some((n) => semAcentoP(n.t) === semAcentoP(t))) return;
+    m.notas.push({ t, em: hojeSP() }); m.notas = m.notas.slice(-10); m.nome = c.nome || m.nome || c.pushName || ""; m.fone4 = String(c.fone).slice(-4);
+    todas[k] = m; gravarMemorias(dir, todas); enviarMemoria(k, m); log(`Sofia: (…${m.fone4}) memória: ${t}`);
+  }
+  function apagarMemoria(c) {
+    if (!c.fone) return; const k = chaveMemoria(c.fone), todas = lerMemorias(dir);
+    todas[k] = { notas: [], nome: "", fone4: String(c.fone).slice(-4) }; gravarMemorias(dir, todas); enviarMemoria(k, todas[k]);
+  }
+  // Correções feitas no app (editar ou apagar) chegam pela configuração e valem sobre o arquivo do servidor.
+  function aplicarMemoriasDoApp(lista) {
+    if (!Array.isArray(lista) || !lista.length) return;
+    const todas = lerMemorias(dir); let mudou = false;
+    for (const x of lista) {
+      if (!x || !x.chave) continue; const m = todas[x.chave] || { notas: [] };
+      if (m.appEm && m.appEm >= x.em) continue;
+      todas[x.chave] = { ...m, notas: Array.isArray(x.notas) ? x.notas.filter((n) => n && n.t && !SENSIVEL.test(n.t)).slice(-10) : [], appEm: x.em }; mudou = true;
+    }
+    if (mudou) gravarMemorias(dir, todas);
+  }
   function barbeiroDoAB(nomeAB) {
     const eq = (cfg && cfg.equipe) || [], alvo = normN((cfg && cfg.nomesAB && cfg.nomesAB[nomeAB]) || nomeAB);
     if (!alvo) return null;
@@ -1291,7 +1360,7 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
           c.noturna = 0; c.pendTipo = null;
         }
         const antes = c.contexto.splice(0).sort((a, b) => a.ts - b.ts).map((x) => x.linha);
-        const cadLinha = c.verificado ? "" : (c.verificado = true, (await verificarCadastro(ab, c.fone, c)) + "\n" + (c.plano ? "" : dicaPlano({ dir, fone: c.fone, planosCfg: cfg.planos })) + (jaApresentou(c.fone)
+        const cadLinha = c.verificado ? "" : (c.verificado = true, (await verificarCadastro(ab, c.fone, c)) + "\n" + (c.fone ? costumeLinha(dir, c.fone) + memoriaLinha(dir, c.fone) : "") + (c.plano ? "" : dicaPlano({ dir, fone: c.fone, planosCfg: cfg.planos })) + (jaApresentou(c.fone)
           ? "[Apresentação: você já se apresentou a este cliente em outra conversa; não se apresente de novo]\n"
           : `[Apresentação: é a primeira vez que você fala com este cliente; na sua resposta, apresente-se em uma frase curta e simpática (ex.: "Eu sou a ${cfg.nome}, atendente da ${cfg.barbearia} 😊")]\n`));
         const naoEnviada = c.naoEnviada ? "[Sua resposta anterior NÃO foi enviada, porque o cliente mandou mais mensagens enquanto você respondia. Responda agora considerando tudo.]\n" : ""; c.naoEnviada = false;
@@ -1300,7 +1369,7 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
           : novas.join("\n")) });
         if (!c.contada) { c.contada = true; zera(); stats.conversas++; if (resultados) resultados.evento(cfg.company_id, { tipo: "conversa", origem: c.origem || "whatsapp" }); }
         if (!c.artes) c.artes = cfg.artes; // congeladas junto com as instruções
-        const ctx = { ab, fone: c.fone, stats, simular: false, evento: (ev) => ev && resultados && cfg && resultados.evento(cfg.company_id, { origem: c.origem || "whatsapp", ...ev }), carga: cargaDoDia, fidelizacao: (n) => { const b = barbeiroDoAB(n); return b && Number.isFinite(b.fid) ? b.fid : null; }, parabens: cfg.parabens || "", equipe: [...(cfg.equipe || []).map((b) => b.name), cfg.barbearia].filter(Boolean), /* o dono costuma ter o nome da barbearia */ artes: c.artes, enviarArte: (a) => enviarArte(jid, a), registro: (t) => log(`Sofia: ${t}.`),
+        const ctx = { ab, fone: c.fone, stats, simular: false, evento: (ev) => ev && resultados && cfg && resultados.evento(cfg.company_id, { origem: c.origem || "whatsapp", ...ev }), lembrar: (t) => guardarMemoria(c, t), esquecer: () => apagarMemoria(c), carga: cargaDoDia, fidelizacao: (n) => { const b = barbeiroDoAB(n); return b && Number.isFinite(b.fid) ? b.fid : null; }, parabens: cfg.parabens || "", equipe: [...(cfg.equipe || []).map((b) => b.name), cfg.barbearia].filter(Boolean), /* o dono costuma ter o nome da barbearia */ artes: c.artes, enviarArte: (a) => enviarArte(jid, a), registro: (t) => log(`Sofia: ${t}.`),
           falha: (t) => { log(`Sofia: (…${String(c.fone).slice(-4)}) ${t}`); pendencias.push(`(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); status().catch(() => {}); },
           listaEspera: (x) => listaEspera(jid, c, x), alertar: (t) => alertaEquipe(c, t), avisarProfissional: (nome, t) => avisarProfissional(c, nome, t), pendencia: (t) => { c.motivo = t; pendencias.push(`${c.nome ? c.nome.split(" ")[0] + " " : ""}(${c.fone ? "…" + c.fone.slice(-4) : "sem fone"}) ${t}`); } };
         const antesStats = { agendou: stats.agendados, remarcou: stats.remarcados, cancelou: stats.cancelados };
