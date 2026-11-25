@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "7.9";
+export const SOFIA_VERSAO = "8.0";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -291,6 +291,7 @@ Jeito de falar:
 - Sem listas longas nem markdown (nada de **negrito** ou #). Ao oferecer horários, sugira 2 ou 3 opções próximas do que o cliente pediu.
 - Indicação: se um cliente novo falar que foi indicado ou mandar um código de indicação, use validar_indicacao antes de agendar. O benefício vale só na primeira visita de quem ainda não é cliente. Se a ferramenta disser que não vale, explique com gentileza e siga o atendimento normal.
 - Memória: quando a mensagem trouxer "O de sempre deste cliente" ou "Memória do cliente", use para atender como quem já conhece o cliente (proponha o de sempre, lembre das preferências), sem soar invasiva e sem listar o que você sabe. Quando o cliente contar algo útil para os próximos atendimentos, use lembrar (sem avisar). Se ele pedir para apagar os dados dele, use esquecer.
+- Encaixe na agenda: quando ver_horarios trouxer encaixe_sem_buraco, ofereça primeiro esses horários (eles não deixam buraco na agenda do profissional). Se o cliente pedir um horário que deixa buraco, sugira com naturalidade o encaixe mais perto (ex.: "Tenho 14h40 ou 15h20, que ficam certinhos; serve?"); se ele insistir no dele, marque o que ele pediu.
 - Ofertas depois de marcar: o adicional (Oferta no final) vem SEMPRE na mensagem que confirma o horário, mesmo para quem pediu "o de sempre" (só não ofereça o que ele já vai fazer). Se também houver dica de Venda de plano, ofereça o plano só depois, numa próxima mensagem (quando o cliente responder sobre o adicional), nunca as duas ofertas juntas.
 - Brincadeira: se o cliente brincar (risadas, 🤣, "me passa o pix que é presente de aniversário", "aniversariante não tem desconto?"), entre na brincadeira com leveza, numa frase curta, e volte ao agendamento na mesma mensagem. Brincadeira não é pedido sério: nunca chame a recepção por causa dela.
 - Pagamento (Pix, cartão, dinheiro): é feito na barbearia, no dia do atendimento, a não ser que as Informações da casa digam outra coisa. Pergunta de pagamento no meio de um agendamento não é motivo para chamar a recepção: responda isso e continue. Nunca deixe um agendamento pela metade para chamar a recepção quando o assunto não impede marcar; termine o agendamento primeiro.
@@ -344,6 +345,19 @@ const primeiroNome = (n) => { const w = String(n || "").trim().split(/\s+/)[0] |
 const limpaNome = (t) => String(t).replace(/,\s*(?=[?!.])/g, "").replace(/\s{2,}/g, " ").replace(/\s+([?!.,])/g, "$1").trim();
 const reais = (v) => (v === null || v === undefined || v === "" || isNaN(Number(v)) ? null : "R$ " + Number(v).toFixed(2).replace(".", ","));
 // Horários livres com o valor do dia, agrupados por preço (ex.: { "R$ 40,00": ["09:00", …] }).
+// Encaixe sem buraco: horários livres que não deixam, antes nem depois, um espaço menor que `minimo` minutos na agenda
+// do profissional (onde não cabe um serviço). Ex.: atendimento até 14h40 → 14h40 é bom; 15h deixaria 20 minutos parados.
+export function semBuraco(horas, dur = 40, minimo = 40) {
+  const m = [...new Set((horas || []).map(mins))].sort((a, b) => a - b); if (!m.length) return [];
+  const passo = m.length > 1 ? Math.max(5, Math.min(...m.slice(1).map((x, i) => x - m[i]).filter((x) => x > 0))) : 20;
+  const runs = []; let ini = m[0], fim = m[0];
+  for (const x of m.slice(1)) { if (x - fim <= passo) fim = x; else { runs.push([ini, fim]); ini = fim = x; } }
+  runs.push([ini, fim]);
+  const ok = [];
+  for (const [a, b] of runs) for (const h of m) if (h >= a && h <= b) { const antes = h - a, depois = b - h; if ((antes === 0 || antes >= minimo) && (depois === 0 || depois >= minimo)) ok.push(h); }
+  const hh = (x) => `${String(Math.floor(x / 60)).padStart(2, "0")}:${String(x % 60).padStart(2, "0")}`;
+  return ok.map(hh);
+}
 function precosDoDia(p) {
   const grupos = {};
   for (const h of p.horarios.slice(0, 40)) {
@@ -456,6 +470,10 @@ export async function executar(nomeTool, input, ctx) {
       }
       const d = new Date(input.data + "T12:00:00Z");
       const out = { dia: `${DIAS[d.getUTCDay()]}, ${input.data.split("-").reverse().join("/")}`, profissionais: lista.map((p, i) => ({ ...(ordenado && p.horarios.length ? { ordem: i + 1 } : {}), codigo: p.codigo, nome: p.nome, ...precosDoDia(p) })) };
+      // Encaixe: horários que não deixam buraco (menor que 40 min) na agenda de cada profissional.
+      { const serv = (await Promise.resolve().then(() => ab.servicos()).catch(() => []) || []).find((x) => Number(x.codigo) === Number(input.servico)), dur = Number(serv && serv.minutos) || 40;
+        for (const p of out.profissionais) { const l = lista.find((x) => x.codigo === p.codigo); if (!l || !l.horarios.length) continue; const bons = semBuraco(l.horarios, dur); if (bons.length && bons.length < l.horarios.length) p.encaixe_sem_buraco = bons; }
+        if (out.profissionais.some((p) => p.encaixe_sem_buraco)) out.nota_encaixe = "encaixe_sem_buraco = horários que encostam num atendimento ou deixam espaço que cabe outro serviço. Ofereça esses primeiro; os outros deixam um buraco de 20 minutos na agenda."; }
       if (ordenado) out.nota_ordem = "Lista na ordem de preferência da barbearia para cliente sem preferência de profissional: ofereça primeiro os horários do ordem 1 que sirvam para o que o cliente pediu; só vá para o próximo se não houver. Não comente o motivo da ordem.";
       // O cliente já tem horário nesse dia (consultar_cliente): mostra também o que fica livre trocando o horário dele.
       if (conv.agenda && conv.agenda.some((a) => String(a.quando).startsWith(input.data))) {
@@ -1684,7 +1702,8 @@ export function criarRetorno({ dir, log = () => {}, api = async () => ({}), sock
   async function vagaEm(d, s, a, tol, hoje) {
     const lista = await ab.horarios(d, s.codigo), p = lista.find((x) => mesmoProf(x, a.prof)); if (!p) return null;
     let best = null;
-    for (const h of p.horarios) { const dif = Math.abs(mins(h) - a.hora); if (dif <= tol && (d > hoje || mins(h) > relogio() + 120) && (!best || dif < best.dif)) best = { h, dif }; }
+    const bons = new Set(semBuraco(p.horarios, Number(s.minutos) || 40)), cand = p.horarios.filter((h) => bons.has(h)).length ? p.horarios.filter((h) => bons.has(h)) : p.horarios;
+    for (const h of cand) { const dif = Math.abs(mins(h) - a.hora); if (dif <= tol && (d > hoje || mins(h) > relogio() + 120) && (!best || dif < best.dif)) best = { h, dif }; }
     return best ? { data: d, hora: best.h, prof: p, serv: s } : null;
   }
   async function acharVaga(a, hoje, fechados) {
@@ -2184,7 +2203,8 @@ export function criarAgendaCheia({ dir, log = () => {}, api = async () => ({}), 
           // Horário livre mais perto do de costume (até 2h), oferecido a no máximo 2 clientes; o serviço dele precisa caber.
           const sC = porNome(x.a.serv) || sRef;
           const horas = sC.codigo === sRef.codigo ? o.horas : (((await ab.horarios(dia, sC.codigo).catch(() => [])).find((p) => mesmoProf(p, o.p.nome)) || {}).horarios || []).filter((hh) => mins(hh) >= desde);
-          const hora = horas.filter((hh) => (st.slots[`${o.p.codigo}|${dia}|${hh}`] || 0) < 2 && Math.abs(mins(hh) - x.a.hora) <= 120).sort((p, q) => Math.abs(mins(p) - x.a.hora) - Math.abs(mins(q) - x.a.hora))[0];
+          const bons = new Set(semBuraco(horas, Number(sC.minutos) || 40)), base = horas.filter((hh) => bons.has(hh)).length ? horas.filter((hh) => bons.has(hh)) : horas;
+          const hora = base.filter((hh) => (st.slots[`${o.p.codigo}|${dia}|${hh}`] || 0) < 2 && Math.abs(mins(hh) - x.a.hora) <= 120).sort((p, q) => Math.abs(mins(p) - x.a.hora) - Math.abs(mins(q) - x.a.hora))[0];
           if (!hora) continue;
           const d = so(x.cl.f), numero = d.length <= 11 ? "55" + d : d;
           const [w] = await s.onWhatsApp(numero).catch(() => []); if (!w || !w.exists) { st.env[x.kf] = hoje; continue; }

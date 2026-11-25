@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-25-encaixe', date: '2026-11-25', title: 'Atendente IA: horários sem buraco na agenda', items: [
+    ['melhoria', 'A atendente IA oferece primeiro os horários que encostam num atendimento (ou deixam espaço para outro serviço), para não sobrar buraco de 20 minutos na agenda do profissional. Ex.: se o anterior termina 14h40, ela oferece 14h40 ou 15h20, não 15h. Vale também para os convites de Retorno e da Agenda cheia.'],
+  ] },
   { id: '2026-11-25-lembrete-tarde', date: '2026-11-25', title: 'Lembrete de agendamento: antecedência diferente à tarde', items: [
     ['melhoria', 'No Lembrete de agendamento, dá para usar uma antecedência para os horários da manhã e outra a partir de um horário (ex.: até 13h, 1 hora antes; a partir das 13h, 2 horas antes).'],
   ] },
