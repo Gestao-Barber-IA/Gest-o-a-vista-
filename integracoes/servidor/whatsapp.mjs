@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "9.9";
+const VERSAO = "10.0";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -266,17 +266,20 @@ const lerCli = () => { try { return JSON.parse(readFileSync(ENV_CLI, "utf8")); }
 const diaSemanaSP = () => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", weekday: "short" }).format(new Date()));
 const fechadoHoje = (e) => !!(e.horario && Array.isArray(e.horario.fechados) && e.horario.fechados.includes(diaSemanaSP()));
 async function lembretesClientes(e, hoje) {
-  const c = e.clientes, lead = Math.max(15, Math.min(240, Number(c.antecedencia) || 60)), agora = agoraSP();
+  const c = e.clientes, leadManha = Math.max(15, Math.min(240, Number(c.antecedencia) || 60)), agora = agoraSP();
+  // Horários a partir de "tardeDesde" (ex.: 13h) podem ter outra antecedência (ex.: 2 horas antes).
+  const leadTarde = c.antecedenciaTarde ? Math.max(15, Math.min(240, Number(c.antecedenciaTarde))) : leadManha, corte = min(c.tardeDesde || "13:00");
+  const leadDe = (b) => (b.min >= corte ? leadTarde : leadManha), lead = Math.max(leadManha, leadTarde);
   if (fechadoHoje(e)) return;
   // Janela: da abertura menos a antecedência (lembrete do primeiro horário) até o fechamento.
-  if (e.horario && (agora < min(e.horario.abertura) - lead - 15 || agora > min(e.horario.fechamento))) return;
+  if (e.horario && (agora < min(e.horario.abertura) - leadManha - 15 || agora > min(e.horario.fechamento))) return;
   const env = lerCli(); for (const d of Object.keys(env)) if (d < hoje) delete env[d];
   const feitos = new Set((env[hoje] = env[hoje] || {})[e.company_id] || []);
   const lista = blocos(await agendaHoje(e, hoje), hoje);
   // Hora de mandar: faltam no máximo `lead` minutos (e ainda falta pelo menos 10).
   // Quem agendou em cima da hora (depois desse momento) recebe 20 minutos antes, se agendou com pelo menos 20 minutos.
-  const hora = (b) => { const falta = b.min - agora, cedo = b.reg < 0 || b.min - b.reg >= lead;
-    return cedo ? falta <= lead && falta >= 10 : b.min - b.reg >= 20 && falta <= 20 && falta >= 5; };
+  const hora = (b) => { const l = leadDe(b), falta = b.min - agora, cedo = b.reg < 0 || b.min - b.reg >= l;
+    return cedo ? falta <= l && falta >= 10 : b.min - b.reg >= 20 && falta <= 20 && falta >= 5; };
   const fila = lista.filter((b) => !b.cods.some((k) => feitos.has(k)) && hora(b));
   const principal = NUMERO === "principal", L = LIMITE[principal ? "principal" : "chip"];
   if (ritmo.dia !== hoje) { ritmo = { dia: hoje, envios: [] }; erroSeguido = 0; }

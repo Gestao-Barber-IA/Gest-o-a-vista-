@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-25-lembrete-tarde', date: '2026-11-25', title: 'Lembrete de agendamento: antecedência diferente à tarde', items: [
+    ['melhoria', 'No Lembrete de agendamento, dá para usar uma antecedência para os horários da manhã e outra a partir de um horário (ex.: até 13h, 1 hora antes; a partir das 13h, 2 horas antes).'],
+  ] },
   { id: '2026-11-25-feedback-novo-profissional', date: '2026-11-25', title: 'Pedido de feedback também na 1ª vez com o profissional', items: [
     ['melhoria', 'O pedido de feedback agora vai também para o cliente da casa que foi atendido pela primeira vez por aquele profissional (nos últimos 6 meses), além dos clientes novos na barbearia. A pergunta é sobre o atendimento desse profissional.'],
   ] },
