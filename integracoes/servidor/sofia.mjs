@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "7.4";
+export const SOFIA_VERSAO = "7.5";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -2016,6 +2016,116 @@ export function criarPlanos({ dir, log = () => {}, api = async () => ({}), sock 
   }
   async function rodar(e, hoje = hojeSP()) {
     if (ocupado || !e || !e.planos) return; ocupado = true;
+    try { await passo(e, hoje); } finally { ocupado = false; }
+  }
+  return { rodar };
+}
+
+// ---------- agenda cheia automática ----------
+// Mede a ocupação de cada profissional no próximo dia aberto (e, se ligado, no resto de hoje): minutos marcados ÷
+// (marcados + livres). Quem está abaixo do limite recebe convites para os clientes DELE que estão perto do prazo de
+// voltar e costumam vir no período em que há horário livre. Cada horário é oferecido a no máximo 2 clientes.
+export const TEXTOS_AC = [
+  "{Saudacao}, {cliente}! Tudo bem? 😊\n{profissional} tem um horário *{dia} às {hora}*, bem no seu jeito de vir. Já está chegando a hora do seu próximo {servico}.\nQuer que eu reserve pra você?",
+  "{Saudacao}, {cliente}! 😊\nSeparei um horário com {profissional} *{dia} às {hora}*, perto do horário que você costuma vir.\nPosso deixar reservado pra você?",
+];
+// Minutos livres a partir das horas de início livres (para um serviço de `dur` minutos): blocos seguidos.
+export function minutosLivres(horas, dur) {
+  const m = [...new Set(horas.map(mins))].sort((a, b) => a - b); if (!m.length) return 0;
+  const passo = m.length > 1 ? Math.max(5, Math.min(...m.slice(1).map((x, i) => x - m[i]).filter((x) => x > 0))) : 30;
+  let total = 0, ini = m[0], fim = m[0];
+  for (const x of m.slice(1)) { if (x - fim <= passo) fim = x; else { total += fim - ini + dur; ini = fim = x; } }
+  return total + (fim - ini + dur);
+}
+export function criarAgendaCheia({ dir, log = () => {}, api = async () => ({}), sock = () => null, sofia = () => null, req = null, pode = () => true, relogio = agoraSP, intervaloMin = 45, esperaEntre = [20000, 45000] }) {
+  const EST = join(dir, "agenda-cheia-estado.json");
+  const ler = (f, pad) => { try { return JSON.parse(readFileSync(f, "utf8")); } catch { return pad; } };
+  const gravar = (v) => { try { writeFileSync(EST, JSON.stringify(v), { mode: 0o600 }); } catch (e) { log("Agenda cheia: não gravei o arquivo: " + e.message); } };
+  let ab = null, abChave = "", ocupado = false, rodouEm = 0;
+  const mesmoProf = (p, nome) => { const a = semAcento(nome), b = semAcento(p.completo || p.nome), c = semAcento(p.nome); return !!a && (a === b || a === c || a.split(" ")[0] === c.split(" ")[0] || a.split(" ")[0] === b.split(" ")[0] || mesmoNome(p.completo || p.nome, nome)); };
+  const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  // Ocupação de cada profissional num dia: [{ p (da disponibilidade), marcados, livres, ocup, horas (livres) }]
+  async function ocupacao(dia, servs, sRef, desde = 0) {
+    const durDe = (nome) => (servs.find((x) => semAcento(x.nome) === semAcento(nome)) || {}).minutos || 30;
+    const marc = new Map();
+    for (const st of ["1", "2"]) for (const a of await ab.agenda(dia, dia, st)) {
+      const m = String(a.scheduling_start || "").match(/ (\d{2}):(\d{2})/); if (m && +m[1] * 60 + +m[2] < desde) continue;
+      const n = String(a.employee_name || "").trim(); if (n) marc.set(n, (marc.get(n) || 0) + Number(durDe(a.service_description)));
+    }
+    const out = [];
+    for (const p of await ab.horarios(dia, sRef.codigo)) {
+      const horas = (p.horarios || []).filter((h) => mins(h) >= desde); if (!horas.length) continue; // sem horário livre: cheio ou de folga
+      let marcados = 0; for (const [n, v] of marc) if (mesmoProf(p, n)) marcados += v;
+      const livres = minutosLivres(horas, Number(sRef.minutos) || 30), total = marcados + livres;
+      if (total < 120) continue; // trabalha pouco nesse dia: não mede
+      out.push({ p, marcados, livres, ocup: Math.round((marcados / total) * 100), horas });
+    }
+    return out.sort((a, b) => a.ocup - b.ocup);
+  }
+  async function passo(e, hoje) {
+    const c = e.agendaCheia, agora = relogio(), fechados = ((e.horario && e.horario.fechados) || []).map(Number);
+    if (fechados.includes(diaDaSemana(hoje)) || agora < 10 * 60 || agora > 19 * 60) return;
+    if (Date.now() - rodouEm < intervaloMin * 60000) return; rodouEm = Date.now();
+    const k = `${c.codigo_estabelecimento}|${c.appbarber_api_key}`;
+    if (!ab || abChave !== k) { abChave = k; ab = ferramentasAppBarber({ cfg: c, ...(req ? { req } : {}), creditos: (n, zero) => api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: n, ...(zero ? { sem_saldo: true } : {}) }).catch(() => {}) }); }
+    const st = ler(EST, {}); if (st.cid !== e.company_id) { st.cid = e.company_id; st.env = {}; }
+    st.env = st.env || {}; if (st.dia !== hoje) { st.dia = hoje; st.hoje = { convites: 0 }; st.slots = {}; }
+    let alvo = somaDias(hoje, 1); for (let i = 0; i < 3 && fechados.includes(diaDaSemana(alvo)); i++) alvo = somaDias(alvo, 1);
+    const dias = [...(c.dias >= 2 ? [[hoje, agora + 120]] : []), [alvo, 0]];
+    const servs = await ab.servicos(), porNome = (n) => servs.find((x) => semAcento(x.nome) === semAcento(String(n || "").split(" + ")[0]));
+    const sRef = servs.find((x) => /corte tradicional/i.test(x.nome)) || servs.find((x) => /corte/i.test(x.nome)) || servs[0]; if (!sRef) return;
+    const h = await historicoClientes({ ab, dir, cid: e.company_id, hoje, log, marcadosMin: 30 });
+    const marc = new Set(h.marcados || []), sair = new Set(ler(join(dir, "reconquista-sair.json"), [])), wb = ler(join(dir, "reconquista-enviados.json"), {}), rt = ler(join(dir, "retorno-enviados.json"), {}), fv = (ler(join(dir, "vagas-estado.json"), {}).env) || {};
+    const resumo = [], s = sock();
+    for (const [dia, desde] of dias) {
+      const ocs = await ocupacao(dia, servs, sRef, desde);
+      resumo.push(`${dia === hoje ? "hoje" : dia === somaDias(hoje, 1) ? "amanhã" : dia.split("-").reverse().slice(0, 2).join("/")}: ${ocs.map((o) => `${primeiroNome(o.p.nome)} ${o.ocup}%`).join(", ") || "sem dados"}`);
+      for (const o of ocs.filter((x) => x.ocup < c.limite)) {
+        if (!s || !pode() || st.hoje.convites >= c.porDia) break;
+        // Quantos convites para este profissional: ~1 por hora livre, até 4 por rodada.
+        let vagasProf = Math.min(4, Math.max(1, Math.round(o.livres / 60)));
+        const cand = [];
+        for (const [kf, cl] of Object.entries(h.cli)) {
+          if (marc.has(kf) || sair.has(kf) || (st.env[kf] && diasEntre(st.env[kf], hoje) < 10)) continue;
+          if (fv[kf] && diasEntre(fv[kf], hoje) < 7) continue;
+          if (rt[kf] && rt[kf].em && rt[kf].enviado && diasEntre(rt[kf].em, hoje) < 5) continue;
+          if (wb[kf] && wb[kf].em && diasEntre(wb[kf].em, hoje) < 30) continue;
+          const a = analisarCliente(cl.v, hoje); if (!a || !a.prof || !a.serv || a.hora == null || !mesmoProf(o.p, a.prof)) continue;
+          const atraso = diasEntre(a.ultima, dia) - a.media; if (atraso < -5 || atraso > 30) continue; // no dia, perto do prazo dele
+          cand.push({ kf, cl, a, atraso });
+        }
+        cand.sort((p, q) => Math.abs(p.atraso) - Math.abs(q.atraso) || q.a.visitas - p.a.visitas);
+        for (const x of cand) {
+          if (vagasProf <= 0 || st.hoje.convites >= c.porDia || !pode()) break;
+          // Horário livre mais perto do de costume (até 2h), oferecido a no máximo 2 clientes; o serviço dele precisa caber.
+          const sC = porNome(x.a.serv) || sRef;
+          const horas = sC.codigo === sRef.codigo ? o.horas : (((await ab.horarios(dia, sC.codigo).catch(() => [])).find((p) => mesmoProf(p, o.p.nome)) || {}).horarios || []).filter((hh) => mins(hh) >= desde);
+          const hora = horas.filter((hh) => (st.slots[`${o.p.codigo}|${dia}|${hh}`] || 0) < 2 && Math.abs(mins(hh) - x.a.hora) <= 120).sort((p, q) => Math.abs(mins(p) - x.a.hora) - Math.abs(mins(q) - x.a.hora))[0];
+          if (!hora) continue;
+          const d = so(x.cl.f), numero = d.length <= 11 ? "55" + d : d;
+          const [w] = await s.onWhatsApp(numero).catch(() => []); if (!w || !w.exists) { st.env[x.kf] = hoje; continue; }
+          const nome = primeiroNome(x.cl.n), profissional = primeiroNome(o.p.nome), servico = String(x.a.serv).split(" + ")[0].replace(/^\d+(\.\d+)?\s*/, "").toLowerCase();
+          const txt = textoRetorno(c.texto || TEXTOS_AC.join("\n---\n"), { nome, dias: x.a.dias, profissional, data: dia, hora, servico, barbearia: e.nome }, hoje, relogio());
+          st.env[x.kf] = hoje; st.slots[`${o.p.codigo}|${dia}|${hora}`] = (st.slots[`${o.p.codigo}|${dia}|${hora}`] || 0) + 1; st.hoje.convites++; vagasProf--; gravar(st);
+          try {
+            await s.presenceSubscribe(w.jid).catch(() => {}); await s.sendPresenceUpdate("composing", w.jid).catch(() => {});
+            await espera(1500 + Math.random() * 2000); await s.sendPresenceUpdate("paused", w.jid).catch(() => {});
+            const r = await s.sendMessage(w.jid, { text: txt });
+            const so2 = sofia(); if (so2 && so2.conviteEnviado) so2.conviteEnviado(w.jid, r && r.key && r.key.id, { fone: normFone(d), nome, texto: txt, horas: 8, origem: "agenda", tipo: "convite para horário livre na agenda do profissional de costume",
+              detalhe: `[horário oferecido: ${dia} ${hora}, profissional código ${o.p.codigo} (${o.p.nome}), serviço código ${sC.codigo} (${sC.nome}); de costume o cliente faz: ${x.a.serv}, a cada ~${x.a.media} dias. Esse horário pode ter sido oferecido a outro cliente: se ele aceitar, confira com ver_horarios e agende na hora; se já tiver sido preenchido, ofereça o horário livre mais perto com o mesmo profissional.]` });
+            log(`Agenda cheia: convite (${nome || "cliente"} → ${profissional} ${dia} ${hora}; ocupação ${o.ocup}%).`);
+          } catch (err) { log("Agenda cheia: convite não enviado: " + err.message); }
+          gravar(st);
+          await espera(esperaEntre[0] + Math.random() * (esperaEntre[1] - esperaEntre[0]));
+        }
+      }
+    }
+    gravar(st);
+    const quando = new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+    await api("POST", { company_id: e.company_id, acao: "ac_status", status: `ok: ${quando} · ocupação ${resumo.join(" · ")} · ${st.hoje.convites} convite(s) hoje (limite ${c.porDia})` }).catch(() => {});
+  }
+  async function rodar(e, hoje = hojeSP()) {
+    if (ocupado || !e || !e.agendaCheia) return; ocupado = true;
     try { await passo(e, hoje); } finally { ocupado = false; }
   }
   return { rodar };
