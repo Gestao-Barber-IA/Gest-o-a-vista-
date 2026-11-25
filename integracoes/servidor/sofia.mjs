@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "7.2";
+export const SOFIA_VERSAO = "7.3";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -114,6 +114,7 @@ export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) 
   const assinantes = () => memo("assinantes", 6 * 3600000, async () => ((await chamar("GET", "/v1/establishment/subscribers")).data || [])
     .map((x) => ({ k: chaveFone(x.person_cellphone), plano: String(x.subscription_name || "").trim(), situacao: String(x.subscription_status || "").trim(), contratacao: String(x.contracting_date || ""), vencimento: String(x.due_date || "") }))
     .filter((x) => x.k));
+  const assinantesTodos = () => assinantes();
   async function assinaturaDe(fone) {
     const k = chaveFone(fone); if (!k) return null;
     return (await assinantes()).find((x) => x.k === k && !/cancel|encerr|inativ/i.test(x.situacao)) || null;
@@ -220,7 +221,7 @@ export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) 
     if (Number(r.error) > 0) throw new Error(r.result || "a AppBarber não aceitou a confirmação");
     return true;
   }
-  return { servicos, profissionais, horarios, assinaturaDe, agendamentosDe, ultimoDe, buscarClientes, nomeDe, clienteDe, salvarCliente, criar, cancelarComanda, agenda, noLocal, confirmar };
+  return { servicos, profissionais, horarios, assinaturaDe, assinantesTodos, agendamentosDe, ultimoDe, buscarClientes, nomeDe, clienteDe, salvarCliente, criar, cancelarComanda, agenda, noLocal, confirmar };
 }
 
 // ---------- o que a Sofia pode fazer (ferramentas para o Claude) ----------
@@ -995,7 +996,7 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
   async function configurar(e) {
     if (!e || !e.sofia || !e.appbarber) { cfg = null; return; }
     const novo = { company_id: e.company_id, barbearia: e.nome, brand: e.brand, nome: e.sofia.nome || "Sofia", modelo: MODELOS.includes(e.sofia.modelo) ? e.sofia.modelo : MODELO_PADRAO,
-      janelas: e.sofia.janelas || JANELAS_PADRAO, horario: e.horario || null, artes: Array.isArray(e.sofia.artes) ? e.sofia.artes.filter((a) => a && a.url && a.nome) : [], avisar: so(e.sofia.avisar || ""), alerta: so(e.sofia.alerta || ""), equipe: Array.isArray(e.barbers) ? e.barbers : [], nomesAB: (e.sofia && e.sofia.nomes) || {}, pausaMin: Math.max(15, Math.min(1440, Number(e.sofia.pausa) || 60)), parabens: (e.feedback && e.feedback.parabens) || "", aniversario: (e.aniversario && e.aniversario.texto) || "", notas: e.sofia.notas || "", upsell: Array.isArray(e.sofia.upsell) ? e.sofia.upsell : [], ab: e.appbarber };
+      janelas: e.sofia.janelas || JANELAS_PADRAO, horario: e.horario || null, artes: Array.isArray(e.sofia.artes) ? e.sofia.artes.filter((a) => a && a.url && a.nome) : [], avisar: so(e.sofia.avisar || ""), alerta: so(e.sofia.alerta || ""), equipe: Array.isArray(e.barbers) ? e.barbers : [], nomesAB: (e.sofia && e.sofia.nomes) || {}, pausaMin: Math.max(15, Math.min(1440, Number(e.sofia.pausa) || 60)), parabens: (e.feedback && e.feedback.parabens) || "", aniversario: (e.aniversario && e.aniversario.texto) || "", planos: e.planos || null, notas: e.sofia.notas || "", upsell: Array.isArray(e.sofia.upsell) ? e.sofia.upsell : [], ab: e.appbarber };
     cfg = novo;
     if (abKey !== e.appbarber.appbarber_api_key + e.appbarber.codigo_estabelecimento) {
       abKey = e.appbarber.appbarber_api_key + e.appbarber.codigo_estabelecimento;
@@ -1290,7 +1291,7 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
           c.noturna = 0; c.pendTipo = null;
         }
         const antes = c.contexto.splice(0).sort((a, b) => a.ts - b.ts).map((x) => x.linha);
-        const cadLinha = c.verificado ? "" : (c.verificado = true, (await verificarCadastro(ab, c.fone, c)) + "\n" + (jaApresentou(c.fone)
+        const cadLinha = c.verificado ? "" : (c.verificado = true, (await verificarCadastro(ab, c.fone, c)) + "\n" + (c.plano ? "" : dicaPlano({ dir, fone: c.fone, planosCfg: cfg.planos })) + (jaApresentou(c.fone)
           ? "[Apresentação: você já se apresentou a este cliente em outra conversa; não se apresente de novo]\n"
           : `[Apresentação: é a primeira vez que você fala com este cliente; na sua resposta, apresente-se em uma frase curta e simpática (ex.: "Eu sou a ${cfg.nome}, atendente da ${cfg.barbearia} 😊")]\n`));
         const naoEnviada = c.naoEnviada ? "[Sua resposta anterior NÃO foi enviada, porque o cliente mandou mais mensagens enquanto você respondia. Responda agora considerando tudo.]\n" : ""; c.naoEnviada = false;
@@ -1824,6 +1825,128 @@ export function criarConfirmacao({ dir, log = () => {}, api = async () => ({}), 
   }
   async function rodar(e, hoje = hojeSP()) {
     if (ocupado || !e || !e.confirmacao) return; ocupado = true;
+    try { await passo(e, hoje); } finally { ocupado = false; }
+  }
+  return { rodar };
+}
+
+// ---------- venda de planos ----------
+// Cliente que vem com frequência e não é assinante: compara o que ele gasta por mês pagando avulso com o plano que
+// combina com o serviço de costume dele. A atendente IA oferece depois de agendar (na conversa) e, se ligado, um convite
+// por dia para os melhores candidatos. Quem se interessa vai para a recepção (pagamento e contrato são com a equipe).
+export const TEXTOS_PL = [
+  "{Saudacao}, {cliente}! Tudo bem? 😊\nVi que você vem bem certinho aqui na {barbearia}, a cada {dias} dias mais ou menos. No *Plano {plano}* você paga R$ {preco} por mês{economia_txt} e já fica com seu horário garantido com {profissional}.\nQuer que eu te conte como funciona?",
+];
+const reais0 = (v) => Math.round(Number(v) || 0).toLocaleString("pt-BR");
+// Melhor plano para o cliente (a = analisarCliente). planos: [{ nome, preco, avulso, visitas, quando }], dias: dias da semana permitidos.
+export function candidatoPlano(a, planos = [], dias = [1, 2, 3, 4]) {
+  if (!a || !a.media || !a.serv || a.media > 12) return null; // vem pelo menos ~3 vezes no mês
+  if (Array.isArray(dias) && dias.length && !dias.includes(a.dia)) return null; // o dia de costume dele não é aceito no plano
+  const nomes = String(a.serv).split(" + ").map((x) => semAcento(x)), visitasMes = Math.min(8, 30 / a.media);
+  let melhor = null;
+  for (const p of planos) {
+    const preco = Number(p.preco) || 0, avulso = Number(p.avulso) || 0, vis = Math.max(1, Number(p.visitas) || 4);
+    if (!preco || !avulso || avulso <= preco) continue;
+    const regra = regraQuando(p.quando); if (!regraVale(regra, nomes)) continue;
+    const espec = Math.max(0, ...regra.ou.filter((todas) => todas.every((w) => nomes.some((n) => n.includes(w)))).map((t) => t.length));
+    const usa = Math.min(visitasMes, vis), gasto = usa * (avulso / vis), economia = Math.round(gasto - preco), maisVisitas = Math.max(0, Math.round(vis - visitasMes));
+    if (economia < 0 && -economia > preco * 0.15) continue; // sai bem mais caro para ele: não oferece
+    const x = { plano: p.nome, preco, visitas: vis, visitasMes: Math.round(visitasMes * 10) / 10, gasto: Math.round(gasto), economia, maisVisitas, espec };
+    if (!melhor || x.espec > melhor.espec || (x.espec === melhor.espec && x.economia > melhor.economia)) melhor = x;
+  }
+  return melhor;
+}
+export function textoPlano(modelo, x, { nome, profissional, barbearia, dias }, agora = agoraSP()) {
+  const versoes = String(modelo || TEXTOS_PL.join("\n---\n")).split(/\n\s*-{3,}\s*\n/).map((t) => t.trim()).filter(Boolean);
+  const sd = agora < 12 * 60 ? "Bom dia" : agora < 18 * 60 ? "Boa tarde" : "Boa noite";
+  const ec = x.economia > 0 ? `, uma economia de uns R$ ${reais0(x.economia)} por mês` : x.maisVisitas > 0 ? ` e pode vir ${x.visitas} vezes no mês` : "";
+  let t = versoes[Math.floor(Math.random() * versoes.length)];
+  if (!nome) t = t.replace(/,\s*\{cliente\}/g, "").replace(/\{cliente\},?\s*/g, "");
+  return t.replace(/\{Saudacao\}/g, sd).replace(/\{saudacao\}/g, sd.toLowerCase()).replace(/\{cliente\}/g, nome).replace(/\{plano\}/g, x.plano).replace(/\{preco\}/g, reais0(x.preco))
+    .replace(/\{economia_txt\}/g, ec).replace(/\{economia\}/g, reais0(Math.max(0, x.economia))).replace(/\{visitas\}/g, String(x.visitas)).replace(/\{dias\}/g, String(dias))
+    .replace(/\{profissional\}/g, profissional || "o seu barbeiro").replace(/\{barbearia\}/g, barbearia || "").replace(/https?:\/\/\S+/gi, "").trim();
+}
+// Linha de contexto para a conversa da atendente (uma vez a cada 30 dias por cliente).
+export function dicaPlano({ dir, fone, planosCfg, hoje = hojeSP() }) {
+  if (!planosCfg || !planosCfg.chat || !fone) return "";
+  const ler = (f, pad) => { try { return JSON.parse(readFileSync(join(dir, f), "utf8")); } catch { return pad; } };
+  const k = chaveFone(fone), h = ler("retorno-historico.json", null), of = ler("planos-ofertas.json", {});
+  if (!h || !h.cli || !h.cli[k] || (of[k] && diasEntre(of[k].em, hoje) < 30)) return "";
+  const a = analisarCliente(h.cli[k].v, hoje), x = candidatoPlano(a, planosCfg.planos, planosCfg.dias); if (!x) return "";
+  of[k] = { em: hoje, plano: x.plano, como: "conversa" }; try { writeFileSync(join(dir, "planos-ofertas.json"), JSON.stringify(of), { mode: 0o600 }); } catch { /* tenta na próxima */ }
+  return `[Venda de plano: este cliente NÃO é assinante, vem a cada ~${a.media} dias (~${x.visitasMes} vezes no mês) e costuma fazer ${a.serv} com ${a.prof}. O Plano ${x.plano} (R$ ${reais0(x.preco)}/mês, ${x.visitas} visitas) ${x.economia > 0 ? `sai uns R$ ${reais0(x.economia)} por mês mais barato do que ele paga avulso (~R$ ${reais0(x.gasto)})` : `custa quase o mesmo que ele já gasta (~R$ ${reais0(x.gasto)}) e dá ${x.visitas} visitas`}. DEPOIS de concluir o que ele pediu (ex.: confirmar o agendamento), ofereça esse plano UMA vez, numa frase leve, com a economia. Se ele se interessar, envie a arte dos planos (se houver) e tire as dúvidas pelas Informações da casa; se quiser assinar, use chamar_recepcao com o plano escolhido. Se ele não quiser, siga sem insistir. Não ofereça se a conversa for reclamação, cancelamento ou assunto delicado.]\n`;
+}
+export function criarPlanos({ dir, log = () => {}, api = async () => ({}), sock = () => null, sofia = () => null, resultados = null, req = null, pode = () => true, relogio = agoraSP }) {
+  const OF = join(dir, "planos-ofertas.json");
+  const ler = (f, pad) => { try { return JSON.parse(readFileSync(f, "utf8")); } catch { return pad; } };
+  const gravar = (v) => { try { writeFileSync(OF, JSON.stringify(v), { mode: 0o600 }); } catch (e) { log("Planos: não gravei o arquivo: " + e.message); } };
+  let ab = null, abChave = "", ocupado = false, ultimoEnvio = 0, statusEm = 0, conferidoEm = "";
+  async function passo(e, hoje) {
+    const c = e.planos, agora = relogio(), fechados = ((e.horario && e.horario.fechados) || []).map(Number);
+    if (fechados.includes(diaDaSemana(hoje)) || agora < 10 * 60 || agora > 19 * 60) return;
+    const k = `${c.codigo_estabelecimento}|${c.appbarber_api_key}`;
+    if (!ab || abChave !== k) { abChave = k; ab = ferramentasAppBarber({ cfg: c, ...(req ? { req } : {}), creditos: (n, zero) => api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: n, ...(zero ? { sem_saldo: true } : {}) }).catch(() => {}) }); }
+    const of = ler(OF, {});
+    // Fechamentos: quem recebeu a oferta (até 45 dias) e virou assinante depois dela. Conferido 1 vez por dia.
+    if (conferidoEm !== hoje && Object.keys(of).length) {
+      conferidoEm = hoje;
+      try {
+        const lista = await ab.assinantesTodos();
+        for (const [kf, x] of Object.entries(of)) {
+          if (x.fechou || diasEntre(x.em, hoje) > 45) continue;
+          const s = lista.find((y) => y.k === kf); if (!s) continue;
+          const m = String(s.contratacao).match(/^(\d{2})\/(\d{2})\/(\d{4})/), d = m ? `${m[3]}-${m[2]}-${m[1]}` : "";
+          if (d && d >= x.em) { x.fechou = d; const p = (c.planos || []).find((y) => semAcento(s.plano).includes(semAcento(y.nome))) || {};
+            if (resultados) resultados.evento(e.company_id, { tipo: "plano_fechado", origem: "plano", valor: Number(p.preco) || null, ref: `plf:${hashCurto(kf + d)}`, dados: { plano: s.plano, como: x.como } });
+            log(`Planos: assinatura fechada depois da oferta (${s.plano}).`); }
+        }
+        gravar(of);
+      } catch (err) { log("Planos: não conferi os assinantes: " + err.message); }
+    }
+    // Convites (se ligado): os melhores candidatos, espalhados entre 10h e 19h.
+    const hojeN = Object.values(of).filter((x) => x.em === hoje && x.como === "convite").length;
+    const s = sock();
+    if (c.porDia > 0 && s && pode() && hojeN < c.porDia && Date.now() - ultimoEnvio >= Math.max(20, Math.floor(9 * 60 / c.porDia)) * 60000) {
+      const h = await historicoClientes({ ab, dir, cid: e.company_id, hoje, log });
+      const marc = new Set(h.marcados || []), sair = new Set(ler(join(dir, "reconquista-sair.json"), [])), rt = ler(join(dir, "retorno-enviados.json"), {}), wb = ler(join(dir, "reconquista-enviados.json"), {});
+      const assin = new Set((await ab.assinantesTodos().catch(() => [])).map((x) => x.k));
+      const cand = [];
+      for (const [kf, cl] of Object.entries(h.cli)) {
+        if (assin.has(kf) || sair.has(kf) || (of[kf] && diasEntre(of[kf].em, hoje) < 60)) continue;
+        if (rt[kf] && rt[kf].em && diasEntre(rt[kf].em, hoje) < 3) continue;
+        if (wb[kf] && wb[kf].em && diasEntre(wb[kf].em, hoje) < 30) continue;
+        const a = analisarCliente(cl.v, hoje); if (!a || a.dias > 21) continue; // ainda vem (atendido nas últimas 3 semanas)
+        const x = candidatoPlano(a, c.planos, c.dias); if (!x) continue;
+        cand.push({ kf, cl, a, x, marcado: marc.has(kf) });
+      }
+      // Primeiro quem já tem horário marcado (está ativo) e quem mais economiza.
+      cand.sort((p, q) => (q.marcado - p.marcado) || (q.x.economia - p.x.economia) || (q.a.visitas - p.a.visitas));
+      for (const y of cand.slice(0, 3)) {
+        const d = so(y.cl.f), numero = d.length <= 11 ? "55" + d : d;
+        const [w] = await s.onWhatsApp(numero).catch(() => []);
+        if (!w || !w.exists) { of[y.kf] = { em: hoje, plano: y.x.plano, como: "sem whatsapp" }; gravar(of); continue; }
+        const nome = primeiroNome(y.cl.n), prof = primeiroNome(y.a.prof);
+        const txt = textoPlano(c.texto, y.x, { nome, profissional: prof, barbearia: e.nome, dias: y.a.media }, agora);
+        of[y.kf] = { em: hoje, plano: y.x.plano, como: "convite" }; gravar(of); ultimoEnvio = Date.now();
+        try {
+          await s.presenceSubscribe(w.jid).catch(() => {}); await s.sendPresenceUpdate("composing", w.jid).catch(() => {});
+          await espera(2000 + Math.random() * 2000); await s.sendPresenceUpdate("paused", w.jid).catch(() => {});
+          const r = await s.sendMessage(w.jid, { text: txt });
+          const so2 = sofia(); if (so2 && so2.conviteEnviado) so2.conviteEnviado(w.jid, r && r.key && r.key.id, { fone: normFone(d), nome, texto: txt, horas: 24, origem: "plano", tipo: "oferta de plano mensal para cliente frequente",
+            detalhe: `[oferta do Plano ${y.x.plano}: R$ ${reais0(y.x.preco)}/mês, ${y.x.visitas} visitas; o cliente vem a cada ~${y.a.media} dias e faz ${y.a.serv} com ${y.a.prof} (avulso ~R$ ${reais0(y.x.gasto)}/mês). Se ele tiver interesse, envie a arte dos planos (se houver), explique pelas Informações da casa e, se quiser assinar, use chamar_recepcao com o plano escolhido. Se não quiser, agradeça e não insista.]` });
+          log(`Planos: oferta enviada (${nome || "cliente"} → ${y.x.plano}).`);
+        } catch (err) { of[y.kf].erro = String(err.message).slice(0, 80); gravar(of); log("Planos: oferta não enviada: " + err.message); }
+        break; // uma por vez
+      }
+    }
+    if (Date.now() - statusEm > 1800000) {
+      statusEm = Date.now();
+      const v = Object.values(of), mes = somaDias(hoje, -30), quando = new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+      await api("POST", { company_id: e.company_id, acao: "pl_status", status: `ok: ${quando} · últimos 30 dias: ${v.filter((x) => x.em >= mes && x.como === "convite").length} convite(s) e ${v.filter((x) => x.em >= mes && x.como === "conversa").length} oferta(s) na conversa · ${v.filter((x) => x.fechou && x.fechou >= mes).length} plano(s) fechado(s) depois da oferta` }).catch(() => {});
+    }
+  }
+  async function rodar(e, hoje = hojeSP()) {
+    if (ocupado || !e || !e.planos) return; ocupado = true;
     try { await passo(e, hoje); } finally { ocupado = false; }
   }
   return { rodar };
