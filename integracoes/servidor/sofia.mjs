@@ -471,7 +471,7 @@ export async function executar(nomeTool, input, ctx) {
       const d = new Date(input.data + "T12:00:00Z");
       const out = { dia: `${DIAS[d.getUTCDay()]}, ${input.data.split("-").reverse().join("/")}`, profissionais: lista.map((p, i) => ({ ...(ordenado && p.horarios.length ? { ordem: i + 1 } : {}), codigo: p.codigo, nome: p.nome, ...precosDoDia(p) })) };
       // Encaixe: horários que não deixam buraco (menor que 40 min) na agenda de cada profissional.
-      { const serv = (await ab.servicos().catch(() => [])).find((x) => Number(x.codigo) === Number(input.servico)), dur = Number(serv && serv.minutos) || 40;
+      { const serv = (await Promise.resolve().then(() => ab.servicos()).catch(() => []) || []).find((x) => Number(x.codigo) === Number(input.servico)), dur = Number(serv && serv.minutos) || 40;
         for (const p of out.profissionais) { const l = lista.find((x) => x.codigo === p.codigo); if (!l || !l.horarios.length) continue; const bons = semBuraco(l.horarios, dur); if (bons.length && bons.length < l.horarios.length) p.encaixe_sem_buraco = bons; }
         if (out.profissionais.some((p) => p.encaixe_sem_buraco)) out.nota_encaixe = "encaixe_sem_buraco = horários que encostam num atendimento ou deixam espaço que cabe outro serviço. Ofereça esses primeiro; os outros deixam um buraco de 20 minutos na agenda."; }
       if (ordenado) out.nota_ordem = "Lista na ordem de preferência da barbearia para cliente sem preferência de profissional: ofereça primeiro os horários do ordem 1 que sirvam para o que o cliente pediu; só vá para o próximo se não houver. Não comente o motivo da ordem.";
