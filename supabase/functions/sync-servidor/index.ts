@@ -136,6 +136,23 @@ Deno.serve(async (req) => {
 
   const url = new URL(req.url);
   // Totem: o servidor espera pedidos novos (long polling). Marca que está no ar (o tablet mostra "sem conexão" se não estiver).
+  // Instagram: o servidor espera mensagens novas (até 25 s) das empresas com o Instagram ligado.
+  if (req.method === "GET" && url.searchParams.get("acao") === "ig_espera") {
+    const ids = String(url.searchParams.get("empresas") || "").split(",").filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 20);
+    if (!ids.length) return json({ mensagens: [] });
+    await db.from("integrations").update({ ig_seen_at: new Date().toISOString() }).in("company_id", ids);
+    if (Math.random() < 0.05) await db.from("ig_mensagens").delete().lt("criado_em", new Date(Date.now() - 2 * 86400000).toISOString());
+    const fim = Date.now() + 25000;
+    while (Date.now() < fim) {
+      const { data: novos } = await db.from("ig_mensagens").select("id").in("company_id", ids).eq("status", "novo").order("id").limit(20);
+      if (novos && novos.length) {
+        const { data: pegos } = await db.from("ig_mensagens").update({ status: "pego" }).in("id", novos.map((n: any) => n.id)).eq("status", "novo").select("id, company_id, sid, tipo, texto, mid, criado_em");
+        if (pegos && pegos.length) return json({ mensagens: pegos.sort((a: any, b: any) => a.id - b.id) });
+      }
+      await new Promise((r) => setTimeout(r, 700));
+    }
+    return json({ mensagens: [] });
+  }
   if (req.method === "GET" && url.searchParams.get("acao") === "totem_espera") {
     const ids = String(url.searchParams.get("empresas") || "").split(",").filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 20);
     if (!ids.length) return json({ pedidos: [] });
@@ -164,7 +181,7 @@ Deno.serve(async (req) => {
   if (req.method === "GET" && url.searchParams.get("acao") === "lembretes") {
     const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
     const { data: ints, error } = await db.from("integrations")
-      .select("company_id, est_code, api_key, branch_code, rm_pedido, fc_agenda, srv_update_req, srv_update_done, bo_on, bo_hour, bo_phone, bo_sent_on, bo_force, ia_report_phone, ac_status, cf_status, ac_on, ac_limit, ac_daily, ac_days, ac_text, pl_on, pl_chat, pl_daily, pl_days, pl_plans, pl_text, cf_on, cf_hour, cf_second, cf_before, cf_text, cf_text2, fv_on, fv_per, fv_daily, fv_lead, fv_days, fv_text, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, fb_reply, fb_pro_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, wb_gift, wb_gift_done, cl_status, cl_status_at, rt_on, rt_daily, rt_lead, rt_text, tt_on, tt_notify, tt_days, upsell, bd_on, bd_text, ia_on, ia_name, ia_model, ia_hours, ia_pause, ia_notes, ia_report_phone, ia_alert_phone, ia_arts, names").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,rt_on.eq.true,tt_on.eq.true,bd_on.eq.true,ia_on.eq.true");
+      .select("company_id, est_code, api_key, branch_code, ig_on, ig_token, rm_pedido, fc_agenda, srv_update_req, srv_update_done, bo_on, bo_hour, bo_phone, bo_sent_on, bo_force, ia_report_phone, ac_status, cf_status, ac_on, ac_limit, ac_daily, ac_days, ac_text, pl_on, pl_chat, pl_daily, pl_days, pl_plans, pl_text, cf_on, cf_hour, cf_second, cf_before, cf_text, cf_text2, fv_on, fv_per, fv_daily, fv_lead, fv_days, fv_text, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, fb_reply, fb_pro_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, wb_gift, wb_gift_done, cl_status, cl_status_at, rt_on, rt_daily, rt_lead, rt_text, tt_on, tt_notify, tt_days, upsell, bd_on, bd_text, ia_on, ia_name, ia_model, ia_hours, ia_pause, ia_notes, ia_report_phone, ia_alert_phone, ia_arts, names").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,rt_on.eq.true,tt_on.eq.true,bd_on.eq.true,ia_on.eq.true");
     if (error) return json({ erro: error.message }, 500);
     const empresas = [];
     for (const i of ints || []) {
@@ -246,6 +263,7 @@ Deno.serve(async (req) => {
         pop: (pop || []).map((r) => ({ barberId: r.barber_id, day: r.day, ...(r.data || {}) })),
         entries: (entries || []).map((e) => ({ barberId: e.barber_id, date: e.date, source: e.source, ...(e.data || {}) })),
         memorias,
+        instagram: i.ig_on && i.ig_token && i.ia_on ? { ligado: true } : null, // a atendente IA responde o Direct
         // "Gerar a análise agora" pelo app: rm_pedido = "AAAA-MM@quando" (o "quando" separa um pedido do outro).
         mensal_pedido: /^\d{4}-\d{2}(@|$)/.test(String(i.rm_pedido || "")) ? String(i.rm_pedido).slice(0, 7) : null, mensal_pedido_em: String(i.rm_pedido || ""),
         // Botão "Atualizar servidor agora" do app (até o servidor responder com a versão).
@@ -336,6 +354,27 @@ Deno.serve(async (req) => {
       await db.from("integrations").update({ rm_pedido: null, rm_status: "ok: análise de " + ym + " pronta", rm_status_at: new Date().toISOString() }).eq("company_id", b.company_id);
       return error ? json({ erro: error.message }, 500) : json({ ok: true });
     }
+    // Instagram: a resposta da atendente sai pela API do Instagram com o token da empresa (renovado a cada ~30 dias).
+    if (b.acao === "ig_enviar") {
+      const { data: g } = await db.from("integrations").select("ig_on, ig_user_id, ig_token, ig_token_at").eq("company_id", b.company_id).maybeSingle();
+      if (!g || !g.ig_on || !g.ig_token) return json({ erro: "Instagram desligado." }, 400);
+      let token = g.ig_token;
+      if (!g.ig_token_at || Date.now() - new Date(g.ig_token_at).getTime() > 30 * 86400000) {
+        try { const r = await fetch(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(token)}`); const j = await r.json();
+          if (j && j.access_token) { token = j.access_token; await db.from("integrations").update({ ig_token: token, ig_token_at: new Date().toISOString() }).eq("company_id", b.company_id); } } catch { /* usa o atual */ }
+      }
+      const para = String(b.para || "").replace(/[^0-9]/g, "").slice(0, 64), texto = String(b.texto || "").slice(0, 1000), imagem = /^https:\/\//.test(String(b.imagem || "")) ? String(b.imagem) : "";
+      if (!para || (!texto && !imagem)) return json({ erro: "Mensagem vazia." }, 400);
+      const message = imagem ? { attachment: { type: "image", payload: { url: imagem } } } : { text: texto };
+      const r = await fetch(`https://graph.instagram.com/v21.0/${encodeURIComponent(g.ig_user_id || "me")}/messages`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ recipient: { id: para }, message }) });
+      const j: any = await r.json().catch(() => ({}));
+      if (!r.ok || !j.message_id) {
+        const erro = (j && j.error && j.error.message) || `HTTP ${r.status}`;
+        await db.from("integrations").update({ ig_status: "erro: " + String(erro).slice(0, 200), ig_status_at: new Date().toISOString() }).eq("company_id", b.company_id);
+        return json({ erro }, 502);
+      }
+      return json({ ok: true, mid: j.message_id });
+    }
     if (b.acao === "previsao") {
       const ag: Record<string, number> = {};
       for (const [d, v] of Object.entries(b.agenda && typeof b.agenda === "object" ? b.agenda : {}).slice(0, 40)) if (/^\d{4}-\d{2}-\d{2}$/.test(d) && Number.isFinite(Number(v))) ag[d] = Number(v);
@@ -377,7 +416,7 @@ Deno.serve(async (req) => {
       const { error } = await db.from("integrations").update({ ia_report: rel, ia_report_at: new Date().toISOString() }).eq("company_id", b.company_id);
       return error ? json({ erro: error.message }, 500) : json({ ok: true });
     }
-    if (["wa_status", "cl_status", "fb_status", "wb_status", "rt_status", "tt_status", "bd_status", "ia_status", "fv_status", "cf_status", "pl_status", "ac_status"].includes(b.acao)) {
+    if (["wa_status", "cl_status", "fb_status", "wb_status", "rt_status", "tt_status", "bd_status", "ia_status", "fv_status", "cf_status", "pl_status", "ac_status", "ig_status"].includes(b.acao)) {
       const k = String(b.acao).slice(0, 2);
       const { error } = await db.from("integrations").update({ [k + "_status"]: String(b.status || "").slice(0, 500), [k + "_status_at"]: new Date().toISOString() }).eq("company_id", b.company_id);
       return error ? json({ erro: error.message }, 500) : json({ ok: true });
