@@ -3839,7 +3839,9 @@ ${rows.length ? '' : emptyBarbers()}
     return user.barberId ? perfFor(user.barberId, user) : `<div class="card muted">Seu cadastro ainda não está ligado a um barbeiro. Fale com o gestor.</div>`;
   }
 
-  function inviteLink(code) { return location.origin + location.pathname + '?marca=' + MARCA + '#convite-' + code; }
+  // Links que saem do app (clientes, profissionais, totem) usam sempre o endereço oficial do sistema.
+  const siteBase = () => { const u = String((window.GB_CONFIG || {}).siteUrl || '').replace(/\/+$/, ''); return /^https:\/\//.test(u) ? u : location.origin; };
+  function inviteLink(code) { return siteBase() + '/?marca=' + MARCA + '#convite-' + code; }
 
   function pageBarbeiros() {
     const pending = state.users.filter(u => u.role === 'barbeiro' && u.status === 'pendente');
@@ -7452,7 +7454,7 @@ Content-Type: application/json</pre>
     AG().bloqueios(agAt(h, 0), agAt(iso(f), 0)).then(l => { a.bloqLista = l || []; render(); }).catch(() => { a.bloqLista = []; render(); });
   }
   function agConfig() {
-    const a = ui.ag, c = a.cfg || {}, link = c.slug ? `${location.origin}/agendar/${c.slug}` : `${location.origin}/agendar.html#e=${encodeURIComponent(Cloud.enabled ? Cloud.companyId || '' : 'demo')}`;
+    const a = ui.ag, c = a.cfg || {}, link = c.slug ? `${siteBase()}/agendar/${c.slug}` : `${siteBase()}/agendar.html#e=${encodeURIComponent(Cloud.enabled ? Cloud.companyId || '' : 'demo')}`;
     const servs = a.servicos, oc = GB.ocupCfgOf(state);
     const web = `<section class="section card"><h2 class="section-title">${icon('phone')} Web app do cliente</h2>
       <p class="section-note">O cliente abre o link, faz um cadastro rápido (nome, sobrenome e WhatsApp, com um código de 4 números enviado pelo WhatsApp da barbearia) e marca sozinho: serviço, profissional (ou sem preferência), dia e horário. Depois ele completa o cadastro e vê ou cancela os horários dele.</p>
@@ -7460,7 +7462,7 @@ Content-Type: application/json</pre>
       ${agExterna() ? `<p class="section-note">${icon('alert')} Com a AppBarber conectada, o web app abre em <b>modo de teste</b> (o cliente vê o aviso). Use para testar antes de divulgar o link.</p>` : ''}
       ${Cloud.enabled ? `<div class="ag-link"><input class="input" id="ag-url" readonly value="${esc(link)}"><button class="btn btn-sm" type="button" data-action="agCopiar">${icon('copy')} Copiar link</button><a class="btn btn-sm" href="${esc(link)}" target="_blank" rel="noopener">${icon('share')} Abrir</a></div>` : '<p class="section-note">O link do web app aparece quando a conta estiver na nuvem.</p>'}
       <form class="form" data-form="agCfgSalvar" novalidate>
-        <label class="field"><span>Seu link (personalize)</span><div class="ag-slug"><small>${esc(location.host)}/agendar/</small><input class="input" name="slug" maxlength="40" value="${esc(c.slug || '')}" placeholder="${esc(agSlugDe(state.company.name) || 'suaempresa')}" autocomplete="off" autocapitalize="none" spellcheck="false"></div><small class="muted">Só letras minúsculas, números e hífen (3 a 40). Esse é o link que você manda para os clientes. Se mudar, o link antigo para de funcionar.</small></label>
+        <label class="field"><span>Seu link (personalize)</span><div class="ag-slug"><small>${esc(siteBase().replace(/^https?:\/\//, ''))}/agendar/</small><input class="input" name="slug" maxlength="40" value="${esc(c.slug || '')}" placeholder="${esc(agSlugDe(state.company.name) || 'suaempresa')}" autocomplete="off" autocapitalize="none" spellcheck="false"></div><small class="muted">Só letras minúsculas, números e hífen (3 a 40). Esse é o link que você manda para os clientes. Se mudar, o link antigo para de funcionar.</small></label>
         <label class="check"><input type="checkbox" name="ativo" ${c.ativo ? 'checked' : ''}><span><b>Agendamento online ligado</b><small>Desligado, o link mostra que o agendamento online está fechado.</small></span></label>
         <div class="grid-2"><label class="field"><span>Horários de quantos em quantos minutos</span><input class="input num" type="number" name="passo" min="5" max="60" step="5" value="${c.passo || 20}"></label>
           <label class="field"><span>Antecedência mínima (min)</span><input class="input num" type="number" name="antecedencia" min="0" max="1440" step="5" value="${c.antecedencia ?? 60}"></label></div>
@@ -8860,7 +8862,7 @@ Content-Type: application/json</pre>
       const token = [...b].map(x => x.toString(16).padStart(2, '0')).join('');
       const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token)))].map(x => x.toString(16).padStart(2, '0')).join('');
       const emp = Cloud.enabled ? Cloud.companyId : 'demo';
-      const link = `${location.origin}/totem.html#e=${encodeURIComponent(emp)}&t=${token}`;
+      const link = `${siteBase()}/totem.html#e=${encodeURIComponent(emp)}&t=${token}`;
       if (!Cloud.enabled) { state.integ = { ...cur, tt_token_hash: hash }; save(); ui.ttLink = link; return render(); }
       Cloud.integ.save({ tt_token_hash: hash }).then(r => { ui.integ = r || { ...cur, tt_token_hash: hash }; ui.ttLink = link; toast('Link do totem gerado.'); render(); })
         .catch(e => { const m = Cloud.message(e); toast(/tt_|column|schema cache/i.test(m) ? 'O totem ainda está sendo ativado no servidor.' : m); });

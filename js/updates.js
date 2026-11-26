@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-26-dominio', date: '2026-11-26', title: 'Links com o endereço oficial', items: [
+    ['melhoria', 'Os links que você manda (agendamento online, totem e convite de profissional) agora usam sempre o endereço oficial gestaoperformance.vercel.app, mesmo abrindo o sistema por outro endereço.'],
+  ] },
   { id: '2026-11-26-link', date: '2026-11-26', title: 'Link personalizado do web app', items: [
     ['novo', 'Em Agenda › Configurar › Web app do cliente, escolha o seu link (ex.: /agendar/nunosantos). É o link que você manda para os clientes. O link antigo, com o código da empresa, continua funcionando.'],
   ] },
