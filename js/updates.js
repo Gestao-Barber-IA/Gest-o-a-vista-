@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-27-lid', date: '2026-11-27', title: 'Atendente IA: respostas que chegam por outro endereço do WhatsApp', items: [
+    ['correcao', 'Às vezes o WhatsApp entrega a resposta do cliente por um código interno ("@lid") sem o número junto. Aí um "ok" à confirmação de presença era tratado como um simples "recebido" e o horário não era confirmado (o cliente recebia o 2º aviso). Agora a atendente IA descobre o número e responde na conversa certa.'],
+  ] },
   { id: '2026-11-27-agenda-ajustes', date: '2026-11-27', title: 'Agenda própria: feedback, planos e cashback pela comanda', items: [
     ['novo', 'Pedido de feedback também na agenda própria: depois da comanda fechada, cliente novo na casa (ou atendido pela 1ª vez por aquele profissional) recebe o pedido no WhatsApp.'],
     ['novo', 'Planos na agenda própria: os "Planos mensais vendidos" dos Lançamentos valem como assinantes por 30 dias, e a atendente IA aplica a regra do plano (mesmo profissional, mesma semana) nos horários deles.'],
