@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-26-agenda-fonte', date: '2026-11-26', title: 'Agenda própria: modo teste com a AppBarber conectada', items: [
+    ['melhoria', 'Com a AppBarber conectada, o sistema usa só a agenda dela (atendente IA, lembretes, confirmações, vagas e resultados). A agenda própria e o web app ficam em modo teste, com aviso, e passam a valer como agenda oficial quando não houver API conectada.'],
+  ] },
   { id: '2026-11-26-agenda', date: '2026-11-26', title: 'Agenda própria e web app do cliente', items: [
     ['novo', 'Agenda no menu: o dia de cada profissional em colunas. Toque num espaço vazio para marcar, num horário para remarcar ou mudar o status (Confirmado, Chegou, Finalizado, Faltou, Cancelado) e bloqueie horários (almoço, curso). O sistema não deixa marcar dois clientes no mesmo horário do mesmo profissional.'],
     ['novo', 'Agenda › Configurar: serviços (duração e preço), horário de cada profissional por dia da semana e o link do web app do cliente.'],
