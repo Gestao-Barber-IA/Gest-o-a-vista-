@@ -2,6 +2,11 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-26-agenda', date: '2026-11-26', title: 'Agenda própria e web app do cliente', items: [
+    ['novo', 'Agenda no menu: o dia de cada profissional em colunas. Toque num espaço vazio para marcar, num horário para remarcar ou mudar o status (Confirmado, Chegou, Finalizado, Faltou, Cancelado) e bloqueie horários (almoço, curso). O sistema não deixa marcar dois clientes no mesmo horário do mesmo profissional.'],
+    ['novo', 'Agenda › Configurar: serviços (duração e preço), horário de cada profissional por dia da semana e o link do web app do cliente.'],
+    ['novo', 'Web app do cliente: o cliente abre o link, faz um cadastro rápido (nome, sobrenome e WhatsApp com código de 4 números) e marca sozinho o serviço, o profissional (ou sem preferência), o dia e o horário. Depois ele vê e cancela os horários dele e completa o cadastro (e-mail e aniversário). A confirmação chega pelo WhatsApp da barbearia.'],
+  ] },
   { id: '2026-11-25-sem-buracos', date: '2026-11-25', title: 'Agenda sem buracos', items: [
     ['novo', 'Em Integração & API › Agenda sem buracos: quando um horário marcado deixou um buraco menor que 40 minutos na agenda do profissional, o cliente recebe um pedido gentil para vir um pouco antes ou depois (ex.: 14h40 ou 15h20 em vez de 15h). Se ele aceitar, a atendente IA remarca; se não, o horário continua o mesmo.'],
   ] },

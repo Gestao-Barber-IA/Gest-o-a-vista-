@@ -237,6 +237,25 @@
     entregar: async (codigo, entregues) => RES(await c.from('ia_indicacoes').update({ entregues }).eq('company_id', Cloud.companyId).eq('codigo', codigo).select().single()),
   };
   // Relatório mensal com análise e plano de ação (gerado pelo servidor com IA).
+  // Agenda própria (tabelas ag_*). A trava ag_sem_conflito no banco impede dois clientes no mesmo horário do profissional.
+  Cloud.ag = {
+    cfg: async () => RES(await c.from('ag_config').select('*').eq('company_id', Cloud.companyId).maybeSingle()) || { ativo: false, passo: 20, antecedencia: 60, dias_max: 30, cancelar_horas: 2, buraco_min: 40, aviso: '' },
+    cfgSave: async row => RES(await c.from('ag_config').upsert({ ...row, company_id: Cloud.companyId, atualizado: new Date().toISOString() }).select().single()),
+    servicos: async () => RES(await c.from('ag_servicos').select('*').eq('company_id', Cloud.companyId).order('ordem').order('criado_em')) || [],
+    servSave: async row => RES(row.id ? await c.from('ag_servicos').update(row).eq('id', row.id).eq('company_id', Cloud.companyId) : await c.from('ag_servicos').insert({ ...row, company_id: Cloud.companyId })),
+    servDel: async id => RES(await c.from('ag_servicos').delete().eq('id', id).eq('company_id', Cloud.companyId)),
+    profs: async () => RES(await c.from('ag_profissionais').select('*').eq('company_id', Cloud.companyId)) || [],
+    profSave: async row => RES(await c.from('ag_profissionais').upsert({ ...row, company_id: Cloud.companyId, atualizado: new Date().toISOString() })),
+    dia: async (ini, fim) => {
+      const [x, y] = await Promise.all([
+        c.from('ag_agendamentos').select('*').eq('company_id', Cloud.companyId).lt('inicio', fim).gt('fim', ini).order('inicio').limit(1000),
+        c.from('ag_bloqueios').select('*').eq('company_id', Cloud.companyId).lt('inicio', fim).gt('fim', ini).limit(500)]);
+      return { ags: RES(x) || [], bloqs: RES(y) || [] };
+    },
+    agSave: async row => RES(row.id ? await c.from('ag_agendamentos').update({ ...row, atualizado_em: new Date().toISOString() }).eq('id', row.id).eq('company_id', Cloud.companyId) : await c.from('ag_agendamentos').insert({ ...row, company_id: Cloud.companyId, origem: 'equipe' })),
+    bloqSave: async row => RES(await c.from('ag_bloqueios').insert({ ...row, company_id: Cloud.companyId })),
+    bloqDel: async id => RES(await c.from('ag_bloqueios').delete().eq('id', id).eq('company_id', Cloud.companyId)),
+  };
   Cloud.iaRelatorio = async ym => RES(await c.from('ia_relatorios').select('ym, analise, dados, criado_em').eq('company_id', Cloud.companyId).eq('ym', ym).maybeSingle());
   // Memória dos clientes (atendente IA): o gestor vê, corrige e apaga (o servidor aplica a correção).
   Cloud.memorias = {

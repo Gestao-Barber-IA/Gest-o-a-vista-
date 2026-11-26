@@ -153,6 +153,23 @@ Deno.serve(async (req) => {
     }
     return json({ mensagens: [] });
   }
+  // Web app de agendamento: mensagens para mandar pelo WhatsApp (código de verificação e confirmação do horário).
+  if (req.method === "GET" && url.searchParams.get("acao") === "saida_espera") {
+    const ids = String(url.searchParams.get("empresas") || "").split(",").filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 20);
+    if (!ids.length) return json({ mensagens: [] });
+    await db.from("integrations").update({ ws_seen_at: new Date().toISOString() }).in("company_id", ids);
+    if (Math.random() < 0.05) { await db.from("wa_saida").delete().lt("criado_em", new Date(Date.now() - 7 * 86400000).toISOString()); await db.from("ag_codigos").delete().lt("criado_em", new Date(Date.now() - 86400000).toISOString()); }
+    const fim = Date.now() + 25000;
+    while (Date.now() < fim) {
+      const { data: novos } = await db.from("wa_saida").select("id").in("company_id", ids).eq("status", "novo").gte("criado_em", new Date(Date.now() - 15 * 60000).toISOString()).order("id").limit(10);
+      if (novos && novos.length) {
+        const { data: pegos } = await db.from("wa_saida").update({ status: "pego" }).in("id", novos.map((n: any) => n.id)).eq("status", "novo").select("id, company_id, fone, texto");
+        if (pegos && pegos.length) return json({ mensagens: pegos.sort((a: any, b: any) => a.id - b.id) });
+      }
+      await new Promise((r) => setTimeout(r, 600));
+    }
+    return json({ mensagens: [] });
+  }
   if (req.method === "GET" && url.searchParams.get("acao") === "totem_espera") {
     const ids = String(url.searchParams.get("empresas") || "").split(",").filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 20);
     if (!ids.length) return json({ pedidos: [] });
@@ -183,6 +200,8 @@ Deno.serve(async (req) => {
     const { data: ints, error } = await db.from("integrations")
       .select("company_id, est_code, api_key, branch_code, oa_on, oa_daily, oa_text, cl_lead_pm, cl_pm_from, in_on, in_daily, in_min, in_beneficio, in_premio, in_text, ig_on, ig_token, rm_pedido, fc_agenda, srv_update_req, srv_update_done, bo_on, bo_hour, bo_phone, bo_sent_on, bo_force, ia_report_phone, ac_status, cf_status, ac_on, ac_limit, ac_daily, ac_days, ac_text, pl_on, pl_chat, pl_daily, pl_days, pl_plans, pl_text, cf_on, cf_hour, cf_second, cf_before, cf_text, cf_text2, fv_on, fv_per, fv_daily, fv_lead, fv_days, fv_text, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, fb_reply, fb_pro_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, wb_gift, wb_gift_done, cl_status, cl_status_at, rt_on, rt_daily, rt_lead, rt_text, tt_on, tt_notify, tt_days, upsell, bd_on, bd_text, ia_on, ia_name, ia_model, ia_hours, ia_pause, ia_notes, ia_report_phone, ia_alert_phone, ia_arts, names").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,rt_on.eq.true,tt_on.eq.true,bd_on.eq.true,ia_on.eq.true");
     if (error) return json({ erro: error.message }, 500);
+    const { data: agc } = await db.from("ag_config").select("company_id").eq("ativo", true);
+    const agOn = new Set((agc || []).map((x: any) => x.company_id));
     const empresas = [];
     for (const i of ints || []) {
       const { data: co } = await db.from("companies").select("id, name, settings, sub_status, paid_until").eq("id", i.company_id).maybeSingle();
@@ -270,6 +289,7 @@ Deno.serve(async (req) => {
         pop: (pop || []).map((r) => ({ barberId: r.barber_id, day: r.day, ...(r.data || {}) })),
         entries: (entries || []).map((e) => ({ barberId: e.barber_id, date: e.date, source: e.source, ...(e.data || {}) })),
         memorias,
+        agendaApp: agOn.has(i.company_id), // web app de agendamento: o servidor manda os códigos e confirmações pelo WhatsApp
         instagram: i.ig_on && i.ig_token && i.ia_on ? { ligado: true } : null, // a atendente IA responde o Direct
         // "Gerar a análise agora" pelo app: rm_pedido = "AAAA-MM@quando" (o "quando" separa um pedido do outro).
         mensal_pedido: /^\d{4}-\d{2}(@|$)/.test(String(i.rm_pedido || "")) ? String(i.rm_pedido).slice(0, 7) : null, mensal_pedido_em: String(i.rm_pedido || ""),
@@ -415,6 +435,10 @@ Deno.serve(async (req) => {
         await db.from("ia_eventos").update({ compareceu: !!x.ok }).eq("company_id", b.company_id).eq("ref", String(x.ref).slice(0, 80));
       }
       return json({ ok: true });
+    }
+    if (b.acao === "saida_ok") {
+      const { error } = await db.from("wa_saida").update({ status: b.ok ? "enviado" : "erro", enviado_em: new Date().toISOString() }).eq("id", Number(b.id)).eq("company_id", b.company_id);
+      return error ? json({ erro: error.message }, 500) : json({ ok: true });
     }
     if (b.acao === "totem_resposta") {
       const resp = b.resposta && typeof b.resposta === "object" ? b.resposta : {};
