@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "8.3";
+export const SOFIA_VERSAO = "8.4";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -1055,7 +1055,7 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
   const conversas = new Map(); // jid → { mensagens, ultima, ultimaSofia, humanoEm, contexto, nome, agenda, recepcao, fone, fila, ocupado }
   // As conversas sobrevivem a reinícios (atualização, instalador): ficam num arquivo do servidor por até 6 horas.
   const CONV = join(dir, "sofia-conversas.json");
-  const CAMPOS = ["recepcaoEm", "parabenizou", "origem", "jaAgendou", "mensagens", "inicio", "ultima", "ultimaSofia", "humanoEm", "contexto", "contada", "nome", "recepcao", "fone", "cadastro", "verificado", "sistema", "artes", "feitos", "gasto", "motivo", "pushName", "esperaAte", "esperaDe", "registrada", "regId", "fila", "noturna", "pendTipo", "ultimaCliente"];
+  const CAMPOS = ["recepcaoEm", "parabenizou", "origem", "jaAgendou", "mensagens", "inicio", "ultima", "ultimaSofia", "humanoEm", "contexto", "contada", "nome", "recepcao", "fone", "cadastro", "verificado", "sistema", "artes", "feitos", "gasto", "motivo", "pushName", "esperaAte", "esperaDe", "registrada", "regId", "fila", "noturna", "pendTipo", "ultimaCliente", "lid"];
   // Mensagens esperando resposta (fila) também ficam salvas: um reinício não faz ninguém ficar sem resposta.
   // Áudio não dá para guardar (o arquivo fica no WhatsApp): vira um aviso para a Sofia pedir de novo.
   let avisouSemAudio = false;
@@ -1393,6 +1393,15 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
   }
   setInterval(() => { retornos().catch(() => {}); filaDaNoite().catch(() => {}); verificarEspera().catch(() => {}); salvarConversas(true); }, 60000).unref();
   // Conversa deste contato (cria se não houver ou se estiver parada há mais de 6 horas).
+  // Tabela "@lid" ↔ número que a biblioteca do WhatsApp guarda (Baileys 7). Sem ela, a resposta que chega por "@lid" sem o
+  // número junto não encontra a conversa do convite/confirmação (ex.: o cliente responde "ok" e ninguém confirma).
+  const lidMap = () => { try { const s = sock(); return s && s.signalRepository && s.signalRepository.lidMapping; } catch { return null; } };
+  async function pnDoLid(jid) {
+    try { const m = lidMap(); const pn = m && (await (m.getPNForLID || m.getPnForLid || (() => null)).call(m, jid)); const d = so(String(pn || "").split(/[:@]/)[0]); return d.length >= 10 ? d : ""; } catch { return ""; }
+  }
+  async function lidDoPn(jid) {
+    try { const m = lidMap(); const l = m && (await (m.getLIDForPN || m.getLidForPn || (() => null)).call(m, jid)); const v = String(l || ""); return /@lid$/.test(v) ? v.replace(/:\d+@/, "@") : ""; } catch { return ""; }
+  }
   function obter(jid, msg) {
     let c = conversas.get(jid);
     // O WhatsApp às vezes identifica o mesmo cliente por dois endereços (o número ou um código interno "@lid").
@@ -1400,7 +1409,7 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
     // esse telefone em outro endereço, ela passa a ser esta (com o contexto, o horário sugerido e a espera).
     if (!c && msg && msg.key) {
       const f = foneDe(msg), k = f && chaveFone(f);
-      if (k) for (const [j2, c2] of conversas) if (j2 !== jid && c2.fone && chaveFone(c2.fone) === k && (Date.now() - c2.ultima < 6 * 3600000 || c2.noturna)) {
+      for (const [j2, c2] of conversas) if (j2 !== jid && ((k && c2.fone && chaveFone(c2.fone) === k) || (c2.lid && c2.lid === jid)) && (Date.now() - c2.ultima < 6 * 3600000 || c2.noturna)) {
         conversas.delete(j2); conversas.set(jid, c2); c = c2;
         if (pausas.has(j2)) { pausas.set(jid, pausas.get(j2)); pausas.delete(j2); }
         break;
@@ -1536,6 +1545,7 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
       const idv = msg.key && msg.key.id && `${jid}|${msg.key.id}`;
       if (idv) { if (vistas.has(idv)) continue; vistas.add(idv); if (vistas.size > 5000) vistas.delete(vistas.values().next().value); }
       if (!jid || !/@(s\.whatsapp\.net|lid|instagram)$/.test(jid)) continue; // ignora grupos, status e canais (Instagram: "ig_<id>@instagram")
+      if (/@lid$/.test(jid) && !foneDe(msg)) { const pn = await pnDoLid(jid); if (pn) msg.key.remoteJidAlt = pn + "@s.whatsapp.net"; }
       const ts = Number(msg.messageTimestamp && msg.messageTimestamp.low !== undefined ? msg.messageTimestamp.low : msg.messageTimestamp) || 0;
       if (ts && Date.now() / 1000 - ts > 600) continue; // mensagens antigas (reconexão, histórico) não contam
       const t = texto(msg), md = midia(msg), conteudo = t || (md ? `[mandou um(a) ${md}]` : "");
@@ -1597,6 +1607,7 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
   function conviteEnviado(jid, id, { fone = "", nome = "", texto = "", detalhe = "", tipo = "convite de retorno: o cliente costuma voltar nesse prazo", horas = 3, origem = "retorno" } = {}) {
     if (id) daSofia.add(id);
     const c = obter(jid, null); c.origem = origem;
+    if (/@s\.whatsapp\.net$/.test(jid) && !c.lid) lidDoPn(jid).then((l) => { if (l) c.lid = l; }).catch(() => {});
     if (resultados && cfg) resultados.evento(cfg.company_id, { tipo: "convite", origem }); if (!c.fone && fone) c.fone = fone; if (!c.pushName && nome) c.pushName = nome;
     anotar(c, `Mensagem automática da barbearia (${tipo})`, `${texto} ${detalhe}`.trim());
     c.ultima = Date.now();
