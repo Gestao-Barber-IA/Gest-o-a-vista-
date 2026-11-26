@@ -7276,6 +7276,14 @@ Content-Type: application/json</pre>
         .catch(e => { a.ags = []; a.bloqs = []; a.erro = Cloud.message ? Cloud.message(e) : String(e); render(); });
     }
   }
+  // Fonte da agenda: com um sistema externo conectado (AppBarber), o Gestão usa só os dados dele (Sophia, lembretes,
+  // confirmações, resultados). A agenda própria fica em modo teste e só vira a agenda oficial sem API conectada.
+  function agExterna() {
+    if (!Cloud.enabled) { const it = state.integ || {}; return !!it.est_code && it.active !== false; }
+    if (ui.integ === undefined && isGestor(currentUser())) { ui.integ = null; Cloud.integ.get().then(r => { ui.integ = r || {}; render(); }).catch(() => { ui.integ = { erro: true }; render(); }); }
+    const it = ui.integ; return !!(it && !it.erro && it.est_code && it.active !== false);
+  }
+  const agTesteAviso = () => agExterna() ? `<section class="section card ag-teste"><p>${icon('alert')} <b>Modo teste.</b> A AppBarber está conectada, então o sistema continua usando <b>só a agenda da AppBarber</b> (${esc(iaNomeTxt())}, lembretes, confirmações, vagas e resultados). O que for marcado aqui, pela equipe ou pelo web app, não vai para a AppBarber nem para os relatórios. A agenda própria passa a valer quando a sincronização AppBarber for desligada.</p></section>` : '';
   function pageAgenda(user) {
     const a = ui.ag = ui.ag || { dia: iso(new Date()), tab: 'dia' };
     agCarregar();
@@ -7283,7 +7291,7 @@ Content-Type: application/json</pre>
     const topo = `<div class="res-top"><div class="seg" role="group" aria-label="Agenda">${tabs.map(([k, t]) => `<button type="button" class="${a.tab === k ? 'on' : ''}" data-action="agTab" data-t="${k}">${t}</button>`).join('')}</div>${Cloud.enabled ? '' : '<span class="chip">Sem nuvem · salvo neste aparelho</span>'}</div>`;
     if (a.base === 'erro') return topo + `<section class="section card"><p class="form-msg err">Não consegui abrir a agenda (${esc(String(a.erro || '').slice(0, 140))}). Tente de novo em instantes.</p></section>`;
     if (a.base !== 'ok') return topo + '<section class="section card"><p class="muted">Carregando…</p></section>';
-    return topo + (a.tab === 'config' && pode ? agConfig() : agDia(user, pode));
+    return topo + agTesteAviso() + (a.tab === 'config' && pode ? agConfig() : agDia(user, pode));
   }
   function agDia(user, pode) {
     const a = ui.ag, dia = a.dia, profs = agProfs(a.profs), d = fromIso(dia), hoje = iso(new Date());
@@ -7368,6 +7376,7 @@ Content-Type: application/json</pre>
     const web = `<section class="section card"><h2 class="section-title">${icon('phone')} Web app do cliente</h2>
       <p class="section-note">O cliente abre o link, faz um cadastro rápido (nome, sobrenome e WhatsApp, com um código de 4 números enviado pelo WhatsApp da barbearia) e marca sozinho: serviço, profissional (ou sem preferência), dia e horário. Depois ele completa o cadastro e vê ou cancela os horários dele.</p>
       <p class="section-note">${icon('alert')} O código e a confirmação saem pelo número do servidor do WhatsApp dos clientes: ele precisa estar ligado.</p>
+      ${agExterna() ? `<p class="section-note">${icon('alert')} Com a AppBarber conectada, o web app abre em <b>modo de teste</b> (o cliente vê o aviso). Use para testar antes de divulgar o link.</p>` : ''}
       ${Cloud.enabled ? `<div class="ag-link"><input class="input" id="ag-url" readonly value="${esc(link)}"><button class="btn btn-sm" type="button" data-action="agCopiar">${icon('copy')} Copiar link</button><a class="btn btn-sm" href="${esc(link)}" target="_blank" rel="noopener">${icon('share')} Abrir</a></div>` : '<p class="section-note">O link do web app aparece quando a conta estiver na nuvem.</p>'}
       <form class="form" data-form="agCfgSalvar" novalidate>
         <label class="check"><input type="checkbox" name="ativo" ${c.ativo ? 'checked' : ''}><span><b>Agendamento online ligado</b><small>Desligado, o link mostra que o agendamento online está fechado.</small></span></label>

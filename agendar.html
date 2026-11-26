@@ -112,7 +112,7 @@ input.cod { text-align:center; letter-spacing:.5em; font-family:"Archivo",sans-s
   var TELAS = {
     erro: function () { pinta('<h1>Ops!</h1><p class="sub">' + esc(st.x.erro || 'Não deu certo.') + '</p>' + (st.x.voltar ? '<button class="btn pri" data-a="' + st.x.voltar + '">Tentar de novo</button>' : '')); },
     entrar: function () {
-      pinta('<h1>Agende seu horário</h1><p class="sub">Cadastro rápido: só o seu nome e o seu WhatsApp. Vamos mandar um código de 4 números para confirmar.</p>' + (info.aviso ? '<div class="aviso">' + esc(info.aviso) + '</div>' : '') +
+      pinta(testeAviso() + '<h1>Agende seu horário</h1><p class="sub">Cadastro rápido: só o seu nome e o seu WhatsApp. Vamos mandar um código de 4 números para confirmar.</p>' + (info.aviso ? '<div class="aviso">' + esc(info.aviso) + '</div>' : '') +
         '<form id="fe" novalidate><div class="row2"><label class="f"><span>Nome</span><input class="in" name="nome" autocomplete="given-name" maxlength="40" value="' + esc(st.nome || '') + '" autofocus></label>' +
         '<label class="f"><span>Sobrenome</span><input class="in" name="sobrenome" autocomplete="family-name" maxlength="60" value="' + esc(st.sobrenome || '') + '"></label></div>' +
         '<label class="f"><span>WhatsApp com DDD</span><input class="in" name="fone" type="tel" inputmode="tel" autocomplete="tel-national" maxlength="16" placeholder="(11) 91234-5678" value="' + esc(st.fone ? foneFmt(st.fone) : '') + '"></label>' +
@@ -143,7 +143,7 @@ input.cod { text-align:center; letter-spacing:.5em; font-family:"Archivo",sans-s
           '<div class="tx"><b>' + esc(dataTxt(iso, true)) + ' às ' + h.replace(':', 'h') + '</b><small>' + esc(a.servicos.join(' + ')) + (a.profissional ? ' · com ' + esc(a.profissional.split(' ')[0]) : '') + '</small><br><span class="st ' + esc(a.status) + '">' + esc(a.status) + '</span>' +
           (botoes && a.pode_cancelar ? '<br><button class="lk" data-a="cancelar" data-id="' + esc(a.id) + '">' + (st.conf === a.id ? 'Confirmar cancelamento' : 'Cancelar horário') + '</button>' : '') +
           (botoes && !a.pode_cancelar && ['agendado', 'confirmado'].indexOf(a.status) >= 0 ? '<br><small>Para cancelar agora, fale com a barbearia.</small>' : '') + '</div></div>'; };
-      pinta('<h1>Olá, ' + esc(c.nome) + '!</h1>' + (info.aviso ? '<div class="aviso">' + esc(info.aviso) + '</div>' : '') +
+      pinta(testeAviso() + '<h1>Olá, ' + esc(c.nome) + '!</h1>' + (info.aviso ? '<div class="aviso">' + esc(info.aviso) + '</div>' : '') +
         '<button class="btn pri" data-a="novo">Agendar horário</button>' +
         (falta ? '<div class="card" style="margin-top:14px"><b>Complete seu cadastro</b><p class="sub" style="margin:4px 0 8px">Assim a gente lembra do seu aniversário 🎉</p><button class="btn" data-a="perfil">Completar cadastro</button></div>' : '') +
         '<h2>Seus próximos horários</h2>' + (prox.length ? prox.map(function (a) { return item(a, true); }).join('') : '<p class="vazio">Nenhum horário marcado.</p>') +
@@ -202,6 +202,7 @@ input.cod { text-align:center; letter-spacing:.5em; font-family:"Archivo",sans-s
         chamar('perfil', d).then(function () { Object.assign(eu.cliente, d); msg('Cadastro salvo.', true); f.querySelector('button').disabled = false; }).catch(function (er) { f.querySelector('button').disabled = false; msg(er.message); }); });
     },
   };
+  function testeAviso() { return info && info.teste ? '<div class="aviso"><b>Modo de teste.</b> Os horários marcados aqui ainda não valem na agenda oficial da barbearia.</div>' : ''; }
   function passos(n) { var h = '<div class="passos" aria-label="Passo ' + n + ' de 4">'; for (var i = 1; i <= 4; i++) h += '<i class="' + (i <= n ? 'on' : '') + '"></i>'; return h + '</div>'; }
   function servPor(id) { return info.servicos.filter(function (s) { return s.id === id; })[0]; }
   function duracao() { return st.sel.reduce(function (t, id) { var s = servPor(id); return t + (s ? s.duracao : 0); }, 0); }

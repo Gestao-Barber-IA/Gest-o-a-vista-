@@ -77,8 +77,10 @@ Deno.serve(async (req) => {
   };
 
   if (acao === "info") {
-    const [servs, profs] = await Promise.all([servicosAtivos(), profsAtivos()]);
-    return json({ ok: true, nome: co.name, logo: co.logo || "", marca: co.settings?.brand || "barber", aviso: cfg.aviso || "", dias_max: cfg.dias_max, cancelar_horas: cfg.cancelar_horas, hoje: hojeSP(), fechados: fech,
+    // Regra da fonte da agenda: com um sistema externo conectado (ex.: AppBarber), o sistema usa só os dados dele e
+    // esta agenda fica em modo teste; ela só vale como agenda da barbearia quando não há API conectada.
+    const [servs, profs, { data: ext }] = await Promise.all([servicosAtivos(), profsAtivos(), db.from("integrations").select("est_code, active").eq("company_id", empresa).maybeSingle()]);
+    return json({ ok: true, teste: !!(ext && ext.est_code && ext.active !== false), nome: co.name, logo: co.logo || "", marca: co.settings?.brand || "barber", aviso: cfg.aviso || "", dias_max: cfg.dias_max, cancelar_horas: cfg.cancelar_horas, hoje: hojeSP(), fechados: fech,
       servicos: servs.map((s: any) => ({ id: s.id, nome: s.nome, duracao: s.duracao, preco: Number(s.preco) || 0 })),
       profissionais: profs.map((p: any) => ({ id: p.barber_id, nome: p.nome, foto: /^https:\/\//.test(p.foto) ? p.foto : "", servicos: p.servicos || [] })),
       cliente: cli ? { nome: cli.nome, sobrenome: cli.sobrenome, fone: cli.fone, email: cli.email, nascimento: cli.nascimento } : null });

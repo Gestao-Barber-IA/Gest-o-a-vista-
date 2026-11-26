@@ -3301,3 +3301,5 @@ html[data-theme="light"] .res-page { --cf-ok: #1f9d55; --cf-rem: #2a78d6; --cf-c
 .ag-pr .form { margin-top: 12px; }
 .ag-semana { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
 @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .ag-st-agendado { --ag-c: #2a78d6; } }
+.ag-teste { border-color: color-mix(in srgb, var(--gold) 45%, var(--line)); background: color-mix(in srgb, var(--gold) 10%, var(--surface)); }
+.ag-teste p { margin: 0; }
