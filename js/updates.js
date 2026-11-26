@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-26-link', date: '2026-11-26', title: 'Link personalizado do web app', items: [
+    ['novo', 'Em Agenda › Configurar › Web app do cliente, escolha o seu link (ex.: /agendar/nunosantos). É o link que você manda para os clientes. O link antigo, com o código da empresa, continua funcionando.'],
+  ] },
   { id: '2026-11-26-webapp-app', date: '2026-11-26', title: 'Web app do cliente com cara de aplicativo', items: [
     ['novo', 'Menu embaixo (Início, Agendamentos e Menu). No Início: banners de promoção, o próximo horário, "Agendar horário" e "Repetir último".'],
     ['novo', 'Página da barbearia com foto de capa, endereço e mapa, e as abas Serviços (busca e Agendar em cada serviço), Profissionais (Agendar com ele e favorito), Detalhes (horário, WhatsApp e Instagram), Planos ("Quero assinar" abre o WhatsApp com a mensagem pronta) e Avaliações.'],
