@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "10.3";
+const VERSAO = "10.4";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -88,6 +88,23 @@ async function igLaco() {
     } catch (err) { log("Instagram: " + err.message); await espera(15000); }
   }
   igRodando = false;
+}
+// Web app de agendamento: o servidor manda pelo WhatsApp o código de verificação e a confirmação do horário.
+let saidaEmpresas = [], saidaRodando = false;
+async function saidaLaco() {
+  saidaRodando = true; log("Agenda online: envio de códigos e confirmações ligado.");
+  while (saidaEmpresas.length) {
+    try {
+      const r = await api("GET", null, `?acao=saida_espera&empresas=${encodeURIComponent(saidaEmpresas.join(","))}`);
+      for (const x of r.mensagens || []) {
+        let ok = false;
+        try { if (!sock || !aberto) throw new Error("WhatsApp desconectado"); await enviar(x.fone, x.texto); ok = true; log(`Agenda online: mensagem enviada (final ${String(x.fone).slice(-4)}).`); }
+        catch (err) { log("Agenda online: não enviada: " + err.message); }
+        await api("POST", { company_id: x.company_id, acao: "saida_ok", id: x.id, ok }).catch(() => {});
+      }
+    } catch (err) { log("Agenda online: " + err.message); await espera(15000); }
+  }
+  saidaRodando = false;
 }
 let sofia = null, retorno = null, totem = null, vagas = null, confirmacao = null, planos = null, agendaCheia = null, previsao = null, indicacao = null, otimizar = null;
 
@@ -581,12 +598,13 @@ async function ciclo() {
   const pedidas = empresas.filter((e) => e.atualizar);
   if (pedidas.length) { log("Atualização pedida pelo app."); await atualizar(true, pedidas); }
   // Cada número cuida só das empresas com o seu tipo de lembrete ligado.
-  const minhas = empresas.filter((e) => (CLI ? !!(e.clientes || e.feedback || e.reconquista || e.retorno || e.vagas || e.confirmacao || e.planos || e.agendaCheia || e.indicacao || e.otimizar || e.totem || e.aniversario || e.sofia) : e.cfg.ligado !== false));
+  const minhas = empresas.filter((e) => (CLI ? !!(e.clientes || e.feedback || e.reconquista || e.retorno || e.vagas || e.confirmacao || e.planos || e.agendaCheia || e.indicacao || e.otimizar || e.totem || e.aniversario || e.sofia || e.agendaApp) : e.cfg.ligado !== false));
   empresasConhecidas = minhas.map((e) => e.company_id);
   if (CLI) await escolherNumero(minhas);
   // Sofia: atende o número dos clientes da primeira barbearia com a atendente IA ligada.
   if (CLI && SOFIA) { if (!sofia) sofia = SOFIA.criarSofia({ dir: DIR, log, api, sock: () => sockMisto(), resultados: SOFIA.resultadosDe ? SOFIA.resultadosDe(DIR, api, log) : null, conectado: () => aberto, cmdConectar: () => CMD,
     baixarMidia: (msg) => downloadMediaMessage(msg, "buffer", {}, { logger: pino({ level: "silent" }), reuploadRequest: sock.updateMediaMessage }) }); await sofia.configurar(minhas.find((e) => e.sofia)).catch((err) => log("Sofia: " + err.message)); }
+  if (CLI) { saidaEmpresas = minhas.filter((e) => e.agendaApp).map((e) => e.company_id); if (saidaEmpresas.length && !saidaRodando) saidaLaco(); }
   // Instagram (Direct) com a atendente IA: funciona mesmo com o WhatsApp desconectado.
   if (CLI && sofia) { const eIg = minhas.find((e) => e.instagram && e.sofia); igEmpresa = eIg ? eIg.company_id : null; if (igEmpresa && !igRodando) igLaco(); }
   // Serviços da AppBarber para o app sugerir os nomes nas ofertas (upsell): 1 vez a cada 6 horas.

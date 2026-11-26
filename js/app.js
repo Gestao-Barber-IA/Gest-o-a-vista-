@@ -762,6 +762,7 @@
   const NAV = [
     { items: [
       { r: 'inicio', t: 'Início', i: 'grid' },
+      { r: 'agenda', t: 'Agenda', i: 'clock' },
       { r: 'performance', t: 'Minha performance', i: 'chart' },
       { r: 'lancamentos', t: 'Lançamentos', i: 'wallet', g: 1, a: 1 },
       { r: 'avisos', t: 'Avisos e alterações', i: 'bell' },
@@ -7213,6 +7214,204 @@ Content-Type: application/json</pre>
       </section>`;
   }
 
+  // ---------- Agenda própria + web app do cliente ----------
+  // Dia por profissional (colunas), marcar, remarcar, status e bloqueios. A configuração liga o web app (agendar.html),
+  // cadastra os serviços e o horário de cada profissional. Na nuvem usa as tabelas ag_*; sem nuvem, guarda no aparelho.
+  const AG_ST = { agendado: 'Agendado', confirmado: 'Confirmado', chegou: 'Chegou', finalizado: 'Finalizado', faltou: 'Faltou', cancelado: 'Cancelado' };
+  const AG_OR = { equipe: 'Equipe', app: 'Web app', atendente: 'Atendente IA', totem: 'Totem' };
+  const AG_DIAS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+  const agHm = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  const agMinOf = d => { const t = new Date(d); return t.getHours() * 60 + t.getMinutes(); };
+  const agAt = (dia, m) => { const [y, mo, d] = dia.split('-').map(Number); return new Date(y, mo - 1, d, Math.floor(m / 60), m % 60).toISOString(); };
+  const agPode = u => !!u && (isGestor(u) || accessOf(u.barberId) === 'gestor' || isRecep(u.barberId));
+  // Faixas "09:00-12:00, 13:00-20:00" ⇄ [["09:00","12:00"],["13:00","20:00"]]
+  const agFaixasTxt = f => (f || []).map(x => x.join('-')).join(', ');
+  const agFaixasDe = t => String(t || '').split(/[,;]+/).map(x => x.trim()).filter(Boolean).map(x => { const m = x.match(/^(\d{1,2})(?::(\d{2}))?\s*(?:-|–|às|a)\s*(\d{1,2})(?::(\d{2}))?$/i); if (!m) return null; const a = agHm(+m[1] * 60 + +(m[2] || 0)), b = agHm(+m[3] * 60 + +(m[4] || 0)); return a < b && b <= '24:00' ? [a, b] : null; });
+  // Guarda local (sem nuvem): mesma interface do Cloud.ag.
+  const agLocal = (() => {
+    const L = () => (state.agLocal = state.agLocal || { cfg: { ativo: false, passo: 20, antecedencia: 60, dias_max: 30, cancelar_horas: 2, buraco_min: 40, aviso: '' }, servicos: [], profs: [], ags: [], bloqs: [] });
+    const id = () => (crypto.randomUUID ? crypto.randomUUID() : 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2));
+    const dentro = (x, ini, fim) => new Date(x.inicio) < new Date(fim) && new Date(x.fim) > new Date(ini);
+    const ok = v => { save(); return Promise.resolve(v); };
+    return {
+      cfg: () => Promise.resolve(L().cfg), cfgSave: row => { Object.assign(L().cfg, row); return ok(L().cfg); },
+      servicos: () => Promise.resolve([...L().servicos].sort((a, b) => a.ordem - b.ordem)),
+      servSave: row => { const l = L().servicos, i = l.findIndex(x => x.id === row.id); if (i >= 0) l[i] = { ...l[i], ...row }; else l.push({ ativo: true, online: true, ordem: l.length, ...row, id: id() }); return ok(); },
+      servDel: sid => { L().servicos = L().servicos.filter(x => x.id !== sid); return ok(); },
+      profs: () => Promise.resolve(L().profs), profSave: row => { const l = L().profs, i = l.findIndex(x => x.barber_id === row.barber_id); if (i >= 0) l[i] = { ...l[i], ...row }; else l.push(row); return ok(); },
+      dia: (ini, fim) => Promise.resolve({ ags: L().ags.filter(x => dentro(x, ini, fim)), bloqs: L().bloqs.filter(x => dentro(x, ini, fim)) }),
+      agSave: row => {
+        const l = L().ags, ativo = x => !['cancelado', 'faltou'].includes(x.status);
+        const novo = { status: 'agendado', origem: 'equipe', ...((l.find(x => x.id === row.id)) || {}), ...row };
+        if (ativo(novo) && l.some(x => x.id !== novo.id && x.barber_id === novo.barber_id && ativo(x) && dentro(x, novo.inicio, novo.fim))) return Promise.reject(new Error('ag_sem_conflito'));
+        const i = l.findIndex(x => x.id === row.id); if (i >= 0) l[i] = novo; else l.push({ ...novo, id: id(), criado_em: new Date().toISOString() });
+        return ok();
+      },
+      bloqSave: row => { L().bloqs.push({ ...row, id: id() }); return ok(); }, bloqDel: bid => { L().bloqs = L().bloqs.filter(x => x.id !== bid); return ok(); },
+      clientes: q => { const s = String(q || '').toLowerCase(); const vistos = new Map(); for (const a of L().ags) if (a.cliente_nome.toLowerCase().includes(s) || a.cliente_fone.includes(s)) vistos.set(a.cliente_fone || a.cliente_nome, { nome: a.cliente_nome, fone: a.cliente_fone }); return Promise.resolve([...vistos.values()].slice(0, 8)); },
+    };
+  })();
+  const AG = () => (Cloud.enabled ? Cloud.ag : agLocal);
+  // Profissionais da agenda: os cadastrados em ag_profissionais; quem não tem cadastro e não é da recepção entra com o horário da empresa.
+  function agProfs(lista) {
+    const by = new Map((lista || []).map(p => [p.barber_id, p]));
+    return state.barbers.filter(b => b.active !== false).map(b => ({ b, p: by.get(b.id) || { barber_id: b.id, ativo: !isRecep(b.id), online: true, servicos: [], horarios: {}, novo: true } })).filter(x => x.p.ativo);
+  }
+  function agFaixasDia(p, dia) {
+    const dow = fromIso(dia).getDay(), h = (p.horarios || {})[dow], oc = GB.ocupCfgOf(state);
+    if (Array.isArray(h)) return h;
+    return (Array.isArray(oc.closed) ? oc.closed.map(Number) : [0]).includes(dow) ? [] : [[oc.open || '09:00', oc.close || '20:00']];
+  }
+  function agCarregar(force) {
+    const a = ui.ag;
+    if (!a.base || force === 'base') {
+      a.base = 'carregando';
+      Promise.all([AG().cfg(), AG().servicos(), AG().profs()]).then(([cfg, servicos, profs]) => { a.cfg = cfg || {}; a.servicos = servicos || []; a.profs = profs || []; a.base = 'ok'; render(); })
+        .catch(e => { a.base = 'erro'; a.erro = Cloud.message ? Cloud.message(e) : String(e); render(); });
+    }
+    if (a.diaCarregado !== a.dia || force === 'dia') {
+      a.diaCarregado = a.dia; a.ags = null;
+      const dia = a.dia;
+      AG().dia(agAt(dia, 0), agAt(dia, 24 * 60 - 1)).then(r => { if (a.dia !== dia) return; a.ags = r.ags || []; a.bloqs = r.bloqs || []; render(); })
+        .catch(e => { a.ags = []; a.bloqs = []; a.erro = Cloud.message ? Cloud.message(e) : String(e); render(); });
+    }
+  }
+  function pageAgenda(user) {
+    const a = ui.ag = ui.ag || { dia: iso(new Date()), tab: 'dia' };
+    agCarregar();
+    const pode = agPode(user), tabs = [['dia', 'Agenda do dia'], ...(pode ? [['config', 'Configurar']] : [])];
+    const topo = `<div class="res-top"><div class="seg" role="group" aria-label="Agenda">${tabs.map(([k, t]) => `<button type="button" class="${a.tab === k ? 'on' : ''}" data-action="agTab" data-t="${k}">${t}</button>`).join('')}</div>${Cloud.enabled ? '' : '<span class="chip">Sem nuvem · salvo neste aparelho</span>'}</div>`;
+    if (a.base === 'erro') return topo + `<section class="section card"><p class="form-msg err">Não consegui abrir a agenda (${esc(String(a.erro || '').slice(0, 140))}). Tente de novo em instantes.</p></section>`;
+    if (a.base !== 'ok') return topo + '<section class="section card"><p class="muted">Carregando…</p></section>';
+    return topo + (a.tab === 'config' && pode ? agConfig() : agDia(user, pode));
+  }
+  function agDia(user, pode) {
+    const a = ui.ag, dia = a.dia, profs = agProfs(a.profs), d = fromIso(dia), hoje = iso(new Date());
+    const rot = `${AG_DIAS[d.getDay()]}, ${d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}${dia === hoje ? ' · hoje' : ''}`;
+    const nav = `<section class="section card ag-bar">
+      <div class="ag-nav"><button class="icon-btn" type="button" data-action="agDia" data-d="-1" aria-label="Dia anterior">${icon('left')}</button>
+        <label class="ag-data"><span class="sr-only">Dia</span><input class="input" type="date" value="${dia}" data-ag-dia></label>
+        <button class="icon-btn" type="button" data-action="agDia" data-d="1" aria-label="Próximo dia">${icon('right')}</button>
+        ${dia !== hoje ? `<button class="btn btn-sm" type="button" data-action="agDia" data-d="0">Hoje</button>` : ''}</div>
+      <b class="ag-rot">${esc(rot)}</b>
+      ${pode ? `<div class="btn-row"><button class="btn btn-sm btn-primary" type="button" data-action="agNovo">${icon('plus')} Novo horário</button><button class="btn btn-sm" type="button" data-action="agBloq">${icon('lock')} Bloquear horário</button></div>` : ''}
+    </section>`;
+    const form = a.edit ? agForm(a.edit, profs) : a.bloq ? agBloqForm(a.bloq, profs) : '';
+    if (!profs.length) return nav + form + `<section class="section card"><p class="muted">Nenhum profissional na agenda. Cadastre em Adicionar profissional e ajuste em Agenda › Configurar.</p></section>`;
+    if (!a.ags) return nav + form + '<section class="section card"><p class="muted">Carregando o dia…</p></section>';
+    // Janela do dia: do primeiro início ao último fim (horários dos profissionais e o que foi marcado fora deles).
+    let ini = 24 * 60, fim = 0;
+    for (const { p } of profs) for (const [x, y] of agFaixasDia(p, dia)) { ini = Math.min(ini, hmMin(x)); fim = Math.max(fim, hmMin(y)); }
+    for (const x of a.ags) { if (x.status === 'cancelado') continue; ini = Math.min(ini, agMinOf(x.inicio)); fim = Math.max(fim, agMinOf(x.fim) || 24 * 60); }
+    if (ini >= fim) { ini = 9 * 60; fim = 20 * 60; }
+    ini = Math.floor(ini / 60) * 60; fim = Math.ceil(fim / 60) * 60;
+    const PX = 1.4, passo = Math.max(5, Number(a.cfg.passo) || 20), top = m => ((m - ini) * PX).toFixed(1);
+    const horas = []; for (let m = ini; m < fim; m += 60) horas.push(`<span class="ag-h" style="top:${top(m)}px">${agHm(m)}</span>`);
+    const agora = dia === hoje ? new Date().getHours() * 60 + new Date().getMinutes() : -1;
+    const cols = profs.map(({ b, p }) => {
+      const faixas = agFaixasDia(p, dia), fora = [];
+      let t = ini; for (const [x, y] of [...faixas].sort()) { if (hmMin(x) > t) fora.push([t, hmMin(x)]); t = Math.max(t, hmMin(y)); } if (t < fim) fora.push([t, fim]);
+      const slots = []; if (pode) for (let m = ini; m < fim; m += passo) slots.push(`<button type="button" class="ag-slot" style="top:${top(m)}px;height:${(passo * PX).toFixed(1)}px" data-action="agNovo" data-b="${esc(b.id)}" data-h="${agHm(m)}" aria-label="Marcar às ${agHm(m)} com ${esc(b.name)}"></button>`);
+      const bl = a.bloqs.filter(x => !x.barber_id || x.barber_id === b.id).map(x => { const s = Math.max(ini, agMinOf(x.inicio)), e = Math.min(fim, iso(new Date(x.fim)) > dia ? 24 * 60 : agMinOf(x.fim)); return `<div class="ag-bl" style="top:${top(s)}px;height:${((e - s) * PX).toFixed(1)}px"><span>${icon('lock')} ${esc(x.motivo || 'Bloqueado')}</span>${pode ? `<button type="button" class="link-btn" data-action="agBloqDel" data-id="${esc(x.id)}">${ui.confirm === 'agb' + x.id ? 'Confirmar' : 'Tirar'}</button>` : ''}</div>`; });
+      const ev = a.ags.filter(x => x.barber_id === b.id && x.status !== 'cancelado').map(x => { const s = agMinOf(x.inicio), e = iso(new Date(x.fim)) > dia ? 24 * 60 : agMinOf(x.fim), h = (e - s) * PX;
+        return `<button type="button" class="ag-ev ag-st-${esc(x.status)}" style="top:${top(s)}px;height:${Math.max(18, h - 2).toFixed(1)}px" data-action="agAbrir" data-id="${esc(x.id)}">
+          <b>${agHm(s)} ${esc(x.cliente_nome || 'Cliente')}</b>${h > 34 ? `<small>${esc((x.servicos || []).map(s => s.nome).join(' + '))}</small>` : ''}${h > 52 ? `<small>${AG_ST[x.status] || ''}${x.origem && x.origem !== 'equipe' ? ' · ' + AG_OR[x.origem] : ''}</small>` : ''}</button>`; });
+      const n = a.ags.filter(x => x.barber_id === b.id && !['cancelado', 'faltou'].includes(x.status));
+      return `<div class="ag-col"><div class="ag-colh"><b>${esc(b.name)}</b><small>${n.length} horário${n.length === 1 ? '' : 's'}${n.length ? ' · ' + money0(n.reduce((s, x) => s + (Number(x.valor) || 0), 0)) : ''}</small></div>
+        <div class="ag-body" style="height:${((fim - ini) * PX).toFixed(0)}px">${fora.map(([x, y]) => `<div class="ag-fora" style="top:${top(x)}px;height:${((y - x) * PX).toFixed(1)}px"></div>`).join('')}${slots.join('')}${bl.join('')}${ev.join('')}${agora >= ini && agora <= fim ? `<i class="ag-agora" style="top:${top(agora)}px"></i>` : ''}</div></div>`;
+    }).join('');
+    const canc = a.ags.filter(x => x.status === 'cancelado');
+    const tot = a.ags.filter(x => !['cancelado', 'faltou'].includes(x.status));
+    return nav + form + `<section class="section card ag-wrap">
+      <p class="ag-resumo"><b>${tot.length}</b> horário${tot.length === 1 ? '' : 's'} · <b>${money0(tot.reduce((s, x) => s + (Number(x.valor) || 0), 0))}</b> marcados${canc.length ? ` · ${canc.length} cancelado${canc.length === 1 ? '' : 's'}` : ''}</p>
+      <div class="ag-grade" role="region" aria-label="Agenda do dia" tabindex="0"><div class="ag-horas" style="height:${((fim - ini) * PX).toFixed(0)}px">${horas.join('')}</div>${cols}</div>
+      ${pode ? '<p class="section-note">Toque num espaço vazio para marcar ou num horário para ver, remarcar ou mudar o status.</p>' : ''}
+      ${canc.length ? `<details class="ag-canc"><summary>Cancelados do dia (${canc.length})</summary><ul>${canc.map(x => `<li><button type="button" class="link-btn" data-action="agAbrir" data-id="${esc(x.id)}">${agHm(agMinOf(x.inicio))} ${esc(x.cliente_nome)} · ${esc((barberById(x.barber_id) || {}).name || '')}</button>${x.obs ? ` <small class="muted">${esc(x.obs)}</small>` : ''}</li>`).join('')}</ul></details>` : ''}
+    </section>`;
+  }
+  function agForm(e, profs) {
+    const a = ui.ag, servs = a.servicos.filter(s => s.ativo !== false), novo = !e.id, sel = new Set((e.servicos || []).map(s => s.id));
+    const dur = (e.servicos || []).reduce((t, s) => t + (Number(s.duracao) || 0), 0) || 30;
+    const fone4 = String(e.cliente_fone || '').slice(-4);
+    return `<section class="section card ag-form"><h2 class="section-title">${icon(novo ? 'plus' : 'edit')} ${novo ? 'Novo horário' : 'Horário de ' + esc(e.cliente_nome || 'cliente')}</h2>
+      ${!novo ? `<p class="section-note"><span class="chip ag-chip-${esc(e.status)}">${AG_ST[e.status] || e.status}</span> ${AG_OR[e.origem] ? 'Marcado por: ' + AG_OR[e.origem] : ''}${fone4 ? ` · WhatsApp final ${esc(fone4)}` : ''}</p>
+      <div class="btn-row ag-sts">${['confirmado', 'chegou', 'finalizado', 'faltou'].map(s => `<button type="button" class="btn btn-sm ${e.status === s ? 'btn-primary' : ''}" data-action="agStatus" data-s="${s}">${AG_ST[s]}</button>`).join('')}
+        <button type="button" class="btn btn-sm ${ui.confirm === 'agc' ? 'btn-danger' : ''}" data-action="agStatus" data-s="${e.status === 'cancelado' ? 'agendado' : 'cancelado'}">${e.status === 'cancelado' ? 'Reativar' : ui.confirm === 'agc' ? 'Confirmar cancelamento' : 'Cancelar horário'}</button></div>` : ''}
+      <form class="form" data-form="agSalvar" novalidate>
+        <div class="grid-2"><label class="field"><span>Nome do cliente</span><input class="input" name="nome" maxlength="80" value="${esc(e.cliente_nome || '')}" list="ag-cli" autocomplete="off" required></label>
+          <label class="field"><span>WhatsApp (com DDD)</span><input class="input" name="fone" inputmode="tel" maxlength="20" value="${esc(e.cliente_fone || '')}" placeholder="(11) 91234-5678"></label></div>
+        <datalist id="ag-cli">${(a.sugCli || []).map(c => `<option value="${esc(c.nome)}">${esc(c.fone ? 'final ' + c.fone.slice(-4) : '')}</option>`).join('')}</datalist>
+        <fieldset class="field"><legend>Serviços</legend>${servs.length ? `<div class="ag-servs">${servs.map(s => `<label class="check ag-serv"><input type="checkbox" name="serv" value="${esc(s.id)}" ${sel.has(s.id) ? 'checked' : ''}><span><b>${esc(s.nome)}</b><small>${s.duracao} min · ${money0(Number(s.preco) || 0)}</small></span></label>`).join('')}</div>` : '<p class="muted">Cadastre os serviços em Configurar.</p>'}</fieldset>
+        <div class="grid-2"><label class="field"><span>Profissional</span><select class="input" name="barber">${profs.map(({ b }) => `<option value="${esc(b.id)}" ${b.id === e.barber_id ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>
+          <label class="field"><span>Dia</span><input class="input" type="date" name="dia" value="${esc(e.dia || a.dia)}" required></label></div>
+        <div class="grid-2"><label class="field"><span>Horário</span><input class="input" type="time" name="hora" step="300" value="${esc(e.hora || '')}" required></label>
+          <label class="field"><span>Duração (min)</span><input class="input num" type="number" name="dur" min="5" max="600" step="5" value="${e.dur || dur}"><small class="muted">Soma dos serviços; mude se precisar.</small></label></div>
+        <label class="field"><span>Observação</span><input class="input" name="obs" maxlength="300" value="${esc(e.obs || '')}"></label>
+        <p class="form-msg" data-msg></p>
+        <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} ${novo ? 'Marcar' : 'Salvar alterações'}</button><button class="btn" type="button" data-action="agFechar">Fechar</button></div>
+      </form></section>`;
+  }
+  function agBloqForm(e, profs) {
+    return `<section class="section card ag-form"><h2 class="section-title">${icon('lock')} Bloquear horário</h2>
+      <form class="form" data-form="agBloqSalvar" novalidate>
+        <div class="grid-2"><label class="field"><span>Profissional</span><select class="input" name="barber"><option value="">Todos</option>${profs.map(({ b }) => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('')}</select></label>
+          <label class="field"><span>Dia</span><input class="input" type="date" name="dia" value="${esc(e.dia || ui.ag.dia)}" required></label></div>
+        <div class="grid-2"><label class="field"><span>Das</span><input class="input" type="time" name="de" step="300" value="12:00" required></label><label class="field"><span>Até</span><input class="input" type="time" name="ate" step="300" value="13:00" required></label></div>
+        <label class="field"><span>Motivo</span><input class="input" name="motivo" maxlength="80" placeholder="Almoço, curso, médico…"></label>
+        <p class="form-msg" data-msg></p>
+        <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('lock')} Bloquear</button><button class="btn" type="button" data-action="agFechar">Fechar</button></div>
+      </form></section>`;
+  }
+  function agConfig() {
+    const a = ui.ag, c = a.cfg || {}, link = `${location.origin}/agendar.html#e=${encodeURIComponent(Cloud.enabled ? Cloud.companyId || '' : 'demo')}`;
+    const servs = a.servicos, oc = GB.ocupCfgOf(state);
+    const web = `<section class="section card"><h2 class="section-title">${icon('phone')} Web app do cliente</h2>
+      <p class="section-note">O cliente abre o link, faz um cadastro rápido (nome, sobrenome e WhatsApp, com um código de 4 números enviado pelo WhatsApp da barbearia) e marca sozinho: serviço, profissional (ou sem preferência), dia e horário. Depois ele completa o cadastro e vê ou cancela os horários dele.</p>
+      <p class="section-note">${icon('alert')} O código e a confirmação saem pelo número do servidor do WhatsApp dos clientes: ele precisa estar ligado.</p>
+      ${Cloud.enabled ? `<div class="ag-link"><input class="input" id="ag-url" readonly value="${esc(link)}"><button class="btn btn-sm" type="button" data-action="agCopiar">${icon('copy')} Copiar link</button><a class="btn btn-sm" href="${esc(link)}" target="_blank" rel="noopener">${icon('share')} Abrir</a></div>` : '<p class="section-note">O link do web app aparece quando a conta estiver na nuvem.</p>'}
+      <form class="form" data-form="agCfgSalvar" novalidate>
+        <label class="check"><input type="checkbox" name="ativo" ${c.ativo ? 'checked' : ''}><span><b>Agendamento online ligado</b><small>Desligado, o link mostra que o agendamento online está fechado.</small></span></label>
+        <div class="grid-2"><label class="field"><span>Horários de quantos em quantos minutos</span><input class="input num" type="number" name="passo" min="5" max="60" step="5" value="${c.passo || 20}"></label>
+          <label class="field"><span>Antecedência mínima (min)</span><input class="input num" type="number" name="antecedencia" min="0" max="1440" step="5" value="${c.antecedencia ?? 60}"></label></div>
+        <div class="grid-2"><label class="field"><span>Agenda aberta até quantos dias à frente</span><input class="input num" type="number" name="dias_max" min="1" max="120" value="${c.dias_max || 30}"></label>
+          <label class="field"><span>Cliente cancela pelo app até (horas antes)</span><input class="input num" type="number" name="cancelar_horas" min="0" max="72" value="${c.cancelar_horas ?? 2}"></label></div>
+        <label class="field"><span>Não oferecer horário que deixe buraco menor que (min)</span><input class="input num" type="number" name="buraco_min" min="0" max="120" step="5" value="${c.buraco_min ?? 40}"><small class="muted">0 = oferecer todos os horários livres.</small></label>
+        <label class="field"><span>Recado no topo do web app (opcional)</span><input class="input" name="aviso" maxlength="200" value="${esc(c.aviso || '')}" placeholder="Ex.: Aos sábados, chegue 10 minutos antes."></label>
+        <p class="form-msg" data-msg></p><div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
+      </form></section>`;
+    const sv = `<section class="section card"><h2 class="section-title">${icon('scissors')} Serviços</h2>
+      <p class="section-note">A duração define o tamanho do horário na agenda. "No app" = aparece para o cliente marcar sozinho.</p>
+      ${servs.length ? `<div class="ag-svlist">${servs.map(s => `<form class="ag-sv" data-form="agServSalvar" data-id="${esc(s.id)}" novalidate>
+        <input class="input" name="nome" maxlength="60" value="${esc(s.nome)}" aria-label="Nome do serviço">
+        <label class="ag-mini"><span>min</span><input class="input num" type="number" name="duracao" min="5" max="600" step="5" value="${s.duracao}"></label>
+        <label class="ag-mini"><span>R$</span><input class="input num" type="number" name="preco" min="0" step="0.01" value="${Number(s.preco) || 0}"></label>
+        <label class="check ag-mini"><input type="checkbox" name="online" ${s.online !== false ? 'checked' : ''}><span>No app</span></label>
+        <label class="check ag-mini"><input type="checkbox" name="ativo" ${s.ativo !== false ? 'checked' : ''}><span>Ativo</span></label>
+        <button class="icon-btn" type="submit" aria-label="Salvar ${esc(s.nome)}">${icon('check')}</button>
+        <button class="icon-btn ${ui.confirm === 'ags' + s.id ? 'btn-danger' : ''}" type="button" data-action="agServDel" data-id="${esc(s.id)}" aria-label="${ui.confirm === 'ags' + s.id ? 'Confirmar: apagar' : 'Apagar'} ${esc(s.nome)}">${ui.confirm === 'ags' + s.id ? icon('check') : icon('trash')}</button>
+      </form>`).join('')}</div>` : '<p class="muted">Nenhum serviço ainda.</p>'}
+      <form class="ag-sv ag-sv-novo" data-form="agServSalvar" novalidate>
+        <input class="input" name="nome" maxlength="60" placeholder="Novo serviço (ex.: Corte)" aria-label="Nome do novo serviço">
+        <label class="ag-mini"><span>min</span><input class="input num" type="number" name="duracao" min="5" max="600" step="5" value="40"></label>
+        <label class="ag-mini"><span>R$</span><input class="input num" type="number" name="preco" min="0" step="0.01" value="0"></label>
+        <label class="check ag-mini"><input type="checkbox" name="online" checked><span>No app</span></label>
+        <input type="hidden" name="ativo" value="on">
+        <button class="btn btn-sm btn-primary" type="submit">${icon('plus')} Adicionar</button>
+      </form><p class="form-msg" data-msg id="ag-sv-msg"></p></section>`;
+    const by = new Map((a.profs || []).map(p => [p.barber_id, p]));
+    const pr = `<section class="section card"><h2 class="section-title">${icon('users')} Profissionais e horários</h2>
+      <p class="section-note">Escreva as faixas de cada dia, como <b>09:00-12:00, 13:00-20:00</b>. Em branco = folga. Sem horário salvo, vale o horário da empresa (${esc(oc.open)} às ${esc(oc.close)}).</p>
+      ${state.barbers.filter(b => b.active !== false).map(b => { const p = by.get(b.id) || { ativo: !isRecep(b.id), online: true, servicos: [], horarios: {} }, temH = Object.keys(p.horarios || {}).length, ss = new Set(p.servicos || []);
+        return `<details class="ag-pr"><summary><b>${esc(b.name)}</b> <small class="muted">${p.ativo ? (p.online ? 'na agenda e no app' : 'só na agenda') : 'fora da agenda'}${temH ? '' : ' · horário da empresa'}</small></summary>
+        <form class="form" data-form="agProfSalvar" data-b="${esc(b.id)}" novalidate>
+          <div class="grid-2"><label class="check"><input type="checkbox" name="ativo" ${p.ativo ? 'checked' : ''}><span><b>Atende pela agenda</b></span></label><label class="check"><input type="checkbox" name="online" ${p.online !== false ? 'checked' : ''}><span><b>Aparece no web app</b></span></label></div>
+          <div class="ag-semana">${[1, 2, 3, 4, 5, 6, 0].map(dw => { const f = (p.horarios || {})[dw], pad = (Array.isArray(oc.closed) ? oc.closed.map(Number) : [0]).includes(dw) ? '' : `${oc.open}-${oc.close}`;
+            return `<label class="field"><span>${AG_DIAS[dw]}</span><input class="input" name="h${dw}" value="${esc(Array.isArray(f) ? agFaixasTxt(f) : temH ? '' : pad)}" placeholder="folga"></label>`; }).join('')}</div>
+          ${servs.length ? `<fieldset class="field"><legend>Serviços que faz (nenhum marcado = todos)</legend><div class="ag-servs">${servs.map(s => `<label class="check ag-serv"><input type="checkbox" name="serv" value="${esc(s.id)}" ${ss.has(s.id) ? 'checked' : ''}><span>${esc(s.nome)}</span></label>`).join('')}</div></fieldset>` : ''}
+          <p class="form-msg" data-msg></p><div><button class="btn btn-primary btn-sm" type="submit">${icon('check')} Salvar ${esc(b.name.split(' ')[0])}</button></div>
+        </form></details>`; }).join('')}</section>`;
+    return web + sv + pr;
+  }
   const PAGES = {
     inicio: { t: 'Início', r: pageInicio },
     fechamento: { t: 'Fechamento do mês', r: pageFechamento, g: 1, a: 1 },
@@ -7235,6 +7434,7 @@ Content-Type: application/json</pre>
     atualizacoes: { t: 'Atualizações', r: pageAtualizacoes, g: 1 },
     avisos: { t: 'Avisos e alterações', r: pageAvisos },
     fiscalizacao: { t: 'Fiscalização', r: pageFiscalizacao, g: 1, a: 1 },
+    agenda: { t: 'Agenda', r: pageAgenda },
     'resultado-ia': { t: 'Resultado da Sofia', r: pageResultadoIa, g: 1 },
     bonus: { t: 'Bônus', r: pageBonus },
     contratos: { t: 'Contratos', r: pageContratos },
@@ -8824,6 +9024,38 @@ Content-Type: application/json</pre>
       if (ui.confirm !== 'mem:' + k) { ui.confirm = 'mem:' + k; return render(); }
       ui.confirm = null; memGravar(k, []);
     },
+    agTab(el) { ui.ag.tab = el.dataset.t; ui.ag.edit = ui.ag.bloq = null; render(); },
+    agDia(el) { const a = ui.ag, n = Number(el.dataset.d); if (!n) a.dia = iso(new Date()); else { const d = fromIso(a.dia); d.setDate(d.getDate() + n); a.dia = iso(d); } a.edit = a.bloq = null; render(); },
+    agNovo(el) {
+      const a = ui.ag, profs = agProfs(a.profs);
+      a.bloq = null; a.edit = { dia: a.dia, hora: el.dataset.h || '', barber_id: el.dataset.b || (profs[0] && profs[0].b.id), servicos: [] };
+      render(); document.querySelector('.ag-form input[name="nome"]')?.focus();
+    },
+    agBloq() { ui.ag.edit = null; ui.ag.bloq = { dia: ui.ag.dia }; render(); },
+    agFechar() { ui.ag.edit = ui.ag.bloq = null; ui.confirm = null; render(); },
+    agAbrir(el) {
+      const a = ui.ag, x = (a.ags || []).find(v => v.id === el.dataset.id); if (!x) return;
+      const s = agMinOf(x.inicio), e = agMinOf(x.fim);
+      a.bloq = null; a.edit = { ...x, dia: iso(new Date(x.inicio)), hora: agHm(s), dur: e > s ? e - s : 30 }; ui.confirm = null;
+      render(); window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    agStatus(el) {
+      const a = ui.ag, e = a.edit, s = el.dataset.s; if (!e || !e.id) return;
+      if (s === 'cancelado' && ui.confirm !== 'agc') { ui.confirm = 'agc'; return render(); }
+      ui.confirm = null;
+      AG().agSave({ id: e.id, status: s, ...(s === 'cancelado' ? { obs: (e.obs ? e.obs + ' · ' : '') + 'Cancelado pela equipe' } : {}) })
+        .then(() => { toast(s === 'cancelado' ? 'Horário cancelado.' : 'Status: ' + AG_ST[s] + '.'); a.edit = s === 'cancelado' ? null : { ...e, status: s }; agCarregar('dia'); render(); })
+        .catch(err => toast(/ag_sem_conflito|exclusion/i.test(String(err && err.message)) ? 'Esse horário já está ocupado por outro cliente.' : (Cloud.message ? Cloud.message(err) : String(err))));
+    },
+    agBloqDel(el) {
+      const k = 'agb' + el.dataset.id; if (ui.confirm !== k) { ui.confirm = k; return render(); }
+      ui.confirm = null; AG().bloqDel(el.dataset.id).then(() => { toast('Bloqueio retirado.'); agCarregar('dia'); render(); }).catch(err => toast(Cloud.message ? Cloud.message(err) : String(err)));
+    },
+    agServDel(el) {
+      const k = 'ags' + el.dataset.id; if (ui.confirm !== k) { ui.confirm = k; return render(); }
+      ui.confirm = null; AG().servDel(el.dataset.id).then(() => { toast('Serviço apagado.'); agCarregar('base'); }).catch(err => toast(/foreign|violat/i.test(String(err && err.message)) ? 'Esse serviço já foi usado: desmarque "Ativo" em vez de apagar.' : (Cloud.message ? Cloud.message(err) : String(err))));
+    },
+    agCopiar() { copyText(document.getElementById('ag-url')?.value || '', document.getElementById('ag-url'), 'Link do agendamento copiado.'); },
     resPer(el) {
       const ant = ui.iaRes || {}, h = new Date();
       ui.iaRes = el.dataset.p === 'per' ? { p: 'per', de: ant.de || iso(new Date(h.getFullYear(), h.getMonth(), 1)), ate: ant.ate || iso(h) } : { p: el.dataset.p, de: ant.de, ate: ant.ate };
@@ -9625,6 +9857,60 @@ Content-Type: application/json</pre>
       Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(row.bd_on ? 'Parabéns automático ligado.' : 'Parabéns automático desligado.'); render(); })
         .catch(e => { const m = Cloud.message(e); setMsg(f, /bd_|column|schema cache/i.test(m) ? 'O parabéns automático ainda está sendo ativado no servidor.' : m); });
     },
+    agSalvar(f) {
+      const a = ui.ag, e = a.edit || {}, E = f.elements, nome = E.nome.value.trim().slice(0, 80);
+      let fone = String(E.fone.value || '').replace(/\D/g, ''); if (fone.length > 11 && fone.startsWith('55')) fone = fone.slice(2);
+      if (!nome) return setMsg(f, 'Digite o nome do cliente.');
+      if (fone && fone.length !== 10 && fone.length !== 11) return setMsg(f, 'Confira o WhatsApp com DDD (10 ou 11 números).');
+      const dia = E.dia.value, hora = E.hora.value, dur = Math.round(Number(E.dur.value) || 0);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dia) || !/^\d{2}:\d{2}$/.test(hora)) return setMsg(f, 'Escolha o dia e o horário.');
+      const ids = [...f.querySelectorAll('input[name="serv"]:checked')].map(x => x.value), servicos = ids.map(id => a.servicos.find(s => s.id === id)).filter(Boolean).map(s => ({ id: s.id, nome: s.nome, duracao: Number(s.duracao) || 30, preco: Number(s.preco) || 0 }));
+      const somaD = servicos.reduce((t, s) => t + s.duracao, 0), d2 = dur >= 5 ? dur : somaD || 30;
+      const ini = hmMin(hora), barber_id = E.barber.value;
+      const row = { ...(e.id ? { id: e.id } : {}), barber_id, cliente_nome: nome, cliente_fone: fone, inicio: agAt(dia, ini), fim: agAt(dia, ini + d2), servicos, valor: servicos.reduce((t, s) => t + s.preco, 0), obs: E.obs.value.trim().slice(0, 300) };
+      // Aviso: fora do horário do profissional ou em cima de um bloqueio (a equipe pode marcar mesmo assim, confirmando).
+      const p = agProfs(a.profs).find(x => x.b.id === barber_id), dentro = p && agFaixasDia(p.p, dia).some(([x, y]) => ini >= hmMin(x) && ini + d2 <= hmMin(y));
+      const bloq = dia === a.dia && (a.bloqs || []).some(x => (!x.barber_id || x.barber_id === barber_id) && new Date(x.inicio) < new Date(row.fim) && new Date(x.fim) > new Date(row.inicio));
+      const k = 'agfora' + barber_id + dia + hora + d2;
+      if ((!dentro || bloq) && ui.confirm !== k) { ui.confirm = k; return setMsg(f, (bloq ? 'Esse horário está bloqueado.' : 'Fica fora do horário de trabalho do profissional.') + ' Toque em Marcar de novo para confirmar.'); }
+      ui.confirm = null; setMsg(f, 'Salvando…', true);
+      AG().agSave(row).then(() => { toast(e.id ? 'Horário atualizado.' : 'Horário marcado.'); a.edit = null; a.dia = dia; a.diaCarregado = null; agCarregar('dia'); render(); })
+        .catch(err => setMsg(f, /ag_sem_conflito|exclusion|conflict/i.test(String(err && (err.message || err.code))) ? 'Esse profissional já tem cliente nesse horário. Escolha outro horário.' : (Cloud.message ? Cloud.message(err) : String(err))));
+    },
+    agBloqSalvar(f) {
+      const a = ui.ag, E = f.elements, dia = E.dia.value, de = hmMin(E.de.value), ate = hmMin(E.ate.value);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dia) || !E.de.value || !E.ate.value || ate <= de) return setMsg(f, 'Confira o dia e o horário (o fim depois do início).');
+      setMsg(f, 'Salvando…', true);
+      AG().bloqSave({ barber_id: E.barber.value || null, inicio: agAt(dia, de), fim: agAt(dia, ate), motivo: E.motivo.value.trim().slice(0, 80) })
+        .then(() => { toast('Horário bloqueado.'); a.bloq = null; a.dia = dia; a.diaCarregado = null; agCarregar('dia'); render(); }).catch(err => setMsg(f, Cloud.message ? Cloud.message(err) : String(err)));
+    },
+    agCfgSalvar(f) {
+      const E = f.elements, n = (k, lo, hi) => Math.max(lo, Math.min(hi, Math.round(Number(E[k].value) || 0)));
+      const row = { ativo: !!E.ativo.checked, passo: Math.max(5, n('passo', 5, 60)), antecedencia: n('antecedencia', 0, 1440), dias_max: Math.max(1, n('dias_max', 1, 120)), cancelar_horas: n('cancelar_horas', 0, 72), buraco_min: n('buraco_min', 0, 120), aviso: E.aviso.value.trim().slice(0, 200) };
+      if (row.ativo && !ui.ag.servicos.some(s => s.ativo !== false && s.online !== false)) return setMsg(f, 'Cadastre pelo menos um serviço "No app" antes de ligar.');
+      setMsg(f, 'Salvando…', true);
+      AG().cfgSave(row).then(r => { ui.ag.cfg = r || row; toast(row.ativo ? 'Agendamento online ligado.' : 'Configuração salva.'); render(); }).catch(err => setMsg(f, Cloud.message ? Cloud.message(err) : String(err)));
+    },
+    agServSalvar(f) {
+      const E = f.elements, nome = E.nome.value.trim().slice(0, 60), duracao = Math.round(Number(E.duracao.value) || 0), preco = Math.round((Number(E.preco.value) || 0) * 100) / 100;
+      const msg = f.dataset.id ? f : document.getElementById('ag-sv-msg');
+      const aviso = t => { if (msg && msg.tagName === 'FORM') toast(t); else if (msg) { msg.textContent = t; msg.className = 'form-msg err'; } };
+      if (!nome) return aviso('Digite o nome do serviço.');
+      if (duracao < 5 || duracao > 600) return aviso('Duração: de 5 a 600 minutos.');
+      const row = { ...(f.dataset.id ? { id: f.dataset.id } : { ordem: ui.ag.servicos.length }), nome, duracao, preco: Math.max(0, preco), online: !!E.online.checked, ativo: E.ativo.type === 'hidden' ? true : !!E.ativo.checked };
+      AG().servSave(row).then(() => { toast(f.dataset.id ? 'Serviço salvo.' : 'Serviço adicionado.'); agCarregar('base'); }).catch(err => aviso(Cloud.message ? Cloud.message(err) : String(err)));
+    },
+    agProfSalvar(f) {
+      const E = f.elements, horarios = {};
+      for (const dw of [0, 1, 2, 3, 4, 5, 6]) {
+        const fx = agFaixasDe(E['h' + dw].value);
+        if (fx.some(x => !x)) return setMsg(f, `Confira o horário de ${AG_DIAS[dw]} (ex.: 09:00-12:00, 13:00-20:00).`);
+        horarios[dw] = fx.sort((x, y) => (x[0] < y[0] ? -1 : 1));
+      }
+      const row = { barber_id: f.dataset.b, ativo: !!E.ativo.checked, online: !!E.online.checked, horarios, servicos: [...f.querySelectorAll('input[name="serv"]:checked')].map(x => x.value) };
+      setMsg(f, 'Salvando…', true);
+      AG().profSave(row).then(() => { toast('Horários salvos.'); ui.ag.diaCarregado = null; agCarregar('base'); }).catch(err => setMsg(f, Cloud.message ? Cloud.message(err) : String(err)));
+    },
     resData(f) {
       const de = f.elements.de.value, ate = f.elements.ate.value;
       if (!/^\d{4}-\d{2}-\d{2}$/.test(de) || !/^\d{4}-\d{2}-\d{2}$/.test(ate)) return setMsg(f, 'Escolha as duas datas.');
@@ -10148,6 +10434,7 @@ Content-Type: application/json</pre>
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('article[data-action]')) { e.preventDefault(); ACTIONS[e.target.dataset.action](e.target, e); }
   });
   root.addEventListener('change', e => {
+    if (e.target.matches && e.target.matches('[data-ag-dia]')) { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value) && ui.ag) { ui.ag.dia = e.target.value; ui.ag.edit = ui.ag.bloq = null; render(); } return; }
     const pc = e.target.closest('[data-popcfg],[data-popitem],[data-poplevel]');
     if (pc) {
       const c = popCfgW(), v = pc.value;
