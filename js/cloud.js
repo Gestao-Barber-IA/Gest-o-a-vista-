@@ -254,6 +254,31 @@
     },
     agSave: async row => RES(row.id ? await c.from('ag_agendamentos').update({ ...row, atualizado_em: new Date().toISOString() }).eq('id', row.id).eq('company_id', Cloud.companyId) : await c.from('ag_agendamentos').insert({ ...row, company_id: Cloud.companyId, origem: 'equipe' })),
     bloqSave: async row => RES(await c.from('ag_bloqueios').insert({ ...row, company_id: Cloud.companyId })),
+    bloqueios: async (ini, fim) => RES(await c.from('ag_bloqueios').select('*').eq('company_id', Cloud.companyId).lt('inicio', fim).gt('fim', ini).order('inicio').limit(300)) || [],
+    externa: async () => { const { data, error } = await c.rpc('ag_externa'); if (error) throw error; return !!data; },
+    // Clientes: busca por nome (todas as palavras) ou pelos números do telefone.
+    clientesBuscar: async q => {
+      const sem = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''), ws = sem(q).replace(/[%_(),.*]/g, ' ').split(/\s+/).filter(Boolean), dg = String(q).replace(/\D/g, '');
+      let r = c.from('ag_clientes').select('id, nome, sobrenome, fone').eq('company_id', Cloud.companyId);
+      r = dg.length >= 3 ? r.ilike('fone', `%${dg}%`) : r.or(`nome.ilike.%${ws[0] || ''}%,sobrenome.ilike.%${ws[0] || ''}%`);
+      const l = RES(await r.order('nome').limit(60)) || [];
+      return (dg.length >= 3 ? l : l.filter(x => ws.every(w => sem(x.nome + ' ' + x.sobrenome).includes(w)))).slice(0, 8);
+    },
+    clienteNovo: async row => {
+      const { data, error } = await c.from('ag_clientes').insert({ ...row, company_id: Cloud.companyId }).select('id, nome, sobrenome, fone').single();
+      if (!error) return data;
+      if (/duplicate|unique/i.test(error.message)) return RES(await c.from('ag_clientes').select('id, nome, sobrenome, fone').eq('company_id', Cloud.companyId).eq('fone', row.fone).single());
+      throw error;
+    },
+    historico: async (cid, fone) => RES(await c.from('ag_agendamentos').select('id, barber_id, inicio, fim, servicos, valor, status').eq('company_id', Cloud.companyId).or(`cliente_id.eq.${cid}${/^\d{10,11}$/.test(fone || '') ? `,cliente_fone.eq.${fone}` : ''}`).order('inicio', { ascending: false }).limit(40)) || [],
+    buscar: async q => {
+      const dg = String(q).replace(/\D/g, ''), t = String(q).replace(/[%_(),.*]/g, ' ').trim().split(/\s+/)[0] || '';
+      let r = c.from('ag_agendamentos').select('id, barber_id, inicio, cliente_nome, cliente_fone, status').eq('company_id', Cloud.companyId).gte('inicio', new Date(Date.now() - 30 * 86400000).toISOString());
+      r = dg.length >= 3 ? r.ilike('cliente_fone', `%${dg}%`) : r.ilike('cliente_nome', `%${t}%`);
+      const sem = x => String(x || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''), ws = sem(q).split(/\s+/).filter(Boolean);
+      const l = RES(await r.order('inicio').limit(80)) || [];
+      return (dg.length >= 3 ? l : l.filter(x => ws.every(w => sem(x.cliente_nome).includes(w)))).slice(0, 20);
+    },
     bloqDel: async id => RES(await c.from('ag_bloqueios').delete().eq('id', id).eq('company_id', Cloud.companyId)),
   };
   Cloud.iaRelatorio = async ym => RES(await c.from('ia_relatorios').select('ym, analise, dados, criado_em').eq('company_id', Cloud.companyId).eq('ym', ym).maybeSingle());

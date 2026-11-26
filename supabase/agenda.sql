@@ -135,3 +135,10 @@ alter table public.ag_codigos enable row level security;
 alter table public.wa_saida enable row level security;
 grant all on public.ag_codigos to service_role;
 grant all on public.wa_saida to service_role;
+
+-- Fonte da agenda: true quando a empresa tem um sistema externo conectado (AppBarber). Aí o sistema usa só os dados dele
+-- e a agenda própria fica em modo teste. A recepção não lê a tabela integrations, por isso a função.
+create or replace function public.ag_externa() returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.integrations i where i.company_id = public.my_company() and coalesce(i.est_code, '') <> '' and i.active is not false);
+$$;
+grant execute on function public.ag_externa() to authenticated;

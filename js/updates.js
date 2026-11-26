@@ -2,6 +2,12 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-26-agenda-premium', date: '2026-11-26', title: 'Agenda: ficha do cliente, metas, filtro e busca', items: [
+    ['novo', 'Novo agendamento com cliente cadastrado: busque por nome ou telefone, ou cadastre na hora (o mesmo cadastro do web app). A ficha mostra os últimos 3 atendimentos, o próximo horário, há quantos dias foi o último, de quantos em quantos dias ele volta (a partir de 3 visitas) e as faltas.'],
+    ['novo', 'Serviços com "+ adicionar serviço": a duração e o valor somam sozinhos.'],
+    ['novo', 'Metas na agenda: meta do dia da barbearia no topo e de cada profissional no cabeçalho da coluna, com barra. Com a AppBarber conectada, o realizado vem dos lançamentos; sem API, dos horários finalizados.'],
+    ['novo', 'Filtro de profissionais (fica salvo no aparelho), busca de clientes e agendamentos no topo, grade no intervalo da agenda (ex.: de 10 em 10 minutos) e Desbloquear: lista dos bloqueios dos próximos 14 dias, para tirar um a um ou todos do dia.'],
+  ] },
   { id: '2026-11-26-agenda-fonte', date: '2026-11-26', title: 'Agenda própria: modo teste com a AppBarber conectada', items: [
     ['melhoria', 'Com a AppBarber conectada, o sistema usa só a agenda dela (atendente IA, lembretes, confirmações, vagas e resultados). A agenda própria e o web app ficam em modo teste, com aviso, e passam a valer como agenda oficial quando não houver API conectada.'],
   ] },
