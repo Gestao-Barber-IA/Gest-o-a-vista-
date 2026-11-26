@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "10.4";
+const VERSAO = "10.5";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -246,9 +246,9 @@ async function agendaHoje(e, hoje) {
   const q = new URLSearchParams({ establishment_code: String(c.codigo_estabelecimento), start_date: hoje, end_date: hoje, status_type: "1" });
   if (c.codigo_filial) q.set("branch_code", String(c.codigo_filial));
   // Mesmo cabeçalho da sincronização (que a AppBarber já aceita neste IP).
-  const r = await getExato("https://api.appbarber.com/v1/appointments/history?" + q, { "X-API-Key": c.appbarber_api_key, Accept: "application/json", "User-Agent": "GestaoBarberIA-Sync/2.8" });
+  const r = await getExato((c.api_base || "https://api.appbarber.com") + "/v1/appointments/history?" + q, { "X-API-Key": c.appbarber_api_key, Accept: "application/json", "User-Agent": "GestaoBarberIA-Sync/2.8" });
   // Créditos: cada consulta bem-sucedida gasta 1; o total vai para o contador do app.
-  if (r.ok) api("POST", { company_id: k, acao: "ab_uso", creditos: 1 }).catch(() => {});
+  if (c.api_base) { /* agenda própria: sem créditos */ } else if (r.ok) api("POST", { company_id: k, acao: "ab_uso", creditos: 1 }).catch(() => {});
   else if (/saldo insuficiente/i.test(r.text)) api("POST", { company_id: k, acao: "ab_uso", creditos: 0, sem_saldo: true }).catch(() => {});
   if (!r.ok) throw new Error(`AppBarber respondeu ${r.status}${motivo(r.text)}`);
   const lista = ((JSON.parse(r.text).data) || []).filter((a) => !a.scheduling_status || /agendad|confirmad/i.test(a.scheduling_status));
@@ -388,8 +388,8 @@ const isoData = (t) => { const v = String(t || "").trim(), m = v.match(/^(\d{2})
 const diasDesde = (isoD, hoje) => Math.round((new Date(hoje + "T12:00:00") - new Date(String(isoD).slice(0, 10) + "T12:00:00")) / 86400000);
 async function abGet(e, caminho) {
   const c = e.appbarber || e.reconquista;
-  const r = await getExato(`https://api.appbarber.com${caminho}${caminho.includes("?") ? "&" : "?"}establishment_code=${encodeURIComponent(c.codigo_estabelecimento)}`, { "X-API-Key": c.appbarber_api_key, Accept: "application/json", "User-Agent": "GestaoBarberIA-Sync/2.8" });
-  if (r.ok) api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: 1 }).catch(() => {});
+  const r = await getExato(`${c.api_base || "https://api.appbarber.com"}${caminho}${caminho.includes("?") ? "&" : "?"}establishment_code=${encodeURIComponent(c.codigo_estabelecimento)}`, { "X-API-Key": c.appbarber_api_key, Accept: "application/json", "User-Agent": "GestaoBarberIA-Sync/2.8" });
+  if (c.api_base) { /* agenda própria: sem créditos */ } else if (r.ok) api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: 1 }).catch(() => {});
   else if (/saldo insuficiente/i.test(r.text)) api("POST", { company_id: e.company_id, acao: "ab_uso", creditos: 0, sem_saldo: true }).catch(() => {});
   if (!r.ok) throw new Error(`AppBarber respondeu ${r.status}${motivo(r.text)}`);
   return (JSON.parse(r.text).data) || [];

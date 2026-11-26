@@ -4287,13 +4287,13 @@ Content-Type: application/json</pre>
     if (!isGestor(currentUser())) return '';
     const it = Cloud.enabled ? ui.integ : (state.integ || {});
     if (!it || it.erro) return '';
-    const st = String(it.cl_status || ''), on = !!it.cl_on, bad = /^(erro|desconectado)/.test(st), noAb = !it.est_code;
+    const st = String(it.cl_status || ''), on = !!it.cl_on, bad = /^(erro|desconectado)/.test(st), noAb = !it.est_code && !agPropriaOk();
     const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const prev = (it.cl_text || CL_TEXT).split(/\n\s*-{3,}\s*\n/)[0].replace(/\{cliente\}/g, 'João').replace(/\{hora\}/g, '14h30').replace(/\{profissional\}/g, 'Igor').replace(/\{servico\}/g, 'Corte e Barba').replace(/\{barbearia\}/g, state.company.name || '');
     return `<section class="section card as-card">
       <h2 class="section-title">${icon('clock')} Lembrete de agendamento para os clientes</h2>
       <p class="section-note">O servidor confere a agenda da AppBarber a cada 15 minutos (só nos dias e horários de funcionamento) e manda um WhatsApp para o cliente antes do horário marcado. Horários seguidos do mesmo cliente viram uma mensagem só. Quem agendou em cima da hora recebe 20 minutos antes do horário. Sai pelo número escolhido abaixo, separado do número dos lembretes da equipe. Nome e telefone dos clientes não ficam guardados.</p>
-      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b> (acima): é por ela que o servidor lê a agenda.</p>` : ''}
+      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b> ou configure a <b>Agenda</b> do sistema (menu Agenda) (acima): é por ela que o servidor lê a agenda.</p>` : ''}
       <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.cl_status_at ? 'Atualizado ' + when(it.cl_status_at) : ''}</small><p class="muted as-msg">${esc(st.replace(/^(ok|erro|desconectado): /, ''))}</p>` : '<span class="chip">Aguardando o servidor</span>'}</div>
       <form class="form" data-form="clRemind" novalidate>
         <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''} ${noAb ? 'disabled' : ''}><span><b>Lembretes para clientes ligados</b><small>Para os agendamentos com status Agendado na AppBarber.</small></span></label>
@@ -4314,6 +4314,12 @@ Content-Type: application/json</pre>
         <p class="form-msg" data-msg></p>
         <div><button class="btn btn-primary" type="submit">${icon('check')} Salvar</button></div>
       </form></section>`;
+  }
+  // Agenda própria como fonte das automações (sem AppBarber conectada): a empresa já configurou a Agenda do sistema.
+  function agPropriaOk() {
+    if (!Cloud.enabled) return !!(state.agLocal && state.agLocal.cfg);
+    if (ui.agUsa === undefined && Cloud.ag && Cloud.ag.existe) { ui.agUsa = null; Cloud.ag.existe().then(v => { ui.agUsa = !!v; render(); }).catch(() => { ui.agUsa = false; }); }
+    return ui.agUsa === true;
   }
   // ---------- Créditos da API da AppBarber (pré-paga) ----------
   // A API não informa o saldo: o servidor conta as consultas e o dono registra cada recarga.
@@ -4392,7 +4398,7 @@ Content-Type: application/json</pre>
     if (!isGestor(currentUser())) return '';
     const it = Cloud.enabled ? ui.integ : (state.integ || {});
     if (!it || it.erro) return '';
-    const st = String(it.wb_status || ''), on = !!it.wb_on, noAb = !it.est_code, bad = /^erro/.test(st);
+    const st = String(it.wb_status || ''), on = !!it.wb_on, noAb = !it.est_code && !agPropriaOk(), bad = /^erro/.test(st);
     const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const h = new Date().getHours(), sd = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
     const prev = (it.wb_text || WB_TEXT).split(/\n\s*-{3,}\s*\n/)[0].replace(/\{Saudacao\}/g, sd).replace(/\{cliente\}/g, 'João').replace(/\{barbearia\}/g, state.company.name || '');
@@ -4401,7 +4407,7 @@ Content-Type: application/json</pre>
       <h2 class="section-title">${icon('rocket')} Reconquista de clientes sumidos</h2>
       <p class="section-note">Clientes que não vêm há algum tempo recebem um convite perguntando se podem receber um <b>presente de retorno</b>. ${it.wb_gift ? `Quem aceitar recebe o presente da <b>${iaNome()}</b>, que já ajuda a agendar.` : 'Quem responder fala com a recepção, que envia o presente (ou preencha o Presente de retorno abaixo para a atendente IA responder).'} A fila começa por quem sumiu há menos tempo; cada cliente recebe no máximo 1 vez a cada 6 meses, e antes de cada envio o sistema confere se ele já não marcou horário.</p>
       <p class="section-note">${icon('alert')} É a mensagem com <b>maior risco de bloqueio</b> (é marketing para quem não fala com a barbearia há meses): mantenha poucas por dia. Sai pelo ${it.cl_numero === 'principal' ? '<b>WhatsApp principal</b>' : '<b>2º chip</b> (troque para o principal no lembrete de agendamento, para a recepção receber as respostas)'}, entre 10h e 18h. Gasta cerca de 1 crédito da AppBarber por mensagem, mais a lista de clientes, baixada uma vez por mês.</p>
-      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}
+      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b> ou configure a <b>Agenda</b> do sistema (menu Agenda).</p>` : ''}
       <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.wb_status_at ? 'Atualizado ' + when(it.wb_status_at) : ''}</small><p class="muted as-msg">${esc(st.replace(/^(ok|erro): /, ''))}</p>` : '<span class="chip">Aguardando o servidor</span>'}</div>
       <form class="form" data-form="wbRemind" novalidate>
         <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''} ${noAb ? 'disabled' : ''}><span><b>Reconquista ligada</b><small>De segunda a sábado, espalhadas entre 10h e 18h.</small></span></label>
@@ -4431,7 +4437,7 @@ Content-Type: application/json</pre>
     if (!isGestor(currentUser())) return '';
     const it = Cloud.enabled ? ui.integ : (state.integ || {});
     if (!it || it.erro) return '';
-    const st = String(it.oa_status || ''), on = !!it.oa_on, noAb = !it.est_code, semIa = !it.ia_on, bad = /^erro/.test(st);
+    const st = String(it.oa_status || ''), on = !!it.oa_on, noAb = !it.est_code && !agPropriaOk(), semIa = !it.ia_on, bad = /^erro/.test(st);
     const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const h = new Date().getHours(), sd = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
     const prev = (it.oa_text || OA_TEXT).replace(/\{Saudacao\}/g, sd).replace(/\{cliente\}/g, 'Enzo').replace(/\{dia\}/g, 'amanhã').replace(/\{hora\}/g, '15h').replace(/\{profissional\}/g, 'Larissa').replace(/\{sugestao\}/g, '14h40 ou às 15h20').replace(/\{barbearia\}/g, state.company.name || '');
@@ -4439,7 +4445,7 @@ Content-Type: application/json</pre>
       <h2 class="section-title">${icon('clock')} Agenda sem buracos</h2>
       <p class="section-note">De hora em hora (9h às 19h), o sistema olha os horários marcados de hoje (com pelo menos 3 horas de folga) e do próximo dia aberto. Quando um horário deixou um <b>buraco menor que 40 minutos</b> antes ou depois na agenda do profissional, o cliente recebe uma mensagem gentil perguntando se ele consegue vir um pouco antes ou depois, num horário que <b>fecha o buraco</b> ou deixa espaço para mais um atendimento. Se ele aceitar, a ${iaNome()} remarca; se não puder, o horário dele continua o mesmo.</p>
       <p class="section-note">Cada horário recebe no máximo um pedido. As sugestões só são horários realmente livres (contando o próprio horário dele) e que não criam outro buraco.</p>
-      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}${semIa ? `<p class="section-note">${icon('alert')} Ligue a <b>Atendente IA</b>: é ela quem remarca quando o cliente aceita.</p>` : ''}
+      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b> ou configure a <b>Agenda</b> do sistema (menu Agenda).</p>` : ''}${semIa ? `<p class="section-note">${icon('alert')} Ligue a <b>Atendente IA</b>: é ela quem remarca quando o cliente aceita.</p>` : ''}
       <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.oa_status_at ? 'Atualizado ' + when(it.oa_status_at) + ' · ' : ''}${esc(st.replace(/^(ok|erro): /, ''))}</small>` : '<span class="chip">Aguardando o servidor</span>'}</div>
       <form class="form" data-form="oaSave" novalidate>
         <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''} ${noAb || semIa ? 'disabled' : ''}><span><b>Agenda sem buracos ligada</b><small>Pedido gentil de troca, só quando ajuda a agenda.</small></span></label>
@@ -4457,7 +4463,7 @@ Content-Type: application/json</pre>
     if (!isGestor(currentUser())) return '';
     const it = Cloud.enabled ? ui.integ : (state.integ || {});
     if (!it || it.erro) return '';
-    const st = String(it.in_status || ''), on = !!it.in_on, noAb = !it.est_code, semIa = !it.ia_on;
+    const st = String(it.in_status || ''), on = !!it.in_on, noAb = !it.est_code && !agPropriaOk(), semIa = !it.ia_on;
     const L = ui.ind = ui.ind || {};
     if (!L.lista && !L.carregando) {
       if (!Cloud.enabled) L.lista = [{ codigo: 'PEDRO975', nome: 'Pedro', fone4: '0001', agendados: 2, vieram: 2, entregues: 1 }, { codigo: 'RAFAELK3M', nome: 'Rafael', fone4: '3321', agendados: 1, vieram: 0, entregues: 0 }];
@@ -4470,7 +4476,7 @@ Content-Type: application/json</pre>
     return `<section class="section card as-card">
       <h2 class="section-title">${icon('gift')} Indicação premiada</h2>
       <p class="section-note">No dia seguinte a uma visita, o cliente <b>fiel</b> (com pelo menos ${it.in_min || 4} atendimentos) recebe um <b>código próprio</b> para indicar amigos. O amigo que ainda não é cliente fala o código com a ${iaNome()}, ganha o <b>benefício</b> na primeira visita, e ela anota na observação do agendamento. Quando o amigo vem (conferido na agenda), quem indicou recebe uma mensagem com o <b>prêmio</b>, que aparece abaixo para a recepção entregar.</p>
-      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}${semIa ? `<p class="section-note">${icon('alert')} Ligue a <b>Atendente IA</b>: é ela quem confere o código do amigo.</p>` : ''}
+      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b> ou configure a <b>Agenda</b> do sistema (menu Agenda).</p>` : ''}${semIa ? `<p class="section-note">${icon('alert')} Ligue a <b>Atendente IA</b>: é ela quem confere o código do amigo.</p>` : ''}
       <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : `<span class="chip chip-ok">Ligado</span>`} <small class="muted">${tot.conv} código(s) enviados · ${tot.ag} amigo(s) agendaram · ${tot.vi} vieram${st && /^erro/.test(st) ? ' · ' + esc(st) : ''}</small></div>
       ${pend.length ? `<div class="in-pend"><b>${icon('gift')} Prêmios a entregar</b>${pend.map(x => `<div class="in-item"><span><b>${esc(x.nome || 'Cliente')}</b> <small class="muted">…${esc(x.fone4 || '')} · código ${esc(x.codigo)}</small><small>${x.vieram - x.entregues} prêmio(s): ${esc(it.in_premio || 'um corte grátis')}</small></span><button class="btn btn-sm" type="button" data-action="inEntregue" data-c="${esc(x.codigo)}">${icon('check')} Entregue</button></div>`).join('')}</div>` : ''}
       <form class="form" data-form="inSave" novalidate>
@@ -4579,7 +4585,7 @@ Content-Type: application/json</pre>
     if (!isGestor(currentUser())) return '';
     const it = Cloud.enabled ? ui.integ : (state.integ || {});
     if (!it || it.erro) return '';
-    const st = String(it.ac_status || ''), on = !!it.ac_on, noAb = !it.est_code, bad = /^erro/.test(st), semIa = !it.ia_on;
+    const st = String(it.ac_status || ''), on = !!it.ac_on, noAb = !it.est_code && !agPropriaOk(), bad = /^erro/.test(st), semIa = !it.ia_on;
     const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const h = new Date().getHours(), sd = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
     const prev = (it.ac_text || AC_TEXT).split(/\n\s*-{3,}\s*\n/)[0].replace(/\{Saudacao\}/g, sd).replace(/\{cliente\}/g, 'João').replace(/\{profissional\}/g, 'Carlos').replace(/\{dia\}/g, 'amanhã (quinta, 26/11)').replace(/\{hora\}/g, '15h').replace(/\{servico\}/g, 'corte').replace(/\{dias\}/g, '20').replace(/\{barbearia\}/g, state.company.name || '');
@@ -4589,7 +4595,7 @@ Content-Type: application/json</pre>
       <h2 class="section-title">${icon('gauge')} Agenda cheia automática</h2>
       <p class="section-note">Todo dia, das 10h às 19h, o sistema mede a <b>ocupação de cada profissional</b> no próximo dia aberto na AppBarber (minutos marcados ÷ marcados + livres). Quem estiver <b>abaixo do limite</b> recebe convites para os <b>clientes dele</b> que estão perto do prazo de voltar, no horário livre mais perto do que cada um costuma vir. A ${iaNome()} responde e marca.</p>
       <p class="section-note">Cada horário é oferecido a no máximo 2 clientes; cada cliente recebe no máximo 1 convite a cada 10 dias. Fica de fora quem já tem horário, pediu SAIR ou recebeu convite de retorno, de vaga ou a reconquista há pouco. Profissional sem nenhum horário livre (cheio ou de folga) não é medido.</p>
-      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}
+      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b> ou configure a <b>Agenda</b> do sistema (menu Agenda).</p>` : ''}
       ${semIa ? `<p class="section-note">${icon('alert')} A <b>Atendente IA</b> está desligada: os convites saem, mas as respostas ficam para a recepção.</p>` : ''}
       <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.ac_status_at ? 'Atualizado ' + when(it.ac_status_at) + ' · ' : ''}${esc(st.replace(/^(ok|erro): /, '').replace(/ocupação .*? · (\d+ convite)/, '$1'))}</small>` : '<span class="chip">Aguardando o servidor</span>'}</div>
       ${on && ocup ? `<div class="ac-ocup">${ocup.split(' · ').map(bloco => { const [dia, resto] = bloco.split(': '); return `<div><b>${esc(dia)}</b>${(resto || '').split(', ').filter(x => /\d+%$/.test(x)).map(x => { const pct = Number(x.match(/(\d+)%$/)[1]), nome = x.replace(/\s*\d+%$/, ''); return `<span class="ac-p ${pct < lim ? 'baixa' : ''}" title="${esc(nome)}: ${pct}% ocupado"><span>${esc(nome)}</span><i style="--p:${pct}%"></i><small class="num">${pct}%</small></span>`; }).join('') || '<small class="muted">sem dados</small>'}</div>`; }).join('')}</div>` : ''}
@@ -4657,7 +4663,7 @@ Content-Type: application/json</pre>
     if (!isGestor(currentUser())) return '';
     const it = Cloud.enabled ? ui.integ : (state.integ || {});
     if (!it || it.erro) return '';
-    const st = String(it.pl_status || ''), on = !!it.pl_on, noAb = !it.est_code, bad = /^erro/.test(st), semIa = !it.ia_on;
+    const st = String(it.pl_status || ''), on = !!it.pl_on, noAb = !it.est_code && !agPropriaOk(), bad = /^erro/.test(st), semIa = !it.ia_on;
     const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const lista = plLista(it), dias = Array.isArray(it.pl_days) ? it.pl_days.map(Number) : [1, 2, 3, 4], chat = it.pl_chat !== false, daily = it.pl_daily == null ? 2 : it.pl_daily;
     const linha = (p, i) => `<div class="pl-row">
@@ -4673,7 +4679,7 @@ Content-Type: application/json</pre>
       <p class="section-note">O sistema olha a frequência de cada cliente na AppBarber e calcula <b>quanto ele gasta por mês pagando avulso</b>. Quem vem pelo menos umas 3 vezes no mês, <b>não é assinante</b> e costuma vir num dia que o plano aceita recebe a oferta do plano que combina com o serviço dele, mostrando a <b>economia</b>.</p>
       <p class="section-note"><b>Na conversa:</b> depois de agendar, a ${iaNome()} oferece o plano uma vez (no máximo a cada 30 dias por cliente). <b>Convite:</b> se quiser, ela também manda por dia uma mensagem aos melhores candidatos. Quem se interessar vai para a recepção fechar (pagamento e contrato ficam com vocês). Quando a pessoa vira assinante em até 45 dias depois da oferta, conta como plano vendido no Resultado.</p>
       <p class="section-note">${icon('alert')} "Valor avulso do pacote" é quanto o cliente pagaria pelos mesmos serviços sem o plano (ex.: 4 cortes + 4 barbas = R$ 340). "Para quem faz": palavras do serviço de costume, separadas por vírgula (<i>corte + barba</i> = os dois; <i>sem navalhado</i> = não faz). Os detalhes e regras de cada plano continuam nas Informações da casa da ${iaNome()}.</p>
-      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}
+      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b> ou configure a <b>Agenda</b> do sistema (menu Agenda).</p>` : ''}
       ${semIa ? `<p class="section-note">${icon('alert')} A <b>Atendente IA</b> está desligada: as ofertas dependem dela.</p>` : ''}
       <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.pl_status_at ? 'Atualizado ' + when(it.pl_status_at) + ' · ' : ''}${esc(st.replace(/^(ok|erro): /, ''))}</small>` : '<span class="chip">Aguardando o servidor</span>'}</div>
       <form class="form" data-form="plSave" novalidate>
@@ -4697,7 +4703,7 @@ Content-Type: application/json</pre>
     if (!isGestor(currentUser())) return '';
     const it = Cloud.enabled ? ui.integ : (state.integ || {});
     if (!it || it.erro) return '';
-    const st = String(it.cf_status || ''), on = !!it.cf_on, noAb = !it.est_code, bad = /^erro/.test(st), semIa = !it.ia_on;
+    const st = String(it.cf_status || ''), on = !!it.cf_on, noAb = !it.est_code && !agPropriaOk(), bad = /^erro/.test(st), semIa = !it.ia_on;
     const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const h = new Date().getHours(), sd = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
     const troca = t => t.replace(/\{Saudacao\}/g, sd).replace(/\{cliente\}/g, 'João').replace(/\{profissional\}/g, 'Carlos').replace(/\{dia\}/g, 'amanhã (quarta, 25/11)').replace(/\{hora\}/g, '14h').replace(/\{servico\}/g, 'Corte Tradicional').replace(/\{barbearia\}/g, state.company.name || '');
@@ -4709,7 +4715,7 @@ Content-Type: application/json</pre>
       <p class="section-note">Na <b>véspera</b>, cada cliente com horário marcado recebe um pedido para <b>confirmar a presença</b>. Quem responder conversa com a ${iaNome()}: se confirmar, o horário fica como <b>Confirmado</b> na AppBarber; se não puder vir, ela já oferece outro horário ou cancela, e o horário liberado entra no <b>Preencher vagas</b>.</p>
       <p class="section-note">No dia, quem não respondeu recebe um <b>2º aviso</b> algumas horas antes. Quem não responde nenhum dos dois aparece abaixo como <b>risco de falta</b>, para a recepção ligar. Quem já está confirmado ou marcou há menos de 3 horas não recebe.</p>
       <p class="section-note">${icon('alert')} Sai pelo ${it.cl_numero === 'principal' ? '<b>WhatsApp principal</b>' : '<b>2º chip</b> (troque para o principal no lembrete de agendamento, para receber as respostas)'}, das ${esc(hora)} às 20h30, em dia aberto (horários de segunda são pedidos no sábado). Usa cerca de 2 consultas da API da AppBarber por hora.</p>
-      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}
+      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b> ou configure a <b>Agenda</b> do sistema (menu Agenda).</p>` : ''}
       ${semIa ? `<p class="section-note">${icon('alert')} A <b>Atendente IA</b> está desligada: os pedidos saem, mas quem precisa confirmar na agenda é a recepção.</p>` : ''}
       <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.cf_status_at ? 'Atualizado ' + when(it.cf_status_at) + ' · ' : ''}${esc(st.replace(/^(ok|erro): /, '').replace(/ · sem resposta \(risco de falta\):.*$/, ''))}</small>` : '<span class="chip">Aguardando o servidor</span>'}</div>
       ${on && risco ? `<div class="cf-risco">${icon('alert')}<div><b>Risco de falta hoje</b><small>Não responderam aos dois avisos (horário e final do telefone): ${esc(risco)}</small></div></div>` : ''}
@@ -4735,7 +4741,7 @@ Content-Type: application/json</pre>
     if (!isGestor(currentUser())) return '';
     const it = Cloud.enabled ? ui.integ : (state.integ || {});
     if (!it || it.erro) return '';
-    const st = String(it.fv_status || ''), on = !!it.fv_on, noAb = !it.est_code, bad = /^erro/.test(st), semIa = !it.ia_on;
+    const st = String(it.fv_status || ''), on = !!it.fv_on, noAb = !it.est_code && !agPropriaOk(), bad = /^erro/.test(st), semIa = !it.ia_on;
     const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const h = new Date().getHours(), sd = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
     const prev = (it.fv_text || FV_TEXT).split(/\n\s*-{3,}\s*\n/)[0].replace(/\{Saudacao\}/g, sd).replace(/\{cliente\}/g, 'João').replace(/\{dias\}/g, '19')
@@ -4746,7 +4752,7 @@ Content-Type: application/json</pre>
       <p class="section-note">Quando um cliente <b>cancela</b> um horário de hoje${days === 2 ? ' ou de amanhã' : ''} e ele continua livre, o sistema convida na hora clientes que <b>costumam ser atendidos por esse profissional</b>, que <b>já estão no prazo de voltar</b> e que costumam vir <b>perto desse horário</b>. Quem responder conversa com a ${iaNome()}, que confere a agenda e marca; o primeiro que confirmar fica com a vaga.</p>
       <p class="section-note">Fica de fora quem já tem horário marcado, quem veio há pouco, quem pediu SAIR, quem recebeu convite de vaga na última semana, de retorno nos últimos 3 dias ou a reconquista no último mês. Usa o mesmo histórico do Retorno no tempo certo (só clientes com pelo menos 3 atendimentos).</p>
       <p class="section-note">${icon('alert')} Os cancelamentos são conferidos a cada 15 minutos, no horário de funcionamento (cerca de 40 consultas da API da AppBarber por dia, mais 2 a 3 por vaga encontrada). Sai pelo ${it.cl_numero === 'principal' ? '<b>WhatsApp principal</b>' : '<b>2º chip</b> (troque para o principal no lembrete de agendamento, para receber as respostas)'}.</p>
-      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}
+      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b> ou configure a <b>Agenda</b> do sistema (menu Agenda).</p>` : ''}
       ${semIa ? `<p class="section-note">${icon('alert')} A <b>Atendente IA</b> está desligada: os convites saem, mas as respostas ficam para a recepção.</p>` : ''}
       <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.fv_status_at ? 'Atualizado ' + when(it.fv_status_at) + ' · ' : ''}${esc(st.replace(/^(ok|erro): /, ''))}</small>` : '<span class="chip">Aguardando o servidor</span>'}</div>
       <form class="form" data-form="fvSave" novalidate>
@@ -4768,7 +4774,7 @@ Content-Type: application/json</pre>
     if (!isGestor(currentUser())) return '';
     const it = Cloud.enabled ? ui.integ : (state.integ || {});
     if (!it || it.erro) return '';
-    const st = String(it.rt_status || ''), on = !!it.rt_on, noAb = !it.est_code, bad = /^erro/.test(st);
+    const st = String(it.rt_status || ''), on = !!it.rt_on, noAb = !it.est_code && !agPropriaOk(), bad = /^erro/.test(st);
     const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const h = new Date().getHours(), sd = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
     const prev = (it.rt_text || RT_TEXT).split(/\n\s*-{3,}\s*\n/)[0].replace(/\{Saudacao\}/g, sd).replace(/\{cliente\}/g, 'João').replace(/\{dias\}/g, '19')
@@ -4778,7 +4784,7 @@ Content-Type: application/json</pre>
       <p class="section-note">O sistema lê a agenda da AppBarber e aprende, para cada cliente, <b>de quantos em quantos dias ele costuma voltar</b>, o <b>dia da semana</b>, o <b>horário</b> e o <b>profissional</b> de costume. Alguns dias antes do prazo dele, se ainda não marcou, ele recebe um convite com um horário livre <b>no dia do prazo</b>, do jeito dele (ex.: quem vem a cada 21 dias, às sextas por volta das 14h com o Lucas, recebe na quarta: <i>sexta às 14h com o Lucas</i>).</p>
       <p class="section-note">Só entra quem tem pelo menos 3 atendimentos e volta num ritmo entre 7 e 60 dias. Quem já tem horário marcado, pediu SAIR ou recebeu a reconquista há pouco não recebe; cada cliente recebe no máximo 1 convite por ciclo. ${it.ia_on ? 'Quando o cliente responde, a <b>${iaNome()}</b> já sabe o horário sugerido e marca na hora.' : 'Quem responder fala com a recepção (com a ${iaNome()} ligada, ela responde e marca sozinha).'}</p>
       <p class="section-note">${icon('alert')} Sai pelo ${it.cl_numero === 'principal' ? '<b>WhatsApp principal</b>' : '<b>2º chip</b> (troque para o principal no lembrete de agendamento, para receber as respostas)'}, entre 10h e 19h, em dia aberto. Gasta cerca de 15 créditos da AppBarber no primeiro dia (12 meses de agenda) e depois uns 15 por dia (agenda do dia e horários livres).</p>
-      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}
+      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b> ou configure a <b>Agenda</b> do sistema (menu Agenda).</p>` : ''}
       <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.rt_status_at ? 'Atualizado ' + when(it.rt_status_at) : ''}</small><p class="muted as-msg">${esc(st.replace(/^(ok|erro): /, ''))}</p>` : '<span class="chip">Aguardando o servidor</span>'}</div>
       <form class="form" data-form="rtRemind" novalidate>
         <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''} ${noAb ? 'disabled' : ''}><span><b>Retorno no tempo certo ligado</b><small>Espalhados entre 10h e 19h, nos dias em que a barbearia abre.</small></span></label>
@@ -4966,7 +4972,7 @@ Content-Type: application/json</pre>
     if (!isGestor(currentUser())) return '';
     const it = Cloud.enabled ? ui.integ : (state.integ || {});
     if (!it || it.erro) return '';
-    const st = String(it.tt_status || ''), on = !!it.tt_on, noAb = !it.est_code, bad = /^erro/.test(st);
+    const st = String(it.tt_status || ''), on = !!it.tt_on, noAb = !it.est_code && !agPropriaOk(), bad = /^erro/.test(st);
     const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const online = it.tt_seen_at && Date.now() - new Date(it.tt_seen_at).getTime() < 120000;
     const link = ui.ttLink || '';
@@ -4974,7 +4980,7 @@ Content-Type: application/json</pre>
       <h2 class="section-title">${icon('monitor')} Totem de autoatendimento</h2>
       <p class="section-note">Uma página para deixar aberta num <b>tablet na recepção</b>. O cliente digita o celular: se tem horário hoje, toca em <b>Cheguei</b> e o horário fica como <b>No local</b> na AppBarber (e o profissional é avisado no WhatsApp); se não tem, <b>agenda na hora</b>, escolhendo serviço, profissional, dia e horário livre. Cliente novo informa nome e sobrenome e já sai cadastrado.</p>
       <p class="section-note">${icon('alert')} Funciona pelo servidor do WhatsApp dos clientes (IP liberado na AppBarber). Cada consulta gasta cerca de 1 crédito da AppBarber (a agenda do dia fica guardada por 40 segundos).</p>
-      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}
+      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b> ou configure a <b>Agenda</b> do sistema (menu Agenda).</p>` : ''}
       <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : online ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.tt_status_at ? 'Atualizado ' + when(it.tt_status_at) : ''}</small>${st ? `<p class="muted as-msg">${esc(st.replace(/^(ok|erro): /, ''))}</p>` : ''}` : '<span class="chip">Aguardando o servidor</span> <small class="muted">rode o instalador do WhatsApp no servidor para ativar</small>'}</div>
       <form class="form" data-form="ttSave" novalidate>
         <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''} ${noAb ? 'disabled' : ''}><span><b>Totem ligado</b><small>Desligado, o tablet mostra “Totem desligado”.</small></span></label>
@@ -5034,7 +5040,7 @@ Content-Type: application/json</pre>
     if (!isGestor(currentUser())) return '';
     const it = Cloud.enabled ? ui.integ : (state.integ || {});
     if (!it || it.erro) return '';
-    const st = String(it.ia_status || ''), on = !!it.ia_on, bad = /^erro/.test(st), noAb = !it.est_code;
+    const st = String(it.ia_status || ''), on = !!it.ia_on, bad = /^erro/.test(st), noAb = !it.est_code && !agPropriaOk();
     const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const hrs = it.ia_hours || IA_PADRAO, nome = it.ia_name || 'Sofia', mod = it.ia_model || 'claude-sonnet-5-5';
     const dia = ([d, rot]) => { const ws = hrs[d] || [], todo = ws.some(w => w[0] === '00:00' && w[1] === '23:59'), lista = todo || !ws.length ? [['12:00', '14:00']] : ws;
@@ -5046,7 +5052,7 @@ Content-Type: application/json</pre>
       <p class="section-note">Nos dias e horários escolhidos abaixo (ex.: folga e almoço da recepção), a <b>${esc(nome)}</b> responde quem mandar mensagem no WhatsApp da barbearia, tira dúvidas de serviços e preços e <b>marca, remarca e cancela horários direto na AppBarber</b>. Ela é simpática, usa emoji e só faz mudanças na agenda depois que o cliente confirma. Preço, profissional e horário vêm sempre da AppBarber, nunca são inventados.</p>
       <p class="section-note">Se alguém da recepção responder uma conversa pelo celular, ela sai daquela conversa pelo tempo escolhido abaixo (padrão: 1 hora). Quando volta, ela já leu o que a recepção e o cliente conversaram e continua de onde pararam, sem repetir nem contradizer o que foi combinado. Reclamação, desconto, pagamento ou dúvida que ela não sabe resolver: avisa o cliente que a equipe já vai responder, deixa a conversa como <b>não lida</b> e o recado aparece aqui. Uma conversa já começada continua até ficar 20 minutos parada, mesmo depois do horário.</p>
       <p class="section-note">${icon('alert')} Atende pelo número dos clientes, que hoje é ${it.cl_numero === 'principal' ? 'o <b>WhatsApp principal</b> ✅' : 'o <b>2º chip</b>: para os clientes falarem com ela, troque para o <b>WhatsApp principal</b> no lembrete de agendamento'}. A chave da IA (Anthropic) fica guardada só no servidor: no servidor, rode <code>gbia-sofia-chave</code>. Cada conversa gasta de 3 a 6 créditos da AppBarber.</p>
-      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}
+      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b> ou configure a <b>Agenda</b> do sistema (menu Agenda).</p>` : ''}
       <div class="as-status">${!on ? '<span class="chip">Desligada</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.ia_status_at ? 'Atualizado ' + when(it.ia_status_at) : ''}</small><p class="muted as-msg">${esc(st.replace(/^(ok|erro): /, ''))}</p>` : '<span class="chip">Aguardando o servidor</span>'}</div>
       ${iaReport(it, nome)}
       ${iaArtes(it, nome)}
@@ -5114,13 +5120,13 @@ Content-Type: application/json</pre>
     if (!isGestor(currentUser())) return '';
     const it = Cloud.enabled ? ui.integ : (state.integ || {});
     if (!it || it.erro) return '';
-    const st = String(it.bd_status || ''), on = !!it.bd_on, noAb = !it.est_code, bad = /^erro/.test(st);
+    const st = String(it.bd_status || ''), on = !!it.bd_on, noAb = !it.est_code && !agPropriaOk(), bad = /^erro/.test(st);
     const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const prev = (it.bd_text || BD_TEXT).split(/\n\s*-{3,}\s*\n/)[0].replace(/\{cliente\}/g, 'David').replace(/\{barbearia\}/g, state.company.name || '');
     return `<section class="section card as-card">
       <h2 class="section-title">${icon('gift')} Parabéns aos aniversariantes</h2>
       <p class="section-note">Todo dia, a partir das 9h, o servidor consulta os aniversariantes na AppBarber e manda a mensagem de parabéns para quem faz aniversário hoje. Sai pelo mesmo número dos clientes (${it.cl_numero === 'principal' ? '<b>WhatsApp principal</b>: as respostas chegam na recepção' : '<b>2º chip</b>'}), com o ritmo de sempre; cada cliente recebe 1 vez por ano. Quem faz aniversário num dia em que a barbearia fecha (ex.: domingo) recebe um parabéns <b>antecipado</b> no último dia aberto antes (ex.: sábado), com a oferta do serviço de cortesia para vir nesse dia. Gasta 1 crédito da AppBarber por dia.</p>
-      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b>.</p>` : ''}
+      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b> ou configure a <b>Agenda</b> do sistema (menu Agenda).</p>` : ''}
       <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.bd_status_at ? 'Atualizado ' + when(it.bd_status_at) : ''}</small><p class="muted as-msg">${esc(st.replace(/^(ok|erro): /, ''))}</p>` : '<span class="chip">Aguardando o servidor</span>'}</div>
       <form class="form" data-form="bdRemind" novalidate>
         <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''} ${noAb ? 'disabled' : ''}><span><b>Parabéns automático ligado</b><small>Para os clientes com data de nascimento cadastrada na AppBarber.</small></span></label>
@@ -7317,11 +7323,11 @@ Content-Type: application/json</pre>
   function pageAgenda(user) {
     const a = ui.ag = ui.ag || { dia: iso(new Date()), tab: 'dia' };
     agCarregar();
-    const pode = agPode(user), tabs = [['dia', 'Agenda do dia'], ...(pode ? [['config', 'Configurar']] : [])];
+    const pode = agPode(user), tabs = [['dia', 'Agenda do dia'], ...(pode ? [['caixa', 'Caixa'], ['config', 'Configurar']] : [])];
     const topo = `<div class="res-top"><div class="seg" role="group" aria-label="Agenda">${tabs.map(([k, t]) => `<button type="button" class="${a.tab === k ? 'on' : ''}" data-action="agTab" data-t="${k}">${t}</button>`).join('')}</div>${Cloud.enabled ? '' : '<span class="chip">Sem nuvem · salvo neste aparelho</span>'}</div>`;
     if (a.base === 'erro') return topo + `<section class="section card"><p class="form-msg err">Não consegui abrir a agenda (${esc(String(a.erro || '').slice(0, 140))}). Tente de novo em instantes.</p></section>`;
     if (a.base !== 'ok') return topo + '<section class="section card"><p class="muted">Carregando…</p></section>';
-    return topo + agTesteAviso() + (a.tab === 'config' && pode ? agConfig() : agDia(user, pode));
+    return topo + agTesteAviso() + (a.tab === 'config' && pode ? agConfig() : a.tab === 'caixa' && pode ? agCaixa() : agDia(user, pode));
   }
   function agDia(user, pode) {
     const a = ui.ag, dia = a.dia, todos = agProfs(a.profs), d = fromIso(dia), hoje = iso(new Date());
@@ -7401,6 +7407,7 @@ Content-Type: application/json</pre>
       <div class="ag-ret"><span>Retorno e frequência</span><p>${vis.length ? `Último atendimento há <b>${dias(vis[0].inicio)} dia${dias(vis[0].inicio) === 1 ? '' : 's'}</b> · ` : ''}${freq}${faltas ? ` · <b class="ag-falta">${faltas} falta${faltas === 1 ? '' : 's'}</b>` : ''}</p></div></div>`;
   }
   function agForm(e, profs) {
+    if (ui.ag.cmd && ui.ag.cmd.id === e.id) return agComanda(e);
     const a = ui.ag, novo = !e.id;
     // Serviços do catálogo + os que já estão no horário (mesmo que tenham saído do catálogo), para não perder nada ao editar.
     const servs = [...a.servicos.filter(s => s.ativo !== false || (e.sv || []).includes(s.id)), ...(e.servicos || []).filter(v => !a.servicos.some(s => s.id === v.id))];
@@ -7416,7 +7423,7 @@ Content-Type: application/json</pre>
       <button type="button" class="btn btn-sm ag-cli-novo" data-action="agCliNovo">${icon('plus')} Cadastrar novo cliente</button>`;
     const opts = id => `<option value="">Selecione um serviço</option>${servs.map(s => `<option value="${esc(s.id)}" ${s.id === id ? 'selected' : ''}>${esc(s.nome)} · ${s.duracao} min · ${money0(Number(s.preco) || 0)}</option>`).join('')}`;
     return `<section class="section card ag-form"><h2 class="section-title">${icon(novo ? 'plus' : 'edit')} ${novo ? 'Novo agendamento' : 'Horário de ' + esc(e.cliente_nome || 'cliente')}</h2>
-      ${!novo ? `<p class="section-note"><span class="chip ag-chip-${esc(e.status)}">${AG_ST[e.status] || e.status}</span> ${AG_OR[e.origem] ? 'Marcado por: ' + AG_OR[e.origem] : ''}${fone4 ? ` · WhatsApp final ${esc(fone4)}` : ''}</p>
+      ${!novo ? `<p class="section-note"><span class="chip ag-chip-${esc(e.status)}">${AG_ST[e.status] || e.status}</span> ${AG_OR[e.origem] ? 'Marcado por: ' + AG_OR[e.origem] : ''}${e.status === 'finalizado' && (e.pagamento || {}).forma ? ` · <b>Pago: ${AG_FORMAS[e.pagamento.forma]} ${money2(Number(e.valor) || 0)}</b>` : ''}${fone4 ? ` · WhatsApp final ${esc(fone4)}` : ''}</p>
       <div class="btn-row ag-sts">${['confirmado', 'chegou', 'finalizado', 'faltou'].map(s => `<button type="button" class="btn btn-sm ${e.status === s ? 'btn-primary' : ''}" data-action="agStatus" data-s="${s}">${AG_ST[s]}</button>`).join('')}
         <button type="button" class="btn btn-sm ${ui.confirm === 'agc' ? 'btn-danger' : ''}" data-action="agStatus" data-s="${e.status === 'cancelado' ? 'agendado' : 'cancelado'}">${e.status === 'cancelado' ? 'Reativar' : ui.confirm === 'agc' ? 'Confirmar cancelamento' : 'Cancelar horário'}</button></div>` : ''}
       ${!novo ? agVendasDoHorario(e) : ''}
@@ -7645,6 +7652,76 @@ Content-Type: application/json</pre>
     const a = ui.ag, file = input.files && input.files[0], id = input.dataset.agPfoto; if (!file) return;
     try { const url = await storeImage(await readImage(file, 600, 0.85), 'agprod'); if (Cloud.enabled && /^data:/.test(url)) throw new Error('Não consegui enviar a foto agora.');
       await AG().prodSave({ id, foto: url }); toast('Foto salva.'); agCarregar('base'); } catch (e) { toast(String((e && e.message) || e)); }
+  }
+  // ---------- Comanda (fechar o atendimento) e Caixa do dia ----------
+  const AG_FORMAS = { pix: 'Pix', dinheiro: 'Dinheiro', debito: 'Débito', credito: 'Crédito' };
+  const agR2 = v => Math.round((Number(v) || 0) * 100) / 100;
+  function agCmdDe(e) {
+    return { id: e.id, sv: (e.servicos || []).map(s => ({ ...s, preco: Number(s.preco) || 0 })), pr: (e.produtos || []).map(p => ({ ...p, preco: Number(p.preco) || 0, qtd: Number(p.qtd) || 1 })),
+      desc: Number(e.desconto_manual) || 0, forma: (e.pagamento || {}).forma || '', recebido: (e.pagamento || {}).recebido || '' };
+  }
+  const agCmdTotal = (c, e) => { const sub = c.sv.reduce((t, s) => t + (Number(s.preco) || 0), 0) + c.pr.reduce((t, p) => t + (Number(p.preco) || 0) * (Number(p.qtd) || 1), 0);
+    return { sub: agR2(sub), total: agR2(Math.max(0, sub - (Number(e.desconto) || 0) - (Number(e.credito_usado) || 0) - (Number(c.desc) || 0))) }; };
+  // Guarda o que já foi digitado na comanda antes de redesenhar.
+  function agCmdLer() {
+    const f = document.querySelector('form[data-form="agCmdFechar"]'), c = ui.ag.cmd; if (!f || !c) return;
+    c.sv.forEach((s, i) => { const x = f.elements['svp_' + i]; if (x) s.preco = agR2(x.value); });
+    c.pr.forEach((p, i) => { const q = f.elements['prq_' + i], v = f.elements['prp_' + i]; if (q) p.qtd = Math.max(1, Math.round(Number(q.value) || 1)); if (v) p.preco = agR2(v.value); });
+    if (f.elements.desc) c.desc = agR2(f.elements.desc.value); if (f.elements.recebido) c.recebido = f.elements.recebido.value;
+  }
+  function agComanda(e) {
+    const a = ui.ag, c = a.cmd, t = agCmdTotal(c, e), troco = c.forma === 'dinheiro' && Number(c.recebido) > 0 ? agR2(Number(c.recebido) - t.total) : null;
+    const servs = a.servicos.filter(s => s.ativo !== false), prods = (a.prods || []).filter(p => p.ativo !== false);
+    return `<section class="section card ag-form ag-cmd"><h2 class="section-title">${icon('wallet')} Fechar comanda · ${esc(e.cliente_nome || 'Cliente')}</h2>
+      <form class="form" data-form="agCmdFechar" novalidate>
+        <b class="ag-ficha-t">Serviços</b>
+        <ul class="ag-cmdl">${c.sv.map((s, i) => `<li><span>${esc(s.nome)}${s.extra ? ' <small class="muted">(extra)</small>' : ''}</span><label class="ag-mini"><span>R$</span><input class="input num" type="number" name="svp_${i}" min="0" step="0.01" value="${s.preco}"></label><button type="button" class="icon-btn" data-action="agCmdTirar" data-t="sv" data-i="${i}" aria-label="Tirar ${esc(s.nome)}">${icon('x')}</button></li>`).join('') || '<li class="muted">Nenhum serviço.</li>'}</ul>
+        ${servs.length ? `<div class="ag-cmdadd"><select class="input" name="addsv" aria-label="Adicionar serviço"><option value="">+ Adicionar serviço…</option>${servs.map(s => `<option value="${esc(s.id)}">${esc(s.nome)} · ${money2(Number(s.preco) || 0)}</option>`).join('')}</select><button type="button" class="btn btn-sm" data-action="agCmdAdd" data-t="sv">Adicionar</button></div>` : ''}
+        <b class="ag-ficha-t">Produtos</b>
+        <ul class="ag-cmdl">${c.pr.map((p, i) => `<li><span>${esc(p.nome)}</span><label class="ag-mini"><span>qtd</span><input class="input num" type="number" name="prq_${i}" min="1" max="99" value="${p.qtd}"></label><label class="ag-mini"><span>R$</span><input class="input num" type="number" name="prp_${i}" min="0" step="0.01" value="${p.preco}"></label><button type="button" class="icon-btn" data-action="agCmdTirar" data-t="pr" data-i="${i}" aria-label="Tirar ${esc(p.nome)}">${icon('x')}</button></li>`).join('') || '<li class="muted">Nenhum produto.</li>'}</ul>
+        ${prods.length ? `<div class="ag-cmdadd"><select class="input" name="addpr" aria-label="Adicionar produto"><option value="">+ Produto vendido no balcão…</option>${prods.map(p => `<option value="${esc(p.id)}">${esc(p.nome)} · ${money2(Number(p.preco) || 0)}</option>`).join('')}</select><button type="button" class="btn btn-sm" data-action="agCmdAdd" data-t="pr">Adicionar</button></div>` : '<p class="section-note">Cadastre produtos em Agenda › Configurar › Vendas no agendamento para vender no balcão.</p>'}
+        <ul class="ag-cmdl ag-cmdt">
+          <li><span>Subtotal</span><b class="num">${money2(t.sub)}</b></li>
+          ${Number(e.desconto) ? `<li><span>Cupom ${esc(e.cupom || '')}</span><b class="num ag-neg">− ${money2(Number(e.desconto))}</b></li>` : ''}
+          ${Number(e.credito_usado) ? `<li><span>Crédito de cashback</span><b class="num ag-neg">− ${money2(Number(e.credito_usado))}</b></li>` : ''}
+          <li><span>Desconto na hora</span><label class="ag-mini"><span>R$</span><input class="input num" type="number" name="desc" min="0" step="0.01" value="${c.desc || 0}"></label></li>
+          <li class="ag-tot"><b>Total a cobrar</b><b class="num">${money2(t.total)}</b></li></ul>
+        <fieldset class="field"><legend>Forma de pagamento</legend><div class="seg ag-formas" role="group">${Object.entries(AG_FORMAS).map(([k, n]) => `<button type="button" class="${c.forma === k ? 'on' : ''}" data-action="agCmdForma" data-f="${k}" aria-pressed="${c.forma === k}">${n}</button>`).join('')}</div></fieldset>
+        ${c.forma === 'dinheiro' ? `<div class="grid-2"><label class="field"><span>Valor recebido (R$)</span><input class="input num" type="number" name="recebido" min="0" step="0.01" value="${esc(c.recebido)}"></label><div class="field"><span>Troco</span><b class="ag-troco num">${troco === null ? '—' : troco < 0 ? 'Falta ' + money2(-troco) : money2(troco)}</b></div></div>` : ''}
+        <p class="form-msg" data-msg></p>
+        <div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check')} Finalizar e fechar comanda</button><button class="btn" type="button" data-action="agCmdSair">Voltar</button></div>
+      </form></section>`;
+  }
+  // Caixa do dia: o que entrou por forma de pagamento e por profissional, produtos e descontos.
+  function agCaixa() {
+    const a = ui.ag, dia = a.dia, hoje = iso(new Date()), d = fromIso(dia);
+    const nav = `<section class="section card ag-bar"><div class="ag-nav"><button class="icon-btn" type="button" data-action="agDia" data-d="-1" aria-label="Dia anterior">${icon('left')}</button>
+      <label class="ag-data"><span class="sr-only">Dia</span><input class="input" type="date" value="${dia}" data-ag-dia></label><button class="icon-btn" type="button" data-action="agDia" data-d="1" aria-label="Próximo dia">${icon('right')}</button>
+      ${dia !== hoje ? '<button class="btn btn-sm" type="button" data-action="agDia" data-d="0">Hoje</button>' : ''}</div><b class="ag-rot">Caixa · ${esc(AG_DIAS[d.getDay()])}, ${d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}</b>
+      <button class="btn btn-sm" type="button" data-action="agImprimir">${icon('file')} Imprimir</button></section>`;
+    if (!a.ags) return nav + '<section class="section card"><p class="muted">Carregando…</p></section>';
+    const fin = a.ags.filter(x => x.status === 'finalizado'), abertos = a.ags.filter(x => ['agendado', 'confirmado', 'chegou'].includes(x.status));
+    const tot = fin.reduce((t, x) => t + (Number(x.valor) || 0), 0), porF = {}, porP = {}, prods = {};
+    let desc = 0, semForma = 0;
+    for (const x of fin) {
+      const f = (x.pagamento || {}).forma || ''; if (!f) semForma++;
+      porF[f] = (porF[f] || 0) + (Number(x.valor) || 0);
+      const p = porP[x.barber_id] = porP[x.barber_id] || { n: 0, v: 0 }; p.n++; p.v += Number(x.valor) || 0;
+      for (const pr of x.produtos || []) { const k = pr.nome; prods[k] = prods[k] || { q: 0, v: 0 }; prods[k].q += Number(pr.qtd) || 1; prods[k].v += (Number(pr.preco) || 0) * (Number(pr.qtd) || 1); }
+      desc += (Number(x.desconto) || 0) + (Number(x.credito_usado) || 0) + (Number(x.desconto_manual) || 0);
+    }
+    const linha = (n, v, extra = '') => `<li><span>${n}</span><b class="num">${money2(v)}</b>${extra}</li>`;
+    return nav + `<section class="section card ag-caixa">
+      <div class="ag-cx-top"><div><small>Total do dia</small><b class="num">${money2(tot)}</b></div><div><small>Atendimentos</small><b class="num">${fin.length}</b></div><div><small>Ticket médio</small><b class="num">${fin.length ? money2(tot / fin.length) : '—'}</b></div></div>
+      ${abertos.length ? `<p class="section-note">${icon('alert')} ${abertos.length} horário${abertos.length === 1 ? '' : 's'} do dia ainda sem fechar comanda.</p>` : ''}
+      ${semForma ? `<p class="section-note">${icon('alert')} ${semForma} atendimento${semForma === 1 ? '' : 's'} finalizado${semForma === 1 ? '' : 's'} sem forma de pagamento: abra o horário e feche a comanda.</p>` : ''}
+      <h3 class="ag-sub">Por forma de pagamento</h3><ul class="ag-cmdl">${Object.keys(AG_FORMAS).filter(k => porF[k]).map(k => linha(AG_FORMAS[k], porF[k])).join('')}${porF[''] ? linha('Sem forma registrada', porF['']) : ''}${!fin.length ? '<li class="muted">Nenhum atendimento finalizado.</li>' : ''}</ul>
+      <h3 class="ag-sub">Por profissional</h3><ul class="ag-cmdl">${Object.entries(porP).sort((x, y) => y[1].v - x[1].v).map(([b, p]) => linha(`${esc((barberById(b) || {}).name || '')} <small class="muted">${p.n} atend.</small>`, p.v)).join('') || '<li class="muted">—</li>'}</ul>
+      ${Object.keys(prods).length ? `<h3 class="ag-sub">Produtos vendidos</h3><ul class="ag-cmdl">${Object.entries(prods).map(([n, p]) => linha(`${p.q}x ${esc(n)}`, p.v)).join('')}</ul>` : ''}
+      ${desc ? `<p class="section-note">Descontos do dia (cupons, crédito de cashback e descontos na hora): <b>${money2(desc)}</b>.</p>` : ''}
+      <h3 class="ag-sub">Comandas</h3><ul class="ag-cmdl">${fin.sort((x, y) => (x.inicio < y.inicio ? -1 : 1)).map(x => `<li><button type="button" class="link-btn" data-action="agAbrirCx" data-id="${esc(x.id)}">${agHm(agMinOf(x.inicio))} ${esc(x.cliente_nome)}</button><small class="muted">${esc(((barberById(x.barber_id) || {}).name || '').split(' ')[0])} · ${AG_FORMAS[(x.pagamento || {}).forma] || 'sem forma'}</small><b class="num">${money2(Number(x.valor) || 0)}</b></li>`).join('') || '<li class="muted">—</li>'}</ul>
+      <p class="section-note">${agExterna() ? 'Com a AppBarber conectada, o ranking continua vindo da AppBarber; este caixa é só da agenda própria (modo teste).' : 'Cada comanda fechada entra sozinha em Lançamentos (faturamento, serviços, clientes, produtos e horas de cada profissional) e no ranking.'}</p>
+    </section>`;
   }
   function agHist(c) {
     const a = ui.ag; a.hist = a.hist || {}; if (!c || !c.id || a.hist[c.id]) return;
@@ -9275,7 +9352,7 @@ Content-Type: application/json</pre>
       if (ui.confirm !== 'mem:' + k) { ui.confirm = 'mem:' + k; return render(); }
       ui.confirm = null; memGravar(k, []);
     },
-    agTab(el) { ui.ag.tab = el.dataset.t; ui.ag.edit = ui.ag.bloq = null; render(); },
+    agTab(el) { ui.ag.tab = el.dataset.t; ui.ag.edit = ui.ag.bloq = ui.ag.cmd = null; render(); },
     agDia(el) { const a = ui.ag, n = Number(el.dataset.d); if (!n) a.dia = iso(new Date()); else { const d = fromIso(a.dia); d.setDate(d.getDate() + n); a.dia = iso(d); } a.edit = a.bloq = null; render(); },
     agNovo(el) {
       const a = ui.ag, profs = agProfs(a.profs);
@@ -9283,7 +9360,7 @@ Content-Type: application/json</pre>
       render(); window.scrollTo({ top: 0, behavior: 'smooth' }); document.querySelector('.ag-form [data-ag-cli-q]')?.focus();
     },
     agBloq(el) { const a = ui.ag; a.edit = null; a.bloq = { dia: a.dia, modo: el.dataset.m || 'novo' }; a.bloqLista = null; agBloqLista(); render(); },
-    agFechar() { ui.ag.edit = ui.ag.bloq = null; ui.confirm = null; render(); },
+    agFechar() { ui.ag.edit = ui.ag.bloq = ui.ag.cmd = null; ui.confirm = null; render(); },
     agAbrir(el) {
       const a = ui.ag, x = (a.ags || []).find(v => v.id === el.dataset.id); if (!x) return;
       a.bloq = null; a.edit = agEditDe(x); ui.confirm = null; agHist(a.edit.cli);
@@ -9303,6 +9380,7 @@ Content-Type: application/json</pre>
     agStatus(el) {
       const a = ui.ag, e = a.edit, s = el.dataset.s; if (!e || !e.id) return;
       if (s === 'cancelado' && ui.confirm !== 'agc') { ui.confirm = 'agc'; return render(); }
+      if (s === 'finalizado') { a.cmd = agCmdDe(e); ui.confirm = null; return render(); } // fecha a comanda (itens, desconto e pagamento)
       ui.confirm = null;
       AG().agSave({ id: e.id, status: s, ...(s === 'cancelado' ? { obs: (e.obs ? e.obs + ' · ' : '') + 'Cancelado pela equipe' } : {}) })
         .then(() => { toast(s === 'cancelado' ? 'Horário cancelado.' : 'Status: ' + AG_ST[s] + '.'); a.edit = s === 'cancelado' ? null : { ...e, status: s }; if (e.cli && a.hist) delete a.hist[e.cli.id]; agCarregar('dia'); render(); })
@@ -9348,6 +9426,17 @@ Content-Type: application/json</pre>
       const k = 'agc' + el.dataset.id; if (ui.confirm !== k) { ui.confirm = k; return render(); }
       ui.confirm = null; AG().cupDel(el.dataset.id).then(() => { toast('Cupom apagado.'); agCarregar('base'); }).catch(err => toast(Cloud.message ? Cloud.message(err) : String(err)));
     },
+    agCmdTirar(el) { agCmdLer(); const c = ui.ag.cmd; (el.dataset.t === 'sv' ? c.sv : c.pr).splice(Number(el.dataset.i), 1); render(); },
+    agCmdAdd(el) {
+      agCmdLer(); const a = ui.ag, c = a.cmd, f = document.querySelector('form[data-form="agCmdFechar"]'); if (!f) return;
+      if (el.dataset.t === 'sv') { const s = a.servicos.find(x => x.id === f.elements.addsv.value); if (s) c.sv.push({ id: s.id, nome: s.nome, duracao: 0, preco: Number(s.preco) || 0, extra: true }); }
+      else { const p = (a.prods || []).find(x => x.id === f.elements.addpr.value); if (p) { const ja = c.pr.find(x => x.id === p.id); if (ja) ja.qtd++; else c.pr.push({ id: p.id, nome: p.nome, preco: Number(p.preco) || 0, qtd: 1 }); } }
+      render();
+    },
+    agCmdForma(el) { agCmdLer(); ui.ag.cmd.forma = el.dataset.f; render(); },
+    agCmdSair() { ui.ag.cmd = null; render(); },
+    agAbrirCx(el) { const a = ui.ag, x = (a.ags || []).find(v => v.id === el.dataset.id); if (!x) return; a.tab = 'dia'; a.edit = agEditDe(x); a.cmd = null; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); },
+    agImprimir() { window.print(); },
     agCopiar() { copyText(document.getElementById('ag-url')?.value || '', document.getElementById('ag-url'), 'Link do agendamento copiado.'); },
     resPer(el) {
       const ant = ui.iaRes || {}, h = new Date();
@@ -10149,6 +10238,19 @@ Content-Type: application/json</pre>
       setMsg(f, 'Salvando…', true);
       Cloud.integ.save(row).then(r => { ui.integ = r || { ...cur, ...row }; toast(row.bd_on ? 'Parabéns automático ligado.' : 'Parabéns automático desligado.'); render(); })
         .catch(e => { const m = Cloud.message(e); setMsg(f, /bd_|column|schema cache/i.test(m) ? 'O parabéns automático ainda está sendo ativado no servidor.' : m); });
+    },
+    agCmdFechar(f) {
+      agCmdLer();
+      const a = ui.ag, e = a.edit, c = a.cmd; if (!e || !c) return;
+      if (!c.sv.length && !c.pr.length) return setMsg(f, 'A comanda precisa de pelo menos um serviço ou produto.');
+      if (!c.forma) return setMsg(f, 'Escolha a forma de pagamento.');
+      const t = agCmdTotal(c, e), rec = c.forma === 'dinheiro' && Number(c.recebido) > 0 ? agR2(c.recebido) : 0;
+      if (c.forma === 'dinheiro' && rec && rec < t.total) return setMsg(f, 'O valor recebido é menor que o total.');
+      const row = { id: e.id, status: 'finalizado', servicos: c.sv, produtos: c.pr, subtotal: t.sub, desconto_manual: agR2(c.desc), valor: t.total,
+        pagamento: { forma: c.forma, ...(rec ? { recebido: rec, troco: agR2(rec - t.total) } : {}) }, pago_em: new Date().toISOString() };
+      setMsg(f, 'Fechando…', true);
+      AG().agSave(row).then(() => { toast(`Comanda fechada: ${money2(t.total)} no ${AG_FORMAS[c.forma]}.`); a.cmd = null; a.edit = null; agCarregar('dia'); render(); })
+        .catch(err => setMsg(f, Cloud.message ? Cloud.message(err) : String(err)));
     },
     async agSalvar(f) {
       const a = ui.ag, e = a.edit || {}, E = f.elements;

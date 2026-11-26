@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "8.2";
+export const SOFIA_VERSAO = "8.3";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -91,10 +91,13 @@ const msgErro = (t) => { try { const j = JSON.parse(t); const d = j.data || {}; 
 // ---------- ferramentas da AppBarber ----------
 export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) {
   const est = String(cfg.codigo_estabelecimento), chave = cfg.appbarber_api_key, filial = cfg.codigo_filial ? String(cfg.codigo_filial) : "";
+  // Agenda própria (sem API externa): a mesma conversa, no endereço da agenda-api do sistema, e sem créditos da AppBarber.
+  const base = cfg.api_base && /^https:\/\//.test(cfg.api_base) ? String(cfg.api_base).replace(/\/$/, "") : AB;
+  if (cfg.api_base) creditos = () => {};
   const cache = new Map();
   const memo = async (k, ms, fn) => { const c = cache.get(k); if (c && Date.now() - c.em < ms) return c.v; const v = await fn(); cache.set(k, { em: Date.now(), v }); return v; };
   async function chamar(metodo, caminho, corpo) {
-    const url = `${AB}${caminho}${metodo === "GET" ? `${caminho.includes("?") ? "&" : "?"}establishment_code=${encodeURIComponent(est)}` : ""}`;
+    const url = `${base}${caminho}${metodo === "GET" ? `${caminho.includes("?") ? "&" : "?"}establishment_code=${encodeURIComponent(est)}` : ""}`;
     const r = await req(metodo, url, chave, corpo);
     if (r.ok) creditos(1, false); else if (/saldo insuficiente/i.test(r.text)) creditos(0, true);
     if (!r.ok) throw new Error(`AppBarber respondeu ${r.status}${msgErro(r.text) ? ": " + msgErro(r.text) : ""}`);

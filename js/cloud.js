@@ -265,6 +265,7 @@
     cupSave: async row => RES(row.id ? await c.from('ag_cupons').update(row).eq('id', row.id).eq('company_id', Cloud.companyId) : await c.from('ag_cupons').insert({ ...row, company_id: Cloud.companyId })),
     cupDel: async id => RES(await c.from('ag_cupons').delete().eq('id', id).eq('company_id', Cloud.companyId)),
     saldo: async cid => { const { data, error } = await c.rpc('ag_saldo', { p_cliente: cid }); if (error) throw error; return Number(data) || 0; },
+    existe: async () => { const { count, error } = await c.from('ag_config').select('company_id', { count: 'exact', head: true }).eq('company_id', Cloud.companyId); if (error) throw error; return (count || 0) > 0; },
     slugLivre: async slug => { const { data, error } = await c.rpc('ag_slug_livre', { p_slug: slug }); if (error) throw error; return !!data; },
     externa: async () => { const { data, error } = await c.rpc('ag_externa'); if (error) throw error; return !!data; },
     // Clientes: busca por nome (todas as palavras) ou pelos números do telefone.
