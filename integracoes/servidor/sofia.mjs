@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "8.4";
+export const SOFIA_VERSAO = "8.5";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -87,6 +87,16 @@ async function abReq(metodo, url, chave, corpo) {
   });
 }
 const msgErro = (t) => { try { const j = JSON.parse(t); const d = j.data || {}; return String(d.result || j.message || j.erro || j.error || "").slice(0, 200); } catch { return String(t || "").replace(/\s+/g, " ").slice(0, 160); } };
+
+// Horários confirmados pela atendente (arquivo no servidor): o 2º aviso da confirmação consulta, mesmo depois de
+// um reinício e mesmo se a agenda ainda não mostrar "Confirmado".
+export function marcarConfirmados(dir, codigos) {
+  if (!dir) return; const f = join(dir, "confirmados.json"); let m = {}; try { m = JSON.parse(readFileSync(f, "utf8")); } catch { /* primeira vez */ }
+  const agora = Date.now(); for (const [k, t] of Object.entries(m)) if (agora - t > 4 * 86400000) delete m[k];
+  for (const c of codigos || []) m[String(c)] = agora;
+  try { writeFileSync(f, JSON.stringify(m), { mode: 0o600 }); } catch { /* tenta na próxima */ }
+}
+export function lerConfirmados(dir) { try { return JSON.parse(readFileSync(join(dir, "confirmados.json"), "utf8")); } catch { return {}; } }
 
 // ---------- ferramentas da AppBarber ----------
 export function ferramentasAppBarber({ cfg, creditos = () => {}, req = abReq }) {
@@ -646,6 +656,7 @@ export async function executar(nomeTool, input, ctx) {
       if (simular) return { ok: true, simulado: true };
       const feitos = [];
       for (const a of meus) { if (!a.confirmado) await ab.confirmar(a.codigo); feitos.push(a.quando); }
+      marcarConfirmados(ctx.dir, meus.map((a) => a.codigo));
       conv.agenda = null; ctx.registro(`confirmou presença em ${feitos.join(", ")}`);
       if (ctx.evento) ctx.evento({ tipo: "confirmado", ref: `cfok:${meus.map((a) => a.codigo).sort((x, y) => x - y).join(",")}`, dados: { quando: meus[0].quando, profissional: meus[0].profissional } });
       return { ok: true, confirmados: feitos, nota: "Agradeça em uma frase curta e simpática (ex.: \"Perfeito, te esperamos! 😊\"). Não faça outra pergunta." };
@@ -1084,6 +1095,11 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
     }
     try { writeFileSync(CONV, JSON.stringify(out), { mode: 0o600 }); } catch (e) { log("Sofia: conversas não gravadas: " + e.message); }
   }
+  // Quando cada cliente escreveu por último (3 dias, sobrevive a reinícios): o 2º aviso da confirmação não vai para quem já respondeu.
+  const RESP = join(dir, "respostas-clientes.json"); let respostas = {}, respostasMudou = false;
+  try { respostas = JSON.parse(readFileSync(RESP, "utf8")); } catch { respostas = {}; }
+  setInterval(() => { if (!respostasMudou) return; respostasMudou = false; const lim = Date.now() - 3 * 86400000; for (const [k, t] of Object.entries(respostas)) if (t < lim) delete respostas[k];
+    try { writeFileSync(RESP, JSON.stringify(respostas), { mode: 0o600 }); } catch { /* tenta de novo */ } }, 30000).unref();
   const pausas = new Map();    // jid → até quando a Sofia fica quieta (a recepção respondeu pelo celular)
   // A pausa sobrevive a reinícios (instalador, atualização): volta a partir da hora em que a recepção respondeu.
   for (const [j, c] of conversas) if (c.humanoEm && c.humanoEm + 60 * 60000 > Date.now()) pausas.set(j, c.humanoEm + 60 * 60000);
@@ -1566,6 +1582,7 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
       }
       if (m.type !== "notify" || !conteudo) continue;
       const c = obter(jid, msg); c.ultima = Date.now(); c.ultimaMsg = msg; c.ultimaCliente = Date.now();
+      respostas[jid] = Date.now(); if (c.fone) respostas["f" + chaveFone(c.fone)] = Date.now(); respostasMudou = true;
       if (/@instagram$/.test(jid) && !c.origem) c.origem = "instagram";
       if (msg.pushName && !c.pushName) c.pushName = msg.pushName;
       // Sem atender agora (desligada, recepção na conversa ou fora do horário): guarda para contexto.
@@ -1615,7 +1632,7 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
   }
   const retornoEnviado = (jid, id, x) => conviteEnviado(jid, id, x);
   // O cliente escreveu nesta conversa depois de `desde` (ms)?
-  const respondeu = (jid, desde) => ((conversas.get(jid) || {}).ultimaCliente || 0) > desde;
+  const respondeu = (jid, desde) => ((conversas.get(jid) || {}).ultimaCliente || 0) > desde || (respostas[jid] || 0) > desde || (respostas["f" + chaveFone(String(jid).split("@")[0])] || 0) > desde;
 
   return { configurar, aoReceber, marcarMinha, ligada, relatorioDaSemana, retornoEnviado, conviteEnviado, respondeu, salvar: () => salvarConversas(true), ativaAgora: () => !!(cfg && client && dentroDaJanela(cfg.janelas)), status };
 }
@@ -1994,6 +2011,7 @@ export function criarConfirmacao({ dir, log = () => {}, api = async () => ({}), 
         const b = atuais.get(kb);
         if (!b) { v.ok = "remarcado ou cancelado"; continue; }
         if (b.conf) { v.ok = "confirmado"; continue; }
+        if (kb.split(",").some((k) => lerConfirmados(dir)[k])) { v.ok = "confirmou com a atendente"; continue; }
         if (so2 && so2.respondeu && so2.respondeu(v.jid, v.em1)) { v.ok = "respondeu"; continue; }
         if (!c.segundo || !s || !pode()) continue;
         const falta = b.min - agora; if (falta > (c.antes || 180) || falta < 30) continue;
