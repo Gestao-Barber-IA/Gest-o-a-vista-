@@ -1,5 +1,5 @@
 // Gestão Barber IA — web app do cliente (agendar.html). Pública: { empresa, acao, dados, token }.
-// Ações: info · codigo { nome, sobrenome, fone } · verificar { fone, codigo } → token · eu · horarios { data, servicos, profissional }
+// Ações: info · codigo { … } · favorito { profissional } · avaliar { id, nota, comentario, publico } ·  { nome, sobrenome, fone } · verificar { fone, codigo } → token · eu · horarios { data, servicos, profissional }
 //        · agendar { data, hora, servicos, profissional } · cancelar { id } · perfil { nome, sobrenome, email, nascimento } · sair
 // O código de 4 dígitos sai pelo WhatsApp da barbearia (fila wa_saida, enviada pelo servidor). A sessão é um token
 // aleatório (só o hash fica salvo), válido por 180 dias.
@@ -67,23 +67,37 @@ Deno.serve(async (req) => {
     if (c && c.sessao_expira && new Date(c.sessao_expira).getTime() > Date.now()) cli = c;
   }
   const precisaLogin = () => erro("Entre de novo com o seu WhatsApp, por favor.", 401);
-  const servicosAtivos = async () => ((await db.from("ag_servicos").select("id, nome, duracao, preco, online, ativo, ordem").eq("company_id", empresa).eq("ativo", true).order("ordem")).data || []).filter((s: any) => s.online);
+  const servicosAtivos = async () => ((await db.from("ag_servicos").select("id, nome, duracao, preco, online, ativo, ordem, icone, descricao").eq("company_id", empresa).eq("ativo", true).order("ordem")).data || []).filter((s: any) => s.online);
   const profsAtivos = async () => {
     // Sem cadastro na agenda: entra com o horário da empresa (menos quem é da recepção), como no app da equipe.
-    const [{ data: ps }, { data: bs }] = await Promise.all([db.from("ag_profissionais").select("*").eq("company_id", empresa), db.from("barbers").select("id, name, photo, active, role").eq("company_id", empresa)]);
+    const [{ data: ps }, { data: bs }] = await Promise.all([db.from("ag_profissionais").select("*").eq("company_id", empresa), db.from("barbers").select("id, name, photo, active, role, unit").eq("company_id", empresa)]);
     const by = new Map((ps || []).map((p: any) => [p.barber_id, p]));
-    return (bs || []).filter((b: any) => b.active !== false).map((b: any) => ({ ...(by.get(b.id) || { barber_id: b.id, ativo: !/recep/i.test(b.role || ""), online: true, servicos: [], horarios: {} }), nome: b.name, foto: b.photo || "" }))
+    return (bs || []).filter((b: any) => b.active !== false).map((b: any) => ({ ...(by.get(b.id) || { barber_id: b.id, ativo: !/recep/i.test(b.role || ""), online: true, servicos: [], horarios: {} }), nome: b.name, foto: b.photo || "", unidade: b.unit || "" }))
       .filter((p: any) => p.ativo && p.online).sort((a: any, b: any) => String(a.nome).localeCompare(String(b.nome), "pt-BR"));
   };
 
   if (acao === "info") {
     // Regra da fonte da agenda: com um sistema externo conectado (ex.: AppBarber), o sistema usa só os dados dele e
     // esta agenda fica em modo teste; ela só vale como agenda da barbearia quando não há API conectada.
-    const [servs, profs, { data: ext }] = await Promise.all([servicosAtivos(), profsAtivos(), db.from("integrations").select("est_code, active").eq("company_id", empresa).maybeSingle()]);
-    return json({ ok: true, teste: !!(ext && ext.est_code && ext.active !== false), nome: co.name, logo: co.logo || "", marca: co.settings?.brand || "barber", aviso: cfg.aviso || "", dias_max: cfg.dias_max, cancelar_horas: cfg.cancelar_horas, hoje: hojeSP(), fechados: fech,
-      servicos: servs.map((s: any) => ({ id: s.id, nome: s.nome, duracao: s.duracao, preco: Number(s.preco) || 0 })),
-      profissionais: profs.map((p: any) => ({ id: p.barber_id, nome: p.nome, foto: /^https:\/\//.test(p.foto) ? p.foto : "", servicos: p.servicos || [] })),
-      cliente: cli ? { nome: cli.nome, sobrenome: cli.sobrenome, fone: cli.fone, email: cli.email, nascimento: cli.nascimento } : null });
+    const [servs, profs, { data: ext }, { data: avs }] = await Promise.all([servicosAtivos(), profsAtivos(), db.from("integrations").select("est_code, active").eq("company_id", empresa).maybeSingle(),
+      cfg.avaliacoes_on ? db.from("ag_avaliacoes").select("nota, comentario, publico, oculto, nome_publico, barber_id, criado_em").eq("company_id", empresa).order("criado_em", { ascending: false }).limit(500) : Promise.resolve({ data: [] })]);
+    // Vitrine: só endereços https (imagens no armazenamento), textos limpos.
+    const url = (u: unknown) => (/^https:\/\/[^\s"'<>]+$/.test(String(u || "")) ? String(u) : "");
+    const st = co.settings || {}, units: string[] = Array.isArray(st.units) ? st.units.filter((x: any) => typeof x === "string" && x.trim()) : [];
+    const uInfo = cfg.unidades || {}, pInfo = cfg.planos_info || {};
+    const nomeP = new Map(profs.map((p: any) => [p.barber_id, p.nome]));
+    const notas = (avs || []), media = notas.length ? Math.round(notas.reduce((t: number, a: any) => t + a.nota, 0) / notas.length * 10) / 10 : 0;
+    return json({ ok: true, teste: !!(ext && ext.est_code && ext.active !== false), nome: co.name, logo: url(co.logo), marca: st.brand || "barber", aviso: cfg.aviso || "", dias_max: cfg.dias_max, cancelar_horas: cfg.cancelar_horas, hoje: hojeSP(), fechados: fech,
+      abre: padrao.open, fecha: padrao.close, capa: url(cfg.capa), banners: (Array.isArray(cfg.banners) ? cfg.banners : []).map((x: any) => url(x && x.url)).filter(Boolean).slice(0, 8),
+      endereco: limpo(cfg.endereco, 200), mapa: url(cfg.mapa), whatsapp: so(cfg.whatsapp).slice(0, 13), instagram: limpo(cfg.instagram, 60).replace(/^@/, "").replace(/[^\w.]/g, ""),
+      faq: (Array.isArray(cfg.faq) ? cfg.faq : []).filter((x: any) => x && x.p && x.r).slice(0, 30).map((x: any) => ({ p: limpo(x.p, 200), r: String(x.r).replace(/[<>]/g, "").slice(0, 1500) })),
+      termos: String(cfg.termos || "").replace(/[<>]/g, "").slice(0, 20000),
+      planos: (Array.isArray(st.planos) ? st.planos : []).filter((p: any) => p && p.n && !(pInfo[p.id] || {}).ocultar).map((p: any) => ({ id: p.id, nome: limpo(p.n, 60), valor: Number(p.v) || 0, desc: String((pInfo[p.id] || {}).desc || "").replace(/[<>]/g, "").slice(0, 600) })),
+      unidades: units.length > 1 ? units.map((n) => ({ nome: limpo(n, 60), endereco: limpo((uInfo[n] || {}).endereco, 200), mapa: url((uInfo[n] || {}).mapa), capa: url((uInfo[n] || {}).capa), whatsapp: so((uInfo[n] || {}).whatsapp).slice(0, 13) })) : [],
+      avaliacoes: cfg.avaliacoes_on ? { media, total: notas.length, lista: notas.filter((a: any) => a.publico && !a.oculto && a.comentario).slice(0, 20).map((a: any) => ({ nota: a.nota, comentario: limpo(a.comentario, 400), nome: limpo(a.nome_publico, 40), profissional: String(nomeP.get(a.barber_id) || "").split(" ")[0], em: String(a.criado_em).slice(0, 10) })) } : null,
+      servicos: servs.map((s: any) => ({ id: s.id, nome: s.nome, duracao: s.duracao, preco: Number(s.preco) || 0, icone: /^[a-z]{2,20}$/.test(s.icone || "") ? s.icone : url(s.icone), descricao: limpo(s.descricao, 80) })),
+      profissionais: profs.map((p: any) => ({ id: p.barber_id, nome: p.nome, foto: url(p.foto), servicos: p.servicos || [], unidade: units.length > 1 ? p.unidade : "" })),
+      cliente: cli ? { nome: cli.nome, sobrenome: cli.sobrenome, fone: cli.fone, email: cli.email, nascimento: cli.nascimento, favorito: cli.favorito || null } : null });
   }
 
   if (acao === "codigo") {
@@ -124,13 +138,34 @@ Deno.serve(async (req) => {
   if (acao === "sair") { await db.from("ag_clientes").update({ sessao_hash: null, sessao_expira: null }).eq("id", cli.id); return json({ ok: true }); }
 
   if (acao === "eu") {
-    const { data: ags } = await db.from("ag_agendamentos").select("id, barber_id, inicio, fim, servicos, valor, status").eq("company_id", empresa).eq("cliente_id", cli.id).gte("inicio", new Date(Date.now() - 60 * 86400000).toISOString()).order("inicio").limit(50);
-    const { data: bs } = await db.from("barbers").select("id, name").eq("company_id", empresa);
+    const { data: ags } = await db.from("ag_agendamentos").select("id, barber_id, inicio, fim, servicos, valor, status").eq("company_id", empresa).eq("cliente_id", cli.id).gte("inicio", new Date(Date.now() - 365 * 86400000).toISOString()).order("inicio").limit(80);
+    const [{ data: bs }, { data: avd }] = await Promise.all([db.from("barbers").select("id, name").eq("company_id", empresa), db.from("ag_avaliacoes").select("agendamento_id").eq("cliente_id", cli.id)]);
+    const avaliado = new Set((avd || []).map((x: any) => x.agendamento_id));
     const nm = new Map((bs || []).map((x: any) => [x.id, x.name]));
     const lim = (Number(cfg.cancelar_horas) || 0) * 3600000;
-    return json({ ok: true, cliente: { nome: cli.nome, sobrenome: cli.sobrenome, fone: cli.fone, email: cli.email, nascimento: cli.nascimento },
-      agendamentos: (ags || []).map((a: any) => ({ id: a.id, inicio: a.inicio, profissional: nm.get(a.barber_id) || "", servicos: (a.servicos || []).map((s: any) => s.nome), valor: Number(a.valor) || 0, status: a.status,
+    return json({ ok: true, cliente: { nome: cli.nome, sobrenome: cli.sobrenome, fone: cli.fone, email: cli.email, nascimento: cli.nascimento, favorito: cli.favorito || null },
+      agendamentos: (ags || []).map((a: any) => ({ id: a.id, inicio: a.inicio, profissional: nm.get(a.barber_id) || "", servicos: (a.servicos || []).map((s: any) => s.nome), valor: Number(a.valor) || 0, status: a.status, profissional_id: a.barber_id, servico_ids: (a.servicos || []).map((s: any) => s.id).filter(Boolean),
+        avaliado: avaliado.has(a.id), pode_avaliar: !!cfg.avaliacoes_on && a.status === "finalizado" && !avaliado.has(a.id),
         pode_cancelar: ["agendado", "confirmado"].includes(a.status) && new Date(a.inicio).getTime() - Date.now() > lim })) });
+  }
+
+  if (acao === "favorito") {
+    const id = d.profissional ? String(d.profissional).slice(0, 60) : null;
+    if (id && !(await profsAtivos()).some((p: any) => p.barber_id === id)) return erro("Profissional não encontrado.");
+    await db.from("ag_clientes").update({ favorito: id }).eq("id", cli.id);
+    return json({ ok: true });
+  }
+
+  if (acao === "avaliar") {
+    if (!cfg.avaliacoes_on) return erro("As avaliações estão desligadas.");
+    const nota = Math.round(Number(d.nota)); if (!(nota >= 1 && nota <= 5)) return erro("Escolha de 1 a 5 estrelas.");
+    const { data: a } = await db.from("ag_agendamentos").select("id, cliente_id, barber_id, status, inicio").eq("id", String(d.id || "")).eq("company_id", empresa).maybeSingle();
+    if (!a || a.cliente_id !== cli.id) return erro("Atendimento não encontrado.", 404);
+    if (a.status !== "finalizado" && !(a.status === "chegou" && new Date(a.inicio).getTime() < Date.now())) return erro("Dá para avaliar depois do atendimento.");
+    const { error } = await db.from("ag_avaliacoes").insert({ company_id: empresa, agendamento_id: a.id, cliente_id: cli.id, barber_id: a.barber_id, nota, comentario: limpo(d.comentario, 400), publico: !!d.publico,
+      nome_publico: `${String(cli.nome || "").split(" ")[0]} ${String(cli.sobrenome || "").charAt(0)}${cli.sobrenome ? "." : ""}`.trim() });
+    if (error) return erro(/duplicate|unique/i.test(error.message) ? "Esse atendimento já foi avaliado. Obrigado!" : "Não consegui salvar agora. Tente de novo.");
+    return json({ ok: true });
   }
 
   if (acao === "perfil") {
@@ -150,7 +185,8 @@ Deno.serve(async (req) => {
   const hoje = hojeSP();
   const dataOk = /^\d{4}-\d{2}-\d{2}$/.test(data) && data >= hoje && data <= somaDias(hoje, Math.max(1, Number(cfg.dias_max) || 30));
   async function disponiveis(dia: string, prefer: string | null) {
-    const profs = (await profsAtivos()).filter((p: any) => (!prefer || p.barber_id === prefer) && (!(p.servicos || []).length || escolhidos.every((s: any) => p.servicos.includes(s.id))));
+    const un = d.unidade ? String(d.unidade) : "";
+    const profs = (await profsAtivos()).filter((p: any) => (!prefer || p.barber_id === prefer) && (!un || prefer || p.unidade === un) && (!(p.servicos || []).length || escolhidos.every((s: any) => p.servicos.includes(s.id))));
     if (!profs.length) return [];
     const ini = quando(dia, 0), fim = quando(dia, 24 * 60 - 1);
     const [{ data: ags }, { data: bls }] = await Promise.all([

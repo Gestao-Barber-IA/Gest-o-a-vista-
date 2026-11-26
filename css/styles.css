@@ -3347,3 +3347,14 @@ html[data-theme="light"] .res-page { --cf-ok: #1f9d55; --cf-rem: #2a78d6; --cf-c
 .ag-bdia { padding: 8px 0; border-top: 1px solid var(--line); }
 .ag-bdia-h { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .ag-bdia ul { list-style: none; margin: 6px 0 0; padding: 0; } .ag-bdia li { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; font-size: 14px; }
+.ag-imgs { display: grid; gap: 16px; margin-bottom: 8px; }
+.ag-imgs b { display: block; margin-bottom: 6px; }
+.ag-thumb { display: block; width: 100%; max-width: 320px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: var(--radius-sm); border: 1px solid var(--line); margin-bottom: 8px; }
+.ag-bans { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 8px; }
+.ag-ban { position: relative; width: 160px; } .ag-ban .ag-thumb { width: 160px; margin: 0; } .ag-ban .icon-btn { position: absolute; top: 4px; right: 4px; background: var(--surface); }
+.ag-imgs label.btn { cursor: pointer; }
+.ag-pl, .ag-un { padding: 10px 0; border-top: 1px solid var(--line); display: grid; gap: 6px; }
+.ag-sv .ag-ico { flex: 0 1 170px; min-width: 0; } .ag-sv .ag-desc { flex: 1 1 200px; min-width: 0; }
+.ag-avs { list-style: none; margin: 0; padding: 0; }
+.ag-avs li { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+.ag-avs p { margin: 4px 0 0; } .ag-est { color: #f5c542; letter-spacing: 1px; }
