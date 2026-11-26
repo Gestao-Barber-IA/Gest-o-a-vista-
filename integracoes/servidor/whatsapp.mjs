@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "10.5";
+const VERSAO = "10.6";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -335,7 +335,13 @@ const fbStatusEm = {};
 async function feedbacks(e, hoje) {
   const agora = agoraSP();
   if (agora < 8 * 60 || agora > 21 * 60) return; // só entre 8h e 21h (o que ficar para depois sai na manhã seguinte)
-  let fila = { itens: [] }; try { fila = JSON.parse(readFileSync(join(DIR, "..", "dados", e.company_id.replace(/[^a-zA-Z0-9-]/g, ""), "feedback-fila.json"), "utf8")); } catch { return; }
+  let fila = { itens: [] };
+  const ap = e.appbarber && e.appbarber.propria ? e.appbarber : null;
+  if (ap) { // agenda própria: a fila vem das comandas fechadas no dia (agenda-api)
+    const r = await getExato(`${ap.api_base}/v1/feedback?date=${hoje}`, { "X-API-Key": ap.appbarber_api_key, Accept: "application/json" });
+    if (!r.ok) throw new Error(`agenda respondeu ${r.status}`);
+    fila = { itens: (JSON.parse(r.text).data) || [] };
+  } else { try { fila = JSON.parse(readFileSync(join(DIR, "..", "dados", e.company_id.replace(/[^a-zA-Z0-9-]/g, ""), "feedback-fila.json"), "utf8")); } catch { return; } }
   let env = {}; try { env = JSON.parse(readFileSync(ENV_FB, "utf8")); } catch { /* primeira vez */ }
   const feitos = new Set(env[e.company_id] || []);
   const principal = NUMERO === "principal", L = LIMITE[principal ? "principal" : "chip"];

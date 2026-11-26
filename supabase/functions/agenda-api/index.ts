@@ -3,7 +3,7 @@
 // assinatura = HMAC-SHA256(SYNC_TOKEN, empresa) (o sync-servidor entrega a chave na configuração de cada empresa).
 // Rotas (as mesmas da AppBarber que o servidor usa): GET /v1/services · /v1/professionals · /v1/availability ·
 // /v1/appointments/history · /v1/establishment/clients · /v1/establishment/birthday · /v1/establishment/subscribers ·
-// POST /v1/appointments · POST/PUT /v1/establishment/clients · PUT /v1/appointments/{código}/status · DELETE /v1/invoice/{código}
+// GET /v1/feedback (fila do pedido de feedback) · POST /v1/appointments · POST/PUT /v1/establishment/clients · PUT /v1/appointments/{código}/status · DELETE /v1/invoice/{código}
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -78,11 +78,44 @@ Deno.serve(async (req) => {
       return { employee_code: p.codigo, employee_nickname: p.nome, employee_name: p.nome, available: livres.map((h) => ({ scheduling_time: h + ":00", scheduling_value: Number(s.preco) || 0, scheduling_discount: 0 })) };
     }));
   }
-  if (req.method === "GET" && rota === "/v1/establishment/subscribers") return ok([]); // planos ainda não são controlados pela agenda própria
+  // Assinantes: os "Planos mensais vendidos" registrados nos Lançamentos (valem 30 dias a partir da venda).
+  async function assinantes() {
+    const desde = new Date(Date.now() - 31 * 86400000).toISOString().slice(0, 10), nomes = new Map(((co.settings || {}).planos || []).map((p: any) => [p.id, p.n]));
+    const { data } = await db.from("plan_sales").select("barber_id, date, data").eq("company_id", empresa).gte("date", desde).order("date", { ascending: false }).limit(5000);
+    const vistos = new Set<string>(), out: any[] = [];
+    for (const r of data || []) { const f = fone10((r.data || {}).fone); if (f.length < 10 || vistos.has(chave(f))) continue; vistos.add(chave(f));
+      const venc = new Date(r.date + "T12:00:00Z"); venc.setUTCDate(venc.getUTCDate() + 30);
+      out.push({ fone: f, barber_id: r.barber_id, nome: String((r.data || {}).nome || ""), plano: nomes.get((r.data || {}).plano) || String((r.data || {}).plano || "Plano"), desde: r.date, ate: venc.toISOString().slice(0, 10) }); }
+    return out;
+  }
+  if (req.method === "GET" && rota === "/v1/establishment/subscribers") {
+    return ok((await assinantes()).map((x) => ({ person_cellphone: "55" + x.fone, person_name: x.nome, subscription_name: x.plano, subscription_status: "Ativo", contracting_date: brData(x.desde), due_date: brData(x.ate) })));
+  }
+  // Fila do pedido de feedback: comandas fechadas no dia de cliente novo na casa (sem visita finalizada nos 180 dias
+  // anteriores) ou de cliente da casa atendido pela 1ª vez por esse profissional. Assinantes de plano ficam de fora.
+  if (req.method === "GET" && rota === "/v1/feedback") {
+    const dia = /^\d{4}-\d{2}-\d{2}$/.test(String(q.get("date") || "")) ? String(q.get("date")) : hojeSP();
+    const { data: hoje } = await db.from("ag_agendamentos").select("codigo, barber_id, cliente_id, cliente_nome, cliente_fone, pago_em, atualizado_em").eq("company_id", empresa).eq("status", "finalizado")
+      .gte("inicio", quando(dia, 0)).lte("inicio", quando(dia, 24 * 60 - 1)).limit(1000);
+    if (!(hoje || []).length) return ok([]);
+    const ini = new Date(new Date(quando(dia, 0)).getTime() - 180 * 86400000).toISOString();
+    const { data: antes } = await db.from("ag_agendamentos").select("barber_id, cliente_id, cliente_fone").eq("company_id", empresa).eq("status", "finalizado").gte("inicio", ini).lt("inicio", quando(dia, 0)).limit(20000);
+    const { data: bs } = await db.from("barbers").select("id, name").eq("company_id", empresa);
+    const nomeB = new Map((bs || []).map((b: any) => [b.id, String(b.name || "").split(" ")[0]])), plano = new Set((await assinantes()).map((x) => chave(x.fone)));
+    const quem = (a: any) => a.cliente_id || chave(a.cliente_fone), prim = (n: string) => { const w = String(n || "").trim().split(/\s+/)[0] || ""; return w ? w[0].toUpperCase() + w.slice(1).toLowerCase() : ""; };
+    const out: any[] = [], ja = new Set<string>();
+    for (const a of hoje || []) {
+      const f = fone10(a.cliente_fone), k = quem(a); if (f.length < 10 || !k || ja.has(k) || plano.has(chave(f))) continue;
+      const veio = (antes || []).filter((x: any) => quem(x) === k); if (veio.some((x: any) => x.barber_id === a.barber_id)) continue;
+      ja.add(k); out.push({ cod: "ag" + a.codigo, fone: f, nome: prim(a.cliente_nome), prof: nomeB.get(a.barber_id) || "", em: new Date(a.pago_em || a.atualizado_em || Date.now()).getTime(), dia, tipo: veio.length ? "novo_profissional" : "novo" });
+    }
+    return ok(out);
+  }
   if (req.method === "GET" && rota === "/v1/appointments/history") {
     const de = String(q.get("start_date") || hojeSP()).slice(0, 10), ate = String(q.get("end_date") || de).slice(0, 10), st = STATUS[String(q.get("status_type") || "1")] || STATUS["1"];
     if (!st.length) return ok([]);
-    const [{ data: ags }, ps] = await Promise.all([db.from("ag_agendamentos").select("*").eq("company_id", empresa).gte("inicio", quando(de, 0)).lte("inicio", quando(ate, 24 * 60 - 1)).in("status", st).order("inicio").limit(5000), profs()]);
+    const [{ data: ags }, ps, assin] = await Promise.all([db.from("ag_agendamentos").select("*").eq("company_id", empresa).gte("inicio", quando(de, 0)).lte("inicio", quando(ate, 24 * 60 - 1)).in("status", st).order("inicio").limit(5000), profs(), assinantes()]);
+    const doPlano = new Map(assin.map((x) => [chave(x.fone), x.barber_id]));
     const servs = await servicos(), cod = new Map(servs.map((s: any) => [s.id, Number(s.codigo)])), pBy = new Map(ps.map((p: any) => [p.barber_id, p]));
     const { data: bs } = await db.from("barbers").select("id, name, ag_codigo").eq("company_id", empresa);
     const bBy = new Map((bs || []).map((b: any) => [b.id, b]));
@@ -93,7 +126,7 @@ Deno.serve(async (req) => {
         linhas.push({ appointment_code: Number(a.codigo), scheduling_code: Number(a.codigo), invoice_code: Number(a.codigo), scheduling_start: br(new Date(t).toISOString()), scheduling_end: br(new Date(t + (Number(s.duracao) || 0) * 60000).toISOString()),
           scheduling_registration_date: br(a.criado_em), scheduling_status: NOME_ST[a.status] || a.status, scheduling_observation: a.obs || (a.origem === "app" ? "Agendado pelo web app" : ""),
           client_phone: a.cliente_fone ? "55" + fone10(a.cliente_fone) : "", client_name: a.cliente_nome, employee_code: Number(b.codigo || b.ag_codigo) || null, employee_name: b.nome || b.name || "", employee_nickname: b.nome || b.name || "",
-          service_code: cod.get(s.id) || null, service_description: s.nome, service_value: Number(s.preco) || 0, subscription_association: false });
+          service_code: cod.get(s.id) || null, service_description: s.nome, service_value: Number(s.preco) || 0, subscription_association: !!a.cliente_fone && doPlano.get(chave(a.cliente_fone)) === a.barber_id });
         t += (Number(s.duracao) || 0) * 60000;
       }
     }

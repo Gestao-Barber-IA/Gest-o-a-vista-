@@ -4367,14 +4367,14 @@ Content-Type: application/json</pre>
     if (!isGestor(currentUser())) return '';
     const it = Cloud.enabled ? ui.integ : (state.integ || {});
     if (!it || it.erro) return '';
-    const st = String(it.fb_status || ''), on = !!it.fb_on, noAb = !it.est_code, bad = /^erro/.test(st);
+    const st = String(it.fb_status || ''), on = !!it.fb_on, noAb = !it.est_code && !agPropriaOk(), bad = /^erro/.test(st);
     const when = d => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const h = new Date().getHours(), sd = h < 12 ? 'bom dia' : h < 18 ? 'boa tarde' : 'boa noite';
     const prev = (it.fb_text || FB_TEXT).split(/\n\s*-{3,}\s*\n/)[0].replace(/\{cliente\}/g, 'João').replace(/\{saudacao\}/g, sd).replace(/\{profissional\}/g, 'Makenzo').replace(/\{barbearia\}/g, state.company.name || '');
     return `<section class="section card as-card">
       <h2 class="section-title">${icon('chat')} Pedido de feedback para clientes novos</h2>
       <p class="section-note">Quando a comanda de um <b>cliente novo</b> (que não veio nos últimos 180 dias) é paga, o servidor manda uma mensagem pedindo a opinião dele sobre o atendimento. Sai pelo mesmo número escolhido no lembrete de agendamento (${it.cl_numero === 'principal' ? '<b>WhatsApp principal</b>: as respostas chegam na recepção' : '<b>2º chip</b>'}), entre 8h e 21h, uma vez por comanda. Não gasta créditos da AppBarber.</p>
-      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b> (acima): é ela que identifica as comandas pagas.</p>` : ''}
+      ${noAb ? `<p class="section-note">${icon('alert')} Ligue antes a <b>Sincronização automática AppBarber</b> (acima) ou use a <b>Agenda</b> do sistema: é por elas que o sistema sabe quais comandas foram pagas.</p>` : ''}
       <div class="as-status">${!on ? '<span class="chip">Desligado</span>' : st ? `<span class="chip ${bad ? 'chip-bad' : 'chip-ok'}">${bad ? 'Com erro' : 'Funcionando'}</span> <small class="muted">${it.fb_status_at ? 'Atualizado ' + when(it.fb_status_at) : ''}</small><p class="muted as-msg">${esc(st.replace(/^(ok|erro): /, ''))}</p>` : '<span class="chip">Aguardando o servidor</span>'}</div>
       <form class="form" data-form="fbRemind" novalidate>
         <label class="check"><input type="checkbox" name="on" ${on ? 'checked' : ''} ${noAb ? 'disabled' : ''}><span><b>Pedido de feedback ligado</b><small>Só para clientes novos e comandas pagas (comandas de plano ficam de fora).</small></span></label>

@@ -2,6 +2,11 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-27-agenda-ajustes', date: '2026-11-27', title: 'Agenda própria: feedback, planos e cashback pela comanda', items: [
+    ['novo', 'Pedido de feedback também na agenda própria: depois da comanda fechada, cliente novo na casa (ou atendido pela 1ª vez por aquele profissional) recebe o pedido no WhatsApp.'],
+    ['novo', 'Planos na agenda própria: os "Planos mensais vendidos" dos Lançamentos valem como assinantes por 30 dias, e a atendente IA aplica a regra do plano (mesmo profissional, mesma semana) nos horários deles.'],
+    ['melhoria', 'Cashback pelo valor da comanda: ao finalizar, o cashback é recalculado pelo total cobrado e passa a valer para qualquer cliente cadastrado (não só quem agendou pelo app).'],
+  ] },
   { id: '2026-11-27-independente', date: '2026-11-27', title: 'Agenda própria completa: atendente IA, automações, comanda e caixa', items: [
     ['novo', 'Sem AppBarber conectada, a agenda do sistema passa a ser a agenda oficial: a atendente IA marca, remarca, cancela e confirma nela, e os lembretes, a confirmação na véspera, Preencher vagas, Agenda cheia, Agenda sem buracos, Retorno, Reconquista, Aniversário e o totem leem a agenda própria.'],
     ['novo', 'Comanda: ao marcar Finalizado, a recepção fecha a comanda (serviços, produtos do balcão, desconto na hora e forma de pagamento: Pix, dinheiro com troco, débito ou crédito).'],
