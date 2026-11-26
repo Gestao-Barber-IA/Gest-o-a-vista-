@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "8.5";
+export const SOFIA_VERSAO = "8.6";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -2048,8 +2048,9 @@ export const TEXTOS_PL = [
 ];
 const reais0 = (v) => Math.round(Number(v) || 0).toLocaleString("pt-BR");
 // Melhor plano para o cliente (a = analisarCliente). planos: [{ nome, preco, avulso, visitas, quando }], dias: dias da semana permitidos.
-export function candidatoPlano(a, planos = [], dias = [1, 2, 3, 4]) {
+export function candidatoPlano(a, planos = [], dias = [1, 2, 3, 4], semPlano = []) {
   if (!a || !a.media || !a.serv || a.media > 12) return null; // vem pelo menos ~3 vezes no mês
+  if ((semPlano || []).some((n) => a.prof && mesmoNome(n, a.prof))) return null; // o profissional dele não fecha planos (ex.: o dono)
   if (Array.isArray(dias) && dias.length && !dias.includes(a.dia)) return null; // o dia de costume dele não é aceito no plano
   const nomes = String(a.serv).split(" + ").map((x) => semAcento(x)), visitasMes = Math.min(8, 30 / a.media);
   let melhor = null;
@@ -2081,7 +2082,7 @@ export function dicaPlano({ dir, fone, planosCfg, hoje = hojeSP() }) {
   const ler = (f, pad) => { try { return JSON.parse(readFileSync(join(dir, f), "utf8")); } catch { return pad; } };
   const k = chaveFone(fone), h = ler("retorno-historico.json", null), of = ler("planos-ofertas.json", {});
   if (!h || !h.cli || !h.cli[k] || (of[k] && diasEntre(of[k].em, hoje) < 30)) return "";
-  const a = analisarCliente(h.cli[k].v, hoje), x = candidatoPlano(a, planosCfg.planos, planosCfg.dias); if (!x) return "";
+  const a = analisarCliente(h.cli[k].v, hoje), x = candidatoPlano(a, planosCfg.planos, planosCfg.dias, planosCfg.semPlano); if (!x) return "";
   of[k] = { em: hoje, plano: x.plano, como: "conversa" }; try { writeFileSync(join(dir, "planos-ofertas.json"), JSON.stringify(of), { mode: 0o600 }); } catch { /* tenta na próxima */ }
   return `[Venda de plano: este cliente NÃO é assinante, vem a cada ~${a.media} dias (~${x.visitasMes} vezes no mês) e costuma fazer ${a.serv} com ${a.prof}. O Plano ${x.plano} (R$ ${reais0(x.preco)}/mês, ${x.visitas} visitas) ${x.economia > 0 ? `sai uns R$ ${reais0(x.economia)} por mês mais barato do que ele paga avulso (~R$ ${reais0(x.gasto)})` : `custa quase o mesmo que ele já gasta (~R$ ${reais0(x.gasto)}) e dá ${x.visitas} visitas`}. DEPOIS de concluir o que ele pediu (ex.: confirmar o agendamento), ofereça esse plano UMA vez, numa frase leve, com a economia. Se ele se interessar, envie a arte dos planos (se houver) e tire as dúvidas pelas Informações da casa; se quiser assinar, use chamar_recepcao com o plano escolhido. Se ele não quiser, siga sem insistir. Não ofereça se a conversa for reclamação, cancelamento ou assunto delicado.]\n`;
 }
@@ -2125,7 +2126,7 @@ export function criarPlanos({ dir, log = () => {}, api = async () => ({}), sock 
         if (rt[kf] && rt[kf].em && diasEntre(rt[kf].em, hoje) < 3) continue;
         if (wb[kf] && wb[kf].em && diasEntre(wb[kf].em, hoje) < 30) continue;
         const a = analisarCliente(cl.v, hoje); if (!a || a.dias > 21) continue; // ainda vem (atendido nas últimas 3 semanas)
-        const x = candidatoPlano(a, c.planos, c.dias); if (!x) continue;
+        const x = candidatoPlano(a, c.planos, c.dias, c.semPlano); if (!x) continue;
         cand.push({ kf, cl, a, x, marcado: marc.has(kf) });
       }
       // Primeiro quem já tem horário marcado (está ativo) e quem mais economiza.
