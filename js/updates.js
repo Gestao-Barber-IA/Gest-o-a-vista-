@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-27-planos-sem', date: '2026-11-27', title: 'Venda de planos: profissionais que não fecham plano', items: [
+    ['novo', 'No cartão Venda de planos, marque os profissionais que NÃO fecham planos (ex.: o dono). Quem costuma cortar com eles não recebe convite de plano e a atendente IA não oferece plano com eles.'],
+  ] },
   { id: '2026-11-27-confirmacao', date: '2026-11-27', title: 'Confirmação de presença: sem 2º aviso para quem já confirmou', items: [
     ['correcao', 'Quem confirmou a presença com a atendente IA na véspera às vezes recebia o 2º aviso no dia (quando o servidor reiniciava de madrugada ou a agenda ainda não mostrava "Confirmado"). Agora a confirmação e a resposta do cliente ficam gravadas no servidor por alguns dias, e o 2º aviso só vai para quem realmente não respondeu.'],
   ] },

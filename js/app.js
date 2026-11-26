@@ -4687,6 +4687,10 @@ Content-Type: application/json</pre>
         <label class="check"><input type="checkbox" name="chat" ${chat ? 'checked' : ''}><span><b>Oferecer na conversa</b><small>Depois que o cliente agenda pelo WhatsApp.</small></span></label>
         <div class="grid-2"><label class="field"><span>Convites por dia (0 = só na conversa)</span><input class="input num" type="number" name="daily" min="0" max="10" step="1" value="${daily}"></label></div>
         <div class="field"><span>Dias em que o plano pode ser usado</span><div class="pl-dias">${PL_DIAS.map(([d, n]) => `<label class="chip-check"><input type="checkbox" name="dia${d}" ${dias.includes(d) ? 'checked' : ''}><span>${n}</span></label>`).join('')}</div></div>
+        <div class="field"><span>Profissionais que NÃO fecham planos</span><div class="pl-dias">${(() => { const sem = Array.isArray(it.pl_sem) ? it.pl_sem : [], nomes = state.barbers.filter(b => b.active !== false && !isRecep(b.id)).map(b => b.name);
+            return [...nomes, ...sem.filter(n => !nomes.includes(n))].map(n => `<label class="chip-check"><input type="checkbox" name="sem" value="${esc(n)}" ${sem.includes(n) ? 'checked' : ''}><span>${esc(n)}</span></label>`).join(''); })()}</div>
+          <input class="input" name="semOutro" maxlength="60" placeholder="Outro nome, como aparece na agenda (ex.: o dono)" style="margin-top:8px">
+          <small class="muted">Quem costuma cortar com eles não recebe convite de plano, e a atendente IA não oferece plano com eles (ex.: o dono, por causa da agenda e da gestão).</small></div>
         <h3 class="res-sub">Planos (até 6; salve para abrir mais uma linha)</h3>
         <div class="pl-rows">${rows}</div>
         <label class="field"><span>Mensagem do convite</span><textarea class="input" name="text" rows="6" maxlength="2000">${esc(it.pl_text || PL_TEXT)}</textarea>
@@ -10471,7 +10475,7 @@ Content-Type: application/json</pre>
       const daily = Math.round(Number(E.daily.value) || 0); if (daily < 0 || daily > 10) return setMsg(f, 'Convites por dia: de 0 a 10.');
       const dias = PL_DIAS.map(([d]) => d).filter(d => E['dia' + d].checked); if (!dias.length) return setMsg(f, 'Marque pelo menos um dia.');
       if (E.on.checked && !planos.length) return setMsg(f, 'Cadastre pelo menos um plano.');
-      const row = { pl_on: !!E.on.checked, pl_chat: !!E.chat.checked, pl_daily: daily, pl_days: dias, pl_plans: planos, pl_text: (E.text.value || '').trim().slice(0, 2000) };
+      const row = { pl_on: !!E.on.checked, pl_chat: !!E.chat.checked, pl_daily: daily, pl_days: dias, pl_plans: planos, pl_text: (E.text.value || '').trim().slice(0, 2000), pl_sem: [...new Set([...f.querySelectorAll('input[name="sem"]:checked')].map(x => x.value).concat((E.semOutro.value || '').trim() ? [(E.semOutro.value || '').trim().slice(0, 60)] : []))] };
       if (row.pl_text === PL_TEXT) row.pl_text = '';
       const cur = (Cloud.enabled ? ui.integ : state.integ) || {};
       if (!Cloud.enabled) { state.integ = { ...cur, ...row }; save(); toast('Venda de planos salva.'); return render(); }
