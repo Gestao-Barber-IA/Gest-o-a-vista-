@@ -7256,6 +7256,7 @@ Content-Type: application/json</pre>
       bloqSave: row => { L().bloqs.push({ ...row, id: id() }); return ok(); }, bloqDel: bid => { L().bloqs = L().bloqs.filter(x => x.id !== bid); return ok(); },
       clientesBuscar: q => { const ws = agSemAc(q).split(/\s+/).filter(Boolean), dg = agFone(q); return Promise.resolve(L().clientes.filter(c => (dg.length >= 3 && c.fone.includes(dg)) || (ws.length && ws.every(w => agSemAc(c.nome + ' ' + c.sobrenome).includes(w)))).slice(0, 8)); },
       clienteNovo: row => { const l = L().clientes, ja = l.find(c => c.fone === row.fone); if (ja) return Promise.resolve(ja); const c = { ...row, id: id(), email: '', criado_em: new Date().toISOString() }; l.push(c); return ok(c); },
+      avaliacoes: () => Promise.resolve(L().avs || []), avOcultar: (id, v) => { const x = (L().avs || []).find(a => a.id === id); if (x) x.oculto = v; return ok(); },
       historico: (cid, fone) => Promise.resolve(L().ags.filter(x => x.cliente_id === cid || (fone && x.cliente_fone === fone)).sort((a, b) => (a.inicio < b.inicio ? 1 : -1)).slice(0, 40)),
       buscar: q => { const ws = agSemAc(q).split(/\s+/).filter(Boolean), dg = agFone(q), desde = new Date(Date.now() - 30 * 86400000).toISOString();
         return Promise.resolve(L().ags.filter(x => x.inicio >= desde && ((dg.length >= 3 && String(x.cliente_fone).includes(dg)) || (ws.length && ws.every(w => agSemAc(x.cliente_nome).includes(w))))).sort((a, b) => (a.inicio < b.inicio ? -1 : 1)).slice(0, 20)); },
@@ -7475,6 +7476,8 @@ Content-Type: application/json</pre>
         <label class="ag-mini"><span>R$</span><input class="input num" type="number" name="preco" min="0" step="0.01" value="${Number(s.preco) || 0}"></label>
         <label class="check ag-mini"><input type="checkbox" name="online" ${s.online !== false ? 'checked' : ''}><span>No app</span></label>
         <label class="check ag-mini"><input type="checkbox" name="ativo" ${s.ativo !== false ? 'checked' : ''}><span>Ativo</span></label>
+        <select class="input ag-ico" name="icone" aria-label="Ícone de ${esc(s.nome)}">${AG_ICONES.map(([k, t]) => `<option value="${k}" ${(s.icone || '') === k ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        <input class="input ag-desc" name="descricao" maxlength="80" value="${esc(s.descricao || '')}" placeholder="Descrição curta (ex.: até 4 anos)" aria-label="Descrição de ${esc(s.nome)}">
         <button class="icon-btn" type="submit" aria-label="Salvar ${esc(s.nome)}">${icon('check')}</button>
         <button class="icon-btn ${ui.confirm === 'ags' + s.id ? 'btn-danger' : ''}" type="button" data-action="agServDel" data-id="${esc(s.id)}" aria-label="${ui.confirm === 'ags' + s.id ? 'Confirmar: apagar' : 'Apagar'} ${esc(s.nome)}">${ui.confirm === 'ags' + s.id ? icon('check') : icon('trash')}</button>
       </form>`).join('')}</div>` : '<p class="muted">Nenhum serviço ainda.</p>'}
@@ -7483,7 +7486,7 @@ Content-Type: application/json</pre>
         <label class="ag-mini"><span>min</span><input class="input num" type="number" name="duracao" min="5" max="600" step="5" value="40"></label>
         <label class="ag-mini"><span>R$</span><input class="input num" type="number" name="preco" min="0" step="0.01" value="0"></label>
         <label class="check ag-mini"><input type="checkbox" name="online" checked><span>No app</span></label>
-        <input type="hidden" name="ativo" value="on">
+        <input type="hidden" name="ativo" value="on"><input type="hidden" name="icone" value=""><input type="hidden" name="descricao" value="">
         <button class="btn btn-sm btn-primary" type="submit">${icon('plus')} Adicionar</button>
       </form><p class="form-msg" data-msg id="ag-sv-msg"></p></section>`;
     const by = new Map((a.profs || []).map(p => [p.barber_id, p]));
@@ -7498,7 +7501,61 @@ Content-Type: application/json</pre>
           ${servs.length ? `<fieldset class="field"><legend>Serviços que faz (nenhum marcado = todos)</legend><div class="ag-servs">${servs.map(s => `<label class="check ag-serv"><input type="checkbox" name="serv" value="${esc(s.id)}" ${ss.has(s.id) ? 'checked' : ''}><span>${esc(s.nome)}</span></label>`).join('')}</div></fieldset>` : ''}
           <p class="form-msg" data-msg></p><div><button class="btn btn-primary btn-sm" type="submit">${icon('check')} Salvar ${esc(b.name.split(' ')[0])}</button></div>
         </form></details>`; }).join('')}</section>`;
-    return web + sv + pr;
+    return web + agVitrine() + sv + pr + agAvalSec();
+  }
+  // ---------- Vitrine do web app (capa, banners, contatos, perguntas, termos, planos, unidades) e avaliações ----------
+  const AG_ICONES = [['', 'Automático (pelo nome)'], ['tesoura', 'Tesoura'], ['maquina', 'Máquina'], ['barba', 'Barba'], ['navalha', 'Navalha'], ['kids', 'Infantil'], ['sobrancelha', 'Sobrancelha'], ['pente', 'Pente'], ['quimica', 'Química / pigmentação'], ['combo', 'Combo'], ['coroa', 'Especial']];
+  const agFaqTxt = l => (l || []).map(x => `${x.p}\n${x.r}`).join('\n\n');
+  const agFaqDe = t => String(t || '').split(/\n\s*\n/).map(b => { const [p, ...r] = b.trim().split('\n'); return { p: (p || '').trim().slice(0, 200), r: r.join('\n').trim().slice(0, 1500) }; }).filter(x => x.p && x.r).slice(0, 30);
+  function agVitrine() {
+    const c = ui.ag.cfg || {}, banners = Array.isArray(c.banners) ? c.banners : [], units = (state.units || []).filter(Boolean), uInfo = c.unidades || {}, pInfo = c.planos_info || {}, planos = planCat();
+    const img = (url, alt) => url ? `<img class="ag-thumb" src="${esc(url)}" alt="${esc(alt)}">` : '';
+    return `<section class="section card"><h2 class="section-title">${icon('sparkle')} Vitrine do web app</h2>
+      <p class="section-note">É o que o cliente vê ao abrir o link: a foto de capa, os banners de promoção no Início, o endereço com o mapa, o WhatsApp, o Instagram, os planos, as perguntas frequentes e os termos.</p>
+      <div class="ag-imgs">
+        <div><b>Foto de capa</b>${img(c.capa, 'Capa') || '<p class="muted">Sem capa.</p>'}<label class="btn btn-sm">${icon('upload')} ${c.capa ? 'Trocar' : 'Enviar'} capa<input type="file" accept="image/*" hidden data-ag-img="capa"></label>${c.capa ? ` <button type="button" class="link-btn" data-action="agImgDel" data-k="capa">Tirar</button>` : ''}</div>
+        <div><b>Banners do Início</b> <small class="muted">(formato 16:9, até 8)</small><div class="ag-bans">${banners.map((b, i) => `<div class="ag-ban">${img(b.url, 'Banner ' + (i + 1))}<button type="button" class="icon-btn" data-action="agImgDel" data-k="banner" data-i="${i}" aria-label="Tirar banner ${i + 1}">${icon('trash')}</button></div>`).join('')}</div>
+          ${banners.length < 8 ? `<label class="btn btn-sm">${icon('plus')} Adicionar banner<input type="file" accept="image/*" hidden data-ag-img="banner"></label>` : ''}</div>
+      </div><p class="form-msg" id="ag-img-msg"></p>
+      <form class="form" data-form="agVitSalvar" novalidate>
+        <label class="field"><span>Endereço</span><input class="input" name="endereco" maxlength="200" value="${esc(c.endereco || '')}" placeholder="Rua, número, bairro, cidade"></label>
+        <div class="grid-2"><label class="field"><span>Link do mapa (opcional)</span><input class="input" name="mapa" maxlength="500" value="${esc(c.mapa || '')}" placeholder="https://maps.app.goo.gl/…"><small class="muted">Em branco, o mapa abre pelo endereço.</small></label>
+          <label class="field"><span>WhatsApp da barbearia</span><input class="input" name="whatsapp" inputmode="tel" maxlength="20" value="${esc(c.whatsapp || '')}" placeholder="(11) 91234-5678"><small class="muted">Para "Falar no WhatsApp" e "Quero assinar".</small></label></div>
+        <label class="field"><span>Instagram</span><input class="input" name="instagram" maxlength="60" value="${esc(c.instagram || '')}" placeholder="@suabarbearia"></label>
+        ${planos.length ? `<fieldset class="field"><legend>Planos no web app</legend><p class="section-note">Os planos de Configurações aparecem com o botão "Quero assinar", que abre o WhatsApp com a mensagem pronta.</p>${planos.map(p => `<div class="ag-pl"><b>${esc(p.n)}</b>${p.v ? ` <span class="muted num">${money2(p.v)}</span>` : ''}
+          <textarea class="input" name="pdesc_${esc(p.id)}" rows="2" maxlength="600" placeholder="O que o plano inclui (ex.: cortes ilimitados de segunda a quinta)">${esc((pInfo[p.id] || {}).desc || '')}</textarea>
+          <label class="check"><input type="checkbox" name="pocu_${esc(p.id)}" ${(pInfo[p.id] || {}).ocultar ? 'checked' : ''}><span>Não mostrar no web app</span></label></div>`).join('')}</fieldset>` : ''}
+        ${units.length > 1 ? `<fieldset class="field"><legend>Unidades</legend><p class="section-note">Com mais de uma unidade, o cliente escolhe a loja e vê só a equipe dela (a unidade de cada profissional fica no cadastro dele).</p>${units.map((u, i) => `<div class="ag-un"><b>${esc(u)}</b>
+          ${img((uInfo[u] || {}).capa, 'Capa ' + u)}<label class="btn btn-sm">${icon('upload')} Foto da unidade<input type="file" accept="image/*" hidden data-ag-img="un" data-u="${esc(u)}"></label>
+          <label class="field"><span>Endereço</span><input class="input" name="uend_${i}" maxlength="200" value="${esc((uInfo[u] || {}).endereco || '')}"></label>
+          <div class="grid-2"><label class="field"><span>Link do mapa</span><input class="input" name="umap_${i}" maxlength="500" value="${esc((uInfo[u] || {}).mapa || '')}"></label><label class="field"><span>WhatsApp da unidade</span><input class="input" name="uzap_${i}" inputmode="tel" maxlength="20" value="${esc((uInfo[u] || {}).whatsapp || '')}"></label></div></div>`).join('')}</fieldset>` : ''}
+        <label class="field"><span>Perguntas frequentes</span><textarea class="input" name="faq" rows="6" maxlength="12000" placeholder="Aceita cartão?\nSim, débito, crédito e Pix.\n\nTem estacionamento?\nSim, na rua de trás.">${esc(agFaqTxt(c.faq))}</textarea><small class="muted">Pergunta numa linha e a resposta embaixo. Deixe uma linha em branco entre uma pergunta e outra.</small></label>
+        <label class="field"><span>Termos de uso</span><textarea class="input" name="termos" rows="5" maxlength="20000" placeholder="Tolerância de atraso, cancelamento, faltas, uso dos dados…">${esc(c.termos || '')}</textarea></label>
+        <label class="check"><input type="checkbox" name="avaliacoes_on" ${c.avaliacoes_on !== false ? 'checked' : ''}><span><b>Avaliações ligadas</b><small>Depois de um atendimento finalizado, o cliente pode dar de 1 a 5 estrelas. O comentário só aparece no app se ele autorizar.</small></span></label>
+        <p class="form-msg" data-msg></p><div><button class="btn btn-primary" type="submit">${icon('check')} Salvar vitrine</button></div>
+      </form></section>`;
+  }
+  function agAvalSec() {
+    const a = ui.ag;
+    if (a.avs === undefined) { a.avs = null; AG().avaliacoes().then(l => { a.avs = l || []; render(); }).catch(() => { a.avs = []; render(); }); }
+    if (!a.avs || !a.avs.length) return a.avs ? '' : '';
+    const media = a.avs.reduce((t, x) => t + x.nota, 0) / a.avs.length, nomeB = id => ((barberById(id) || {}).name || '').split(' ')[0];
+    return `<section class="section card"><h2 class="section-title">${icon('award')} Avaliações dos clientes</h2>
+      <p class="section-note">Média <b>${nf1.format(media)}</b> de 5 em ${a.avs.length} ${a.avs.length === 1 ? "avaliação" : "avaliações"}. Comentários com "Público" aparecem no web app; você pode esconder qualquer um.</p>
+      <ul class="ag-avs">${a.avs.slice(0, 60).map(x => `<li><div><span class="ag-est" aria-label="${x.nota} de 5">${'★'.repeat(x.nota)}${'☆'.repeat(5 - x.nota)}</span> <small class="muted">${esc(x.nome_publico || 'Cliente')}${x.barber_id ? ' · ' + esc(nomeB(x.barber_id)) : ''} · ${new Date(x.criado_em).toLocaleDateString('pt-BR')}</small>
+        ${x.comentario ? `<p>${esc(x.comentario)}</p>` : ''}</div>${x.comentario && x.publico ? `<button type="button" class="btn btn-sm" data-action="agAvOcultar" data-id="${esc(x.id)}">${x.oculto ? 'Mostrar no app' : 'Esconder do app'}</button>` : x.comentario ? '<small class="muted">Não autorizou publicar</small>' : ''}</li>`).join('')}</ul></section>`;
+  }
+  async function agImg(input) {
+    const a = ui.ag, c = a.cfg || {}, k = input.dataset.agImg, file = input.files && input.files[0], box = document.getElementById('ag-img-msg');
+    if (!file) return;
+    const say = (t, ok) => { if (box) { box.textContent = t; box.className = 'form-msg' + (ok ? ' ok' : ' err'); } };
+    try {
+      say('Enviando a imagem…', true);
+      const url = await storeImage(await readImage(file, k === 'banner' ? 1600 : 1400, 0.82), 'ag' + k);
+      if (Cloud.enabled && /^data:/.test(url)) throw new Error('Não consegui enviar a imagem agora. Tente de novo.');
+      const row = k === 'capa' ? { capa: url } : k === 'banner' ? { banners: [...(Array.isArray(c.banners) ? c.banners : []), { url }].slice(0, 8) } : { unidades: { ...(c.unidades || {}), [input.dataset.u]: { ...((c.unidades || {})[input.dataset.u] || {}), capa: url } } };
+      const r = await AG().cfgSave(row); a.cfg = { ...c, ...(r || row) }; toast('Imagem salva.'); render();
+    } catch (e) { say(String((e && e.message) || e)); }
   }
   function agHist(c) {
     const a = ui.ag; a.hist = a.hist || {}; if (!c || !c.id || a.hist[c.id]) return;
@@ -9174,6 +9231,15 @@ Content-Type: application/json</pre>
       const k = 'ags' + el.dataset.id; if (ui.confirm !== k) { ui.confirm = k; return render(); }
       ui.confirm = null; AG().servDel(el.dataset.id).then(() => { toast('Serviço apagado.'); agCarregar('base'); }).catch(err => toast(/foreign|violat/i.test(String(err && err.message)) ? 'Esse serviço já foi usado: desmarque "Ativo" em vez de apagar.' : (Cloud.message ? Cloud.message(err) : String(err))));
     },
+    agImgDel(el) {
+      const a = ui.ag, c = a.cfg || {}, k = el.dataset.k, row = k === 'capa' ? { capa: '' } : { banners: (c.banners || []).filter((_, i) => i !== Number(el.dataset.i)) };
+      const velho = k === 'capa' ? c.capa : ((c.banners || [])[Number(el.dataset.i)] || {}).url;
+      AG().cfgSave(row).then(r => { a.cfg = { ...c, ...(r || row) }; if (Cloud.enabled && velho && Cloud.removePhoto) Cloud.removePhoto(velho); toast('Imagem retirada.'); render(); }).catch(err => toast(Cloud.message ? Cloud.message(err) : String(err)));
+    },
+    agAvOcultar(el) {
+      const a = ui.ag, x = (a.avs || []).find(v => v.id === el.dataset.id); if (!x) return;
+      AG().avOcultar(x.id, !x.oculto).then(() => { x.oculto = !x.oculto; toast(x.oculto ? 'Comentário escondido do app.' : 'Comentário visível no app.'); render(); }).catch(err => toast(Cloud.message ? Cloud.message(err) : String(err)));
+    },
     agCopiar() { copyText(document.getElementById('ag-url')?.value || '', document.getElementById('ag-url'), 'Link do agendamento copiado.'); },
     resPer(el) {
       const ant = ui.iaRes || {}, h = new Date();
@@ -10022,13 +10088,34 @@ Content-Type: application/json</pre>
       setMsg(f, 'Salvando…', true);
       AG().cfgSave(row).then(r => { ui.ag.cfg = r || row; toast(row.ativo ? 'Agendamento online ligado.' : 'Configuração salva.'); render(); }).catch(err => setMsg(f, Cloud.message ? Cloud.message(err) : String(err)));
     },
+    agVitSalvar(f) {
+      const E = f.elements, c = ui.ag.cfg || {}, units = (state.units || []).filter(Boolean), planos = planCat();
+      const zap = agFone(E.whatsapp.value);
+      if (zap && zap.length !== 10 && zap.length !== 11) return setMsg(f, 'Confira o WhatsApp da barbearia com DDD.');
+      const mapa = E.mapa.value.trim(); if (mapa && !/^https:\/\//.test(mapa)) return setMsg(f, 'O link do mapa precisa começar com https://');
+      const row = { endereco: E.endereco.value.trim().slice(0, 200), mapa: mapa.slice(0, 500), whatsapp: zap, instagram: E.instagram.value.trim().replace(/^@/, '').replace(/^https?:\/\/(www\.)?instagram\.com\//, '').replace(/[/?].*$/, '').slice(0, 60),
+        faq: agFaqDe(E.faq.value), termos: E.termos.value.trim().slice(0, 20000), avaliacoes_on: !!E.avaliacoes_on.checked };
+      if (planos.length) row.planos_info = Object.fromEntries(planos.map(p => [p.id, { desc: (E['pdesc_' + p.id] ? E['pdesc_' + p.id].value : '').trim().slice(0, 600), ocultar: !!(E['pocu_' + p.id] && E['pocu_' + p.id].checked) }]));
+      if (units.length > 1) {
+        const un = { ...(c.unidades || {}) };
+        for (const [i, u] of units.entries()) {
+          const mp = (E['umap_' + i].value || '').trim(), z = agFone(E['uzap_' + i].value);
+          if (mp && !/^https:\/\//.test(mp)) return setMsg(f, `O link do mapa de ${u} precisa começar com https://`);
+          if (z && z.length !== 10 && z.length !== 11) return setMsg(f, `Confira o WhatsApp de ${u}.`);
+          un[u] = { ...(un[u] || {}), endereco: E['uend_' + i].value.trim().slice(0, 200), mapa: mp.slice(0, 500), whatsapp: z };
+        }
+        row.unidades = un;
+      }
+      setMsg(f, 'Salvando…', true);
+      AG().cfgSave(row).then(r => { ui.ag.cfg = { ...c, ...(r || row) }; toast('Vitrine salva.'); render(); }).catch(err => setMsg(f, Cloud.message ? Cloud.message(err) : String(err)));
+    },
     agServSalvar(f) {
       const E = f.elements, nome = E.nome.value.trim().slice(0, 60), duracao = Math.round(Number(E.duracao.value) || 0), preco = Math.round((Number(E.preco.value) || 0) * 100) / 100;
       const msg = f.dataset.id ? f : document.getElementById('ag-sv-msg');
       const aviso = t => { if (msg && msg.tagName === 'FORM') toast(t); else if (msg) { msg.textContent = t; msg.className = 'form-msg err'; } };
       if (!nome) return aviso('Digite o nome do serviço.');
       if (duracao < 5 || duracao > 600) return aviso('Duração: de 5 a 600 minutos.');
-      const row = { ...(f.dataset.id ? { id: f.dataset.id } : { ordem: ui.ag.servicos.length }), nome, duracao, preco: Math.max(0, preco), online: !!E.online.checked, ativo: E.ativo.type === 'hidden' ? true : !!E.ativo.checked };
+      const row = { ...(f.dataset.id ? { id: f.dataset.id } : { ordem: ui.ag.servicos.length }), nome, duracao, preco: Math.max(0, preco), online: !!E.online.checked, ativo: E.ativo.type === 'hidden' ? true : !!E.ativo.checked, icone: AG_ICONES.some(([k]) => k === E.icone.value) ? E.icone.value : '', descricao: E.descricao.value.trim().slice(0, 80) };
       AG().servSave(row).then(() => { toast(f.dataset.id ? 'Serviço salvo.' : 'Serviço adicionado.'); agCarregar('base'); }).catch(err => aviso(Cloud.message ? Cloud.message(err) : String(err)));
     },
     agProfSalvar(f) {
@@ -10567,6 +10654,7 @@ Content-Type: application/json</pre>
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('article[data-action]')) { e.preventDefault(); ACTIONS[e.target.dataset.action](e.target, e); }
   });
   root.addEventListener('change', e => {
+    if (e.target.matches && e.target.matches('[data-ag-img]')) { agImg(e.target); return; }
     if (e.target.matches && e.target.matches('[data-ag-filtro]')) { const v = [...document.querySelectorAll('[data-ag-filtro]:checked')].map(x => x.value), n = document.querySelectorAll('[data-ag-filtro]').length; DB.pref.set('agFiltro', v.length === n ? 'null' : JSON.stringify(v)); render(); const d = document.querySelector('.ag-filtro'); if (d) d.open = true; return; }
     if (e.target.matches && e.target.matches('.ag-form select[name="sv"]')) { const a = ui.ag, ids = [...document.querySelectorAll('.ag-form select[name="sv"]')].map(x => x.value), ss = ids.map(id => a.servicos.find(v => v.id === id)).filter(Boolean);
       const dur = ss.reduce((t, v) => t + (Number(v.duracao) || 0), 0), val = ss.reduce((t, v) => t + (Number(v.preco) || 0), 0), di = document.querySelector('.ag-form [name="dur"]'), tt = document.querySelector('[data-ag-total]');

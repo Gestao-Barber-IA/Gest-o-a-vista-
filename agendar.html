@@ -13,111 +13,276 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Hind:wght@400;500;600;700&display=swap">
 <style>
 :root { --bg:#0c0c0e; --s1:#161618; --s2:#1f1f22; --s3:#2a2a2e; --line:#2d2c30; --fg:#f6f2e8; --muted:#aaa59a; --faint:#6f6b63;
-  --ac:#d6b46a; --ac2:#b08c42; --ink:#1d1607; --ok:#52d37e; --bad:#ff6b6b; --r:18px; }
+  --ac:#d6b46a; --ac2:#b08c42; --ink:#1d1607; --ok:#52d37e; --bad:#ff6b6b; --star:#f5c542; --r:18px; }
 * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 html,body { margin:0; min-height:100%; background:var(--bg); color:var(--fg); font-family:"Hind",system-ui,sans-serif; font-size:17px; line-height:1.4; }
 body { --g1:rgba(52,88,190,.16); --g2:rgba(212,178,102,.10); background: radial-gradient(900px 500px at 0% -10%, var(--g1), transparent 60%), radial-gradient(700px 500px at 110% 110%, var(--g2), transparent 60%), var(--bg); background-attachment:fixed; }
-.app { max-width:560px; margin:0 auto; padding: max(14px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); min-height:100vh; display:flex; flex-direction:column; }
-header { display:flex; align-items:center; gap:12px; min-height:56px; margin-bottom:8px; }
-header img { width:48px; height:48px; border-radius:50%; object-fit:contain; background:var(--logo-bg, var(--s2)); box-shadow:0 0 0 2px var(--ac); }
-header .nm { font-family:"Archivo",sans-serif; font-weight:800; font-size:18px; letter-spacing:.01em; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.lk { background:none; border:0; color:var(--ac); font:inherit; font-size:15px; font-weight:600; padding:8px 4px; cursor:pointer; text-decoration:underline; text-underline-offset:3px; }
+.app { max-width:560px; margin:0 auto; padding: max(12px, env(safe-area-inset-top)) 16px calc(92px + env(safe-area-inset-bottom)); min-height:100vh; }
+body.sem-nav .app { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
 h1 { font-family:"Archivo",sans-serif; font-weight:800; font-size:26px; line-height:1.15; margin:8px 0 6px; }
-h2 { font-family:"Archivo",sans-serif; font-weight:700; font-size:19px; margin:22px 0 10px; }
+h2 { font-family:"Archivo",sans-serif; font-weight:700; font-size:20px; margin:24px 0 10px; }
 p.sub { color:var(--muted); margin:0 0 18px; }
+a { color:var(--ac); }
+.ola { display:flex; align-items:center; gap:12px; padding:6px 0 14px; border-bottom:1px solid var(--line); margin:0 -16px 16px; padding-left:16px; padding-right:16px; }
+.ola img { width:44px; height:44px; border-radius:50%; object-fit:contain; background:var(--logo-bg, var(--s2)); box-shadow:0 0 0 2px var(--ac); }
+.ola .tx { flex:1; min-width:0; } .ola b { font-family:"Archivo",sans-serif; font-size:24px; display:block; line-height:1.1; } .ola b span { color:var(--ac); } .ola small { color:var(--muted); font-size:15px; }
+[hidden] { display:none !important; }
 .card { background:var(--s1); border:1px solid var(--line); border-radius:var(--r); padding:16px; margin-bottom:12px; }
 .aviso { background:color-mix(in srgb, var(--ac) 14%, var(--s1)); border:1px solid color-mix(in srgb, var(--ac) 40%, transparent); border-radius:14px; padding:10px 14px; margin-bottom:14px; font-size:15px; }
 label.f { display:block; margin-bottom:14px; }
 label.f span { display:block; font-weight:600; margin-bottom:6px; font-size:15px; }
-input.in { width:100%; font:inherit; font-size:18px; color:var(--fg); background:var(--s2); border:1px solid var(--line); border-radius:14px; padding:13px 14px; outline:none; }
-input.in:focus { border-color:var(--ac); box-shadow:0 0 0 3px color-mix(in srgb, var(--ac) 25%, transparent); }
+input.in, textarea.in { width:100%; font:inherit; font-size:18px; color:var(--fg); background:var(--s2); border:1px solid var(--line); border-radius:14px; padding:13px 14px; outline:none; }
+textarea.in { font-size:16px; resize:vertical; min-height:90px; }
+input.in:focus, textarea.in:focus { border-color:var(--ac); box-shadow:0 0 0 3px color-mix(in srgb, var(--ac) 25%, transparent); }
 input.cod { text-align:center; letter-spacing:.5em; font-family:"Archivo",sans-serif; font-size:30px; font-weight:800; padding-left:.5em; }
 .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-.btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; font:inherit; font-weight:700; font-size:18px; border-radius:16px; padding:15px 18px; border:1px solid var(--line); background:var(--s2); color:var(--fg); cursor:pointer; }
+.btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; font:inherit; font-weight:700; font-size:18px; border-radius:16px; padding:15px 18px; border:1px solid var(--line); background:var(--s2); color:var(--fg); cursor:pointer; text-decoration:none; }
 .btn.pri { background:var(--ac); border-color:var(--ac); color:var(--ink); box-shadow:0 10px 30px var(--glow, rgba(214,180,106,.25)); }
+.btn.sm { width:auto; font-size:15px; padding:8px 14px; border-radius:12px; }
 .btn:disabled { opacity:.5; cursor:default; }
 .btn + .btn { margin-top:10px; }
-.msg { min-height:1.4em; margin:4px 0 12px; font-size:15px; color:var(--bad); }
-.msg.ok { color:var(--ok); }
+.btns2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; } .btns2 .btn + .btn { margin-top:0; }
+.lk { background:none; border:0; color:var(--ac); font:inherit; font-size:15px; font-weight:600; padding:8px 4px; cursor:pointer; text-decoration:underline; text-underline-offset:3px; }
+.msg { min-height:1.4em; margin:4px 0 12px; font-size:15px; color:var(--bad); } .msg.ok { color:var(--ok); }
 .passos { display:flex; gap:6px; margin:4px 0 14px; } .passos i { flex:1; height:4px; border-radius:4px; background:var(--s3); } .passos i.on { background:var(--ac); }
+.voltar { display:inline-flex; align-items:center; gap:6px; background:none; border:0; color:var(--muted); font:inherit; font-size:15px; padding:6px 0; cursor:pointer; }
 .op { display:flex; align-items:center; gap:12px; width:100%; text-align:left; font:inherit; color:var(--fg); background:var(--s1); border:1px solid var(--line); border-radius:16px; padding:14px; margin-bottom:10px; cursor:pointer; }
 .op.on { border-color:var(--ac); background:color-mix(in srgb, var(--ac) 12%, var(--s1)); }
 .op .tx { flex:1; min-width:0; } .op b { display:block; font-size:17px; } .op small { color:var(--muted); font-size:14px; }
 .op .ck { width:24px; height:24px; border-radius:50%; border:2px solid var(--line); flex:0 0 24px; display:grid; place-items:center; color:var(--ink); font-size:14px; font-weight:800; }
 .op.on .ck { background:var(--ac); border-color:var(--ac); }
-.av { width:44px; height:44px; border-radius:50%; object-fit:cover; background:var(--s3); flex:0 0 44px; display:grid; place-items:center; font-family:"Archivo",sans-serif; font-weight:800; color:var(--ac); }
+.av { width:48px; height:48px; border-radius:50%; object-fit:cover; background:var(--s3); flex:0 0 48px; display:grid; place-items:center; font-family:"Archivo",sans-serif; font-weight:800; color:var(--ac); }
+.ic { width:52px; height:52px; border-radius:50%; flex:0 0 52px; display:grid; place-items:center; background:var(--ac); color:var(--ink); overflow:hidden; }
+.ic svg { width:28px; height:28px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; } .ic img { width:100%; height:100%; object-fit:cover; }
 .dias { display:flex; gap:8px; overflow-x:auto; padding:2px 2px 10px; margin:0 -2px 6px; scrollbar-width:none; } .dias::-webkit-scrollbar { display:none; }
 .dia { flex:0 0 64px; text-align:center; font:inherit; color:var(--fg); background:var(--s1); border:1px solid var(--line); border-radius:14px; padding:8px 4px; cursor:pointer; }
 .dia small { display:block; color:var(--muted); font-size:13px; text-transform:capitalize; } .dia b { font-family:"Archivo",sans-serif; font-size:20px; }
 .dia.on { background:var(--ac); border-color:var(--ac); color:var(--ink); } .dia.on small { color:var(--ink); }
 .horas { display:grid; grid-template-columns:repeat(auto-fill, minmax(84px, 1fr)); gap:8px; }
 .hora { font:inherit; font-weight:700; font-size:17px; color:var(--fg); background:var(--s1); border:1px solid var(--line); border-radius:12px; padding:11px 4px; cursor:pointer; }
-.hora.on { background:var(--ac); border-color:var(--ac); color:var(--ink); }
 .vazio { color:var(--muted); text-align:center; padding:18px 8px; }
 .resumo div { display:flex; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid var(--line); } .resumo div:last-child { border:0; }
 .resumo span { color:var(--muted); } .resumo b { text-align:right; }
 .ag { display:flex; gap:12px; align-items:flex-start; }
 .ag .dt { flex:0 0 58px; text-align:center; background:var(--s2); border-radius:12px; padding:6px 2px; }
 .ag .dt small { display:block; color:var(--muted); font-size:12px; text-transform:uppercase; } .ag .dt b { font-family:"Archivo",sans-serif; font-size:22px; }
-.ag .tx { flex:1; min-width:0; } .ag .tx b { display:block; } .ag .tx small { color:var(--muted); }
+.ag .tx { flex:1; min-width:0; } .ag .tx > b { display:block; } .ag .tx small { color:var(--muted); }
 .st { display:inline-block; font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; padding:2px 8px; border-radius:999px; background:var(--s3); color:var(--muted); margin-top:4px; }
-.st.agendado, .st.confirmado { background:color-mix(in srgb, var(--ok) 18%, transparent); color:var(--ok); }
+.st.agendado, .st.confirmado, .st.finalizado { background:color-mix(in srgb, var(--ok) 18%, transparent); color:var(--ok); }
 .st.cancelado, .st.faltou { background:color-mix(in srgb, var(--bad) 16%, transparent); color:var(--bad); }
+.acoes { display:flex; flex-wrap:wrap; gap:4px 14px; }
 .ok-ico { width:76px; height:76px; border-radius:50%; background:color-mix(in srgb, var(--ok) 18%, transparent); color:var(--ok); display:grid; place-items:center; font-size:40px; margin:20px auto 8px; }
 .centro { text-align:center; }
 .spin { width:36px; height:36px; border-radius:50%; border:3px solid var(--s3); border-top-color:var(--ac); animation:g 0.8s linear infinite; margin:60px auto 12px; } @keyframes g { to { transform:rotate(360deg); } }
-.rod { margin-top:auto; padding-top:24px; text-align:center; color:var(--faint); font-size:13px; }
+/* Início */
+.banners { display:flex; gap:10px; overflow-x:auto; scroll-snap-type:x mandatory; margin:0 -16px 6px; padding:0 16px 6px; scrollbar-width:none; } .banners::-webkit-scrollbar { display:none; }
+.banners img { flex:0 0 100%; width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:var(--r); scroll-snap-align:center; background:var(--s2); }
+.pontos { display:flex; justify-content:center; gap:6px; margin-bottom:12px; } .pontos i { width:6px; height:6px; border-radius:50%; background:var(--s3); } .pontos i.on { background:var(--ac); }
+.prox { border-color:color-mix(in srgb, var(--ac) 50%, var(--line)); }
+.prox .eti { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--ac); font-weight:700; }
+.lista-un { margin:0 -16px; border-top:1px solid var(--line); }
+.un { display:flex; gap:14px; align-items:center; width:100%; padding:14px 16px; background:none; border:0; border-bottom:1px solid var(--line); color:var(--fg); font:inherit; text-align:left; cursor:pointer; }
+.un img, .un .ph { width:64px; height:64px; border-radius:50%; object-fit:cover; flex:0 0 64px; background:var(--s2); box-shadow:0 0 0 2px var(--line); display:grid; place-items:center; color:var(--ac); font-family:"Archivo",sans-serif; font-weight:800; font-size:22px; }
+.un b { display:block; font-size:18px; } .un small { display:block; color:var(--muted); font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .un .tx { min-width:0; flex:1; }
+/* Página da barbearia */
+.hero { position:relative; margin:-12px -16px 0; min-height:230px; background:var(--s2) center/cover no-repeat; display:flex; flex-direction:column; justify-content:flex-end; padding:16px; }
+.hero::before { content:""; position:absolute; inset:0; background:linear-gradient(to bottom, rgba(0,0,0,.35), rgba(0,0,0,.15) 40%, rgba(0,0,0,.85)); }
+.hero > * { position:relative; }
+.hero .topo { position:absolute; top:max(12px, env(safe-area-inset-top)); left:16px; right:16px; display:flex; justify-content:space-between; }
+.circ { width:46px; height:46px; border-radius:50%; background:rgba(0,0,0,.6); border:0; color:#fff; display:grid; place-items:center; cursor:pointer; text-decoration:none; }
+.circ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.hero h1 { color:#fff; margin:0 0 4px; } .hero p { color:#e8e4da; margin:0; font-size:15px; }
+.abas { display:flex; gap:4px; overflow-x:auto; margin:0 -16px 14px; padding:0 12px; border-bottom:1px solid var(--line); scrollbar-width:none; background:var(--bg); position:sticky; top:0; z-index:5; } .abas::-webkit-scrollbar { display:none; }
+.aba { flex:0 0 auto; background:none; border:0; border-bottom:3px solid transparent; color:var(--muted); font:inherit; font-weight:700; font-size:15px; letter-spacing:.04em; text-transform:uppercase; padding:14px 10px 11px; cursor:pointer; }
+.aba.on { color:var(--fg); border-bottom-color:var(--ac); }
+.busca { width:100%; font:inherit; font-size:17px; color:var(--fg); background:var(--s1); border:1px solid var(--line); border-radius:14px; padding:13px 14px; margin-bottom:8px; outline:none; }
+.sv { display:flex; align-items:center; gap:14px; padding:14px 0; border-bottom:1px solid var(--line); }
+.sv .tx { flex:1; min-width:0; } .sv b { display:block; font-size:18px; } .sv .ds { display:block; color:var(--muted); font-size:13px; text-transform:uppercase; letter-spacing:.04em; }
+.sv .pr { display:flex; gap:14px; margin-top:4px; font-size:15px; } .sv .pr .v { color:var(--ok); font-weight:700; } .sv .pr .d { color:var(--muted); }
+.sv .btn { flex:0 0 auto; }
+.coracao { background:none; border:0; color:var(--muted); cursor:pointer; padding:6px; } .coracao.on { color:var(--bad); }
+.coracao svg { width:26px; height:26px; fill:none; stroke:currentColor; stroke-width:2; } .coracao.on svg { fill:currentColor; }
+.det div { display:flex; gap:12px; padding:12px 0; border-bottom:1px solid var(--line); } .det div:last-child { border:0; }
+.det span { color:var(--muted); flex:0 0 96px; font-size:15px; }
+.plano { border-color:color-mix(in srgb, var(--ac) 40%, var(--line)); }
+.plano b { font-family:"Archivo",sans-serif; font-size:20px; } .plano .v { color:var(--ac); font-family:"Archivo",sans-serif; font-size:24px; font-weight:800; margin:4px 0 8px; } .plano .v small { font-size:14px; color:var(--muted); }
+.plano p { color:var(--muted); white-space:pre-line; margin:0 0 12px; }
+.estrelas { color:var(--star); letter-spacing:2px; } .media { display:flex; align-items:center; gap:14px; } .media b { font-family:"Archivo",sans-serif; font-size:44px; }
+.dep { padding:12px 0; border-bottom:1px solid var(--line); } .dep p { margin:4px 0 0; } .dep small { color:var(--muted); }
+.notas { display:flex; justify-content:center; gap:8px; margin:10px 0 16px; }
+.nota { font-size:38px; background:none; border:0; color:var(--s3); cursor:pointer; padding:0 2px; line-height:1; } .nota.on { color:var(--star); }
+.chk { display:flex; gap:10px; align-items:flex-start; margin:8px 0 14px; font-size:15px; } .chk input { width:20px; height:20px; margin-top:2px; accent-color:var(--ac); }
+/* Menu */
+.perfil-h { display:flex; align-items:center; gap:14px; padding:10px 0 18px; border-bottom:1px solid var(--line); }
+.perfil-h .av { width:64px; height:64px; flex-basis:64px; font-size:26px; }
+.perfil-h b { font-size:20px; display:block; } .perfil-h small { color:var(--muted); }
+.mi { display:flex; align-items:center; gap:14px; width:100%; padding:16px 2px; background:none; border:0; border-bottom:1px solid var(--line); color:var(--fg); font:inherit; text-align:left; cursor:pointer; text-decoration:none; }
+.mi svg { width:24px; height:24px; flex:0 0 24px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; color:var(--muted); }
+.mi .tx { flex:1; } .mi b { display:block; font-size:18px; } .mi small { color:var(--muted); font-size:14px; }
+.mi .seta { color:var(--faint); font-size:22px; }
+.sair { color:var(--bad); font-weight:700; }
+details.q { border-bottom:1px solid var(--line); padding:12px 0; } details.q summary { cursor:pointer; font-weight:600; } details.q p { color:var(--muted); white-space:pre-line; margin:8px 0 0; }
+.termos { white-space:pre-line; color:var(--muted); font-size:15px; }
+/* Navegação de baixo */
+nav.bn { position:fixed; left:0; right:0; bottom:0; z-index:20; display:flex; justify-content:center; background:color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border-top:1px solid var(--line); padding-bottom:env(safe-area-inset-bottom); }
+nav.bn .in2 { display:flex; width:100%; max-width:560px; }
+nav.bn button { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:10px 4px 9px; background:none; border:0; color:var(--muted); font:inherit; font-size:13px; font-weight:600; cursor:pointer; }
+nav.bn button svg { width:26px; height:26px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+nav.bn button.on { color:var(--ac); }
+body.sem-nav nav.bn { display:none; }
+.rod { padding-top:24px; text-align:center; color:var(--faint); font-size:13px; }
 :focus-visible { outline:2px solid var(--ac); outline-offset:2px; }
-@media (prefers-reduced-motion: reduce) { .spin { animation-duration:3s; } }
+@media (prefers-reduced-motion: reduce) { .spin { animation-duration:3s; } .banners { scroll-behavior:auto; } }
 </style>
 </head>
-<body>
-<div class="app">
-  <header><img id="logo" alt="" hidden><span class="nm" id="nm"></span><span id="topo"></span></header>
-  <main id="m"><div class="spin" role="status" aria-label="Carregando"></div></main>
-  <p class="rod" id="rod">Agendamento online · Gestão Barber IA</p>
-</div>
+<body class="sem-nav">
+<div class="app"><main id="m"><div class="spin" role="status" aria-label="Carregando"></div></main></div>
+<nav class="bn" aria-label="Navegação"><div class="in2">
+  <button type="button" data-a="tab" data-t="inicio"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Início</button>
+  <button type="button" data-a="tab" data-t="agendamentos"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Agendamentos</button>
+  <button type="button" data-a="tab" data-t="menu"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>Menu</button>
+</div></nav>
 <script>
 (function () {
   'use strict';
   var URL_FN = 'https://sekkmnkajnaqubyhpxvd.supabase.co/functions/v1/agenda-app', ANON = 'sb_publishable_H_B9KotYo03JbNmuERyf6Q_1u-RyKYB';
   var DIAS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'], DIASL = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+  // Ícones dos serviços (a barbearia escolhe em Agenda › Configurar; sem escolha, o nome do serviço sugere um).
+  var ICONES = {
+    tesoura: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M8.6 7.6 20 18M8.6 16.4 20 6"/>',
+    maquina: '<rect x="7" y="7" width="10" height="14" rx="2"/><path d="M7 7V4h10v3M9 4V2M12 4V2M15 4V2M10 12h4"/>',
+    barba: '<path d="M5 6c0 7 2.5 12 7 14 4.5-2 7-7 7-14"/><path d="M9 13c1-1 2-1 3 0 1-1 2-1 3 0"/><path d="M10 17h4"/>',
+    navalha: '<path d="M3 15 15 3l3 3L6 18z"/><path d="M15 9l6 6-3 3-6-6"/>',
+    kids: '<circle cx="12" cy="13" r="8"/><path d="M9 11h.01M15 11h.01M9 16c1.7 1.3 4.3 1.3 6 0M9 5c1-2 5-2 6 0"/>',
+    sobrancelha: '<path d="M3 9c4-4 14-4 18 0"/><path d="M3 15c3 3 15 3 18 0-3-3-15-3-18 0z"/><circle cx="12" cy="15" r="1.6"/>',
+    pente: '<path d="M3 8h18v4H3z"/><path d="M5 12v6M8 12v6M11 12v6M14 12v6M17 12v6M20 12v4"/>',
+    quimica: '<path d="M12 3s6 7 6 11a6 6 0 0 1-12 0c0-4 6-11 6-11z"/>',
+    combo: '<path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z"/>',
+    coroa: '<path d="M3 18h18M4 18 3 7l5 4 4-6 4 6 5-4-1 11"/>'
+  };
+  var ICO = function (n) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + (ICONES[n] || ICONES.tesoura) + '</svg>'; };
+  function iconeDe(s) {
+    if (s.icone && /^https:/.test(s.icone)) return '<span class="ic"><img src="' + esc(s.icone) + '" alt=""></span>';
+    var k = s.icone && ICONES[s.icone] ? s.icone : (function (n) { n = n.toLowerCase();
+      return /kid|infantil|crian/.test(n) ? 'kids' : /sobrancel/.test(n) ? 'sobrancelha' : /navalh/.test(n) ? 'navalha' : /barba/.test(n) && !/\+|corte|cabelo/.test(n) ? 'barba' : /pigment|qu[ií]mic|luzes|platin|colora|progress|selag/.test(n) ? 'quimica' : /m[aá]quina/.test(n) ? 'maquina' : /\+|combo/.test(n) ? 'combo' : 'tesoura'; })(s.nome || '');
+    return '<span class="ic">' + ICO(k) + '</span>';
+  }
+  var SVG = function (p) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + p + '</svg>'; };
+  var I = { voltar: SVG('<path d="M15 18l-6-6 6-6"/>'), mapa: SVG('<path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/>'), coracao: SVG('<path d="M12 20s-8-5-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 9c0 6-8 11-8 11z"/>'),
+    pessoa: SVG('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>'), plano: SVG('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/>'), hist: SVG('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+    duvida: SVG('<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.7M12 17h.01"/>'), doc: SVG('<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/>'), zap: SVG('<path d="M4 20l1.3-3.9A8 8 0 1 1 8 19z"/><path d="M9 9.5c.5 2 2.5 4 4.5 4.5l1-1.5 2 1-.5 2c-3.5 0-7.5-4-7.5-7.5l2-.5 1 2z"/>'),
+    estrela: SVG('<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>'), loja: SVG('<path d="M4 10v10h16V10M3 10l2-6h14l2 6zM9 20v-6h6v6"/>') };
   var $ = function (id) { return document.getElementById(id); };
   var esc = function (t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
-  var reais = function (v) { return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: Number(v) % 1 ? 2 : 0, maximumFractionDigits: 2 }); };
+  var reais = function (v) { return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
   var emp = ''; try { emp = new URLSearchParams(location.hash.slice(1)).get('e') || ''; } catch (e) { emp = ''; }
   if (!emp) { try { emp = localStorage.getItem('gbAgEmp') || ''; } catch (e) { emp = ''; } } else { try { localStorage.setItem('gbAgEmp', emp); } catch (e) { /* segue */ } }
   var KEY = 'gbAg:' + emp, token = ''; try { token = localStorage.getItem(KEY) || ''; } catch (e) { token = ''; }
-  var info = null, eu = null, st = {}, tela = '';
+  var info = null, eu = null, st = { aba: 'inicio' }, tela = '';
 
   function chamar(acao, dados) {
     return fetch(URL_FN, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: ANON }, body: JSON.stringify({ empresa: emp, acao: acao, dados: dados || {}, token: token || undefined }) })
       .then(function (r) { return r.json().catch(function () { return { erro: 'Sem resposta. Tente de novo.' }; }).then(function (j) {
-        if (r.status === 401) { sair(true); }
+        if (r.status === 401) { guardar(''); eu = null; }
         if (!r.ok || j.erro) { var e = new Error(j.erro || 'Não deu certo. Tente de novo.'); e.status = r.status; throw e; }
         return j; }); }, function () { throw new Error('Sem internet. Confira a conexão e tente de novo.'); });
   }
   function guardar(t) { token = t; try { if (t) localStorage.setItem(KEY, t); else localStorage.removeItem(KEY); } catch (e) { /* segue */ } }
-  function sair(silencioso) { guardar(''); eu = null; if (!silencioso) chamar('sair').catch(function () {}); }
   var m = $('m');
-  function pinta(html) { m.innerHTML = html; var f = m.querySelector('[autofocus]'); if (f) f.focus(); window.scrollTo(0, 0); }
+  function pinta(html, nav) { m.innerHTML = html; document.body.classList.toggle('sem-nav', !nav); [].forEach.call(document.querySelectorAll('nav.bn button'), function (b) { b.classList.toggle('on', b.dataset.t === st.aba); });
+    var f = m.querySelector('[autofocus]'); if (f) f.focus(); window.scrollTo(0, 0); }
   function carregando(t) { pinta('<div class="spin" role="status"></div><p class="centro sub">' + esc(t || 'Carregando…') + '</p>'); }
   function msg(t, ok) { var el = m.querySelector('.msg'); if (el) { el.textContent = t || ''; el.className = 'msg' + (ok ? ' ok' : ''); } }
   function foneFmt(d) { d = String(d || '').replace(/\D/g, ''); return d.length === 11 ? '(' + d.slice(0, 2) + ') ' + d.slice(2, 7) + '-' + d.slice(7) : d.length === 10 ? '(' + d.slice(0, 2) + ') ' + d.slice(2, 6) + '-' + d.slice(6) : d; }
-  function dataTxt(iso, longo) { var d = new Date(iso + 'T12:00:00'); var hoje = info && info.hoje; if (iso === hoje) return 'hoje'; var am = new Date(hoje + 'T12:00:00'); am.setDate(am.getDate() + 1); if (iso === am.toISOString().slice(0, 10)) return 'amanhã';
+  function isoLocal(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function dataTxt(iso, longo) { var d = new Date(iso + 'T12:00:00'), hoje = info && info.hoje; if (iso === hoje) return 'hoje'; var am = new Date(hoje + 'T12:00:00'); am.setDate(am.getDate() + 1); if (iso === isoLocal(am)) return 'amanhã';
     return (longo ? DIASL : DIAS)[d.getDay()] + ', ' + String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0'); }
-  function topo() { $('topo').innerHTML = eu && tela !== 'perfil' ? '<button class="lk" data-a="perfil">Meu cadastro</button>' : ''; }
-  function ir(t, x) { tela = t; st.x = x || {}; topo(); TELAS[t](); }
+  function testeAviso() { return info && info.teste ? '<div class="aviso"><b>Modo de teste.</b> Os horários marcados aqui ainda não valem na agenda oficial da barbearia.</div>' : ''; }
+  function voltarBtn(a, t) { var aba = a === 'tab' ? ({ 'Menu': 'menu', 'Agendamentos': 'agendamentos' }[t] || 'inicio') : ''; return '<button class="voltar" data-a="' + a + '"' + (aba ? ' data-t="' + aba + '"' : '') + '>‹ ' + esc(t || 'Voltar') + '</button>'; }
+  function ir(t, x) { tela = t; st.x = x || {}; TELAS[t](); }
+  function zap(txt, num) { var n = String(num || (unidadeAtual() || {}).whatsapp || info.whatsapp || '').replace(/\D/g, ''); if (!n) return ''; if (n.length <= 11) n = '55' + n; return 'https://wa.me/' + n + (txt ? '?text=' + encodeURIComponent(txt) : ''); }
+  function unidadeAtual() { return st.unidade ? info.unidades.filter(function (u) { return u.nome === st.unidade; })[0] : null; }
+  function profsDaUnidade() { return info.profissionais.filter(function (p) { return !st.unidade || !p.unidade || p.unidade === st.unidade; }); }
+  function mapaDe(u) { var x = u || {}; if (x.mapa) return x.mapa; var end = x.endereco || (!u ? info.endereco : ''); return end ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(end) : ''; }
+  function estrelas(n) { var s = ''; for (var i = 1; i <= 5; i++) s += i <= Math.round(n) ? '★' : '☆'; return '<span class="estrelas" aria-label="' + n + ' de 5">' + s + '</span>'; }
+  function cardAg(a, botoes) {
+    var d = new Date(a.inicio), iso = isoLocal(d), h = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    var ac = [];
+    if (botoes && a.pode_cancelar) ac.push('<button class="lk" data-a="cancelar" data-id="' + esc(a.id) + '">' + (st.conf === a.id ? 'Confirmar cancelamento' : 'Cancelar horário') + '</button>');
+    if (a.pode_avaliar) ac.push('<button class="lk" data-a="avaliar" data-id="' + esc(a.id) + '">Avaliar atendimento</button>');
+    if (!botoes && a.status !== 'cancelado' && a.servico_ids && a.servico_ids.length) ac.push('<button class="lk" data-a="repetir" data-id="' + esc(a.id) + '">Agendar de novo</button>');
+    return '<div class="card ag"><div class="dt"><small>' + DIAS[d.getDay()] + '</small><b>' + String(d.getDate()).padStart(2, '0') + '</b><small>' + d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '') + '</small></div>' +
+      '<div class="tx"><b>' + esc(dataTxt(iso, true)) + ' às ' + h.replace(':', 'h') + '</b><small>' + esc(a.servicos.join(' + ')) + (a.profissional ? ' · com ' + esc(a.profissional.split(' ')[0]) : '') + '</small><br><span class="st ' + esc(a.status) + '">' + esc(a.status) + '</span>' +
+      (botoes && !a.pode_cancelar && ['agendado', 'confirmado'].indexOf(a.status) >= 0 ? '<br><small>Para cancelar agora, fale com a barbearia.</small>' : '') +
+      (ac.length ? '<div class="acoes">' + ac.join('') + '</div>' : '') + '</div></div>';
+  }
+  function proximos() { return eu ? eu.agendamentos.filter(function (a) { return new Date(a.inicio) >= new Date(Date.now() - 3600000) && ['agendado', 'confirmado', 'chegou'].indexOf(a.status) >= 0; }) : []; }
+  function ultimo() { if (!eu) return null; var l = eu.agendamentos.filter(function (a) { return new Date(a.inicio) < new Date() && ['finalizado', 'chegou', 'confirmado', 'agendado'].indexOf(a.status) >= 0 && (a.servico_ids || []).length; }); return l[l.length - 1] || null; }
 
   var TELAS = {
     erro: function () { pinta('<h1>Ops!</h1><p class="sub">' + esc(st.x.erro || 'Não deu certo.') + '</p>' + (st.x.voltar ? '<button class="btn pri" data-a="' + st.x.voltar + '">Tentar de novo</button>' : '')); },
+    // ---------- Abas ----------
+    inicio: function () {
+      st.aba = 'inicio'; var c = eu && eu.cliente, prox = proximos()[0], ult = ultimo(), hoje = new Date(info.hoje + 'T12:00:00');
+      var bn = info.banners.length ? '<div class="banners" id="bns">' + info.banners.map(function (u, i) { return '<img src="' + esc(u) + '" alt="Novidade ' + (i + 1) + '" loading="lazy">'; }).join('') + '</div>' +
+        (info.banners.length > 1 ? '<div class="pontos" id="pts">' + info.banners.map(function (u, i) { return '<i class="' + (i ? '' : 'on') + '"></i>'; }).join('') + '</div>' : '') : '';
+      var un = info.unidades.length ? '<h2>Unidades</h2><div class="lista-un">' + info.unidades.map(function (u) { return '<button class="un" data-a="loja" data-u="' + esc(u.nome) + '">' + (u.capa ? '<img src="' + esc(u.capa) + '" alt="">' : '<span class="ph">' + esc(u.nome.charAt(0)) + '</span>') + '<span class="tx"><b>' + esc(info.nome) + ' · ' + esc(u.nome) + '</b>' + (u.endereco ? '<small>' + esc(u.endereco) + '</small>' : '') + '</span></button>'; }).join('') + '</div>'
+        : '<h2>A barbearia</h2><div class="lista-un"><button class="un" data-a="loja" data-u="">' + (info.capa ? '<img src="' + esc(info.capa) + '" alt="">' : info.logo ? '<img src="' + esc(info.logo) + '" alt="">' : '<span class="ph">' + esc(info.nome.charAt(0)) + '</span>') + '<span class="tx"><b>' + esc(info.nome) + '</b><small>' + esc(info.endereco || 'Serviços, profissionais e detalhes') + '</small></span></button></div>';
+      pinta('<div class="ola">' + (info.logo ? '<img src="' + esc(info.logo) + '" alt="">' : '') + '<div class="tx"><b>Olá' + (c ? ' <span>' + esc(c.nome) + '</span>' : '!') + '</b><small>' + DIASL[hoje.getDay()].charAt(0).toUpperCase() + DIASL[hoje.getDay()].slice(1) + ', ' + hoje.getDate() + ' de ' + hoje.toLocaleDateString('pt-BR', { month: 'long' }) + ' de ' + hoje.getFullYear() + '</small></div></div>' +
+        testeAviso() + (info.aviso ? '<div class="aviso">' + esc(info.aviso) + '</div>' : '') + bn +
+        (prox ? '<div class="card prox"><span class="eti">Seu próximo horário</span>' + cardAg(prox, true).replace('class="card ag"', 'class="ag"') + '</div>' : '') +
+        '<div class="' + (ult ? 'btns2' : '') + '"><button class="btn pri" data-a="novo">Agendar horário</button>' + (ult ? '<button class="btn" data-a="repetir" data-id="' + esc(ult.id) + '">Repetir último</button>' : '') + '</div>' +
+        (!c ? '<p class="centro"><button class="lk" data-a="entrar">Já é cliente? Entrar</button></p>' : '') + un + rodape(), true);
+      var b = $('bns'), p = $('pts'); if (b && p) b.addEventListener('scroll', function () { var i = Math.round(b.scrollLeft / b.clientWidth); [].forEach.call(p.children, function (x, k) { x.classList.toggle('on', k === i); }); }, { passive: true });
+    },
+    agendamentos: function () {
+      st.aba = 'agendamentos';
+      if (!eu) return pinta('<h1>Agendamentos</h1><p class="sub">Entre com o seu WhatsApp para ver e marcar seus horários.</p><button class="btn pri" data-a="entrar">Entrar</button>' + rodape(), true);
+      var prox = proximos(), pass = eu.agendamentos.filter(function (a) { return prox.indexOf(a) < 0; }).reverse().slice(0, 30);
+      pinta('<h1>Agendamentos</h1><button class="btn pri" data-a="novo">Agendar horário</button><h2>Próximos</h2>' + (prox.length ? prox.map(function (a) { return cardAg(a, true); }).join('') : '<p class="vazio">Nenhum horário marcado.</p>') +
+        (pass.length ? '<h2>Histórico</h2>' + pass.map(function (a) { return cardAg(a, false); }).join('') : '') + rodape(), true);
+    },
+    menu: function () {
+      st.aba = 'menu'; var c = eu && eu.cliente, fav = c && c.favorito ? info.profissionais.filter(function (p) { return p.id === c.favorito; })[0] : null;
+      var item = function (a, ic, t, s, extra) { return '<button class="mi" data-a="' + a + '"' + (extra || '') + '>' + ic + '<span class="tx"><b>' + t + '</b><small>' + s + '</small></span><span class="seta">›</span></button>'; };
+      var z = zap('Olá! Vim pelo app de agendamento.');
+      pinta((c ? '<div class="perfil-h"><span class="av">' + esc(c.nome.charAt(0)) + '</span><div><b>' + esc(c.nome + ' ' + c.sobrenome) + '</b><small>' + esc(foneFmt(c.fone)) + '</small></div></div>' : '<h1>Menu</h1><button class="btn pri" data-a="entrar">Entrar com o WhatsApp</button>') +
+        (c ? item('perfil', I.pessoa, 'Meus dados', 'Nome, e-mail e aniversário') + item('favoritos', I.coracao, 'Favorito', fav ? esc(fav.nome) + ' é o seu profissional favorito' : 'Escolha o seu profissional favorito') + item('tab', I.hist, 'Histórico', 'Seus agendamentos', ' data-t="agendamentos"') : '') +
+        (info.planos.length ? item('planos', I.plano, 'Planos', 'Planos mensais da barbearia') : '') +
+        (info.avaliacoes && info.avaliacoes.total ? item('avals', I.estrela, 'Avaliações', 'Nota ' + String(info.avaliacoes.media).replace('.', ',') + ' de 5') : '') +
+        (info.faq.length ? item('faq', I.duvida, 'Perguntas frequentes', 'Respostas para as dúvidas mais comuns') : '') +
+        (z ? '<a class="mi" href="' + esc(z) + '" target="_blank" rel="noopener">' + I.zap + '<span class="tx"><b>Falar no WhatsApp</b><small>Atendimento da barbearia</small></span><span class="seta">↗</span></a>' : '') +
+        (info.termos ? item('termos', I.doc, 'Termos de uso', 'Regras de agendamento e privacidade') : '') +
+        (c ? '<p class="centro"><button class="lk sair" data-a="sair">Sair</button></p>' : '') + rodape(), true);
+    },
+    // ---------- Barbearia (ou unidade) ----------
+    loja: function () {
+      var u = unidadeAtual(), capa = (u && u.capa) || info.capa, end = u ? u.endereco : info.endereco, mp = mapaDe(u), aba = st.lojaAba || 'servicos';
+      var abas = [['servicos', 'Serviços'], ['profissionais', 'Profissionais'], ['detalhes', 'Detalhes']];
+      if (info.planos.length) abas.push(['planos', 'Planos']); if (info.avaliacoes && info.avaliacoes.total) abas.push(['avaliacoes', 'Avaliações']);
+      var corpo = ABAS[aba] ? ABAS[aba](u) : '';
+      pinta('<div class="hero" style="' + (capa ? 'background-image:url(\'' + esc(capa).replace(/'/g, '%27') + '\')' : '') + '"><div class="topo"><button class="circ" data-a="tab" data-t="inicio" aria-label="Voltar">' + I.voltar + '</button>' + (mp ? '<a class="circ" href="' + esc(mp) + '" target="_blank" rel="noopener" aria-label="Abrir no mapa">' + I.mapa + '</a>' : '') + '</div>' +
+        '<h1>' + esc(info.nome) + (u ? ' · ' + esc(u.nome) : '') + '</h1>' + (end ? '<p>' + esc(end) + '</p>' : '') + '</div>' +
+        '<div class="abas" role="tablist">' + abas.map(function (x) { return '<button class="aba' + (x[0] === aba ? ' on' : '') + '" role="tab" aria-selected="' + (x[0] === aba) + '" data-a="lojaAba" data-t="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>' + corpo + rodape(), true);
+      var b = $('bsv'); if (b) { b.value = st.busca || ''; b.addEventListener('input', function () { st.busca = b.value; var q = b.value.toLowerCase(); [].forEach.call(m.querySelectorAll('.sv'), function (x) { x.hidden = q && x.dataset.n.indexOf(q) < 0; }); }); }
+    },
+    favoritos: function () {
+      var c = eu.cliente;
+      pinta(voltarBtn('tab', 'Menu') + '<h1>Profissional favorito</h1><p class="sub">Ele aparece primeiro quando você for agendar.</p>' + info.profissionais.map(function (p) { var on = c.favorito === p.id;
+        return '<div class="op' + (on ? ' on' : '') + '">' + avatar(p) + '<span class="tx"><b>' + esc(p.nome) + '</b>' + (p.unidade ? '<small>' + esc(p.unidade) + '</small>' : '') + '</span><button class="coracao' + (on ? ' on' : '') + '" data-a="fav" data-id="' + esc(p.id) + '" aria-pressed="' + on + '" aria-label="Favorito">' + I.coracao + '</button></div>'; }).join(''));
+    },
+    planos: function () { pinta(voltarBtn('tab', 'Menu') + '<h1>Planos</h1>' + ABAS.planos(unidadeAtual())); },
+    avals: function () { pinta(voltarBtn('tab', 'Menu') + '<h1>Avaliações</h1>' + ABAS.avaliacoes()); },
+    faq: function () { pinta(voltarBtn('tab', 'Menu') + '<h1>Perguntas frequentes</h1>' + info.faq.map(function (q) { return '<details class="q"><summary>' + esc(q.p) + '</summary><p>' + esc(q.r) + '</p></details>'; }).join('')); },
+    termos: function () { pinta(voltarBtn('tab', 'Menu') + '<h1>Termos de uso</h1><div class="termos">' + esc(info.termos) + '</div>'); },
+    // ---------- Entrar ----------
     entrar: function () {
-      pinta(testeAviso() + '<h1>Agende seu horário</h1><p class="sub">Cadastro rápido: só o seu nome e o seu WhatsApp. Vamos mandar um código de 4 números para confirmar.</p>' + (info.aviso ? '<div class="aviso">' + esc(info.aviso) + '</div>' : '') +
+      pinta(voltarBtn('tab', 'Início') + '<h1>Entre para agendar</h1><p class="sub">Cadastro rápido: só o seu nome e o seu WhatsApp. Vamos mandar um código de 4 números para confirmar.</p>' + testeAviso() +
         '<form id="fe" novalidate><div class="row2"><label class="f"><span>Nome</span><input class="in" name="nome" autocomplete="given-name" maxlength="40" value="' + esc(st.nome || '') + '" autofocus></label>' +
         '<label class="f"><span>Sobrenome</span><input class="in" name="sobrenome" autocomplete="family-name" maxlength="60" value="' + esc(st.sobrenome || '') + '"></label></div>' +
         '<label class="f"><span>WhatsApp com DDD</span><input class="in" name="fone" type="tel" inputmode="tel" autocomplete="tel-national" maxlength="16" placeholder="(11) 91234-5678" value="' + esc(st.fone ? foneFmt(st.fone) : '') + '"></label>' +
         '<p class="msg" role="alert"></p><button class="btn pri" type="submit">Receber código no WhatsApp</button></form>');
-      $('fe').fone.addEventListener('input', function (e) { var d = e.target.value.replace(/\D/g, '').slice(0, 11); e.target.value = foneFmt(d); });
+      $('fe').fone.addEventListener('input', function (e) { e.target.value = foneFmt(e.target.value.replace(/\D/g, '').slice(0, 11)); });
       $('fe').addEventListener('submit', function (e) { e.preventDefault(); var f = e.target, nome = f.nome.value.trim(), sob = f.sobrenome.value.trim(), fone = f.fone.value.replace(/\D/g, '');
         if (fone.length > 11 && fone.indexOf('55') === 0) fone = fone.slice(2);
         if (!nome || !sob) return msg('Informe o nome e o sobrenome.');
@@ -129,113 +294,159 @@ input.cod { text-align:center; letter-spacing:.5em; font-family:"Archivo",sans-s
       pinta('<h1>Digite o código</h1><p class="sub">Mandamos um código de 4 números para o WhatsApp <b>' + esc(foneFmt(st.fone)) + '</b>.</p>' +
         '<form id="fc" novalidate><label class="f"><span>Código</span><input class="in cod" name="cod" inputmode="numeric" autocomplete="one-time-code" maxlength="4" pattern="[0-9]*" autofocus></label>' +
         '<p class="msg" role="alert"></p><button class="btn pri" type="submit">Confirmar</button></form>' +
-        '<p class="centro"><button class="lk" data-a="reenviar" id="re">Reenviar código</button> · <button class="lk" data-a="trocar">Trocar número</button></p>');
-      var f = $('fc'); f.cod.addEventListener('input', function () { f.cod.value = f.cod.value.replace(/\D/g, '').slice(0, 4); if (f.cod.value.length === 4) f.requestSubmit ? f.requestSubmit() : f.querySelector('button').click(); });
+        '<p class="centro"><button class="lk" data-a="reenviar">Reenviar código</button> · <button class="lk" data-a="entrar">Trocar número</button></p>');
+      var f = $('fc'); f.cod.addEventListener('input', function () { f.cod.value = f.cod.value.replace(/\D/g, '').slice(0, 4); if (f.cod.value.length === 4) { if (f.requestSubmit) f.requestSubmit(); else f.querySelector('button').click(); } });
       f.addEventListener('submit', function (e) { e.preventDefault(); var c = f.cod.value; if (c.length !== 4) return msg('Digite os 4 números.');
         f.querySelector('button').disabled = true; msg('Conferindo…', true);
-        chamar('verificar', { fone: st.fone, codigo: c }).then(function (r) { guardar(r.token); return inicio(); }).catch(function (er) { f.querySelector('button').disabled = false; f.cod.value = ''; msg(er.message); }); });
+        chamar('verificar', { fone: st.fone, codigo: c }).then(function (r) { guardar(r.token); return carregarEu().then(function () { if (st.depois) { var x = st.depois; st.depois = null; return comecar(x); } ir(st.aba || 'inicio'); }); })
+          .catch(function (er) { f.querySelector('button').disabled = false; f.cod.value = ''; msg(er.message); }); });
     },
-    home: function () {
-      var c = eu.cliente, prox = eu.agendamentos.filter(function (a) { return new Date(a.inicio) >= new Date(Date.now() - 3600000) && ['agendado', 'confirmado', 'chegou'].indexOf(a.status) >= 0; }),
-        pass = eu.agendamentos.filter(function (a) { return prox.indexOf(a) < 0; }).reverse().slice(0, 4), falta = !c.email || !c.nascimento;
-      var item = function (a, botoes) { var d = new Date(a.inicio), iso = d.toLocaleDateString('en-CA'), h = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-        return '<div class="card ag"><div class="dt"><small>' + DIAS[d.getDay()] + '</small><b>' + String(d.getDate()).padStart(2, '0') + '</b><small>' + d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '') + '</small></div>' +
-          '<div class="tx"><b>' + esc(dataTxt(iso, true)) + ' às ' + h.replace(':', 'h') + '</b><small>' + esc(a.servicos.join(' + ')) + (a.profissional ? ' · com ' + esc(a.profissional.split(' ')[0]) : '') + '</small><br><span class="st ' + esc(a.status) + '">' + esc(a.status) + '</span>' +
-          (botoes && a.pode_cancelar ? '<br><button class="lk" data-a="cancelar" data-id="' + esc(a.id) + '">' + (st.conf === a.id ? 'Confirmar cancelamento' : 'Cancelar horário') + '</button>' : '') +
-          (botoes && !a.pode_cancelar && ['agendado', 'confirmado'].indexOf(a.status) >= 0 ? '<br><small>Para cancelar agora, fale com a barbearia.</small>' : '') + '</div></div>'; };
-      pinta(testeAviso() + '<h1>Olá, ' + esc(c.nome) + '!</h1>' + (info.aviso ? '<div class="aviso">' + esc(info.aviso) + '</div>' : '') +
-        '<button class="btn pri" data-a="novo">Agendar horário</button>' +
-        (falta ? '<div class="card" style="margin-top:14px"><b>Complete seu cadastro</b><p class="sub" style="margin:4px 0 8px">Assim a gente lembra do seu aniversário 🎉</p><button class="btn" data-a="perfil">Completar cadastro</button></div>' : '') +
-        '<h2>Seus próximos horários</h2>' + (prox.length ? prox.map(function (a) { return item(a, true); }).join('') : '<p class="vazio">Nenhum horário marcado.</p>') +
-        (pass.length ? '<h2>Últimos</h2>' + pass.map(function (a) { return item(a, false); }).join('') : '') +
-        '<p class="centro"><button class="lk" data-a="sair">Sair</button></p>');
-    },
+    // ---------- Agendar ----------
     servicos: function () {
-      st.sel = st.sel || [];
-      var dur = 0, val = 0; st.sel.forEach(function (id) { var s = servPor(id); if (s) { dur += s.duracao; val += s.preco; } });
-      pinta(passos(1) + '<h1>Qual serviço?</h1><p class="sub">Pode escolher mais de um.</p>' + (info.servicos.length ? info.servicos.map(function (s) { var on = st.sel.indexOf(s.id) >= 0;
-        return '<button class="op' + (on ? ' on' : '') + '" data-a="serv" data-id="' + esc(s.id) + '" aria-pressed="' + on + '"><span class="tx"><b>' + esc(s.nome) + '</b><small>' + s.duracao + ' min' + (s.preco ? ' · ' + reais(s.preco) : '') + '</small></span><span class="ck">' + (on ? '✓' : '') + '</span></button>'; }).join('') : '<p class="vazio">Nenhum serviço disponível online.</p>') +
-        '<button class="btn pri" data-a="aProf"' + (st.sel.length ? '' : ' disabled') + '>Continuar' + (st.sel.length ? ' · ' + dur + ' min' + (val ? ' · ' + reais(val) : '') : '') + '</button><button class="btn" data-a="home">Voltar</button>');
+      var dur = duracao(), val = valor();
+      pinta(passos(1) + voltarBtn('sair_fluxo', 'Cancelar') + '<h1>Qual serviço?</h1><p class="sub">Pode escolher mais de um.</p>' + (info.servicos.length ? info.servicos.map(function (s) { var on = st.sel.indexOf(s.id) >= 0;
+        return '<button class="op' + (on ? ' on' : '') + '" data-a="serv" data-id="' + esc(s.id) + '" aria-pressed="' + on + '">' + iconeDe(s) + '<span class="tx"><b>' + esc(s.nome) + '</b><small>' + (s.descricao ? esc(s.descricao) + ' · ' : '') + s.duracao + ' min' + (s.preco ? ' · ' + reais(s.preco) : '') + '</small></span><span class="ck">' + (on ? '✓' : '') + '</span></button>'; }).join('') : '<p class="vazio">Nenhum serviço disponível online.</p>') +
+        '<button class="btn pri" data-a="aProf"' + (st.sel.length ? '' : ' disabled') + '>Continuar' + (st.sel.length ? ' · ' + dur + ' min' + (val ? ' · ' + reais(val) : '') : '') + '</button>');
     },
     prof: function () {
-      var ps = info.profissionais.filter(function (p) { return !p.servicos.length || st.sel.every(function (id) { return p.servicos.indexOf(id) >= 0; }); });
-      var av = function (p) { return p.foto ? '<img class="av" src="' + esc(p.foto) + '" alt="">' : '<span class="av">' + esc(p.nome.charAt(0)) + '</span>'; };
-      pinta(passos(2) + '<h1>Com quem?</h1><p class="sub">Escolha o profissional ou deixe que a gente escolhe.</p>' +
+      var fav = eu && eu.cliente.favorito, ps = profsDaUnidade().filter(function (p) { return !p.servicos.length || st.sel.every(function (id) { return p.servicos.indexOf(id) >= 0; }); })
+        .sort(function (a, b) { return (b.id === fav) - (a.id === fav); });
+      pinta(passos(2) + voltarBtn('aServ') + '<h1>Com quem?</h1><p class="sub">Escolha o profissional ou deixe que a gente escolhe.</p>' +
         '<button class="op" data-a="prof" data-id=""><span class="av">✦</span><span class="tx"><b>Sem preferência</b><small>Mostra todos os horários livres</small></span></button>' +
-        ps.map(function (p) { return '<button class="op" data-a="prof" data-id="' + esc(p.id) + '">' + av(p) + '<span class="tx"><b>' + esc(p.nome) + '</b></span></button>'; }).join('') +
-        (ps.length ? '' : '<p class="vazio">Nenhum profissional faz todos esses serviços juntos. Volte e escolha menos serviços.</p>') + '<button class="btn" data-a="aServ">Voltar</button>');
+        ps.map(function (p) { return '<button class="op" data-a="prof" data-id="' + esc(p.id) + '">' + avatar(p) + '<span class="tx"><b>' + esc(p.nome) + '</b>' + (p.id === fav ? '<small>♥ Seu favorito</small>' : '') + '</span></button>'; }).join('') +
+        (ps.length ? '' : '<p class="vazio">Nenhum profissional faz todos esses serviços juntos. Volte e escolha menos serviços.</p>'));
     },
     dia: function () {
       var lista = [], d0 = new Date(info.hoje + 'T12:00:00');
-      for (var i = 0; i <= info.dias_max && lista.length < 60; i++) { var d = new Date(d0); d.setDate(d.getDate() + i); if (info.fechados.indexOf(d.getDay()) < 0) lista.push(d.toISOString().slice(0, 10)); }
+      for (var i = 0; i <= info.dias_max && lista.length < 60; i++) { var d = new Date(d0); d.setDate(d.getDate() + i); if (info.fechados.indexOf(d.getDay()) < 0) lista.push(isoLocal(d)); }
       st.data = st.data && lista.indexOf(st.data) >= 0 ? st.data : lista[0];
-      var r = st.porDia && st.porDia[st.data], horas = horasDe(r);
-      var nomeP = st.prof ? (info.profissionais.filter(function (p) { return p.id === st.prof; })[0] || {}).nome : '';
-      pinta(passos(3) + '<h1>Qual dia e horário?</h1><p class="sub">' + (nomeP ? 'Com ' + esc(nomeP.split(' ')[0]) : 'Sem preferência de profissional') + ' · ' + duracao() + ' min</p>' +
+      var r = st.porDia[st.data], horas = horasDe(r), p = st.prof ? info.profissionais.filter(function (x) { return x.id === st.prof; })[0] : null;
+      pinta(passos(3) + voltarBtn(st.profFixo ? 'aServ' : 'aProf') + '<h1>Qual dia e horário?</h1><p class="sub">' + (p ? 'Com ' + esc(p.nome.split(' ')[0]) : 'Sem preferência de profissional') + ' · ' + duracao() + ' min</p>' +
         '<div class="dias" id="dias">' + lista.map(function (x) { var d = new Date(x + 'T12:00:00'); return '<button class="dia' + (x === st.data ? ' on' : '') + '" data-a="dia" data-d="' + x + '"><small>' + (x === info.hoje ? 'hoje' : DIAS[d.getDay()]) + '</small><b>' + String(d.getDate()).padStart(2, '0') + '</b><small>' + d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '') + '</small></button>'; }).join('') + '</div>' +
-        (!r ? '<div class="spin" role="status"></div>' : r.erro ? '<p class="vazio">' + esc(r.erro) + '</p>' : horas.length ? '<div class="horas">' + horas.map(function (h) { return '<button class="hora" data-a="hora" data-h="' + h + '">' + h + '</button>'; }).join('') + '</div>' : '<p class="vazio">Sem horários livres nesse dia. Escolha outro dia.</p>') +
-        '<p></p><button class="btn" data-a="aProf">Voltar</button>');
+        (!r ? '<div class="spin" role="status"></div>' : r.erro ? '<p class="vazio">' + esc(r.erro) + '</p>' : horas.length ? '<div class="horas">' + horas.map(function (h) { return '<button class="hora" data-a="hora" data-h="' + h + '">' + h + '</button>'; }).join('') + '</div>' : '<p class="vazio">Sem horários livres nesse dia. Escolha outro dia.</p>'));
       var sel = m.querySelector('.dia.on'); if (sel) sel.scrollIntoView({ inline: 'center', block: 'nearest' });
       if (!r) buscar(st.data);
     },
     confirmar: function () {
-      var ss = st.sel.map(servPor).filter(Boolean), val = ss.reduce(function (t, s) { return t + s.preco; }, 0), p = st.prof ? info.profissionais.filter(function (x) { return x.id === st.prof; })[0] : null;
-      pinta(passos(4) + '<h1>Confirme</h1><div class="card resumo"><div><span>Serviço</span><b>' + esc(ss.map(function (s) { return s.nome; }).join(' + ')) + '</b></div>' +
+      var ss = st.sel.map(servPor).filter(Boolean), val = valor(), p = st.prof ? info.profissionais.filter(function (x) { return x.id === st.prof; })[0] : null;
+      pinta(passos(4) + voltarBtn('aDia') + '<h1>Confirme</h1>' + testeAviso() + '<div class="card resumo">' + (st.unidade ? '<div><span>Unidade</span><b>' + esc(st.unidade) + '</b></div>' : '') + '<div><span>Serviço</span><b>' + esc(ss.map(function (s) { return s.nome; }).join(' + ')) + '</b></div>' +
         '<div><span>Profissional</span><b>' + esc(p ? p.nome : 'Sem preferência') + '</b></div><div><span>Quando</span><b>' + esc(dataTxt(st.data, true)) + ' às ' + esc(st.hora.replace(':', 'h')) + '</b></div>' +
         '<div><span>Duração</span><b>' + duracao() + ' min</b></div>' + (val ? '<div><span>Valor</span><b>' + reais(val) + '</b></div>' : '') + '</div>' +
-        '<p class="msg" role="alert"></p><button class="btn pri" data-a="agendar">Confirmar agendamento</button><button class="btn" data-a="aDia">Voltar</button>');
+        '<p class="msg" role="alert"></p><button class="btn pri" data-a="agendar">Confirmar agendamento</button>');
     },
     feito: function () {
       var r = st.x;
-      pinta('<div class="ok-ico" aria-hidden="true">✓</div><h1 class="centro">Horário marcado!</h1><p class="sub centro">' + esc(dataTxt(r.data, true)) + ' às ' + esc(r.hora.replace(':', 'h')) + ' com ' + esc(String(r.profissional).split(' ')[0]) + '.<br>A confirmação vai chegar no seu WhatsApp.</p><button class="btn pri" data-a="home">Ver meus horários</button>');
+      pinta('<div class="ok-ico" aria-hidden="true">✓</div><h1 class="centro">Horário marcado!</h1><p class="sub centro">' + esc(dataTxt(r.data, true)) + ' às ' + esc(r.hora.replace(':', 'h')) + ' com ' + esc(String(r.profissional).split(' ')[0]) + '.<br>A confirmação vai chegar no seu WhatsApp.</p><button class="btn pri" data-a="tab" data-t="agendamentos">Ver meus horários</button><button class="btn" data-a="tab" data-t="inicio">Início</button>');
+    },
+    avaliar: function () {
+      var a = eu.agendamentos.filter(function (x) { return x.id === st.x.id; })[0]; if (!a) return ir('agendamentos');
+      st.nota = st.nota || 0;
+      pinta(voltarBtn('tab', 'Agendamentos') + '<h1>Como foi?</h1><p class="sub">' + esc(a.servicos.join(' + ')) + (a.profissional ? ' com ' + esc(a.profissional.split(' ')[0]) : '') + ' · ' + new Date(a.inicio).toLocaleDateString('pt-BR') + '</p>' +
+        '<div class="notas" role="radiogroup" aria-label="Nota">' + [1, 2, 3, 4, 5].map(function (n) { return '<button class="nota' + (n <= st.nota ? ' on' : '') + '" role="radio" aria-checked="' + (n === st.nota) + '" aria-label="' + n + ' estrela' + (n > 1 ? 's' : '') + '" data-a="nota" data-n="' + n + '">★</button>'; }).join('') + '</div>' +
+        '<label class="f"><span>Comentário (opcional)</span><textarea class="in" id="cmt" maxlength="400">' + esc(st.cmt || '') + '</textarea></label>' +
+        '<label class="chk"><input type="checkbox" id="pub"' + (st.pub ? ' checked' : '') + '><span>Pode mostrar minha avaliação no app, com meu primeiro nome.</span></label>' +
+        '<p class="msg" role="alert"></p><button class="btn pri" data-a="enviarNota"' + (st.nota ? '' : ' disabled') + '>Enviar avaliação</button>');
     },
     perfil: function () {
       var c = eu.cliente;
-      pinta('<h1>Meu cadastro</h1><p class="sub">WhatsApp: <b>' + esc(foneFmt(c.fone)) + '</b></p><form id="fp" novalidate>' +
+      pinta(voltarBtn('tab', 'Menu') + '<h1>Meus dados</h1><p class="sub">WhatsApp: <b>' + esc(foneFmt(c.fone)) + '</b></p><form id="fp" novalidate>' +
         '<div class="row2"><label class="f"><span>Nome</span><input class="in" name="nome" maxlength="40" value="' + esc(c.nome) + '"></label><label class="f"><span>Sobrenome</span><input class="in" name="sobrenome" maxlength="60" value="' + esc(c.sobrenome) + '"></label></div>' +
         '<label class="f"><span>E-mail (opcional)</span><input class="in" name="email" type="email" inputmode="email" autocomplete="email" maxlength="120" value="' + esc(c.email || '') + '"></label>' +
         '<label class="f"><span>Data de nascimento (opcional)</span><input class="in" name="nascimento" type="date" max="' + esc(info.hoje) + '" value="' + esc(c.nascimento || '') + '"></label>' +
-        '<p class="msg" role="alert"></p><button class="btn pri" type="submit">Salvar</button><button class="btn" type="button" data-a="home">Voltar</button></form>');
+        '<p class="msg" role="alert"></p><button class="btn pri" type="submit">Salvar</button></form>');
       $('fp').addEventListener('submit', function (e) { e.preventDefault(); var f = e.target, d = { nome: f.nome.value.trim(), sobrenome: f.sobrenome.value.trim(), email: f.email.value.trim(), nascimento: f.nascimento.value };
         if (!d.nome || !d.sobrenome) return msg('Nome e sobrenome não podem ficar vazios.');
         f.querySelector('button').disabled = true; msg('Salvando…', true);
         chamar('perfil', d).then(function () { Object.assign(eu.cliente, d); msg('Cadastro salvo.', true); f.querySelector('button').disabled = false; }).catch(function (er) { f.querySelector('button').disabled = false; msg(er.message); }); });
     },
   };
-  function testeAviso() { return info && info.teste ? '<div class="aviso"><b>Modo de teste.</b> Os horários marcados aqui ainda não valem na agenda oficial da barbearia.</div>' : ''; }
+  // Abas da página da barbearia.
+  var ABAS = {
+    servicos: function () {
+      return '<input class="busca" id="bsv" type="search" placeholder="Pesquisar serviço…" aria-label="Pesquisar serviço">' + (info.servicos.length ? info.servicos.map(function (s) {
+        return '<div class="sv" data-n="' + esc(s.nome.toLowerCase()) + '">' + iconeDe(s) + '<div class="tx"><b>' + esc(s.nome) + '</b>' + (s.descricao ? '<span class="ds">' + esc(s.descricao) + '</span>' : '') + '<div class="pr">' + (s.preco ? '<span class="v">' + reais(s.preco) + '</span>' : '') + '<span class="d">◷ ' + s.duracao + ' min</span></div></div><button class="btn pri sm" data-a="agServ" data-id="' + esc(s.id) + '">Agendar</button></div>'; }).join('') : '<p class="vazio">Nenhum serviço disponível online.</p>');
+    },
+    profissionais: function () {
+      var fav = eu && eu.cliente.favorito, ps = profsDaUnidade();
+      return ps.length ? ps.map(function (p) { var on = fav === p.id; return '<div class="sv">' + avatar(p) + '<div class="tx"><b>' + esc(p.nome) + '</b>' + (on ? '<span class="ds">♥ Seu favorito</span>' : '') + '</div>' + (eu ? '<button class="coracao' + (on ? ' on' : '') + '" data-a="fav" data-id="' + esc(p.id) + '" aria-pressed="' + on + '" aria-label="Favorito">' + I.coracao + '</button>' : '') + '<button class="btn pri sm" data-a="agProf" data-id="' + esc(p.id) + '">Agendar</button></div>'; }).join('') : '<p class="vazio">Nenhum profissional disponível online.</p>';
+    },
+    detalhes: function (u) {
+      var end = u ? u.endereco : info.endereco, mp = mapaDe(u), z = zap('Olá! Vim pelo app de agendamento.'), fech = info.fechados.map(function (d) { return DIASL[d]; });
+      return '<div class="card det">' + (end ? '<div><span>Endereço</span><b>' + esc(end) + (mp ? '<br><a href="' + esc(mp) + '" target="_blank" rel="noopener">Abrir no mapa</a>' : '') + '</b></div>' : '') +
+        '<div><span>Horário</span><b>' + esc(info.abre) + ' às ' + esc(info.fecha) + (fech.length ? '<br><small>Fechado: ' + esc(fech.join(', ')) + '</small>' : '') + '</b></div>' +
+        (z ? '<div><span>WhatsApp</span><b><a href="' + esc(z) + '" target="_blank" rel="noopener">Chamar no WhatsApp</a></b></div>' : '') +
+        (info.instagram ? '<div><span>Instagram</span><b><a href="https://instagram.com/' + esc(info.instagram) + '" target="_blank" rel="noopener">@' + esc(info.instagram) + '</a></b></div>' : '') + '</div>';
+    },
+    planos: function () {
+      return '<p class="sub">Assine e garanta o seu horário todo mês.</p>' + info.planos.map(function (p) { var z = zap('Olá! Quero assinar o plano ' + p.nome + ' (' + reais(p.valor) + ' por mês).');
+        return '<div class="card plano"><b>' + esc(p.nome) + '</b><div class="v">' + reais(p.valor) + ' <small>/ mês</small></div>' + (p.desc ? '<p>' + esc(p.desc) + '</p>' : '') +
+          (z ? '<a class="btn pri" href="' + esc(z) + '" target="_blank" rel="noopener">Quero assinar</a>' : '<small class="sub">Para assinar, fale com a recepção.</small>') + '</div>'; }).join('');
+    },
+    avaliacoes: function () {
+      var a = info.avaliacoes;
+      return '<div class="card media"><b>' + String(a.media).replace('.', ',') + '</b><div>' + estrelas(a.media) + '<br><small class="sub">' + a.total + ' ' + (a.total === 1 ? 'avaliação' : 'avaliações') + '</small></div></div>' +
+        (a.lista.length ? a.lista.map(function (x) { return '<div class="dep">' + estrelas(x.nota) + ' <small>' + esc(x.nome) + (x.profissional ? ' · com ' + esc(x.profissional) : '') + '</small><p>' + esc(x.comentario) + '</p></div>'; }).join('') : '<p class="vazio">Ainda sem comentários publicados.</p>');
+    },
+  };
+  function rodape() { return '<p class="rod">Agendamento online · ' + (info.marca === 'salao' ? 'Gestão Salão IA' : 'Gestão Barber IA') + '</p>'; }
+  function avatar(p) { return p.foto ? '<img class="av" src="' + esc(p.foto) + '" alt="">' : '<span class="av">' + esc(p.nome.charAt(0)) + '</span>'; }
   function passos(n) { var h = '<div class="passos" aria-label="Passo ' + n + ' de 4">'; for (var i = 1; i <= 4; i++) h += '<i class="' + (i <= n ? 'on' : '') + '"></i>'; return h + '</div>'; }
   function servPor(id) { return info.servicos.filter(function (s) { return s.id === id; })[0]; }
   function duracao() { return st.sel.reduce(function (t, id) { var s = servPor(id); return t + (s ? s.duracao : 0); }, 0); }
+  function valor() { return st.sel.reduce(function (t, id) { var s = servPor(id); return t + (s ? s.preco : 0); }, 0); }
   function horasDe(r) { if (!r || r.erro) return []; var set = {}; r.profissionais.forEach(function (p) { p.horarios.forEach(function (h) { set[h] = 1; }); }); return Object.keys(set).sort(); }
   function buscar(dia) {
-    var chave = st.chave = dia + '|' + (st.prof || '') + '|' + st.sel.join(',');
-    chamar('horarios', { data: dia, servicos: st.sel, profissional: st.prof || null }).then(function (r) { if (st.chave !== chave) return; st.porDia[dia] = r; if (tela === 'dia' && st.data === dia) TELAS.dia(); })
+    var chave = st.chave = dia + '|' + (st.prof || '') + '|' + st.sel.join(',') + '|' + (st.unidade || '');
+    chamar('horarios', { data: dia, servicos: st.sel, profissional: st.prof || null, unidade: st.unidade || null }).then(function (r) { if (st.chave !== chave) return; st.porDia[dia] = r; if (tela === 'dia' && st.data === dia) TELAS.dia(); })
       .catch(function (e) { if (st.chave !== chave) return; st.porDia[dia] = { erro: e.message }; if (tela === 'dia' && st.data === dia) TELAS.dia(); });
   }
-  function novoBusca() { st.porDia = {}; st.chave = ''; }
+  // Começa o agendamento (do botão, de um serviço, de um profissional ou repetindo um horário). Sem login, entra antes.
+  function comecar(x) {
+    x = x || {};
+    if (!token || !eu) { st.depois = x; return ir('entrar'); }
+    st.sel = (x.sel || []).filter(servPor); st.prof = x.prof && info.profissionais.some(function (p) { return p.id === x.prof; }) ? x.prof : null; st.profFixo = !!st.prof; st.data = null; st.porDia = {};
+    if (st.prof && st.sel.length) return ir('dia');
+    ir('servicos');
+  }
+  function carregarEu() { return chamar('eu').then(function (r) { eu = r; return r; }); }
 
   document.addEventListener('click', function (e) {
     var b = e.target.closest('[data-a]'); if (!b) return; var a = b.dataset.a;
-    if (a === 'home') { st.conf = null; return inicio(); }
-    if (a === 'perfil') return ir('perfil');
-    if (a === 'sair') { sair(); st = {}; return ir('entrar'); }
-    if (a === 'trocar') return ir('entrar');
+    if (a === 'tab') { st.conf = null; st.aba = b.dataset.t || 'inicio'; if (st.aba === 'inicio') st.unidade = null; return ir(st.aba); }
+    if (a === 'loja') { st.unidade = b.dataset.u || null; st.lojaAba = 'servicos'; st.busca = ''; return ir('loja'); }
+    if (a === 'lojaAba') { st.lojaAba = b.dataset.t; return ir('loja'); }
+    if (['perfil', 'favoritos', 'planos', 'avals', 'faq', 'termos', 'entrar'].indexOf(a) >= 0) { if ((a === 'perfil' || a === 'favoritos') && !eu) return ir('entrar'); return ir(a); }
+    if (a === 'sair') { chamar('sair').catch(function () {}); guardar(''); eu = null; st = { aba: 'inicio' }; return ir('inicio'); }
+    if (a === 'sair_fluxo') return ir(st.aba || 'inicio');
     if (a === 'reenviar') { if (Date.now() - (st.enviadoEm || 0) < 60000) return msg('Aguarde 1 minuto para pedir outro código.');
       msg('Enviando…', true); return chamar('codigo', { nome: st.nome, sobrenome: st.sobrenome, fone: st.fone }).then(function () { st.enviadoEm = Date.now(); msg('Código reenviado.', true); }).catch(function (er) { msg(er.message); }); }
-    if (a === 'novo') { st.sel = []; st.prof = null; st.data = null; return ir('servicos'); }
+    if (a === 'novo') { if (info.unidades.length && !st.unidade) { st.lojaAba = 'servicos'; return ir('inicio_un'); } return comecar({}); }
+    if (a === 'agServ') return comecar({ sel: [b.dataset.id] });
+    if (a === 'agProf') return comecar({ prof: b.dataset.id });
+    if (a === 'repetir') { var r = eu && eu.agendamentos.filter(function (x) { return x.id === b.dataset.id; })[0]; if (!r) return; return comecar({ sel: r.servico_ids, prof: r.profissional_id }); }
     if (a === 'serv') { var i = st.sel.indexOf(b.dataset.id); if (i >= 0) st.sel.splice(i, 1); else st.sel.push(b.dataset.id); return TELAS.servicos(); }
     if (a === 'aServ') return ir('servicos');
-    if (a === 'aProf') return ir('prof');
-    if (a === 'prof') { st.prof = b.dataset.id || null; novoBusca(); return ir('dia'); }
+    if (a === 'aProf') { if (st.profFixo) { st.porDia = {}; return ir('dia'); } return ir('prof'); }
+    if (a === 'prof') { st.prof = b.dataset.id || null; st.porDia = {}; return ir('dia'); }
     if (a === 'aDia') return ir('dia');
     if (a === 'dia') { st.data = b.dataset.d; return TELAS.dia(); }
     if (a === 'hora') { st.hora = b.dataset.h; return ir('confirmar'); }
     if (a === 'agendar') { b.disabled = true; msg('Marcando…', true);
-      return chamar('agendar', { data: st.data, hora: st.hora, servicos: st.sel, profissional: st.prof || null }).then(function (r) { eu = null; ir('feito', r); })
-        .catch(function (er) { b.disabled = false; msg(er.message); if (er.status === 409) { delete st.porDia[st.data]; } }); }
-    if (a === 'cancelar') { if (st.conf !== b.dataset.id) { st.conf = b.dataset.id; return TELAS.home(); }
-      st.conf = null; carregando('Cancelando…'); return chamar('cancelar', { id: b.dataset.id }).then(function () { return inicio(); }).catch(function (er) { ir('erro', { erro: er.message, voltar: 'home' }); }); }
+      return chamar('agendar', { data: st.data, hora: st.hora, servicos: st.sel, profissional: st.prof || null, unidade: st.unidade || null }).then(function (r) { carregarEu().catch(function () {}); ir('feito', r); })
+        .catch(function (er) { b.disabled = false; msg(er.message); if (er.status === 409) delete st.porDia[st.data]; }); }
+    if (a === 'cancelar') { if (st.conf !== b.dataset.id) { st.conf = b.dataset.id; return ir(tela); }
+      st.conf = null; carregando('Cancelando…'); return chamar('cancelar', { id: b.dataset.id }).then(carregarEu).then(function () { ir(st.aba); }).catch(function (er) { ir('erro', { erro: er.message, voltar: 'tab' }); }); }
+    if (a === 'fav') { if (!eu) return ir('entrar'); var novo = eu.cliente.favorito === b.dataset.id ? null : b.dataset.id, ant = eu.cliente.favorito; eu.cliente.favorito = novo; TELAS[tela](); chamar('favorito', { profissional: novo }).catch(function () { eu.cliente.favorito = ant; TELAS[tela](); }); return; }
+    if (a === 'avaliar') { st.nota = 0; st.cmt = ''; st.pub = true; return ir('avaliar', { id: b.dataset.id }); }
+    if (a === 'nota') { st.cmt = ($('cmt') || {}).value || ''; st.pub = !!($('pub') || {}).checked; st.nota = Number(b.dataset.n); return TELAS.avaliar(); }
+    if (a === 'enviarNota') { b.disabled = true; msg('Enviando…', true); var id = st.x.id;
+      return chamar('avaliar', { id: id, nota: st.nota, comentario: $('cmt').value.trim(), publico: $('pub').checked }).then(function () { eu.agendamentos.forEach(function (x) { if (x.id === id) { x.pode_avaliar = false; x.avaliado = true; } });
+        pinta('<div class="ok-ico" aria-hidden="true">★</div><h1 class="centro">Obrigado!</h1><p class="sub centro">Sua avaliação ajuda a barbearia a melhorar sempre.</p><button class="btn pri" data-a="tab" data-t="agendamentos">Voltar</button>'); })
+        .catch(function (er) { b.disabled = false; msg(er.message); }); }
   });
+  // Com várias unidades, "Agendar" pergunta antes em qual unidade.
+  TELAS.inicio_un = function () { pinta(voltarBtn('tab', 'Início') + '<h1>Em qual unidade?</h1>' + info.unidades.map(function (u) { return '<button class="op" data-a="un_ag" data-u="' + esc(u.nome) + '"><span class="tx"><b>' + esc(u.nome) + '</b>' + (u.endereco ? '<small>' + esc(u.endereco) + '</small>' : '') + '</span></button>'; }).join('')); };
+  document.addEventListener('click', function (e) { var b = e.target.closest('[data-a="un_ag"]'); if (b) { st.unidade = b.dataset.u; comecar({}); } });
 
   // Cores da página a partir do logo (mesma leitura de cores do totem): destaque na cor principal e fundo na cor da marca.
   function mix(a, b, t) { var p = function (h) { return [1, 3, 5].map(function (i) { return parseInt(h.slice(i, i + 2), 16); }); }, A = p(a), B = p(b); return '#' + A.map(function (v, i) { return Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0'); }).join(''); }
@@ -272,17 +483,14 @@ input.cod { text-align:center; letter-spacing:.5em; font-family:"Archivo",sans-s
     im.src = src;
   }
 
-  function inicio() {
-    if (!token) return ir('entrar');
-    carregando();
-    return chamar('eu').then(function (r) { eu = r; ir('home'); }).catch(function (e) { if (e.status === 401 || !token) return ir('entrar'); ir('erro', { erro: e.message, voltar: 'home' }); });
-  }
   if (!/^[0-9a-f-]{36}$/i.test(emp)) { tela = 'erro'; st.x = { erro: 'Link de agendamento inválido. Peça o link certo para a barbearia.' }; TELAS.erro(); }
   else chamar('info').then(function (r) {
-    info = r; $('nm').textContent = r.nome || ''; if (r.marca === 'salao') $('rod').textContent = 'Agendamento online · Gestão Salão IA'; document.title = 'Agendar · ' + (r.nome || 'horário');
-    if (r.logo && /^https:\/\//.test(r.logo)) { $('logo').src = r.logo; $('logo').hidden = false; aplicarCores(r.logo); }
-    if (r.cliente && token) { eu = { cliente: r.cliente, agendamentos: [] }; }
-    inicio();
+    info = r; ['banners', 'faq', 'planos', 'unidades', 'servicos', 'profissionais', 'fechados'].forEach(function (k) { if (!Array.isArray(info[k])) info[k] = []; });
+    document.title = (r.nome || 'Agendar horário');
+    if (r.logo) aplicarCores(r.logo);
+    if (!token) return ir('inicio');
+    carregando();
+    return carregarEu().then(function () { ir('inicio'); }).catch(function (e) { if (e.status === 401) return ir('inicio'); ir('erro', { erro: e.message, voltar: 'tab' }); });
   }).catch(function (e) { ir('erro', { erro: e.message }); });
 })();
 </script>

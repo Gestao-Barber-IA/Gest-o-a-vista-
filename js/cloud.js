@@ -255,6 +255,8 @@
     agSave: async row => RES(row.id ? await c.from('ag_agendamentos').update({ ...row, atualizado_em: new Date().toISOString() }).eq('id', row.id).eq('company_id', Cloud.companyId) : await c.from('ag_agendamentos').insert({ ...row, company_id: Cloud.companyId, origem: 'equipe' })),
     bloqSave: async row => RES(await c.from('ag_bloqueios').insert({ ...row, company_id: Cloud.companyId })),
     bloqueios: async (ini, fim) => RES(await c.from('ag_bloqueios').select('*').eq('company_id', Cloud.companyId).lt('inicio', fim).gt('fim', ini).order('inicio').limit(300)) || [],
+    avaliacoes: async () => RES(await c.from('ag_avaliacoes').select('*').eq('company_id', Cloud.companyId).order('criado_em', { ascending: false }).limit(200)) || [],
+    avOcultar: async (id, oculto) => RES(await c.from('ag_avaliacoes').update({ oculto }).eq('id', id).eq('company_id', Cloud.companyId)),
     externa: async () => { const { data, error } = await c.rpc('ag_externa'); if (error) throw error; return !!data; },
     // Clientes: busca por nome (todas as palavras) ou pelos números do telefone.
     clientesBuscar: async q => {

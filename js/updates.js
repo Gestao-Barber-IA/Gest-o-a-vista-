@@ -2,6 +2,13 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-26-webapp-app', date: '2026-11-26', title: 'Web app do cliente com cara de aplicativo', items: [
+    ['novo', 'Menu embaixo (Início, Agendamentos e Menu). No Início: banners de promoção, o próximo horário, "Agendar horário" e "Repetir último".'],
+    ['novo', 'Página da barbearia com foto de capa, endereço e mapa, e as abas Serviços (busca e Agendar em cada serviço), Profissionais (Agendar com ele e favorito), Detalhes (horário, WhatsApp e Instagram), Planos ("Quero assinar" abre o WhatsApp com a mensagem pronta) e Avaliações.'],
+    ['novo', 'Várias unidades no mesmo link: o cliente escolhe a loja e vê só a equipe dela.'],
+    ['novo', 'Avaliações: depois de um atendimento finalizado, o cliente dá de 1 a 5 estrelas. O comentário só aparece no app se ele autorizar, e você pode esconder qualquer um.'],
+    ['novo', 'Menu do cliente: Meus dados, Favorito, Histórico, Planos, Avaliações, Perguntas frequentes, Falar no WhatsApp e Termos de uso. Agenda › Configurar ganhou a Vitrine do web app e o ícone e a descrição de cada serviço.'],
+  ] },
   { id: '2026-11-26-agenda-premium', date: '2026-11-26', title: 'Agenda: ficha do cliente, metas, filtro e busca', items: [
     ['novo', 'Novo agendamento com cliente cadastrado: busque por nome ou telefone, ou cadastre na hora (o mesmo cadastro do web app). A ficha mostra os últimos 3 atendimentos, o próximo horário, há quantos dias foi o último, de quantos em quantos dias ele volta (a partir de 3 visitas) e as faltas.'],
     ['novo', 'Serviços com "+ adicionar serviço": a duração e o valor somam sozinhos.'],
