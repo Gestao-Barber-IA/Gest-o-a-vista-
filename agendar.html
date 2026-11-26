@@ -175,13 +175,17 @@ body.sem-nav nav.bn { display:none; }
   var $ = function (id) { return document.getElementById(id); };
   var esc = function (t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
   var reais = function (v) { return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
-  var emp = ''; try { emp = new URLSearchParams(location.hash.slice(1)).get('e') || ''; } catch (e) { emp = ''; }
-  if (!emp) { try { emp = localStorage.getItem('gbAgEmp') || ''; } catch (e) { emp = ''; } } else { try { localStorage.setItem('gbAgEmp', emp); } catch (e) { /* segue */ } }
-  var KEY = 'gbAg:' + emp, token = ''; try { token = localStorage.getItem(KEY) || ''; } catch (e) { token = ''; }
+  // Link personalizado (/agendar/nunosantos) ou o link com o código da empresa (agendar.html#e=…).
+  var emp = '', slug = ((location.pathname.match(/\/agendar\/([a-z0-9-]{3,40})\/?$/i) || [])[1] || '').toLowerCase();
+  try { emp = new URLSearchParams(location.hash.slice(1)).get('e') || ''; } catch (e) { emp = ''; }
+  if (!emp && !slug) { try { emp = localStorage.getItem('gbAgEmp') || ''; } catch (e) { emp = ''; } }
+  var KEY = '', token = '';
+  function usarEmpresa(id) { emp = id; KEY = 'gbAg:' + emp; try { localStorage.setItem('gbAgEmp', emp); token = localStorage.getItem(KEY) || ''; } catch (e) { token = ''; } }
+  if (emp) usarEmpresa(emp);
   var info = null, eu = null, st = { aba: 'inicio' }, tela = '';
 
   function chamar(acao, dados) {
-    return fetch(URL_FN, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: ANON }, body: JSON.stringify({ empresa: emp, acao: acao, dados: dados || {}, token: token || undefined }) })
+    return fetch(URL_FN, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: ANON }, body: JSON.stringify({ empresa: emp || undefined, slug: emp ? undefined : slug, acao: acao, dados: dados || {}, token: token || undefined }) })
       .then(function (r) { return r.json().catch(function () { return { erro: 'Sem resposta. Tente de novo.' }; }).then(function (j) {
         if (r.status === 401) { guardar(''); eu = null; }
         if (!r.ok || j.erro) { var e = new Error(j.erro || 'Não deu certo. Tente de novo.'); e.status = r.status; throw e; }
@@ -483,8 +487,9 @@ body.sem-nav nav.bn { display:none; }
     im.src = src;
   }
 
-  if (!/^[0-9a-f-]{36}$/i.test(emp)) { tela = 'erro'; st.x = { erro: 'Link de agendamento inválido. Peça o link certo para a barbearia.' }; TELAS.erro(); }
+  if (!/^[0-9a-f-]{36}$/i.test(emp) && !slug) { tela = 'erro'; st.x = { erro: 'Link de agendamento inválido. Peça o link certo para a barbearia.' }; TELAS.erro(); }
   else chamar('info').then(function (r) {
+    if (r.empresa && r.empresa !== emp) usarEmpresa(r.empresa);
     info = r; ['banners', 'faq', 'planos', 'unidades', 'servicos', 'profissionais', 'fechados'].forEach(function (k) { if (!Array.isArray(info[k])) info[k] = []; });
     document.title = (r.nome || 'Agendar horário');
     if (r.logo) aplicarCores(r.logo);

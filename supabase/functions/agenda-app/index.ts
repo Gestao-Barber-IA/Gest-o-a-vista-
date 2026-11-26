@@ -50,9 +50,15 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return erro("Use POST.", 405);
   let b: any; try { b = await req.json(); } catch { return erro("Pedido inválido."); }
-  const empresa = String(b?.empresa || ""), acao = String(b?.acao || ""), d = (b && typeof b.dados === "object" && b.dados) || {};
-  if (!/^[0-9a-f-]{36}$/i.test(empresa)) return erro("Link inválido.", 404);
+  let empresa = String(b?.empresa || "");
+  const acao = String(b?.acao || ""), d = (b && typeof b.dados === "object" && b.dados) || {};
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
+  // Link personalizado (/agendar/<nome>): descobre a empresa pelo nome escolhido por ela.
+  if (!empresa && /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/.test(String(b?.slug || "").toLowerCase())) {
+    const { data: sl } = await db.from("ag_config").select("company_id").eq("slug", String(b.slug).toLowerCase()).maybeSingle();
+    if (sl) empresa = sl.company_id;
+  }
+  if (!/^[0-9a-f-]{36}$/i.test(empresa)) return erro("Link inválido. Peça o link certo para a barbearia.", 404);
   const [{ data: co }, { data: cfg0 }] = await Promise.all([
     db.from("companies").select("name, logo, settings, sub_status, paid_until").eq("id", empresa).maybeSingle(),
     db.from("ag_config").select("*").eq("company_id", empresa).maybeSingle(),
@@ -89,7 +95,7 @@ Deno.serve(async (req) => {
     const uInfo = cfg.unidades || {}, pInfo = cfg.planos_info || {};
     const nomeP = new Map(profs.map((p: any) => [p.barber_id, p.nome]));
     const notas = (avs || []), media = notas.length ? Math.round(notas.reduce((t: number, a: any) => t + a.nota, 0) / notas.length * 10) / 10 : 0;
-    return json({ ok: true, teste: !!(ext && ext.est_code && ext.active !== false), nome: co.name, logo: url(co.logo), marca: st.brand || "barber", aviso: cfg.aviso || "", dias_max: cfg.dias_max, cancelar_horas: cfg.cancelar_horas, hoje: hojeSP(), fechados: fech,
+    return json({ ok: true, empresa, slug: cfg.slug || "", teste: !!(ext && ext.est_code && ext.active !== false), nome: co.name, logo: url(co.logo), marca: st.brand || "barber", aviso: cfg.aviso || "", dias_max: cfg.dias_max, cancelar_horas: cfg.cancelar_horas, hoje: hojeSP(), fechados: fech,
       abre: padrao.open, fecha: padrao.close, capa: url(cfg.capa), banners: (Array.isArray(cfg.banners) ? cfg.banners : []).map((x: any) => url(x && x.url)).filter(Boolean).slice(0, 8),
       endereco: limpo(cfg.endereco, 200), mapa: url(cfg.mapa), whatsapp: so(cfg.whatsapp).slice(0, 13), instagram: limpo(cfg.instagram, 60).replace(/^@/, "").replace(/[^\w.]/g, ""),
       faq: (Array.isArray(cfg.faq) ? cfg.faq : []).filter((x: any) => x && x.p && x.r).slice(0, 30).map((x: any) => ({ p: limpo(x.p, 200), r: String(x.r).replace(/[<>]/g, "").slice(0, 1500) })),

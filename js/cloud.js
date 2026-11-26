@@ -257,6 +257,7 @@
     bloqueios: async (ini, fim) => RES(await c.from('ag_bloqueios').select('*').eq('company_id', Cloud.companyId).lt('inicio', fim).gt('fim', ini).order('inicio').limit(300)) || [],
     avaliacoes: async () => RES(await c.from('ag_avaliacoes').select('*').eq('company_id', Cloud.companyId).order('criado_em', { ascending: false }).limit(200)) || [],
     avOcultar: async (id, oculto) => RES(await c.from('ag_avaliacoes').update({ oculto }).eq('id', id).eq('company_id', Cloud.companyId)),
+    slugLivre: async slug => { const { data, error } = await c.rpc('ag_slug_livre', { p_slug: slug }); if (error) throw error; return !!data; },
     externa: async () => { const { data, error } = await c.rpc('ag_externa'); if (error) throw error; return !!data; },
     // Clientes: busca por nome (todas as palavras) ou pelos números do telefone.
     clientesBuscar: async q => {

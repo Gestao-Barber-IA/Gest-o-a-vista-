@@ -7239,6 +7239,7 @@ Content-Type: application/json</pre>
     const dentro = (x, ini, fim) => new Date(x.inicio) < new Date(fim) && new Date(x.fim) > new Date(ini);
     const ok = v => { save(); return Promise.resolve(v); };
     return {
+      slugLivre: () => Promise.resolve(true),
       externa: () => Promise.resolve(!!(state.integ && state.integ.est_code && state.integ.active !== false)),
       cfg: () => Promise.resolve(L().cfg), cfgSave: row => { Object.assign(L().cfg, row); return ok(L().cfg); },
       servicos: () => Promise.resolve([...L().servicos].sort((a, b) => a.ordem - b.ordem)),
@@ -7451,7 +7452,7 @@ Content-Type: application/json</pre>
     AG().bloqueios(agAt(h, 0), agAt(iso(f), 0)).then(l => { a.bloqLista = l || []; render(); }).catch(() => { a.bloqLista = []; render(); });
   }
   function agConfig() {
-    const a = ui.ag, c = a.cfg || {}, link = `${location.origin}/agendar.html#e=${encodeURIComponent(Cloud.enabled ? Cloud.companyId || '' : 'demo')}`;
+    const a = ui.ag, c = a.cfg || {}, link = c.slug ? `${location.origin}/agendar/${c.slug}` : `${location.origin}/agendar.html#e=${encodeURIComponent(Cloud.enabled ? Cloud.companyId || '' : 'demo')}`;
     const servs = a.servicos, oc = GB.ocupCfgOf(state);
     const web = `<section class="section card"><h2 class="section-title">${icon('phone')} Web app do cliente</h2>
       <p class="section-note">O cliente abre o link, faz um cadastro rápido (nome, sobrenome e WhatsApp, com um código de 4 números enviado pelo WhatsApp da barbearia) e marca sozinho: serviço, profissional (ou sem preferência), dia e horário. Depois ele completa o cadastro e vê ou cancela os horários dele.</p>
@@ -7459,6 +7460,7 @@ Content-Type: application/json</pre>
       ${agExterna() ? `<p class="section-note">${icon('alert')} Com a AppBarber conectada, o web app abre em <b>modo de teste</b> (o cliente vê o aviso). Use para testar antes de divulgar o link.</p>` : ''}
       ${Cloud.enabled ? `<div class="ag-link"><input class="input" id="ag-url" readonly value="${esc(link)}"><button class="btn btn-sm" type="button" data-action="agCopiar">${icon('copy')} Copiar link</button><a class="btn btn-sm" href="${esc(link)}" target="_blank" rel="noopener">${icon('share')} Abrir</a></div>` : '<p class="section-note">O link do web app aparece quando a conta estiver na nuvem.</p>'}
       <form class="form" data-form="agCfgSalvar" novalidate>
+        <label class="field"><span>Seu link (personalize)</span><div class="ag-slug"><small>${esc(location.host)}/agendar/</small><input class="input" name="slug" maxlength="40" value="${esc(c.slug || '')}" placeholder="${esc(agSlugDe(state.company.name) || 'suaempresa')}" autocomplete="off" autocapitalize="none" spellcheck="false"></div><small class="muted">Só letras minúsculas, números e hífen (3 a 40). Esse é o link que você manda para os clientes. Se mudar, o link antigo para de funcionar.</small></label>
         <label class="check"><input type="checkbox" name="ativo" ${c.ativo ? 'checked' : ''}><span><b>Agendamento online ligado</b><small>Desligado, o link mostra que o agendamento online está fechado.</small></span></label>
         <div class="grid-2"><label class="field"><span>Horários de quantos em quantos minutos</span><input class="input num" type="number" name="passo" min="5" max="60" step="5" value="${c.passo || 20}"></label>
           <label class="field"><span>Antecedência mínima (min)</span><input class="input num" type="number" name="antecedencia" min="0" max="1440" step="5" value="${c.antecedencia ?? 60}"></label></div>
@@ -7504,6 +7506,7 @@ Content-Type: application/json</pre>
     return web + agVitrine() + sv + pr + agAvalSec();
   }
   // ---------- Vitrine do web app (capa, banners, contatos, perguntas, termos, planos, unidades) e avaliações ----------
+  const agSlugDe = t => agSemAc(t).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
   const AG_ICONES = [['', 'Automático (pelo nome)'], ['tesoura', 'Tesoura'], ['maquina', 'Máquina'], ['barba', 'Barba'], ['navalha', 'Navalha'], ['kids', 'Infantil'], ['sobrancelha', 'Sobrancelha'], ['pente', 'Pente'], ['quimica', 'Química / pigmentação'], ['combo', 'Combo'], ['coroa', 'Especial']];
   const agFaqTxt = l => (l || []).map(x => `${x.p}\n${x.r}`).join('\n\n');
   const agFaqDe = t => String(t || '').split(/\n\s*\n/).map(b => { const [p, ...r] = b.trim().split('\n'); return { p: (p || '').trim().slice(0, 200), r: r.join('\n').trim().slice(0, 1500) }; }).filter(x => x.p && x.r).slice(0, 30);
@@ -10081,12 +10084,15 @@ Content-Type: application/json</pre>
       AG().bloqSave({ barber_id: E.barber.value || null, inicio: agAt(dia, de), fim: agAt(dia, ate), motivo: E.motivo.value.trim().slice(0, 80) })
         .then(() => { toast('Horário bloqueado.'); a.bloq = null; a.bloqLista = null; a.dia = dia; a.diaCarregado = null; agCarregar('dia'); render(); }).catch(err => setMsg(f, Cloud.message ? Cloud.message(err) : String(err)));
     },
-    agCfgSalvar(f) {
+    async agCfgSalvar(f) {
       const E = f.elements, n = (k, lo, hi) => Math.max(lo, Math.min(hi, Math.round(Number(E[k].value) || 0)));
-      const row = { ativo: !!E.ativo.checked, passo: Math.max(5, n('passo', 5, 60)), antecedencia: n('antecedencia', 0, 1440), dias_max: Math.max(1, n('dias_max', 1, 120)), cancelar_horas: n('cancelar_horas', 0, 72), buraco_min: n('buraco_min', 0, 120), aviso: E.aviso.value.trim().slice(0, 200) };
+      const slug = String(E.slug.value || '').trim().toLowerCase();
+      if (slug && !/^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/.test(slug)) return setMsg(f, 'O link aceita só letras minúsculas, números e hífen, de 3 a 40 caracteres (sem acento e sem espaço), e não pode começar nem terminar com hífen.');
+      if (slug && slug !== (ui.ag.cfg || {}).slug) { setMsg(f, 'Conferindo o link…', true); try { if (!(await AG().slugLivre(slug))) return setMsg(f, `O link "${slug}" já é usado por outra empresa. Escolha outro.`); } catch (e) { return setMsg(f, Cloud.message ? Cloud.message(e) : String(e)); } }
+      const row = { ativo: !!E.ativo.checked, passo: Math.max(5, n('passo', 5, 60)), antecedencia: n('antecedencia', 0, 1440), dias_max: Math.max(1, n('dias_max', 1, 120)), cancelar_horas: n('cancelar_horas', 0, 72), buraco_min: n('buraco_min', 0, 120), aviso: E.aviso.value.trim().slice(0, 200), slug };
       if (row.ativo && !ui.ag.servicos.some(s => s.ativo !== false && s.online !== false)) return setMsg(f, 'Cadastre pelo menos um serviço "No app" antes de ligar.');
       setMsg(f, 'Salvando…', true);
-      AG().cfgSave(row).then(r => { ui.ag.cfg = r || row; toast(row.ativo ? 'Agendamento online ligado.' : 'Configuração salva.'); render(); }).catch(err => setMsg(f, Cloud.message ? Cloud.message(err) : String(err)));
+      AG().cfgSave(row).then(r => { ui.ag.cfg = { ...(ui.ag.cfg || {}), ...(r || row) }; toast(row.ativo ? 'Agendamento online ligado.' : 'Configuração salva.'); render(); }).catch(err => setMsg(f, /ag_config_slug|duplicate|unique/i.test(String(err && err.message)) ? `O link "${slug}" já é usado por outra empresa. Escolha outro.` : (Cloud.message ? Cloud.message(err) : String(err))));
     },
     agVitSalvar(f) {
       const E = f.elements, c = ui.ag.cfg || {}, units = (state.units || []).filter(Boolean), planos = planCat();
