@@ -2,6 +2,12 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-27-independente', date: '2026-11-27', title: 'Agenda própria completa: atendente IA, automações, comanda e caixa', items: [
+    ['novo', 'Sem AppBarber conectada, a agenda do sistema passa a ser a agenda oficial: a atendente IA marca, remarca, cancela e confirma nela, e os lembretes, a confirmação na véspera, Preencher vagas, Agenda cheia, Agenda sem buracos, Retorno, Reconquista, Aniversário e o totem leem a agenda própria.'],
+    ['novo', 'Comanda: ao marcar Finalizado, a recepção fecha a comanda (serviços, produtos do balcão, desconto na hora e forma de pagamento: Pix, dinheiro com troco, débito ou crédito).'],
+    ['novo', 'Caixa (Agenda › Caixa): total do dia por forma de pagamento e por profissional, produtos vendidos, descontos e a lista de comandas, com botão de imprimir.'],
+    ['novo', 'Cada comanda fechada entra sozinha em Lançamentos (faturamento, serviços, clientes, produtos e horas de cada profissional) e no ranking.'],
+  ] },
   { id: '2026-11-27-funil', date: '2026-11-27', title: 'Funil de venda no agendamento online', items: [
     ['novo', 'Web app: barra de etapas (Serviço, Profissional, Data e hora, Confirmar), calendário do mês com os dias livres em verde e os cheios em vermelho, e os horários separados em Manhã, Tarde e Noite.'],
     ['novo', '"Aproveite também" na hora de confirmar: serviços extras e produtos recomendados para o serviço. Extras marcados como "Sem tempo extra" (ex.: sobrancelha) entram no mesmo horário; os que ocupam tempo só aparecem quando cabem na agenda. Produtos ficam reservados para retirar no atendimento.'],

@@ -200,14 +200,20 @@ Deno.serve(async (req) => {
     const { data: ints, error } = await db.from("integrations")
       .select("company_id, est_code, api_key, branch_code, oa_on, oa_daily, oa_text, cl_lead_pm, cl_pm_from, in_on, in_daily, in_min, in_beneficio, in_premio, in_text, ig_on, ig_token, rm_pedido, fc_agenda, srv_update_req, srv_update_done, bo_on, bo_hour, bo_phone, bo_sent_on, bo_force, ia_report_phone, ac_status, cf_status, ac_on, ac_limit, ac_daily, ac_days, ac_text, pl_on, pl_chat, pl_daily, pl_days, pl_plans, pl_text, cf_on, cf_hour, cf_second, cf_before, cf_text, cf_text2, fv_on, fv_per, fv_daily, fv_lead, fv_days, fv_text, wa_on, wa_hour, wa_min, wa_text, cl_on, cl_lead, cl_text, cl_reply, cl_numero, fb_on, fb_text, fb_reply, fb_pro_text, wb_on, wb_daily, wb_min_days, wb_max_days, wb_text, wb_gift, wb_gift_done, cl_status, cl_status_at, rt_on, rt_daily, rt_lead, rt_text, tt_on, tt_notify, tt_days, upsell, bd_on, bd_text, ia_on, ia_name, ia_model, ia_hours, ia_pause, ia_notes, ia_report_phone, ia_alert_phone, ia_arts, names").or("wa_on.eq.true,cl_on.eq.true,fb_on.eq.true,wb_on.eq.true,rt_on.eq.true,tt_on.eq.true,bd_on.eq.true,ia_on.eq.true");
     if (error) return json({ erro: error.message }, 500);
-    const { data: agc } = await db.from("ag_config").select("company_id").eq("ativo", true);
-    const agOn = new Set((agc || []).map((x: any) => x.company_id));
+    const { data: agc } = await db.from("ag_config").select("company_id, ativo");
+    const agOn = new Set((agc || []).filter((x: any) => x.ativo).map((x: any) => x.company_id)), agUsa = new Set((agc || []).map((x: any) => x.company_id));
+    // Fonte da agenda: a AppBarber, quando conectada; senão a agenda própria (que responde no formato da AppBarber).
+    const base = (Deno.env.get("SUPABASE_URL") || "").replace(/\/$/, "") + "/functions/v1/agenda-api";
+    const assinar = async (cid: string) => { const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(token), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+      return cid + "." + [...new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(cid)))].map((x) => x.toString(16).padStart(2, "0")).join("").slice(0, 40); };
     const empresas = [];
     for (const i of ints || []) {
       const { data: co } = await db.from("companies").select("id, name, settings, sub_status, paid_until").eq("id", i.company_id).maybeSingle();
       if (!co) continue;
       const paidUntil = co.paid_until ? new Date(co.paid_until + "T23:59:59Z").getTime() + 86400000 : 0;
       if (!(["active", "courtesy", "canceled"].includes(co.sub_status) && paidUntil >= Date.now())) continue;
+      const fonte: any = i.est_code && i.api_key ? { codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key }
+        : !i.est_code && agUsa.has(i.company_id) ? { codigo_estabelecimento: i.company_id, codigo_filial: "", appbarber_api_key: await assinar(i.company_id), api_base: base, propria: true } : null;
       const [{ data: barbers }, { data: profs }, { data: pop }, { data: entries }] = await Promise.all([
         db.from("barbers").select("id, name, active").eq("company_id", co.id),
         db.from("profiles").select("barber_id, phone, status").eq("company_id", co.id),
@@ -239,48 +245,48 @@ Deno.serve(async (req) => {
         numero: i.cl_numero === "principal" ? "principal" : "chip", // número que fala com os clientes
         feedback: i.fb_on ? { texto: i.fb_text || "", resposta: String(i.fb_reply || "").slice(0, 1200), parabens: String(i.fb_pro_text || "").slice(0, 800) } : null,
         // Parabéns aos aniversariantes do dia (lista de aniversariantes da AppBarber, 1 crédito por dia).
-        aniversario: i.bd_on && i.est_code && i.api_key ? { texto: i.bd_text || "" } : null,
+        aniversario: i.bd_on && fonte ? { texto: i.bd_text || "" } : null,
         // Sofia, a atendente IA: dias e horários em que ela responde o WhatsApp dos clientes.
-        sofia: i.ia_on && i.est_code && i.api_key ? sofiaCfg(i) : null,
+        sofia: i.ia_on && fonte ? sofiaCfg(i) : null,
         // Mesma configuração, mesmo com a Sofia desligada: só para a conversa de teste no terminal (gbia-sofia-teste).
-        sofia_teste: i.est_code && i.api_key ? sofiaCfg(i) : null,
-        appbarber: i.est_code && i.api_key ? { codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
+        sofia_teste: fonte ? sofiaCfg(i) : null,
+        appbarber: fonte ? { ...fonte } : null,
         // Reconquista de clientes sumidos (lista de clientes da AppBarber, 1 crédito por página).
-        reconquista: i.wb_on && i.est_code && i.api_key ? { porDia: Math.max(1, Math.min(40, Number(i.wb_daily) || 15)), minDias: Math.max(30, Number(i.wb_min_days) || 90), maxDias: Math.max(60, Number(i.wb_max_days) || 365), texto: i.wb_text || "", presente: String(i.wb_gift || "").slice(0, 1500), presenteFinal: String(i.wb_gift_done || "").slice(0, 1000), codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
+        reconquista: i.wb_on && fonte ? { porDia: Math.max(1, Math.min(40, Number(i.wb_daily) || 15)), minDias: Math.max(30, Number(i.wb_min_days) || 90), maxDias: Math.max(60, Number(i.wb_max_days) || 365), texto: i.wb_text || "", presente: String(i.wb_gift || "").slice(0, 1500), presenteFinal: String(i.wb_gift_done || "").slice(0, 1000), ...fonte } : null,
         // Retorno no tempo certo: convite N dias antes do prazo de costume de cada cliente (agenda da AppBarber).
         // Indicação premiada (a atendente IA confere o código do amigo).
-        indicacao: i.in_on && i.ia_on && i.est_code && i.api_key ? { porDia: Math.max(1, Math.min(20, Number(i.in_daily) || 3)), minVisitas: Math.max(2, Math.min(20, Number(i.in_min) || 4)),
+        indicacao: i.in_on && i.ia_on && fonte ? { porDia: Math.max(1, Math.min(20, Number(i.in_daily) || 3)), minVisitas: Math.max(2, Math.min(20, Number(i.in_min) || 4)),
           beneficio: String(i.in_beneficio || "20% de desconto no primeiro atendimento").slice(0, 120), premio: String(i.in_premio || "um corte grátis").slice(0, 120), texto: String(i.in_text || "").slice(0, 2000),
-          codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
+          ...fonte } : null,
         // Agenda sem buracos (a atendente IA remarca se o cliente aceitar).
-        otimizar: i.oa_on && i.ia_on && i.est_code && i.api_key ? { porDia: Math.max(1, Math.min(30, Number(i.oa_daily) || 6)), texto: String(i.oa_text || "").slice(0, 1500),
-          codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
+        otimizar: i.oa_on && i.ia_on && fonte ? { porDia: Math.max(1, Math.min(30, Number(i.oa_daily) || 6)), texto: String(i.oa_text || "").slice(0, 1500),
+          ...fonte } : null,
         // Previsão do mês: o servidor soma o valor marcado na agenda até o fim do mês.
-        previsao: i.est_code && i.api_key ? { codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
+        previsao: fonte ? { ...fonte } : null,
         // Agenda cheia automática: convites para os clientes do profissional com pouca ocupação.
-        agendaCheia: i.ac_on && i.est_code && i.api_key ? { limite: Math.max(20, Math.min(95, Number(i.ac_limit) || 60)), porDia: Math.max(1, Math.min(40, Number(i.ac_daily) || 10)), dias: Number(i.ac_days) === 2 ? 2 : 1,
-          texto: String(i.ac_text || "").slice(0, 2000), codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
+        agendaCheia: i.ac_on && fonte ? { limite: Math.max(20, Math.min(95, Number(i.ac_limit) || 60)), porDia: Math.max(1, Math.min(40, Number(i.ac_daily) || 10)), dias: Number(i.ac_days) === 2 ? 2 : 1,
+          texto: String(i.ac_text || "").slice(0, 2000), ...fonte } : null,
         // Venda de planos: oferta para clientes frequentes (na conversa e/ou convite por dia).
-        planos: i.pl_on && i.est_code && i.api_key && Array.isArray(i.pl_plans) && i.pl_plans.length ? { chat: i.pl_chat !== false, porDia: Math.max(0, Math.min(10, Number(i.pl_daily) || 0)),
+        planos: i.pl_on && fonte && Array.isArray(i.pl_plans) && i.pl_plans.length ? { chat: i.pl_chat !== false, porDia: Math.max(0, Math.min(10, Number(i.pl_daily) || 0)),
           dias: (Array.isArray(i.pl_days) ? i.pl_days : [1, 2, 3, 4]).map(Number).filter((d: number) => d >= 0 && d <= 6),
           planos: i.pl_plans.slice(0, 6).map((p: any) => ({ nome: String(p.nome || "").slice(0, 40), preco: Number(p.preco) || 0, avulso: Number(p.avulso) || 0, visitas: Math.max(1, Math.min(8, Number(p.visitas) || 4)), quando: String(p.quando || "").slice(0, 80) })).filter((p: any) => p.nome && p.preco && p.avulso > p.preco),
-          texto: String(i.pl_text || "").slice(0, 2000), codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
+          texto: String(i.pl_text || "").slice(0, 2000), ...fonte } : null,
         // Confirmação de presença: pedido na véspera e 2º aviso no dia (a atendente IA confirma, remarca ou cancela).
-        confirmacao: i.cf_on && i.est_code && i.api_key ? { hora: /^\d{2}:\d{2}$/.test(String(i.cf_hour || "")) ? i.cf_hour : "17:00", segundo: i.cf_second !== false,
+        confirmacao: i.cf_on && fonte ? { hora: /^\d{2}:\d{2}$/.test(String(i.cf_hour || "")) ? i.cf_hour : "17:00", segundo: i.cf_second !== false,
           antes: Math.max(60, Math.min(360, Number(i.cf_before) || 180)), texto: String(i.cf_text || "").slice(0, 2000), texto2: String(i.cf_text2 || "").slice(0, 1000),
-          codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
+          ...fonte } : null,
         // Preencher vagas: cancelamento de hoje/amanhã vira convite para clientes do mesmo profissional no prazo de voltar.
-        vagas: i.fv_on && i.est_code && i.api_key ? { porVaga: Math.max(1, Math.min(3, Number(i.fv_per) || 2)), porDia: Math.max(1, Math.min(30, Number(i.fv_daily) || 8)),
+        vagas: i.fv_on && fonte ? { porVaga: Math.max(1, Math.min(3, Number(i.fv_per) || 2)), porDia: Math.max(1, Math.min(30, Number(i.fv_daily) || 8)),
           antecedencia: Math.max(30, Math.min(240, Number(i.fv_lead) || 90)), dias: Number(i.fv_days) === 1 ? 1 : 2, texto: String(i.fv_text || "").slice(0, 2000),
-          codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
-        retorno: i.rt_on && i.est_code && i.api_key ? { porDia: Math.max(1, Math.min(30, Number(i.rt_daily) || 10)), antes: i.rt_lead == null || !Number.isFinite(Number(i.rt_lead)) ? 2 : Math.max(-3, Math.min(7, Math.round(Number(i.rt_lead)))), texto: i.rt_text || "", codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
+          ...fonte } : null,
+        retorno: i.rt_on && fonte ? { porDia: Math.max(1, Math.min(30, Number(i.rt_daily) || 10)), antes: i.rt_lead == null || !Number.isFinite(Number(i.rt_lead)) ? 2 : Math.max(-3, Math.min(7, Math.round(Number(i.rt_lead)))), texto: i.rt_text || "", ...fonte } : null,
         // Totem de autoatendimento na recepção (check-in e agendamento na hora).
-        totem: i.tt_on && i.est_code && i.api_key ? { avisar: i.tt_notify !== false, dias: Math.max(1, Math.min(30, Number(i.tt_days) || 7)), upsell: upsellCfg(i) } : null,
+        totem: i.tt_on && fonte ? { avisar: i.tt_notify !== false, dias: Math.max(1, Math.min(30, Number(i.tt_days) || 7)), upsell: upsellCfg(i) } : null,
         // Estado do número dos clientes: o programa da equipe (outro número) avisa quando ele desconecta.
         wa_clientes: i.cl_on || i.ia_on || i.wb_on || i.bd_on || i.fb_on || i.rt_on || i.fv_on || i.cf_on || i.pl_on || i.ac_on ? { status: i.cl_status || "", em: i.cl_status_at, numero: i.cl_numero === "principal" ? "principal" : "chip", sofia: !!i.ia_on, alerta: String(i.ia_alert_phone || i.ia_report_phone || "").replace(/\D/g, "") } : null,
         cfg: { ligado: !!i.wa_on, hora: i.wa_hour || "13:00", minimo: Number(i.wa_min) || 0, texto: i.wa_text || "" },
         // Lembrete de agendamento para os clientes (o servidor consulta a agenda da AppBarber).
-        clientes: i.cl_on && i.est_code && i.api_key ? { numero: i.cl_numero === "principal" ? "principal" : "chip", antecedencia: Number(i.cl_lead) || 60, antecedenciaTarde: Number(i.cl_lead_pm) || null, tardeDesde: /^\d{2}:\d{2}$/.test(String(i.cl_pm_from || "")) ? i.cl_pm_from : "13:00", texto: i.cl_text || "", resposta: i.cl_reply || "", codigo_estabelecimento: i.est_code, codigo_filial: i.branch_code || "", appbarber_api_key: i.api_key } : null,
+        clientes: i.cl_on && fonte ? { numero: i.cl_numero === "principal" ? "principal" : "chip", antecedencia: Number(i.cl_lead) || 60, antecedenciaTarde: Number(i.cl_lead_pm) || null, tardeDesde: /^\d{2}:\d{2}$/.test(String(i.cl_pm_from || "")) ? i.cl_pm_from : "13:00", texto: i.cl_text || "", resposta: i.cl_reply || "", ...fonte } : null,
         brand: co.settings?.brand || "barber", popCfg: co.settings?.pop || null,
         // Horário de funcionamento (Configurações): fora dele e nos dias fechados não consulta a AppBarber nem manda lembrete.
         horario: (() => { const o = co.settings?.ocup || {}, ok = (v: unknown, d: string) => (typeof v === "string" && /^\d{2}:\d{2}$/.test(v) ? v : d);

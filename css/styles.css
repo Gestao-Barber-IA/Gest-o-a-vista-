@@ -3369,3 +3369,13 @@ html[data-theme="light"] .res-page { --cf-ok: #1f9d55; --cf-rem: #2a78d6; --cf-c
 .ag-vendas { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--line-accent, var(--line)); border-radius: var(--radius-sm); }
 .ag-vendas ul { list-style: none; margin: 6px 0 0; padding: 0; } .ag-vendas li { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; font-size: 14px; }
 .ag-vendas li span.num { margin-left: auto; } .ag-neg { color: var(--money); } .ag-vendas .ag-tot { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 6px; }
+.ag-cmd .ag-ficha-t { display: block; margin-top: 10px; }
+.ag-cmdl { list-style: none; margin: 6px 0 8px; padding: 0; } .ag-cmdl li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.ag-cmdl li > span:first-child, .ag-cmdl li > button.link-btn { flex: 1 1 140px; min-width: 0; } .ag-cmdl li > b.num { margin-left: auto; }
+.ag-cmdl .ag-mini .input { width: 90px; } .ag-cmdt .ag-tot b { font-size: 18px; }
+.ag-cmdadd { display: flex; gap: 8px; margin-bottom: 8px; } .ag-cmdadd select { flex: 1; min-width: 0; }
+.ag-formas { display: flex; flex-wrap: wrap; } .ag-troco { font-size: 20px; display: block; padding: 10px 0; }
+.ag-cx-top { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px; }
+.ag-cx-top div { padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); } .ag-cx-top small { display: block; color: var(--muted); } .ag-cx-top b { font-size: 20px; }
+@media (max-width: 480px) { .ag-cx-top { grid-template-columns: 1fr 1fr; } .ag-cx-top div:first-child { grid-column: span 2; } }
+@media print { .ag-bar .btn, .ag-nav, .drawer, header, .topbar, .res-top, .fab { display: none !important; } }
