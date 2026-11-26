@@ -11,6 +11,8 @@ const erro = (m: string, status = 400) => json({ erro: m }, status);
 async function sha256(t: string) { const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(t)); return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join(""); }
 const so = (t: unknown) => String(t ?? "").replace(/\D/g, "");
 const foneBR = (t: unknown) => { let d = so(t); if (d.length > 11 && d.startsWith("55")) d = d.slice(2); d = d.replace(/^0+/, ""); return d.length === 10 || d.length === 11 ? d : ""; };
+// Texto livre do cliente (comentário): guarda como foi escrito; as telas sempre mostram escapado.
+const texto = (t: unknown, n: number) => String(t ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 const limpo = (t: unknown, n: number) => String(t ?? "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, n);
 const hojeSP = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
 const agoraMin = () => { const p = new Intl.DateTimeFormat("en-GB", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date()).split(":").map(Number); return p[0] * 60 + p[1]; };
@@ -94,7 +96,7 @@ Deno.serve(async (req) => {
       termos: String(cfg.termos || "").replace(/[<>]/g, "").slice(0, 20000),
       planos: (Array.isArray(st.planos) ? st.planos : []).filter((p: any) => p && p.n && !(pInfo[p.id] || {}).ocultar).map((p: any) => ({ id: p.id, nome: limpo(p.n, 60), valor: Number(p.v) || 0, desc: String((pInfo[p.id] || {}).desc || "").replace(/[<>]/g, "").slice(0, 600) })),
       unidades: units.length > 1 ? units.map((n) => ({ nome: limpo(n, 60), endereco: limpo((uInfo[n] || {}).endereco, 200), mapa: url((uInfo[n] || {}).mapa), capa: url((uInfo[n] || {}).capa), whatsapp: so((uInfo[n] || {}).whatsapp).slice(0, 13) })) : [],
-      avaliacoes: cfg.avaliacoes_on ? { media, total: notas.length, lista: notas.filter((a: any) => a.publico && !a.oculto && a.comentario).slice(0, 20).map((a: any) => ({ nota: a.nota, comentario: limpo(a.comentario, 400), nome: limpo(a.nome_publico, 40), profissional: String(nomeP.get(a.barber_id) || "").split(" ")[0], em: String(a.criado_em).slice(0, 10) })) } : null,
+      avaliacoes: cfg.avaliacoes_on ? { media, total: notas.length, lista: notas.filter((a: any) => a.publico && !a.oculto && a.comentario).slice(0, 20).map((a: any) => ({ nota: a.nota, comentario: texto(a.comentario, 400), nome: limpo(a.nome_publico, 40), profissional: String(nomeP.get(a.barber_id) || "").split(" ")[0], em: String(a.criado_em).slice(0, 10) })) } : null,
       servicos: servs.map((s: any) => ({ id: s.id, nome: s.nome, duracao: s.duracao, preco: Number(s.preco) || 0, icone: /^[a-z]{2,20}$/.test(s.icone || "") ? s.icone : url(s.icone), descricao: limpo(s.descricao, 80) })),
       profissionais: profs.map((p: any) => ({ id: p.barber_id, nome: p.nome, foto: url(p.foto), servicos: p.servicos || [], unidade: units.length > 1 ? p.unidade : "" })),
       cliente: cli ? { nome: cli.nome, sobrenome: cli.sobrenome, fone: cli.fone, email: cli.email, nascimento: cli.nascimento, favorito: cli.favorito || null } : null });
@@ -162,7 +164,7 @@ Deno.serve(async (req) => {
     const { data: a } = await db.from("ag_agendamentos").select("id, cliente_id, barber_id, status, inicio").eq("id", String(d.id || "")).eq("company_id", empresa).maybeSingle();
     if (!a || a.cliente_id !== cli.id) return erro("Atendimento não encontrado.", 404);
     if (a.status !== "finalizado" && !(a.status === "chegou" && new Date(a.inicio).getTime() < Date.now())) return erro("Dá para avaliar depois do atendimento.");
-    const { error } = await db.from("ag_avaliacoes").insert({ company_id: empresa, agendamento_id: a.id, cliente_id: cli.id, barber_id: a.barber_id, nota, comentario: limpo(d.comentario, 400), publico: !!d.publico,
+    const { error } = await db.from("ag_avaliacoes").insert({ company_id: empresa, agendamento_id: a.id, cliente_id: cli.id, barber_id: a.barber_id, nota, comentario: texto(d.comentario, 400), publico: !!d.publico,
       nome_publico: `${String(cli.nome || "").split(" ")[0]} ${String(cli.sobrenome || "").charAt(0)}${cli.sobrenome ? "." : ""}`.trim() });
     if (error) return erro(/duplicate|unique/i.test(error.message) ? "Esse atendimento já foi avaliado. Obrigado!" : "Não consegui salvar agora. Tente de novo.");
     return json({ ok: true });
