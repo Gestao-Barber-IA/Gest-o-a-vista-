@@ -257,6 +257,14 @@
     bloqueios: async (ini, fim) => RES(await c.from('ag_bloqueios').select('*').eq('company_id', Cloud.companyId).lt('inicio', fim).gt('fim', ini).order('inicio').limit(300)) || [],
     avaliacoes: async () => RES(await c.from('ag_avaliacoes').select('*').eq('company_id', Cloud.companyId).order('criado_em', { ascending: false }).limit(200)) || [],
     avOcultar: async (id, oculto) => RES(await c.from('ag_avaliacoes').update({ oculto }).eq('id', id).eq('company_id', Cloud.companyId)),
+    prods: async () => RES(await c.from('ag_produtos').select('*').eq('company_id', Cloud.companyId).order('ordem').order('criado_em')) || [],
+    prodSave: async row => RES(row.id ? await c.from('ag_produtos').update(row).eq('id', row.id).eq('company_id', Cloud.companyId) : await c.from('ag_produtos').insert({ ...row, company_id: Cloud.companyId })),
+    prodDel: async id => RES(await c.from('ag_produtos').delete().eq('id', id).eq('company_id', Cloud.companyId)),
+    cups: async () => { const [l, u] = await Promise.all([c.from('ag_cupons').select('*').eq('company_id', Cloud.companyId).order('criado_em', { ascending: false }), c.from('ag_cupom_usos').select('cupom_id').eq('company_id', Cloud.companyId).limit(20000)]);
+      const n = {}; for (const x of RES(u) || []) n[x.cupom_id] = (n[x.cupom_id] || 0) + 1; return (RES(l) || []).map(x => ({ ...x, usos: n[x.id] || 0 })); },
+    cupSave: async row => RES(row.id ? await c.from('ag_cupons').update(row).eq('id', row.id).eq('company_id', Cloud.companyId) : await c.from('ag_cupons').insert({ ...row, company_id: Cloud.companyId })),
+    cupDel: async id => RES(await c.from('ag_cupons').delete().eq('id', id).eq('company_id', Cloud.companyId)),
+    saldo: async cid => { const { data, error } = await c.rpc('ag_saldo', { p_cliente: cid }); if (error) throw error; return Number(data) || 0; },
     slugLivre: async slug => { const { data, error } = await c.rpc('ag_slug_livre', { p_slug: slug }); if (error) throw error; return !!data; },
     externa: async () => { const { data, error } = await c.rpc('ag_externa'); if (error) throw error; return !!data; },
     // Clientes: busca por nome (todas as palavras) ou pelos números do telefone.

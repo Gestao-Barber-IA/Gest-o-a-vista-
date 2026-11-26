@@ -2,6 +2,13 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-27-funil', date: '2026-11-27', title: 'Funil de venda no agendamento online', items: [
+    ['novo', 'Web app: barra de etapas (Serviço, Profissional, Data e hora, Confirmar), calendário do mês com os dias livres em verde e os cheios em vermelho, e os horários separados em Manhã, Tarde e Noite.'],
+    ['novo', '"Aproveite também" na hora de confirmar: serviços extras e produtos recomendados para o serviço. Extras marcados como "Sem tempo extra" (ex.: sobrancelha) entram no mesmo horário; os que ocupam tempo só aparecem quando cabem na agenda. Produtos ficam reservados para retirar no atendimento.'],
+    ['novo', 'Oferta especial depois de confirmar: ex.: Barba de R$ 40 por R$ 32 no mesmo horário, com "Adicionar ao atendimento" ou "Seguir sem adicionar". Tela final com o resumo e "Chegue com 10 min de antecedência".'],
+    ['novo', 'Cashback: o cliente vê "Faltam R$ X para liberar" e quanto vai ganhar; o crédito é liberado quando o horário é marcado como Finalizado e ele usa na próxima visita (Menu › Meu cashback). Cancelou ou faltou: o cashback cai e o crédito usado volta.'],
+    ['novo', 'Cupons de desconto (% ou R$, validade, limite, 1 por cliente). Em Agenda › Configurar › Vendas no agendamento você configura tudo; no horário, a recepção vê o que foi vendido e o total a cobrar.'],
+  ] },
   { id: '2026-11-26-dominio', date: '2026-11-26', title: 'Links com o endereço oficial', items: [
     ['melhoria', 'Os links que você manda (agendamento online, totem e convite de profissional) agora usam sempre o endereço oficial gestaoperformance.vercel.app, mesmo abrindo o sistema por outro endereço.'],
   ] },

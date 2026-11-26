@@ -7242,6 +7242,10 @@ Content-Type: application/json</pre>
     const ok = v => { save(); return Promise.resolve(v); };
     return {
       slugLivre: () => Promise.resolve(true),
+      prods: () => Promise.resolve([...(L().prods || [])]), prodSave: row => { const l = L().prods = L().prods || [], i = l.findIndex(x => x.id === row.id); if (i >= 0) l[i] = { ...l[i], ...row }; else l.push({ ativo: true, online: true, foto: '', ...row, id: id() }); return ok(); },
+      prodDel: pid => { L().prods = (L().prods || []).filter(x => x.id !== pid); return ok(); },
+      cups: () => Promise.resolve([...(L().cups || [])]), cupSave: row => { const l = L().cups = L().cups || [], i = l.findIndex(x => x.id === row.id); if (i >= 0) l[i] = { ...l[i], ...row }; else l.push({ usos: 0, ...row, id: id() }); return ok(); },
+      cupDel: cid => { L().cups = (L().cups || []).filter(x => x.id !== cid); return ok(); }, saldo: () => Promise.resolve(0),
       externa: () => Promise.resolve(!!(state.integ && state.integ.est_code && state.integ.active !== false)),
       cfg: () => Promise.resolve(L().cfg), cfgSave: row => { Object.assign(L().cfg, row); return ok(L().cfg); },
       servicos: () => Promise.resolve([...L().servicos].sort((a, b) => a.ordem - b.ordem)),
@@ -7291,7 +7295,7 @@ Content-Type: application/json</pre>
     const a = ui.ag;
     if (!a.base || force === 'base') {
       a.base = a.base === 'ok' ? 'ok' : 'carregando';
-      Promise.all([AG().cfg(), AG().servicos(), AG().profs(), AG().externa().catch(() => false)]).then(([cfg, servicos, profs, externa]) => { a.cfg = cfg || {}; a.servicos = servicos || []; a.profs = profs || []; a.externa = !!externa; a.base = 'ok'; render(); })
+      Promise.all([AG().cfg(), AG().servicos(), AG().profs(), AG().externa().catch(() => false), AG().prods().catch(() => []), AG().cups().catch(() => [])]).then(([cfg, servicos, profs, externa, prods, cups]) => { a.cfg = cfg || {}; a.servicos = servicos || []; a.profs = profs || []; a.externa = !!externa; a.prods = prods || []; a.cups = cups || []; a.base = 'ok'; render(); })
         .catch(e => { a.base = 'erro'; a.erro = Cloud.message ? Cloud.message(e) : String(e); render(); });
     }
     if (a.diaCarregado !== a.dia || force === 'dia') {
@@ -7393,11 +7397,14 @@ Content-Type: application/json</pre>
     if (vis.length >= 3) { const v = vis.slice(0, 10), gaps = []; for (let i = 0; i < v.length - 1; i++) gaps.push((new Date(v[i].inicio) - new Date(v[i + 1].inicio)) / 86400000); freq = `volta a cada ~${Math.max(1, Math.round(gaps.reduce((t, g) => t + g, 0) / gaps.length))} dias`; }
     return `<div class="ag-ficha"><b class="ag-ficha-t">${vis.length ? `Últimos ${Math.min(3, vis.length)} atendimentos` : 'Histórico'}</b>${vis.length ? `<ul>${vis.slice(0, 3).map(linha).join('')}</ul>` : '<p class="muted">Primeira vez na agenda.</p>'}
       ${prox ? `<p class="ag-prox">Próximo: <b>${new Date(prox.inicio).toLocaleDateString('pt-BR')} às ${agHm(agMinOf(prox.inicio))}</b></p>` : ''}
+      ${(ui.ag.saldos || {})[c.id] ? `<p class="ag-prox">💰 Crédito de cashback: <b>${money2(ui.ag.saldos[c.id])}</b></p>` : ''}
       <div class="ag-ret"><span>Retorno e frequência</span><p>${vis.length ? `Último atendimento há <b>${dias(vis[0].inicio)} dia${dias(vis[0].inicio) === 1 ? '' : 's'}</b> · ` : ''}${freq}${faltas ? ` · <b class="ag-falta">${faltas} falta${faltas === 1 ? '' : 's'}</b>` : ''}</p></div></div>`;
   }
   function agForm(e, profs) {
-    const a = ui.ag, servs = a.servicos.filter(s => s.ativo !== false || (e.sv || []).includes(s.id)), novo = !e.id;
-    const sv = (e.sv && e.sv.length ? e.sv : ['']), porId = id => a.servicos.find(s => s.id === id);
+    const a = ui.ag, novo = !e.id;
+    // Serviços do catálogo + os que já estão no horário (mesmo que tenham saído do catálogo), para não perder nada ao editar.
+    const servs = [...a.servicos.filter(s => s.ativo !== false || (e.sv || []).includes(s.id)), ...(e.servicos || []).filter(v => !a.servicos.some(s => s.id === v.id))];
+    const sv = (e.sv && e.sv.length ? e.sv : ['']), porId = id => servs.find(s => s.id === id);
     const dur = sv.reduce((t, id) => t + (Number((porId(id) || {}).duracao) || 0), 0) || 30, valor = sv.reduce((t, id) => t + (Number((porId(id) || {}).preco) || 0), 0);
     const fone4 = String(e.cliente_fone || '').slice(-4);
     let cli;
@@ -7412,6 +7419,7 @@ Content-Type: application/json</pre>
       ${!novo ? `<p class="section-note"><span class="chip ag-chip-${esc(e.status)}">${AG_ST[e.status] || e.status}</span> ${AG_OR[e.origem] ? 'Marcado por: ' + AG_OR[e.origem] : ''}${fone4 ? ` · WhatsApp final ${esc(fone4)}` : ''}</p>
       <div class="btn-row ag-sts">${['confirmado', 'chegou', 'finalizado', 'faltou'].map(s => `<button type="button" class="btn btn-sm ${e.status === s ? 'btn-primary' : ''}" data-action="agStatus" data-s="${s}">${AG_ST[s]}</button>`).join('')}
         <button type="button" class="btn btn-sm ${ui.confirm === 'agc' ? 'btn-danger' : ''}" data-action="agStatus" data-s="${e.status === 'cancelado' ? 'agendado' : 'cancelado'}">${e.status === 'cancelado' ? 'Reativar' : ui.confirm === 'agc' ? 'Confirmar cancelamento' : 'Cancelar horário'}</button></div>` : ''}
+      ${!novo ? agVendasDoHorario(e) : ''}
       <form class="form" data-form="agSalvar" novalidate>
         <div class="ag-cli">${cli}</div>
         <fieldset class="field"><legend>Serviços</legend>${servs.length ? `<div class="ag-svrows">${sv.map((id, i) => `<div class="ag-svrow"><select class="input" name="sv" aria-label="Serviço ${i + 1}">${opts(id)}</select>${sv.length > 1 ? `<button type="button" class="icon-btn" data-action="agSvDel" data-i="${i}" aria-label="Tirar este serviço">${icon('x')}</button>` : ''}</div>`).join('')}</div>
@@ -7480,6 +7488,7 @@ Content-Type: application/json</pre>
         <label class="ag-mini"><span>R$</span><input class="input num" type="number" name="preco" min="0" step="0.01" value="${Number(s.preco) || 0}"></label>
         <label class="check ag-mini"><input type="checkbox" name="online" ${s.online !== false ? 'checked' : ''}><span>No app</span></label>
         <label class="check ag-mini"><input type="checkbox" name="ativo" ${s.ativo !== false ? 'checked' : ''}><span>Ativo</span></label>
+        <label class="check ag-mini" title="Como adicional, é feito dentro do mesmo horário (ex.: sobrancelha)"><input type="checkbox" name="extra_sem_tempo" ${s.extra_sem_tempo ? 'checked' : ''}><span>Sem tempo extra</span></label>
         <select class="input ag-ico" name="icone" aria-label="Ícone de ${esc(s.nome)}">${AG_ICONES.map(([k, t]) => `<option value="${k}" ${(s.icone || '') === k ? 'selected' : ''}>${t}</option>`).join('')}</select>
         <input class="input ag-desc" name="descricao" maxlength="80" value="${esc(s.descricao || '')}" placeholder="Descrição curta (ex.: até 4 anos)" aria-label="Descrição de ${esc(s.nome)}">
         <button class="icon-btn" type="submit" aria-label="Salvar ${esc(s.nome)}">${icon('check')}</button>
@@ -7505,7 +7514,7 @@ Content-Type: application/json</pre>
           ${servs.length ? `<fieldset class="field"><legend>Serviços que faz (nenhum marcado = todos)</legend><div class="ag-servs">${servs.map(s => `<label class="check ag-serv"><input type="checkbox" name="serv" value="${esc(s.id)}" ${ss.has(s.id) ? 'checked' : ''}><span>${esc(s.nome)}</span></label>`).join('')}</div></fieldset>` : ''}
           <p class="form-msg" data-msg></p><div><button class="btn btn-primary btn-sm" type="submit">${icon('check')} Salvar ${esc(b.name.split(' ')[0])}</button></div>
         </form></details>`; }).join('')}</section>`;
-    return web + agVitrine() + sv + pr + agAvalSec();
+    return web + agVitrine() + sv + agVendas() + pr + agAvalSec();
   }
   // ---------- Vitrine do web app (capa, banners, contatos, perguntas, termos, planos, unidades) e avaliações ----------
   const agSlugDe = t => agSemAc(t).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
@@ -7562,9 +7571,85 @@ Content-Type: application/json</pre>
       const r = await AG().cfgSave(row); a.cfg = { ...c, ...(r || row) }; toast('Imagem salva.'); render();
     } catch (e) { say(String((e && e.message) || e)); }
   }
+  // ---------- Vendas no agendamento (funil do web app) ----------
+  function agVendas() {
+    const a = ui.ag, c = a.cfg || {}, servs = a.servicos.filter(s => s.ativo !== false), prods = a.prods || [], cups = a.cups || [], cb = c.cashback || {}, ofs = Array.isArray(c.ofertas) ? c.ofertas : [];
+    const nomeS = id => (a.servicos.find(s => s.id === id) || {}).nome || '';
+    const optS = (sel, vazio) => `${vazio ? `<option value="">${vazio}</option>` : ''}${servs.map(s => `<option value="${esc(s.id)}" ${s.id === sel ? 'selected' : ''}>${esc(s.nome)}</option>`).join('')}`;
+    const img = u => u ? `<img class="ag-pfoto" src="${esc(u)}" alt="">` : `<span class="ag-pfoto">${icon('gift')}</span>`;
+    const rec = servs.length ? servs.map(s => { const rs = new Set(s.recomenda || []), rp = new Set(s.recomenda_produtos || []), n = rs.size + rp.size;
+      return `<details class="ag-pr"><summary><b>${esc(s.nome)}</b> <small class="muted">${n ? n + ' recomendado' + (n === 1 ? '' : 's') : 'automático'}</small></summary>
+        <form class="form" data-form="agRecSalvar" data-id="${esc(s.id)}" novalidate>
+          <fieldset class="field"><legend>Serviços extras</legend><div class="ag-servs">${servs.filter(x => x.id !== s.id).map(x => `<label class="check ag-serv"><input type="checkbox" name="rs" value="${esc(x.id)}" ${rs.has(x.id) ? 'checked' : ''}><span>${esc(x.nome)}${x.extra_sem_tempo ? ' <small class="muted">(sem tempo extra)</small>' : ''}</span></label>`).join('')}</div></fieldset>
+          ${prods.length ? `<fieldset class="field"><legend>Produtos</legend><div class="ag-servs">${prods.filter(p => p.ativo !== false).map(p => `<label class="check ag-serv"><input type="checkbox" name="rp" value="${esc(p.id)}" ${rp.has(p.id) ? 'checked' : ''}><span>${esc(p.nome)}</span></label>`).join('')}</div></fieldset>` : ''}
+          <p class="form-msg" data-msg></p><div><button class="btn btn-sm btn-primary" type="submit">${icon('check')} Salvar</button></div></form></details>`; }).join('') : '<p class="muted">Cadastre os serviços primeiro.</p>';
+    const prodL = `${prods.length ? `<div class="ag-svlist">${prods.map(p => `<form class="ag-sv ag-prod" data-form="agProdSalvar" data-id="${esc(p.id)}" novalidate>
+        <label class="ag-pf" title="Trocar foto">${img(p.foto)}<input type="file" accept="image/*" hidden data-ag-pfoto="${esc(p.id)}"></label>
+        <input class="input" name="nome" maxlength="60" value="${esc(p.nome)}" aria-label="Nome do produto">
+        <input class="input ag-desc" name="descricao" maxlength="80" value="${esc(p.descricao || '')}" placeholder="Descrição curta" aria-label="Descrição">
+        <label class="ag-mini"><span>R$</span><input class="input num" type="number" name="preco" min="0" step="0.01" value="${Number(p.preco) || 0}"></label>
+        <label class="check ag-mini"><input type="checkbox" name="online" ${p.online !== false ? 'checked' : ''}><span>No app</span></label>
+        <label class="check ag-mini"><input type="checkbox" name="ativo" ${p.ativo !== false ? 'checked' : ''}><span>Ativo</span></label>
+        <button class="icon-btn" type="submit" aria-label="Salvar ${esc(p.nome)}">${icon('check')}</button>
+        <button class="icon-btn ${ui.confirm === 'agp' + p.id ? 'btn-danger' : ''}" type="button" data-action="agProdDel" data-id="${esc(p.id)}" aria-label="${ui.confirm === 'agp' + p.id ? 'Confirmar: apagar' : 'Apagar'} ${esc(p.nome)}">${ui.confirm === 'agp' + p.id ? icon('check') : icon('trash')}</button></form>`).join('')}</div>` : '<p class="muted">Nenhum produto ainda.</p>'}
+      <form class="ag-sv ag-sv-novo" data-form="agProdSalvar" novalidate>
+        <input class="input" name="nome" maxlength="60" placeholder="Novo produto (ex.: Pomada matte)" aria-label="Nome do novo produto">
+        <input class="input ag-desc" name="descricao" maxlength="80" placeholder="Descrição curta" aria-label="Descrição">
+        <label class="ag-mini"><span>R$</span><input class="input num" type="number" name="preco" min="0" step="0.01" value="0"></label>
+        <input type="hidden" name="online" value="on"><input type="hidden" name="ativo" value="on">
+        <button class="btn btn-sm btn-primary" type="submit">${icon('plus')} Adicionar</button></form><p class="form-msg" id="ag-prod-msg"></p>`;
+    const ofL = `<form class="form" data-form="agOfertasSalvar" novalidate><div class="ag-ofs">${[...ofs, ...(a.ofNova ? [{ apos: '', oferece: '', desconto: 20 }] : [])].map((o, i) => `<div class="ag-of">
+        <label class="field"><span>Depois de</span><select class="input" name="apos_${i}">${optS(o.apos, 'Qualquer serviço')}</select></label>
+        <label class="field"><span>Oferecer</span><select class="input" name="oferece_${i}">${optS(o.oferece, 'Escolha…')}</select></label>
+        <label class="field ag-mini2"><span>Desconto %</span><input class="input num" type="number" name="desc_${i}" min="0" max="90" value="${Number(o.desconto) || 0}"></label>
+        <button class="icon-btn" type="button" data-action="agOfDel" data-i="${i}" aria-label="Tirar esta oferta">${icon('trash')}</button></div>`).join('') || '<p class="muted">Nenhuma oferta.</p>'}</div>
+        <div class="btn-row"><button class="btn btn-sm" type="button" data-action="agOfNova">${icon('plus')} Nova oferta</button><button class="btn btn-sm btn-primary" type="submit">${icon('check')} Salvar ofertas</button></div><p class="form-msg" data-msg></p></form>`;
+    const cbF = `<form class="form" data-form="agCashSalvar" novalidate>
+        <label class="check"><input type="checkbox" name="ativo" ${cb.ativo ? 'checked' : ''}><span><b>Cashback ligado</b><small>O cliente ganha uma parte do valor como crédito para a próxima visita. O crédito só é liberado quando o atendimento é marcado como Finalizado.</small></span></label>
+        <div class="grid-2"><label class="field"><span>Cashback (%)</span><input class="input num" type="number" name="pct" min="0" max="50" step="0.5" value="${cb.pct ?? 7}"></label>
+          <label class="field"><span>Valor mínimo para ganhar (R$)</span><input class="input num" type="number" name="minimo" min="0" step="1" value="${cb.minimo ?? 60}"></label></div>
+        <div class="grid-2"><label class="field"><span>Crédito vale por (dias)</span><input class="input num" type="number" name="validade" min="0" max="365" value="${cb.validade ?? 60}"><small class="muted">0 = não vence.</small></label>
+          <label class="field"><span>Usar no máximo (% da próxima visita)</span><input class="input num" type="number" name="max_uso" min="1" max="100" value="${cb.max_uso ?? 50}"></label></div>
+        <label class="field"><span>"Chegue com antecedência" (min)</span><input class="input num" type="number" name="chegar" min="0" max="60" value="${c.chegar_antes ?? 10}"><small class="muted">Aparece na tela final e na mensagem de confirmação. 0 = não mostrar.</small></label>
+        <p class="form-msg" data-msg></p><div><button class="btn btn-primary btn-sm" type="submit">${icon('check')} Salvar</button></div></form>`;
+    const hoje = iso(new Date());
+    const cupL = `${cups.length ? `<ul class="ag-cups">${cups.map(x => `<li><div><b class="num">${esc(x.codigo)}</b> <span class="chip ${x.ativo && (!x.validade || x.validade >= hoje) ? 'chip-ok' : ''}">${!x.ativo ? 'Pausado' : x.validade && x.validade < hoje ? 'Vencido' : 'Ativo'}</span>
+        <small class="muted">${x.tipo === 'pct' ? nf0.format(x.valor) + '%' : money2(x.valor)} de desconto${Number(x.minimo) ? ' · mínimo ' + money0(x.minimo) : ''}${x.validade ? ' · até ' + dateBR(x.validade) : ''} · ${x.usos || 0}${x.limite ? '/' + x.limite : ''} uso(s)${x.por_cliente ? ' · 1 por cliente' : ''}</small></div>
+        <div class="btn-row"><button class="btn btn-sm" type="button" data-action="agCupAtivo" data-id="${esc(x.id)}">${x.ativo ? 'Pausar' : 'Ativar'}</button><button class="icon-btn ${ui.confirm === 'agc' + x.id ? 'btn-danger' : ''}" type="button" data-action="agCupDel" data-id="${esc(x.id)}" aria-label="Apagar cupom">${ui.confirm === 'agc' + x.id ? icon('check') : icon('trash')}</button></div></li>`).join('')}</ul>` : '<p class="muted">Nenhum cupom.</p>'}
+      <form class="form" data-form="agCupNovo" novalidate><div class="grid-2"><label class="field"><span>Código</span><input class="input" name="codigo" maxlength="30" placeholder="EX.: PRIMEIRA10" autocapitalize="characters"></label>
+        <label class="field"><span>Desconto</span><span class="ag-cupv"><input class="input num" type="number" name="valor" min="0" step="0.01" value="10"><select class="input" name="tipo"><option value="pct">%</option><option value="valor">R$</option></select></span></label></div>
+        <div class="grid-2"><label class="field"><span>Válido até (opcional)</span><input class="input" type="date" name="validade" min="${hoje}"></label><label class="field"><span>Limite de usos (opcional)</span><input class="input num" type="number" name="limite" min="1"></label></div>
+        <div class="grid-2"><label class="field"><span>Valor mínimo (R$)</span><input class="input num" type="number" name="minimo" min="0" value="0"></label><label class="check"><input type="checkbox" name="por_cliente" checked><span><b>1 uso por cliente</b></span></label></div>
+        <p class="form-msg" data-msg></p><div><button class="btn btn-sm btn-primary" type="submit">${icon('plus')} Criar cupom</button></div></form>`;
+    return `<section class="section card"><h2 class="section-title">${icon('gift')} Vendas no agendamento</h2>
+      <p class="section-note">O funil do web app: na hora de confirmar, o cliente vê <b>"Aproveite também"</b> (extras e produtos), o <b>cashback</b> e o campo de <b>cupom</b>; logo depois de confirmar, recebe a <b>oferta especial do horário</b>. Tudo é pago na barbearia, e a recepção vê o que foi vendido no horário.</p>
+      <h3 class="ag-sub">Aproveite também: o que recomendar para cada serviço</h3><p class="section-note">Sem escolha, aparecem os serviços marcados como "Sem tempo extra" e os primeiros produtos. Extras que ocupam tempo só aparecem quando cabem na agenda.</p>${rec}
+      <h3 class="ag-sub">Produtos</h3><p class="section-note">O cliente reserva e retira no atendimento.</p>${prodL}
+      <h3 class="ag-sub">Oferta especial depois de confirmar</h3><p class="section-note">Ex.: depois de "Corte", oferecer "Barba" com 27% de desconto. Vale a primeira oferta que servir; só aparece se couber no horário do profissional.</p>${ofL}
+      <h3 class="ag-sub">Cashback</h3>${cbF}
+      <h3 class="ag-sub">Cupons de desconto</h3>${cupL}</section>`;
+  }
+  // Vendas do app num horário: extras, produtos, cupom, crédito e cashback (para a recepção cobrar certo).
+  function agVendasDoHorario(e) {
+    const ex = (e.servicos || []).filter(s => s.extra), pr = e.produtos || [];
+    if (!ex.length && !pr.length && !Number(e.desconto) && !Number(e.credito_usado) && !Number(e.cashback)) return '';
+    return `<div class="ag-vendas"><b class="ag-ficha-t">Vendas do app</b><ul>
+      ${ex.map(s => `<li>${esc(s.nome)}${s.oferta ? ' <span class="chip chip-ok">oferta</span>' : ''}<span class="num">${money2(Number(s.preco) || 0)}</span></li>`).join('')}
+      ${pr.map(p => `<li>🛍️ ${p.qtd > 1 ? p.qtd + 'x ' : ''}${esc(p.nome)} <small class="muted">(retirar)</small><span class="num">${money2((Number(p.preco) || 0) * (p.qtd || 1))}</span></li>`).join('')}
+      ${Number(e.desconto) ? `<li>Cupom ${esc(e.cupom || '')}<span class="num ag-neg">− ${money2(Number(e.desconto))}</span></li>` : ''}
+      ${Number(e.credito_usado) ? `<li>Crédito de cashback<span class="num ag-neg">− ${money2(Number(e.credito_usado))}</span></li>` : ''}
+      <li class="ag-tot"><b>Total a cobrar</b><b class="num">${money2(Number(e.valor) || 0)}</b></li></ul>
+      ${Number(e.cashback) ? `<p class="section-note">💰 O cliente ganha ${money2(Number(e.cashback))} de cashback quando este horário for marcado como <b>Finalizado</b>.</p>` : ''}</div>`;
+  }
+  async function agProdFoto(input) {
+    const a = ui.ag, file = input.files && input.files[0], id = input.dataset.agPfoto; if (!file) return;
+    try { const url = await storeImage(await readImage(file, 600, 0.85), 'agprod'); if (Cloud.enabled && /^data:/.test(url)) throw new Error('Não consegui enviar a foto agora.');
+      await AG().prodSave({ id, foto: url }); toast('Foto salva.'); agCarregar('base'); } catch (e) { toast(String((e && e.message) || e)); }
+  }
   function agHist(c) {
     const a = ui.ag; a.hist = a.hist || {}; if (!c || !c.id || a.hist[c.id]) return;
-    AG().historico(c.id, c.fone).then(l => { a.hist[c.id] = l || []; render(); }).catch(() => { a.hist[c.id] = []; render(); });
+    a.saldos = a.saldos || {};
+    Promise.all([AG().historico(c.id, c.fone), AG().saldo(c.id).catch(() => 0)]).then(([l, sd]) => { a.saldos[c.id] = Number(sd) || 0; a.hist[c.id] = l || []; render(); }).catch(() => { a.hist[c.id] = []; render(); });
   }
   // Busca com espera curta enquanto digita: preenche só a lista (sem redesenhar a tela, para não perder o cursor).
   let agBuscaT = 0;
@@ -9245,6 +9330,24 @@ Content-Type: application/json</pre>
       const a = ui.ag, x = (a.avs || []).find(v => v.id === el.dataset.id); if (!x) return;
       AG().avOcultar(x.id, !x.oculto).then(() => { x.oculto = !x.oculto; toast(x.oculto ? 'Comentário escondido do app.' : 'Comentário visível no app.'); render(); }).catch(err => toast(Cloud.message ? Cloud.message(err) : String(err)));
     },
+    agProdDel(el) {
+      const k = 'agp' + el.dataset.id; if (ui.confirm !== k) { ui.confirm = k; return render(); }
+      ui.confirm = null; AG().prodDel(el.dataset.id).then(() => { toast('Produto apagado.'); agCarregar('base'); }).catch(err => toast(Cloud.message ? Cloud.message(err) : String(err)));
+    },
+    agOfNova() { ui.ag.ofNova = true; render(); },
+    agOfDel(el) {
+      const a = ui.ag, ofertas = (Array.isArray(a.cfg.ofertas) ? a.cfg.ofertas : []).filter((_, i) => i !== Number(el.dataset.i));
+      if (Number(el.dataset.i) >= (a.cfg.ofertas || []).length) { a.ofNova = false; return render(); }
+      AG().cfgSave({ ofertas }).then(r => { a.cfg = { ...a.cfg, ...(r || { ofertas }) }; toast('Oferta retirada.'); render(); }).catch(err => toast(Cloud.message ? Cloud.message(err) : String(err)));
+    },
+    agCupAtivo(el) {
+      const x = (ui.ag.cups || []).find(c => c.id === el.dataset.id); if (!x) return;
+      AG().cupSave({ id: x.id, ativo: !x.ativo }).then(() => { toast(x.ativo ? 'Cupom pausado.' : 'Cupom ativado.'); agCarregar('base'); }).catch(err => toast(Cloud.message ? Cloud.message(err) : String(err)));
+    },
+    agCupDel(el) {
+      const k = 'agc' + el.dataset.id; if (ui.confirm !== k) { ui.confirm = k; return render(); }
+      ui.confirm = null; AG().cupDel(el.dataset.id).then(() => { toast('Cupom apagado.'); agCarregar('base'); }).catch(err => toast(Cloud.message ? Cloud.message(err) : String(err)));
+    },
     agCopiar() { copyText(document.getElementById('ag-url')?.value || '', document.getElementById('ag-url'), 'Link do agendamento copiado.'); },
     resPer(el) {
       const ant = ui.iaRes || {}, h = new Date();
@@ -10066,10 +10169,15 @@ Content-Type: application/json</pre>
       } else return setMsg(f, 'Busque e selecione o cliente, ou toque em "Cadastrar novo cliente".');
       const dia = E.dia.value, hora = E.hora.value, dur = Math.round(Number(E.dur.value) || 0);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(dia) || !/^\d{2}:\d{2}$/.test(hora)) return setMsg(f, 'Escolha o dia e o horário.');
-      const servicos = (e.sv || []).filter(Boolean).map(id => a.servicos.find(s => s.id === id)).filter(Boolean).map(s => ({ id: s.id, nome: s.nome, duracao: Number(s.duracao) || 30, preco: Number(s.preco) || 0 }));
-      const somaD = servicos.reduce((t, s) => t + s.duracao, 0), d2 = dur >= 5 ? dur : somaD || 30;
+      const antes = new Map((e.servicos || []).map(s => [s.id, s]));
+      const servicos = (e.sv || []).filter(Boolean).map(id => antes.get(id) ? { ...antes.get(id) } : a.servicos.find(s => s.id === id)).filter(Boolean).map(s => (s.preco !== undefined && antes.has(s.id) ? s : { id: s.id, nome: s.nome, duracao: Number(s.duracao) || 30, preco: Number(s.preco) || 0 }));
+      const somaD = servicos.reduce((t, s) => t + (Number(s.duracao) || 0), 0), d2 = dur >= 5 ? dur : somaD || 30;
       const ini = hmMin(hora), barber_id = E.barber.value;
-      const row = { ...(e.id ? { id: e.id } : {}), barber_id, cliente_id, cliente_nome, cliente_fone, inicio: agAt(dia, ini), fim: agAt(dia, ini + d2), servicos, valor: servicos.reduce((t, s) => t + s.preco, 0), obs: String(e.obs || '').trim().slice(0, 300) };
+      const row = { ...(e.id ? { id: e.id } : {}), barber_id, cliente_id, cliente_nome, cliente_fone, inicio: agAt(dia, ini), fim: agAt(dia, ini + d2), servicos, obs: String(e.obs || '').trim().slice(0, 300) };
+      // Valor: serviços + produtos reservados − cupom − crédito (as vendas do app continuam valendo ao editar).
+      const vProd = (e.produtos || []).reduce((t, p) => t + (Number(p.preco) || 0) * (p.qtd || 1), 0);
+      row.subtotal = Math.round((servicos.reduce((t, s) => t + (Number(s.preco) || 0), 0) + vProd) * 100) / 100;
+      row.valor = Math.max(0, Math.round((row.subtotal - (Number(e.desconto) || 0) - (Number(e.credito_usado) || 0)) * 100) / 100);
       // Aviso: fora do horário do profissional ou em cima de um bloqueio (a equipe pode marcar mesmo assim, confirmando).
       const p = agProfs(a.profs).find(x => x.b.id === barber_id), dentro = p && agFaixasDia(p.p, dia).some(([x, y]) => ini >= hmMin(x) && ini + d2 <= hmMin(y));
       const bloq = dia === a.dia && (a.bloqs || []).some(x => (!x.barber_id || x.barber_id === barber_id) && new Date(x.inicio) < new Date(row.fim) && new Date(x.fim) > new Date(row.inicio));
@@ -10117,13 +10225,51 @@ Content-Type: application/json</pre>
       setMsg(f, 'Salvando…', true);
       AG().cfgSave(row).then(r => { ui.ag.cfg = { ...c, ...(r || row) }; toast('Vitrine salva.'); render(); }).catch(err => setMsg(f, Cloud.message ? Cloud.message(err) : String(err)));
     },
+    agRecSalvar(f) {
+      const row = { id: f.dataset.id, recomenda: [...f.querySelectorAll('input[name="rs"]:checked')].map(x => x.value), recomenda_produtos: [...f.querySelectorAll('input[name="rp"]:checked')].map(x => x.value) };
+      setMsg(f, 'Salvando…', true);
+      AG().servSave(row).then(() => { toast('Recomendações salvas.'); agCarregar('base'); }).catch(err => setMsg(f, Cloud.message ? Cloud.message(err) : String(err)));
+    },
+    agProdSalvar(f) {
+      const E = f.elements, nome = E.nome.value.trim().slice(0, 60), preco = Math.round((Number(E.preco.value) || 0) * 100) / 100;
+      const aviso = t => { if (f.dataset.id) toast(t); else { const m = document.getElementById('ag-prod-msg'); if (m) { m.textContent = t; m.className = 'form-msg err'; } } };
+      if (!nome) return aviso('Digite o nome do produto.');
+      const row = { ...(f.dataset.id ? { id: f.dataset.id } : { ordem: (ui.ag.prods || []).length }), nome, descricao: E.descricao.value.trim().slice(0, 80), preco: Math.max(0, preco),
+        online: E.online.type === 'hidden' ? true : !!E.online.checked, ativo: E.ativo.type === 'hidden' ? true : !!E.ativo.checked };
+      AG().prodSave(row).then(() => { toast(f.dataset.id ? 'Produto salvo.' : 'Produto adicionado.'); agCarregar('base'); }).catch(err => aviso(Cloud.message ? Cloud.message(err) : String(err)));
+    },
+    agOfertasSalvar(f) {
+      const E = f.elements, n = f.querySelectorAll('.ag-of').length, ofertas = [];
+      for (let i = 0; i < n; i++) { const of = E['oferece_' + i].value, ap = E['apos_' + i].value, ds = Math.round(Number(E['desc_' + i].value) || 0);
+        if (!of) continue; if (of === ap) return setMsg(f, 'A oferta precisa ser um serviço diferente do "Depois de".'); if (ds < 0 || ds > 90) return setMsg(f, 'Desconto de 0 a 90%.');
+        ofertas.push({ apos: ap, oferece: of, desconto: ds }); }
+      setMsg(f, 'Salvando…', true);
+      AG().cfgSave({ ofertas }).then(r => { ui.ag.cfg = { ...ui.ag.cfg, ...(r || { ofertas }) }; ui.ag.ofNova = false; toast('Ofertas salvas.'); render(); }).catch(err => setMsg(f, Cloud.message ? Cloud.message(err) : String(err)));
+    },
+    agCashSalvar(f) {
+      const E = f.elements, num = (k, lo, hi) => Math.max(lo, Math.min(hi, Number(E[k].value) || 0));
+      const cashback = { ativo: !!E.ativo.checked, pct: Math.round(num('pct', 0, 50) * 10) / 10, minimo: Math.round(num('minimo', 0, 100000)), validade: Math.round(num('validade', 0, 365)), max_uso: Math.round(num('max_uso', 1, 100)) };
+      if (cashback.ativo && !cashback.pct) return setMsg(f, 'Defina a porcentagem do cashback.');
+      setMsg(f, 'Salvando…', true);
+      const row = { cashback, chegar_antes: Math.round(num('chegar', 0, 60)) };
+      AG().cfgSave(row).then(r => { ui.ag.cfg = { ...ui.ag.cfg, ...(r || row) }; toast(cashback.ativo ? 'Cashback ligado.' : 'Salvo.'); render(); }).catch(err => setMsg(f, Cloud.message ? Cloud.message(err) : String(err)));
+    },
+    agCupNovo(f) {
+      const E = f.elements, codigo = E.codigo.value.trim().toUpperCase().replace(/\s+/g, ''), valor = Number(E.valor.value) || 0;
+      if (!/^[A-Z0-9_-]{3,30}$/.test(codigo)) return setMsg(f, 'Código: de 3 a 30 letras e números, sem espaço nem acento.');
+      if (valor <= 0 || (E.tipo.value === 'pct' && valor > 100)) return setMsg(f, 'Confira o desconto.');
+      if ((ui.ag.cups || []).some(c => c.codigo === codigo)) return setMsg(f, 'Já existe um cupom com esse código.');
+      const row = { codigo, tipo: E.tipo.value, valor, validade: E.validade.value || null, limite: Math.round(Number(E.limite.value)) || null, minimo: Math.max(0, Number(E.minimo.value) || 0), por_cliente: !!E.por_cliente.checked, ativo: true };
+      setMsg(f, 'Salvando…', true);
+      AG().cupSave(row).then(() => { toast('Cupom criado.'); agCarregar('base'); }).catch(err => setMsg(f, /duplicate|unique/i.test(String(err && err.message)) ? 'Já existe um cupom com esse código.' : (Cloud.message ? Cloud.message(err) : String(err))));
+    },
     agServSalvar(f) {
       const E = f.elements, nome = E.nome.value.trim().slice(0, 60), duracao = Math.round(Number(E.duracao.value) || 0), preco = Math.round((Number(E.preco.value) || 0) * 100) / 100;
       const msg = f.dataset.id ? f : document.getElementById('ag-sv-msg');
       const aviso = t => { if (msg && msg.tagName === 'FORM') toast(t); else if (msg) { msg.textContent = t; msg.className = 'form-msg err'; } };
       if (!nome) return aviso('Digite o nome do serviço.');
       if (duracao < 5 || duracao > 600) return aviso('Duração: de 5 a 600 minutos.');
-      const row = { ...(f.dataset.id ? { id: f.dataset.id } : { ordem: ui.ag.servicos.length }), nome, duracao, preco: Math.max(0, preco), online: !!E.online.checked, ativo: E.ativo.type === 'hidden' ? true : !!E.ativo.checked, icone: AG_ICONES.some(([k]) => k === E.icone.value) ? E.icone.value : '', descricao: E.descricao.value.trim().slice(0, 80) };
+      const row = { ...(f.dataset.id ? { id: f.dataset.id } : { ordem: ui.ag.servicos.length }), nome, duracao, preco: Math.max(0, preco), online: !!E.online.checked, ativo: E.ativo.type === 'hidden' ? true : !!E.ativo.checked, icone: AG_ICONES.some(([k]) => k === E.icone.value) ? E.icone.value : '', descricao: E.descricao.value.trim().slice(0, 80), extra_sem_tempo: !!(E.extra_sem_tempo && E.extra_sem_tempo.checked) };
       AG().servSave(row).then(() => { toast(f.dataset.id ? 'Serviço salvo.' : 'Serviço adicionado.'); agCarregar('base'); }).catch(err => aviso(Cloud.message ? Cloud.message(err) : String(err)));
     },
     agProfSalvar(f) {
@@ -10663,6 +10809,7 @@ Content-Type: application/json</pre>
   });
   root.addEventListener('change', e => {
     if (e.target.matches && e.target.matches('[data-ag-img]')) { agImg(e.target); return; }
+    if (e.target.matches && e.target.matches('[data-ag-pfoto]')) { agProdFoto(e.target); return; }
     if (e.target.matches && e.target.matches('[data-ag-filtro]')) { const v = [...document.querySelectorAll('[data-ag-filtro]:checked')].map(x => x.value), n = document.querySelectorAll('[data-ag-filtro]').length; DB.pref.set('agFiltro', v.length === n ? 'null' : JSON.stringify(v)); render(); const d = document.querySelector('.ag-filtro'); if (d) d.open = true; return; }
     if (e.target.matches && e.target.matches('.ag-form select[name="sv"]')) { const a = ui.ag, ids = [...document.querySelectorAll('.ag-form select[name="sv"]')].map(x => x.value), ss = ids.map(id => a.servicos.find(v => v.id === id)).filter(Boolean);
       const dur = ss.reduce((t, v) => t + (Number(v.duracao) || 0), 0), val = ss.reduce((t, v) => t + (Number(v.preco) || 0), 0), di = document.querySelector('.ag-form [name="dur"]'), tt = document.querySelector('[data-ag-total]');
