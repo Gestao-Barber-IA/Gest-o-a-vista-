@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "8.6";
+export const SOFIA_VERSAO = "8.7";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -334,6 +334,7 @@ Regras (muito importantes):
 - Lista de espera: se o cliente quer um dia e horário específicos que estão cheios e diz que não pode em outro dia ou horário, ofereça colocar na lista de espera daquele dia/faixa (com o barbeiro dele, se ele fizer questão). Se ele aceitar, use lista_de_espera. Quando a lista avisa de uma vaga, a mensagem aparece no contexto: se o cliente quiser, confira o horário (ver_horarios) e siga o resumo normal para agendar.
 - Depois de cancelar um horário, nunca termine com uma afirmação ("quando quiser, é só chamar"): termine sempre perguntando "Para quando você gostaria de reagendar, [primeiro nome]?".
 - Remarcar ou cancelar: só horários do próprio cliente (consultar_cliente). Confirme qual horário antes.
+- Cliente avisa que não vai conseguir vir a um horário marcado (ex.: "não conseguirei", "não vou poder", "surgiu um imprevisto"): não pergunte "cancelar ou remarcar?". Seja gentil e já ofereça 2 ou 3 horários próximos com o MESMO profissional e os mesmos serviços (ver_horarios no mesmo dia, se ainda der, ou nos próximos dias em que ele atende), ex.: "Sem problemas! Tenho sábado às 10h ou às 14h20 com o Nuno, algum desses serve?". Se ele escolher, remarque. Se ele disser que não quer remarcar agora, cancele o horário (para liberar a vaga para outro cliente) e termine perguntando para quando ele gostaria de reagendar. Nunca insista.
 - Planos mensais (assinantes): o cliente do plano é atendido pelo profissional fixo do plano. Horário do plano (do_plano em consultar_cliente) só pode ser remarcado para a MESMA semana (segunda a domingo), nos dias que o plano permite e com o MESMO profissional; nunca troque o profissional do plano nem diga que trocar "não tem problema". Se o cliente pedir outro profissional, ou se não houver horário com o dele na semana, explique a regra com gentileza e use chamar_recepcao. Se ele contar que o horário do plano já foi trocado para outro profissional ou para outra semana, não confirme como certo: explique a regra e use chamar_recepcao para a equipe conferir.
 - Adiantar ou atrasar: se o cliente já tem horário e quer adiantar/atrasar (mesmo profissional, mesmo dia), use consultar_cliente e depois ver_horarios: o horário dele ocupa a agenda, então confira também livres_trocando_o_horario_do_cliente (horários que só ficam livres trocando o dele). Ofereça esses e, se ele aceitar, use remarcar.
 - Nunca diga que o cliente tem ou não tem horário marcado sem antes usar consultar_cliente nesta conversa. Se o cliente falar do horário dele, de chegada, de atraso ou de "vou mais tarde", use consultar_cliente antes de responder.
@@ -1490,12 +1491,14 @@ export function criarSofia({ dir, log, api, sock, resultados = null, conectado =
           const hora = new Date(c.noturna).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
           novas.unshift(c.pendTipo === "recente"
             ? `[O cliente escreveu a partir das ${hora} e ainda não tinha sido respondido. Peça desculpas pela demora de forma leve e simpática e responda tudo o que ele pediu nessas mensagens.]`
-            : `[O cliente escreveu ${ontem ? "ontem" : "hoje"} a partir das ${hora}, com a barbearia fechada, e só agora você está respondendo. Cumprimente de acordo com a hora atual (ex.: "Bom dia!"), diga com simpatia que viu a mensagem dele e responda tudo o que ele pediu.]`);
+            : `[O cliente escreveu ${ontem ? "ontem" : "hoje"} a partir das ${hora}, com a barbearia fechada, e só agora você está respondendo. Cumprimente de acordo com a hora atual (ex.: "Bom dia!") e vá direto ao assunto, respondendo tudo o que ele pediu. Não diga "vi sua mensagem" nem peça desculpas pela hora.]`);
           c.noturna = 0; c.pendTipo = null;
         }
         const antes = c.contexto.splice(0).sort((a, b) => a.ts - b.ts).map((x) => x.linha);
         const cadLinha = c.verificado ? "" : (c.verificado = true, (/@instagram$/.test(jid) && !c.fone ? "[Canal: Instagram Direct. Você não tem o celular deste cliente. Para consultar horários marcados ou agendar, peça o celular com DDD (uma vez) e use informar_celular; para tirar dúvidas, não precisa.]\n" : "") + (await verificarCadastro(ab, c.fone, c)) + "\n" + (c.fone ? costumeLinha(dir, c.fone) + memoriaLinha(dir, c.fone) : "") + (c.plano ? "" : dicaPlano({ dir, fone: c.fone, planosCfg: cfg.planos })) + (jaApresentou(c.fone)
           ? "[Apresentação: você já se apresentou a este cliente em outra conversa; não se apresente de novo]\n"
+          : c.origem && c.origem !== "whatsapp" && c.origem !== "instagram"
+          ? "[Apresentação: o cliente está respondendo a uma mensagem da barbearia (confirmação, lembrete ou convite); não se apresente, vá direto ao assunto]\n"
           : `[Apresentação: é a primeira vez que você fala com este cliente; na sua resposta, apresente-se em uma frase curta e simpática (ex.: "Eu sou a ${cfg.nome}, atendente da ${cfg.barbearia} 😊")]\n`));
         const naoEnviada = c.naoEnviada ? "[Sua resposta anterior NÃO foi enviada, porque o cliente mandou mais mensagens enquanto você respondia. Responda agora considerando tudo.]\n" : ""; c.naoEnviada = false;
         c.mensagens.push({ role: "user", content: agoraTexto(c.fone) + "\n" + cadLinha + naoEnviada + (antes.length
@@ -1986,7 +1989,7 @@ export function criarConfirmacao({ dir, log = () => {}, api = async () => ({}), 
     const s = sock(), amanha = somaDias(hoje, 1);
     // Próximo dia aberto (ex.: no sábado, com domingo fechado, pede os horários de segunda).
     let alvo = amanha; for (let i = 0; i < 3 && fechados.includes(diaDaSemana(alvo)); i++) alvo = somaDias(alvo, 1);
-    const detalhe = (b, dia) => `[confirmação de presença: ${dia} ${hhmm(b.min)} com ${b.prof} (${juntos(b.servs)}), códigos ${b.cods.join(", ")}. Se o cliente confirmar (sim, confirmo, 👍, estarei aí), use confirmar_presenca com esses códigos e agradeça curto. Se não puder vir, seja gentil e ofereça remarcar (ver_horarios + remarcar) ou cancelar; nunca insista. Se ele só agradecer, não precisa responder de novo.]`;
+    const detalhe = (b, dia) => `[confirmação de presença: ${dia} ${hhmm(b.min)} com ${b.prof} (${juntos(b.servs)}), códigos ${b.cods.join(", ")}. Se o cliente confirmar (sim, confirmo, 👍, estarei aí), use confirmar_presenca com esses códigos e agradeça curto. Se não puder vir, seja gentil e já ofereça 2 ou 3 horários próximos com o mesmo profissional e serviços (ver_horarios), sem perguntar \"cancelar ou remarcar?\"; se ele escolher, use remarcar; se não quiser remarcar, cancele para liberar a vaga. Nunca insista. Se ele só agradecer, não precisa responder de novo.]`;
     // 1) Véspera: a partir do horário escolhido até 20h30, em dia aberto, para os horários de amanhã.
     if (s && pode() && !fechados.includes(diaDaSemana(hoje)) && !fechados.includes(diaDaSemana(alvo)) && agora >= mins(c.hora || "17:00") && agora <= 20 * 60 + 30) {
       let n = 0;
