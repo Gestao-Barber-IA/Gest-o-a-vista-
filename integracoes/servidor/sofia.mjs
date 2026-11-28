@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-export const SOFIA_VERSAO = "8.8";
+export const SOFIA_VERSAO = "8.9";
 export const MODELO_PADRAO = "claude-sonnet-5-5";
 const MODELOS = ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"];
 // Preço por milhão de tokens (US$): entrada, saída, leitura do cache, gravação do cache (1,25× a entrada).
@@ -253,7 +253,7 @@ export const TOOLS = [
   { name: "consultar_cliente", description: "Nome do cliente cadastrado na barbearia (pelo telefone do WhatsApp) e os horários que ele já tem marcados nos próximos 30 dias, com o código de cada um. Use antes de remarcar ou cancelar, e para chamar o cliente pelo nome.", strict: true, input_schema: obj({}, []) },
   { name: "agendar", description: "Marca o horário na AppBarber. Use quando o cliente confirmou com clareza o serviço, o profissional, o dia e a hora: um 'sim'/'pode marcar' ao resumo, ou a escolha de um dos horários que você ofereceu (com serviço e profissional já definidos). Também serve para marcar só o adicional aceito depois, no fim do serviço já marcado.", strict: true,
     input_schema: obj({ servicos: { type: "array", items: { type: "integer" }, description: "Códigos dos serviços, na ordem" }, profissional: { type: "integer", description: "Código do profissional (de ver_horarios)" }, data_hora: { type: "string", description: "AAAA-MM-DD HH:MM" }, nome_cliente: { type: "string", description: "Nome completo do cliente" }, observacao: { type: ["string", "null"], description: "Recado curto para o barbeiro(a), ex.: Primeira vez na barbearia; ou null" } }, ["servicos", "profissional", "data_hora", "nome_cliente", "observacao"]) },
-  { name: "remarcar", description: "Troca um horário já marcado por outro: marca o novo e depois cancela o antigo. SÓ use depois que o cliente confirmou o novo horário.", strict: true,
+  { name: "remarcar", description: "Troca um horário já marcado por outro: marca o novo e depois cancela o antigo. Também serve para trocar só o serviço no MESMO horário (ex.: corte por pezinho): mande o mesmo profissional e a mesma data_hora com o novo serviço. SÓ use depois que o cliente confirmou o novo horário.", strict: true,
     input_schema: obj({ codigo_agendamento: { type: "integer", description: "Código do horário atual (de consultar_cliente)" }, servicos: { type: "array", items: { type: "integer" } }, profissional: { type: "integer" }, data_hora: { type: "string", description: "AAAA-MM-DD HH:MM" } }, ["codigo_agendamento", "servicos", "profissional", "data_hora"]) },
   { name: "validar_indicacao", description: "Confere o código de indicação que um cliente NOVO informou (ex.: PEDRO7K2). Se for válido, o cliente ganha o benefício de indicação na primeira visita; registre isso ao agendar.", strict: true,
     input_schema: obj({ codigo: { type: "string", description: "Código como o cliente escreveu" } }, ["codigo"]) },
@@ -410,7 +410,8 @@ async function blocosDoCliente(ab, agenda, data) {
   for (const a of meus) { const b = blocos.find((x) => mesmoNome(x.profissional, a.profissional) && Math.abs(x.fim - a.ini) <= 5); if (b) { b.fim = Math.max(b.fim, a.ini + a.min); b.itens.push(a); } else blocos.push({ profissional: a.profissional, ini: a.ini, fim: a.ini + a.min, itens: [a] }); }
   return blocos;
 }
-// Horários em que cabe um serviço de `duracao` minutos com o profissional, contando o bloco do cliente como livre.
+// Horários em que cabe um serviço de `duracao` minutos com o profissional, contando o bloco do cliente como livre
+// (inclui o horário atual do cliente: trocar só o serviço, ex.: corte por pezinho no mesmo horário).
 async function livresSemOBloco(ab, data, bloco, duracao) {
   const todos = (await ab.servicos()).filter((x) => x.tipo === 1).sort((a, b) => a.minutos - b.minutos);
   for (const curto of todos.slice(0, 3)) {
@@ -418,7 +419,7 @@ async function livresSemOBloco(ab, data, bloco, duracao) {
     if (!p) continue;
     const livre = (t0, t1) => { for (let t = t0; t < t1; t += 5) { if (t >= bloco.ini && t < bloco.fim) continue; if (!p.horarios.some((h) => t >= mins(h) && t < mins(h) + curto.minutos)) return false; } return true; };
     const cands = [...new Set([...p.horarios.map(mins), bloco.ini, ...[1, 2, 3].map((k) => bloco.ini - k * 20)])].filter((t) => t >= 0).sort((a, b) => a - b);
-    return { profissional: p, horarios: cands.filter((t) => t !== bloco.ini && livre(t, t + duracao)).map(hhmmM) };
+    return { profissional: p, horarios: cands.filter((t) => livre(t, t + duracao)).map(hhmmM) }; // inclui o próprio horário (trocar só o serviço)
   }
   return null;
 }
