@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const VERSAO = "11.0";
+const VERSAO = "11.1";
 const DIR = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i >= 0 ? (process.argv[i + 1] || "") : null; };
 // Papel do número: "equipe" (lembrete do checklist, chip 1) ou "clientes" (lembrete de agendamento, chip 2).
@@ -309,7 +309,16 @@ async function lembretesClientes(e, hoje) {
     let texto = versoes[Math.floor(Math.random() * versoes.length)].replace(/\{cliente\}/g, b.nome || "tudo bem").replace(/\{hora\}/g, hhmm(b.min)).replace(/\{profissional\}/g, junta(b.profs) || "a nossa equipe")
       .replace(/\{servico\}/g, junta(b.servs) || "seu atendimento").replace(/\{barbearia\}/g, e.nome).replace(/ \(\)/g, "");
     if (principal) texto = texto.replace(/https?:\/\/\S+/gi, "").replace(/[ \t]+\n/g, "\n").replace(/:\s*$/gm, ".").trim(); // sem links no número principal
-    try { await enviar(b.fone, texto); n++; erroSeguido = 0; ritmo.envios.push(Date.now()); }
+    try {
+      const env1 = await enviar(b.fone, texto); n++; erroSeguido = 0; ritmo.envios.push(Date.now());
+      // A Sofia fica sabendo do lembrete: se o cliente responder ("bom dia", 👍, "vou atrasar"), ela sabe do horário de hoje.
+      if (sofia && sofia.conviteEnviado && env1) {
+        const q = `hoje às ${hhmm(b.min)}${b.profs.length ? ` com ${junta(b.profs)}` : ""}${b.servs.length ? ` (${junta(b.servs)})` : ""}`;
+        sofia.conviteEnviado(env1.jid, env1.id, { fone: so(b.fone).length <= 11 ? "55" + so(b.fone) : so(b.fone), nome: b.nome || "", texto, horas: Math.max(1, (b.min - agora) / 60 + 1), origem: "lembrete",
+          tipo: `lembrete do horário marcado ${q}`,
+          detalhe: `[O cliente já tem horário marcado ${q}. Se ele só cumprimentar, agradecer ou confirmar (ex.: "bom dia", "ok", 👍), responda curto e simpático lembrando que o esperamos hoje às ${hhmm(b.min)}; NÃO ofereça outro agendamento. Se avisar que vai atrasar, lembre a tolerância com gentileza. Se não puder vir, ofereça 2 ou 3 horários próximos com o mesmo profissional.]` });
+      }
+    }
     catch (err) {
       log(`${e.nome}: lembrete de cliente não enviado (${err.message}).`);
       // "número sem WhatsApp" é do cliente; outros erros seguidos podem ser o WhatsApp barrando: freio automático.
