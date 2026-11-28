@@ -2,6 +2,9 @@
    A cada mudança publicada, acrescente uma entrada NO TOPO da lista, com a data e o que mudou,
    escrito para o dono da empresa (sem termos técnicos). Tipos: novo, melhoria, correcao. */
 window.GB_UPDATES = [
+  { id: '2026-11-28-sofia-lembrete', date: '2026-11-28', title: 'Atendente IA sabe do lembrete do dia', items: [
+    ['correcao', 'Quando o cliente responde ao lembrete do horário (ex.: "bom dia", 👍), a atendente já sabe que ele tem horário hoje: responde lembrando o horário e não oferece um novo agendamento.'],
+  ] },
   { id: '2026-11-27-sofia-tom', date: '2026-11-27', title: 'Atendente IA: respostas mais diretas', items: [
     ['melhoria', 'Quando o cliente responde a uma mensagem da barbearia (confirmação, lembrete ou convite), a atendente não se apresenta de novo: vai direto ao assunto. De manhã, ela responde o que ficou da noite sem dizer "vi sua mensagem".'],
     ['melhoria', 'Cliente avisa que não vai conseguir vir: em vez de perguntar "cancelar ou remarcar?", a atendente já oferece 2 ou 3 horários próximos com o mesmo profissional. Se ele não quiser remarcar, ela cancela para liberar a vaga.'],
